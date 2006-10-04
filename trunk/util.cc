@@ -1,0 +1,142 @@
+// Copyright (C) 2006 Google Inc.
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// 
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Author: Noam Shazeer
+
+
+#include "util.h"
+#include <stdlib.h>
+#include <math.h>
+#include <sstream>
+
+int VERBOSITY = 0;
+int GetVerbosity(){
+  return VERBOSITY;
+}
+void SetVerbosity(int v){
+  VERBOSITY = v;
+}
+
+bool GetLine(istream & input, string * ret) {
+  *ret = "";
+  char c;
+  if (!input.get(c)) return false;
+  while (c!='\n') {
+    *ret += c;
+    if (!input.get(c)) break;
+  }
+  return true;
+}
+
+string StripWhiteEnds(const string & s){
+  int start = 0;
+  while (start<(int)s.size() && isspace(s[start])) start++;
+  int end = s.size()-1;  
+  while (end>start && isspace(s[end-1])) end--;
+  return s.substr(start, end-start);
+}
+
+vector<string> Split(const string & s, char delim){
+  vector<string> ret;
+  string current;
+  for (uint i=0; i<s.size(); i++) {
+    if (s[i]==delim) {
+      if (current.size()) ret.push_back(current);
+      current = "";
+    } else current += s[i];
+  }
+  if (current.size()) ret.push_back(current);
+  return ret;
+}
+string Join(const vector<string> v, char delim){
+  string ret;
+  for (uint i=0; i<v.size(); i++) {
+    if (i) ret += delim;
+    ret += v[i];
+  }
+  return ret;
+}
+int RandomInt(){
+  return rand();
+}
+double twototheminusthirtyone = pow(0.5, 31);
+double RandomFraction(){
+  return (rand()+0.5)*twototheminusthirtyone;
+}
+
+string IntVectorToString(const vector<int> v){
+  ostringstream ostr;
+  for (uint i=0; i<v.size(); i++) {
+    if (i!=0) ostr << " ";
+    ostr << v[i];
+  }
+  return ostr.str();
+}
+vector<int> StringToIntVector(const string & s){
+  vector<int> ret;
+  istringstream istr(s);
+  int i;
+  while (istr >> i) ret.push_back(i);
+  return ret;
+}
+
+PermutationIterator::PermutationIterator(int num_items, int num_slots){  
+  num_slots_ = num_slots;
+  num_items_ = num_items;
+  if (num_items_ > num_slots_) {
+    done_ = true;
+    return;
+  }
+  slot_to_item_ = vector<int>(num_slots_, -1);
+  for (int i=0; i<num_items_; i++) {
+    slot_to_item_[i] = i;
+    item_to_slot_.push_back(i);
+  }
+  done_ = false;
+}
+void PermutationIterator::Move(int item, int new_slot) {
+  CHECK(new_slot >=0 && new_slot < num_slots_);
+  int old_slot = item_to_slot_[item];  
+  if (new_slot==old_slot) return;
+  int displaced_item = slot_to_item_[new_slot];
+  if (displaced_item >=0) item_to_slot_[displaced_item] = -1;
+  item_to_slot_[item] = new_slot;
+  slot_to_item_[new_slot] = item;
+  if (old_slot >= 0) slot_to_item_[old_slot] = -1;
+}
+void PermutationIterator::operator++(){
+  CHECK(!done_);
+  int item_to_advance = num_items_-1;
+  int new_slot = 0;
+  while (true) {
+    if (item_to_advance < 0) {
+      done_ = true;
+      return;
+    }
+    new_slot = item_to_slot_[item_to_advance]+1;
+    while (new_slot < num_slots_ && 
+	   (slot_to_item_[new_slot]>=0 &&
+	    slot_to_item_[new_slot]<item_to_advance)) new_slot++;
+    if (new_slot < num_slots_) break;
+    item_to_advance--;
+  }
+  Move(item_to_advance, new_slot);
+  int pos = 0;
+  for (int item=item_to_advance+1; item<num_items_; item++){
+    while (slot_to_item_[pos]>=0 && slot_to_item_[pos]<item) pos++;
+    Move(item, pos);
+  }
+}
