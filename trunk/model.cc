@@ -68,11 +68,11 @@ Model::Satisfaction * Model::Precondition::GetAddSatisfaction(const
   if (sp) {
     return *sp;
   }
-  vector<Sentence> props = clauses_;
+  vector<Tuple> props = clauses_;
   sub.Substitute(&props);
   for (uint i=0; i<props.size(); i++) 
 
-    if (!model_->sentence_index_.FindSentence(props[i])) return NULL;
+    if (!model_->tuple_index_.FindTuple(props[i])) return NULL;
   Satisfaction * ret = new Satisfaction(this, sub);
   return ret;
 }
@@ -101,10 +101,10 @@ string WordUnescape(string s){
   if (s[0]=='_' && s.size() > 1) return s.substr(1);
   return s;
 }
-vector<Sentence> Model::ComputeSentenceEncoding(const Sentence & s, int name){
-  vector<Sentence> ret;
+vector<Tuple> Model::ComputeTupleEncoding(const Tuple & s, int name){
+  vector<Tuple> ret;
   for (uint i=0; i<s.size(); i++) {
-    Sentence x;
+    Tuple x;
     x.push_back(LEXICON.GetAddID("IN_POS"));
     x.push_back(name);
     x.push_back(LEXICON.GetAddID("POS_" + itoa(i)));
@@ -113,9 +113,9 @@ vector<Sentence> Model::ComputeSentenceEncoding(const Sentence & s, int name){
   }
   return ret; 
 }
-vector<Sentence> Model::Rule::ComputeEncoding(){
-  vector<Sentence> ret;
-  Sentence s;
+vector<Tuple> Model::Rule::ComputeEncoding(){
+  vector<Tuple> ret;
+  Tuple s;
   s.push_back(LEXICON.GetAddID("IS_RULE"));
   s.push_back(LEXICON.GetAddID("RULE_"+itoa(id_)));
   if (type_==NEGATIVE_RULE) {
@@ -125,7 +125,7 @@ vector<Sentence> Model::Rule::ComputeEncoding(){
     s.push_back(LEXICON.GetAddID("POSITIVE"));
   }
   ret.push_back(s);
-  const vector<Sentence> & pre = precondition_->clauses_;
+  const vector<Tuple> & pre = precondition_->clauses_;
   bool contains_result = false;
   if (type_ == NEGATIVE_RULE) {
     contains_result = true;
@@ -133,7 +133,7 @@ vector<Sentence> Model::Rule::ComputeEncoding(){
       if (!(pre % target_rule_->result_[i])) contains_result = false;
     }
     if (contains_result) {
-      Sentence x;
+      Tuple x;
       x.push_back(LEXICON.GetAddID("CONTAINS_RESULT"));
       x.push_back(LEXICON.GetAddID("RULE_"+itoa(id_)));      
     }
@@ -144,22 +144,22 @@ vector<Sentence> Model::Rule::ComputeEncoding(){
       if (contains_result && (target_rule_->result_ % pre[i])) continue;
     }
     int name = LEXICON.GetAddID("RULE_" + itoa(id_) + "_PREC_" + itoa(i));
-    Sentence x;
+    Tuple x;
     x.push_back(LEXICON.GetAddID("HAS_PRECONDITION"));
     x.push_back(LEXICON.GetAddID("RULE_"+itoa(id_)));      
     x.push_back(name);
     ret.push_back(x);
-    vector<Sentence> v = model_->ComputeSentenceEncoding(pre[i], name);
+    vector<Tuple> v = model_->ComputeTupleEncoding(pre[i], name);
     ret.insert(ret.end(), v.begin(), v.end());
   }
   for (uint i=0; i<result_.size(); i++) {
     int name = LEXICON.GetAddID("RULE_" + itoa(id_) + "_RES_" + itoa(i));
-    Sentence x;
+    Tuple x;
     x.push_back(LEXICON.GetAddID("HAS_RESULT"));
     x.push_back(LEXICON.GetAddID("RULE_"+itoa(id_)));      
     x.push_back(name);
     ret.push_back(x);
-    vector<Sentence> v = model_->ComputeSentenceEncoding(result_[i], name);
+    vector<Tuple> v = model_->ComputeTupleEncoding(result_[i], name);
     ret.insert(ret.end(), v.begin(), v.end());
   }
   return ret;
@@ -254,14 +254,14 @@ vector<Model::Firing *> Model::Rule::Firings() const{
 }
 
 string Model::Rule::ImplicationString() const {
-  return SentenceVectorToString(precondition_->clauses_) + " -> " 
-    + SentenceVectorToString(result_);
+  return TupleVectorToString(precondition_->clauses_) + " -> " 
+    + TupleVectorToString(result_);
 }
 string Model::RuleSat::ImplicationString(const Firing * firing) const {
-  vector<Sentence> preconditions = rule_->precondition_->clauses_;
-  vector<Sentence> results = rule_->result_;
-  vector<Sentence> substituted_preconditions = preconditions;
-  vector<Sentence> substituted_results = results;
+  vector<Tuple> preconditions = rule_->precondition_->clauses_;
+  vector<Tuple> results = rule_->result_;
+  vector<Tuple> substituted_preconditions = preconditions;
+  vector<Tuple> substituted_results = results;
   Substitution sub = satisfaction_->substitution_;
   if (firing) sub.Add(firing->right_substitution_);
   sub.Substitute(&substituted_preconditions);
@@ -610,7 +610,7 @@ void Model::CheckLikelihood(){
   }
 }
 int64 Model::FindSatisfactionsForProposition
-( const Sentence & s, 
+( const Tuple & s, 
   vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > *results,
   int64 max_work,
   bool return_subs_for_negative_rules = true,
@@ -624,7 +624,7 @@ int64 Model::FindSatisfactionsForProposition
       Precondition * precondition = run->first;
       int clause_num = run->second;
       Substitution partial_sub;
-      vector<Sentence> simplified_precondition = precondition->clauses_;
+      vector<Tuple> simplified_precondition = precondition->clauses_;
       
       if (!ComputeSubstitution(precondition->clauses_[clause_num], s, &partial_sub))
 	continue;
@@ -637,7 +637,7 @@ int64 Model::FindSatisfactionsForProposition
 	return_subs = true;
       }
       vector<Substitution> complete_subs;
-      if (!sentence_index_.FindSatisfactions
+      if (!tuple_index_.FindSatisfactions
 	  (simplified_precondition, 
 	   return_subs?(&complete_subs):NULL,
 	   &num_complete_subs,
@@ -656,29 +656,29 @@ int64 Model::FindSatisfactionsForProposition
   return total_work;
 }
 
-Model::Precondition * Model::GetAddPrecondition(const vector<Sentence> & sentences) {
-  Precondition ** p = precondition_index_ % Fingerprint(sentences);
+Model::Precondition * Model::GetAddPrecondition(const vector<Tuple> & tuples) {
+  Precondition ** p = precondition_index_ % Fingerprint(tuples);
   if (p) { return *p; }
-  return new Precondition(this, sentences);
+  return new Precondition(this, tuples);
 }
 
-Model::TrueProposition * Model::FindTrueProposition(const Sentence & s) {
-  const Sentence * sentence = sentence_index_.FindSentence(s);
-  if (!sentence) return 0;
-  TrueProposition ** tp = index_to_true_proposition_ % sentence;
+Model::TrueProposition * Model::FindTrueProposition(const Tuple & s) {
+  const Tuple * tuple = tuple_index_.FindTuple(s);
+  if (!tuple) return 0;
+  TrueProposition ** tp = index_to_true_proposition_ % tuple;
   if (tp) return *tp;
   return 0;
 }
-Model::TrueProposition * Model::GetAddTrueProposition(const Sentence & s) {
+Model::TrueProposition * Model::GetAddTrueProposition(const Tuple & s) {
   TrueProposition * ret = FindTrueProposition(s);
   if (ret) return ret;
   ret = new TrueProposition(this, vector<Firing *>(), s, false);
   return ret;
 }
 
-vector<Sentence> GetSentenceVector(istream * input) {
-  vector<Sentence> result;
-  Sentence s;
+vector<Tuple> GetTupleVector(istream * input) {
+  vector<Tuple> result;
+  Tuple s;
   string line;
   while (GetLine(*input, &line) && line != "#") {
     if (StripWhiteEnds(line)=="") continue;
@@ -693,12 +693,12 @@ uint64 Model::Rule::RuleFingerprint() {
     (type_, precondition_->clauses_, 
      (type_==NEGATIVE_RULE)?target_rule_->result_:result_, 	
      (type_==NEGATIVE_RULE)?target_rule_->precondition_->clauses_:
-     vector<Sentence>());
+     vector<Tuple>());
 }
 uint64 Model::RuleFingerprint(RuleType type,
-			      const vector<Sentence> & precondition,
-			      const vector<Sentence> & result,
-			      const vector<Sentence> & target_precondition){
+			      const vector<Tuple> & precondition,
+			      const vector<Tuple> & result,
+			      const vector<Tuple> & target_precondition){
   uint64 ret = type * 23948723983ll;
   ret += Fingerprint(precondition) * 28472462521325ll;
   ret += Fingerprint(result) * 21394285729853473ll;
@@ -882,10 +882,10 @@ void Model::Load(istream * input) {
     AddComponentFromRecord(r);
   }
 }
-bool Model::IsRequired(const Sentence & s){
+bool Model::IsRequired(const Tuple & s){
   return required_ % s.Fingerprint();
 }
-bool Model::IsForbidden(const Sentence & s){
+bool Model::IsForbidden(const Tuple & s){
   if (IsRequired(s)) return false;
   for (GeneralizationIterator run(s); !run.done(); ++run) {
     if (forbidden_ % run.generalized().Fingerprint()) 
@@ -900,7 +900,7 @@ void Model::TrueProposition::CheckForbiddenRequired(){
   else model_->present_forbidden_.erase(this);
   if (required_) model_->absent_required_.erase(proposition_.Fingerprint());  
 }
-void Model::MakeRequired(const Sentence & s){
+void Model::MakeRequired(const Tuple & s){
   required_[s.Fingerprint()] = s;
   TrueProposition * tp = FindTrueProposition(s);
   if (tp) {
@@ -909,7 +909,7 @@ void Model::MakeRequired(const Sentence & s){
     absent_required_.insert(s.Fingerprint());
   }
 }
-void Model::MakeNotRequired(const Sentence & s) {
+void Model::MakeNotRequired(const Tuple & s) {
   required_.erase(s.Fingerprint());
   TrueProposition * tp = FindTrueProposition(s);
   if (tp) {
@@ -917,25 +917,25 @@ void Model::MakeNotRequired(const Sentence & s) {
   }
   absent_required_.erase(s.Fingerprint());
 }
-void Model::MakeForbidden(const Sentence & s){
+void Model::MakeForbidden(const Tuple & s){
   forbidden_[s.Fingerprint()] = s; 
-  vector<const Sentence*> results;
-  sentence_index_.Lookup(s, &results);
+  vector<const Tuple*> results;
+  tuple_index_.Lookup(s, &results);
   for (uint i=0; i<results.size(); i++) {
     if (IsRequired(*(results[i]))) continue;
     index_to_true_proposition_[results[i]]->CheckForbiddenRequired();
   }
 }
-void Model::MakeNotForbidden(const Sentence & s){
+void Model::MakeNotForbidden(const Tuple & s){
   forbidden_.erase(s.Fingerprint());
-  vector<const Sentence*> results;
-  sentence_index_.Lookup(s, &results);
+  vector<const Tuple*> results;
+  tuple_index_.Lookup(s, &results);
   for (uint i=0; i<results.size(); i++) {
     if (IsRequired(*(results[i]))) continue;
     index_to_true_proposition_[results[i]]->CheckForbiddenRequired();
   }
 }
-void Model::MakeGiven(const Sentence & s){
+void Model::MakeGiven(const Tuple & s){
   TrueProposition *tp = FindTrueProposition(s);
   if (!tp) tp = new TrueProposition(this, vector<Firing *>(), s, false);
   tp->given_ = true;
@@ -970,12 +970,12 @@ ReadSpec(istream * input){
       CHECK(false);
     }
     if (!any_pure_wildcards) {
-      Sentence r;
+      Tuple r;
       r.FromString(required);
       MakeRequired(r);
     }
     if (any_wildcards) {
-      Sentence f;
+      Tuple f;
       f.FromString(forbidden);
       MakeForbidden(f);
     }
@@ -983,9 +983,9 @@ ReadSpec(istream * input){
 }
 
 Model::Rule * Model::GetAddNaiveRule(int length) {
-  vector<Sentence> precondition;
-  vector<Sentence> result(1);
-  vector<Sentence> target_precondition;
+  vector<Tuple> precondition;
+  vector<Tuple> result(1);
+  vector<Tuple> target_precondition;
   for (int i=0; i<length; i++) result[0].words_.push_back(-1-i);
   Rule ** rp = rule_index_ 
     % RuleFingerprint(CREATIVE_RULE, precondition, result, 
@@ -1082,7 +1082,7 @@ void Model::Shell(istream  * input) {
       (*input) >> duration;
       time_t end_time = time(0) + duration;
       while (time(0) < end_time) {
-	pair<vector<Sentence>, vector<Sentence> > p 
+	pair<vector<Tuple>, vector<Tuple> > p 
 	  = FindRandomCandidateRule(Tactic(tactic));
 	TryAddImplicationRule(p.first, p.second, REQUIRE_BETTER, true);
       }
@@ -1090,12 +1090,12 @@ void Model::Shell(istream  * input) {
     else if (command == "ispecific"){
       string pat;
       GetLine((*input), &pat);
-      vector<Sentence> preconditions = StringToSentenceVector(pat);
+      vector<Tuple> preconditions = StringToTupleVector(pat);
       GetLine((*input), &pat);
-      vector<Sentence> result = StringToSentenceVector(pat);
+      vector<Tuple> result = StringToTupleVector(pat);
       TryAddImplicationRule(preconditions, result, REQUIRE_BETTER, true);
     } 
-    else if (command=="rs"){ // random sentence
+    else if (command=="rs"){ // random tuple
       string l;
       GetLine((*input), &l);
       istringstream istr(l);
@@ -1107,8 +1107,8 @@ void Model::Shell(istream  * input) {
 	words.push_back(wid);
       }
       for (int i=0; i<10; i++) {
-	const Sentence * s 
-	  = sentence_index_.GetRandomSentenceContaining(words, true);
+	const Tuple * s 
+	  = tuple_index_.GetRandomTupleContaining(words, true);
 	if(s) {
 	  cout << s->ToString() << endl;
 	}
@@ -1120,9 +1120,9 @@ void Model::Shell(istream  * input) {
       SetVerbosity(v);
     }
     else if (command=="pat"){
-      /*pair<vector<Sentence>, vector<Sentence> > p = FindRandomCandidateRule();
-      cout << SentenceVectorToString(p.first) << " -> " 
-      << SentenceVectorToString(p.second) << endl;*/
+      /*pair<vector<Tuple>, vector<Tuple> > p = FindRandomCandidateRule();
+      cout << TupleVectorToString(p.first) << " -> " 
+      << TupleVectorToString(p.second) << endl;*/
     }
     else if (command=="h"){
       ToHTML("html");

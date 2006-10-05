@@ -17,36 +17,36 @@
 // Author: Noam Shazeer
 
 
-#include "sentenceindex.h"
+#include "tupleindex.h"
 #include "lexicon.h"
 
-SentenceIndex::SentenceIndex() {
-  total_sentences_ = 0;
+TupleIndex::TupleIndex() {
+  total_tuples_ = 0;
 }
-SentenceIndex::~SentenceIndex(){
+TupleIndex::~TupleIndex(){
 }
-const Sentence * SentenceIndex::RandomSentence(){
-  uint n = RandomInt() % total_sentences_;
+const Tuple * TupleIndex::RandomTuple(){
+  uint n = RandomInt() % total_tuples_;
   forall(run, lengths_) {
     if (n < run->second) {
       FullySpecifiedNode ** results;
       uint64 num_results;
       LookupInternal(AllVar0(run->first), &results, &num_results);
       CHECK(num_results==run->second);
-      return &results[n]->sentence_;
+      return &results[n]->tuple_;
     } else {
       n-=run->second;
     }
   }
-  cerr << "Total Sentences: " << total_sentences_;
+  cerr << "Total Tuples: " << total_tuples_;
   forall(run, lengths_) {
     cerr << run->first << " " << run->second << endl;
   }
   CHECK(false); 
   return 0;
 }
-const Sentence * 
-SentenceIndex::GetRandomSentenceContaining(const vector<int> & words, 
+const Tuple * 
+TupleIndex::GetRandomTupleContaining(const vector<int> & words, 
 					   bool funky_distribution){
   int n = words.size();
   // okay, for now we'll always use the funky distribution
@@ -55,7 +55,7 @@ SentenceIndex::GetRandomSentenceContaining(const vector<int> & words,
     int length = run->first;
     for (PermutationIterator run_p(n, length); !run_p.done(); ++run_p){
       const vector<int> & perm = run_p.current();
-      Sentence s;
+      Tuple s;
       for (uint i=0; i<perm.size(); i++) {
 	s.push_back((perm[i]==-1)?-1:words[perm[i]]);
       }
@@ -66,7 +66,7 @@ SentenceIndex::GetRandomSentenceContaining(const vector<int> & words,
 	CHECK(un->first_word_counts_);
 	forall(run, (*un->first_word_counts_)){
 	  s[0] = run->first;
-	  VLOG(2) << "Expecting " << run->second << " sentences matching " 
+	  VLOG(2) << "Expecting " << run->second << " tuples matching " 
 		  << s.ToString() << endl;
 	  FullySpecifiedNode ** results; uint64 num_results;
 	  LookupInternal(s, &results, &num_results);
@@ -81,39 +81,39 @@ SentenceIndex::GetRandomSentenceContaining(const vector<int> & words,
     }
   }
   int num_patterns = patterns.size();
-  int total_sentences = 0;
-  for (uint i=0; i<patterns.size(); i++) total_sentences += patterns[i].second;
-  if (total_sentences==0) return 0;
+  int total_tuples = 0;
+  for (uint i=0; i<patterns.size(); i++) total_tuples += patterns[i].second;
+  if (total_tuples==0) return 0;
   int pattern_num = 0;
   if (funky_distribution){
     pattern_num = rand() % num_patterns;
   } else {
-    int sentence_num = rand() % total_sentences;
+    int tuple_num = rand() % total_tuples;
     for (uint i=0; i<patterns.size(); i++) {
-      sentence_num -= patterns[i].second;
-      if (sentence_num<0) {
+      tuple_num -= patterns[i].second;
+      if (tuple_num<0) {
 	pattern_num = i;
 	break;
       }
     }
   }
-  int sentence_num = rand() % patterns[pattern_num].second;
-  return &(patterns[pattern_num].first[sentence_num]->sentence_);
+  int tuple_num = rand() % patterns[pattern_num].second;
+  return &(patterns[pattern_num].first[tuple_num]->tuple_);
 }
 
 /*
-const Sentence * SentenceIndex::RandomSentenceContaining(int w){
+const Tuple * TupleIndex::RandomTupleContaining(int w){
   int total=0;
   uint n=0;
   for (int rep=0; rep<2; rep++){
     if (rep==1) {
-      CHECK(total_sentences_);
+      CHECK(total_tuples_);
       n = RandomInt() % total;
     }
     forall(run, lengths_) {
       int length = run->first;
       for (int i=0; i<length; i++) {
-	Sentence s = AllVar0(length);
+	Tuple s = AllVar0(length);
 	s[i] = w;
 	FullySpecifiedNode ** results;
 	uint64 num_results;
@@ -122,7 +122,7 @@ const Sentence * SentenceIndex::RandomSentenceContaining(int w){
 	  total+=num_results;
 	} else {
 	  if (n<num_results){
-	    return &results[n]->sentence_;
+	    return &results[n]->tuple_;
 	  } else {
 	    n-=num_results;
 	  }
@@ -134,22 +134,22 @@ const Sentence * SentenceIndex::RandomSentenceContaining(int w){
   return 0;
 }
 */
-const Sentence * SentenceIndex::Add(const Sentence & s) {  
+const Tuple * TupleIndex::Add(const Tuple & s) {  
   CHECK(s.Pattern()==0);
   uint64 fp = s.Fingerprint();
   if (fully_specified_ % fp) {
-    cerr << "Sentence already exists: " << s.ToString() << endl;
+    cerr << "Tuple already exists: " << s.ToString() << endl;
     return 0;
   }
-  lengths_[s.size()]++; total_sentences_++;
+  lengths_[s.size()]++; total_tuples_++;
   FullySpecifiedNode * n = new FullySpecifiedNode;
   fully_specified_[fp] = n;
-  n->sentence_ = s;
+  n->tuple_ = s;
   n->pos_in_lists_ = new int[1 << s.size()];
   for (GeneralizationIterator iter(s); !iter.done(); ++iter) {
     int pattern = iter.pattern();
     if (pattern==0) continue;
-    const Sentence & g = iter.generalized();
+    const Tuple & g = iter.generalized();
     uint64 gfp = g.Fingerprint();
     UnderspecifiedNode * un = underspecified_[gfp];
     if (un==0) {
@@ -161,19 +161,19 @@ const Sentence * SentenceIndex::Add(const Sentence & s) {
     un->specifications_.push_back(n);
     if (un->first_word_counts_) (*un->first_word_counts_)[s[0]]++;
   }
-  return &(n->sentence_);
+  return &(n->tuple_);
 }
 
-void SentenceIndex::Remove(const Sentence & s) {
+void TupleIndex::Remove(const Tuple & s) {
   CHECK(s.Pattern()==0);
   uint64 fp = s.Fingerprint();
   hash_map<uint64, FullySpecifiedNode*>::iterator 
     look = fully_specified_.find(fp);
   if (look == fully_specified_.end()) {
-    cerr << "Sentence does not exist" << endl;
+    cerr << "Tuple does not exist" << endl;
     return;
   }
-  lengths_[s.size()]--; total_sentences_--;
+  lengths_[s.size()]--; total_tuples_--;
   if (lengths_[s.size()]==0) lengths_.erase(s.size());
   FullySpecifiedNode * n = look->second;
   fully_specified_.erase(look);
@@ -181,7 +181,7 @@ void SentenceIndex::Remove(const Sentence & s) {
   for (GeneralizationIterator iter(s); !iter.done(); ++iter) {
     int pattern = iter.pattern();
     if (pattern==0) continue;
-    const Sentence & g = iter.generalized();
+    const Tuple & g = iter.generalized();
     uint64 gfp = g.Fingerprint();
     UnderspecifiedNode * un = underspecified_[gfp];
     CHECK(un!=NULL);
@@ -203,7 +203,7 @@ void SentenceIndex::Remove(const Sentence & s) {
   }
   delete n;  
 }
-void SentenceIndex::LookupInternal(const Sentence & s, 
+void TupleIndex::LookupInternal(const Tuple & s, 
 				   FullySpecifiedNode *** results, 
 				   uint64 * num_results) {
   uint64 fp = s.MakeVariableInsensitive().Fingerprint();
@@ -223,17 +223,17 @@ void SentenceIndex::LookupInternal(const Sentence & s,
     }
   }
 }
-void SentenceIndex::Lookup(const Sentence & s, 
-			   vector<const Sentence*> * results) {
+void TupleIndex::Lookup(const Tuple & s, 
+			   vector<const Tuple*> * results) {
   results->clear();
   FullySpecifiedNode ** internal_results;
   uint64 num_results;
   LookupInternal(s, &internal_results, &num_results);
   for (uint i=0; i<num_results; i++) 
-    results->push_back(&internal_results[i]->sentence_);
+    results->push_back(&internal_results[i]->tuple_);
 }
-const Sentence * SentenceIndex::FindSentence(const Sentence & s) {
-  vector<const Sentence *> results;
+const Tuple * TupleIndex::FindTuple(const Tuple & s) {
+  vector<const Tuple *> results;
   Lookup(s, &results);
   if(results.size() > 1) {
     cerr << "More than one result for " << s.ToString() << endl;
@@ -244,7 +244,7 @@ const Sentence * SentenceIndex::FindSentence(const Sentence & s) {
 }
 
 
-bool SentenceIndex::FindSatisfactions(const vector<Sentence> & pattern, 
+bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern, 
 				     vector<Substitution> * substitutions,
 				     uint64 * num_satisfactions, 
 				     int64 max_work,
@@ -278,16 +278,16 @@ bool SentenceIndex::FindSatisfactions(const vector<Sentence> & pattern,
   LookupInternal(pattern[best_clause], &matches, &num_matches);
   // cerr << pattern[best_clause].ToString() 
   //     << " LookupInternal returned " << num_matches << " results\n"; 
-  vector<Sentence> simplified_pattern = pattern;
+  vector<Tuple> simplified_pattern = pattern;
   simplified_pattern.erase(simplified_pattern.begin()+best_clause);
   if (max_work != -1 && least_work > max_work) return false;
   int total_work = least_work;
   uint64 total_num_satisfactions = 0;
   for (uint64 match=0; match<num_matches; match++){
-    vector<Sentence> substituted_pattern = simplified_pattern;
+    vector<Tuple> substituted_pattern = simplified_pattern;
     Substitution partial_sub;
-    const Sentence & pre_sub = pattern[best_clause];
-    const Sentence & post_sub = matches[match]->sentence_;
+    const Tuple & pre_sub = pattern[best_clause];
+    const Tuple & post_sub = matches[match]->tuple_;
     if (!ComputeSubstitution(pre_sub, post_sub, &partial_sub)) continue;
     VLOG(2) << "pre=" << pre_sub.ToString() 
 	    << " post=" << post_sub.ToString()
@@ -322,14 +322,14 @@ bool SentenceIndex::FindSatisfactions(const vector<Sentence> & pattern,
   if (actual_work) *actual_work = total_work;
   return true;
 }
-void SentenceIndex::FindWord(int w, vector<const Sentence *> *results){
+void TupleIndex::FindWord(int w, vector<const Tuple *> *results){
   results->clear();
-  set<const Sentence *> found;
-  vector<const Sentence *> foo;
+  set<const Tuple *> found;
+  vector<const Tuple *> foo;
   forall(run, lengths_) {
     int length = run->first;
     for(int i=0; i<length; i++) {
-      Sentence s;
+      Tuple s;
       for (int j=0; j<length; j++) s.push_back((j==i)?w:-1);      
       Lookup(s, &foo);
       found.insert(foo.begin(), foo.end());
@@ -338,30 +338,30 @@ void SentenceIndex::FindWord(int w, vector<const Sentence *> *results){
   results->insert(results->end(), found.begin(), found.end());
 }
 
-void SentenceIndex::Shell() {
+void TupleIndex::Shell() {
   string line;
   string command;
   
   while (cin >> command) {
     if (command == "add") {
       GetLine(cin, &line);
-      Sentence s;
+      Tuple s;
       s.FromString(line);
       Add(s);
-      cout << "Added sentence " << s.ToString() << endl;
+      cout << "Added tuple " << s.ToString() << endl;
     }
     if (command == "remove") {
       GetLine(cin, &line);
-      Sentence s;
+      Tuple s;
       s.FromString(line);
       Remove(s);
-      cout << "Removed sentence " << s.ToString() << endl;
+      cout << "Removed tuple " << s.ToString() << endl;
     }
     if (command == "lookup") {
-      Sentence s;
+      Tuple s;
       GetLine(cin, &line);
       s.FromString(line);
-      vector<const Sentence *> results;
+      vector<const Tuple *> results;
       cout << "Looking up " << s.ToString() << endl;
       Lookup(s, &results);
       for (uint i=0; i<results.size(); i++) {
@@ -374,7 +374,7 @@ void SentenceIndex::Shell() {
 	cout << "underspecified: " << run->first << endl;
 	for (uint i=0; i<run->second->specifications_.size(); i++) {
 	  cout << "   specification: " 
-	       << run->second->specifications_[i]->sentence_.ToString()
+	       << run->second->specifications_[i]->tuple_.ToString()
 	       << endl;
 	}
       }

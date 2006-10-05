@@ -17,8 +17,8 @@
 // Author: Noam Shazeer
 
 
-#ifndef _SENTENCE_H_
-#define _SENTENCE_H_
+#ifndef _TUPLE_H_
+#define _TUPLE_H_
 
 #include <map>
 #include "util.h"
@@ -30,13 +30,13 @@
 inline int Variable(int i) { return -1-i;} // its own inverse
 inline bool IsVariable(int i) { return (i<0);}
 
-// A Sentence is a tuple of words.
-struct Sentence{
+// A Tuple is a tuple of words.
+struct Tuple{
   vector <int> words_;
-  Sentence() {}
-  Sentence(const Sentence & o) { words_ = o.words_; }
+  Tuple() {}
+  Tuple(const Tuple & o) { words_ = o.words_; }
   uint size() const { return words_.size(); }
-  // A sentence can be represented as a string for human readability and 
+  // A tuple can be represented as a string for human readability and 
   // writablility.  The words are converted by the LexiconWithVariables LEXICON
   // and are space-separated.  The whole thing is surrounded by brackets.
   // e.g. (-3, 17, 17, 22) might translate to "[ $2 foo foo moo ]" 
@@ -47,8 +47,8 @@ struct Sentence{
   const int & operator [](int i) const {return words_[i];}
   void push_back(int i) { words_.push_back(i);}
   // turns all of the variables to Variable(0).
-  Sentence MakeVariableInsensitive() const {
-    Sentence ret = *this;
+  Tuple MakeVariableInsensitive() const {
+    Tuple ret = *this;
     for (uint i=0; i<words_.size(); i++) 
       ret[i] = max(ret[i], -1);
     return ret;
@@ -71,35 +71,35 @@ struct Sentence{
   // are there any variables that occur twice.
   bool HasDuplicateVariables() const;
 };
-bool operator==(const Sentence & s1, const Sentence & s2);
-Sentence AllVar0(int num_words);
-inline uint64 Fingerprint(const Sentence & s, uint64 level = 0){
+bool operator==(const Tuple & s1, const Tuple & s2);
+Tuple AllVar0(int num_words);
+inline uint64 Fingerprint(const Tuple & s, uint64 level = 0){
   return s.Fingerprint(level);
 }
-// Iterates over generalizations of a sentence.  The sentence must be entirely
-// literals, and the generalized sentence iterates over all sentences for which
+// Iterates over generalizations of a tuple.  The tuple must be entirely
+// literals, and the generalized tuple iterates over all tuples for which
 // a possibly empty or full subset of the words of s have been changed to 
 // Variable(0).
 struct GeneralizationIterator {
-  GeneralizationIterator(const Sentence & s) ;
+  GeneralizationIterator(const Tuple & s) ;
   void operator++();
   bool done() const;
-  const Sentence & generalized() const;
+  const Tuple & generalized() const;
   int pattern() const;
   int max_;
   int pattern_;
-  Sentence s_;
-  Sentence generalized_;
+  Tuple s_;
+  Tuple generalized_;
 };
 
 // TODO? maybe this stuff doesn't belong in this file
-typedef pair<vector<Sentence>, vector<Sentence> > CandidateRule;
-inline static vector<Sentence> Concat(const CandidateRule & r) {
-  vector<Sentence> ret = r.first; 
+typedef pair<vector<Tuple>, vector<Tuple> > CandidateRule;
+inline static vector<Tuple> Concat(const CandidateRule & r) {
+  vector<Tuple> ret = r.first; 
   ret.insert(ret.end(), r.second.begin(), r.second.end()); return ret; }
-inline static CandidateRule SplitOffLast(const vector<Sentence> & p) {
+inline static CandidateRule SplitOffLast(const vector<Tuple> & p) {
   return make_pair(RemoveFromVector(p, p.size()-1), 
-		   vector<Sentence>(1, p.back())); }
+		   vector<Tuple>(1, p.back())); }
 
 
 
@@ -114,8 +114,8 @@ struct Substitution {
   }
   int Lookup(int variable) const; // returns variable if not found
   bool Contains(int variable) const {return sub_ % variable;}
-  void Substitute(Sentence * s) const;
-  void Substitute(vector<Sentence> * v) const {
+  void Substitute(Tuple * s) const;
+  void Substitute(vector<Tuple> * v) const {
     for (uint i=0; i<v->size(); i++) Substitute(&((*v)[i]));
   }
   void Substitute(CandidateRule *c){
@@ -133,41 +133,41 @@ inline uint64 Fingerprint(const Substitution & s, uint64 level = 0){
   return s.Fingerprint(level);
 }
 
-set<int> GetVariables(const vector<Sentence> & v);
+set<int> GetVariables(const vector<Tuple> & v);
 
-// removes the sentences that have no variables
-vector<Sentence> RemoveVariableFreeSentences(const vector<Sentence> & v);
+// removes the tuples that have no variables
+vector<Tuple> RemoveVariableFreeTuples(const vector<Tuple> & v);
 
-// computes the substitution to get from one sentence to another
-bool ComputeSubstitution(const Sentence & pre_sub, const Sentence & post_sub,
+// computes the substitution to get from one tuple to another
+bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
 			 Substitution * sub);
 
-set<int> GetAllWords(const vector<Sentence> & v);
+set<int> GetAllWords(const vector<Tuple> & v);
 
-Sentence StringToSentence(const string & s);
-string SentenceVectorToString(const vector<Sentence> &v);
-vector<Sentence> StringToSentenceVector(const string & s);
+Tuple StringToTuple(const string & s);
+string TupleVectorToString(const vector<Tuple> &v);
+vector<Tuple> StringToTupleVector(const string & s);
 // shows both unsubstituted and substituted variables
-string ToString(const Sentence & s, const Substitution & sub); 
+string ToString(const Tuple & s, const Substitution & sub); 
 
-// The likelihood according to a particular encoding of a vector of sentences,
-// given another vector of sentences has already been encoded as context.  
+// The likelihood according to a particular encoding of a vector of tuples,
+// given another vector of tuples has already been encoded as context.  
 // The user is responsible for adding in the ln likelihood of the words passed
 // back in arbitrary_words .
-double SentencesLnLikelihood(const vector<Sentence> &context, 
-			     const vector<Sentence> &to_encode, 
+double TuplesLnLikelihood(const vector<Tuple> &context, 
+			     const vector<Tuple> &to_encode, 
 			     vector<int> * arbitrary_words);
 
-// Given a vector of sentences, with variables, we rename the variables
-// so that the first variable to occur in the vector of sentences is 
+// Given a vector of tuples, with variables, we rename the variables
+// so that the first variable to occur in the vector of tuples is 
 // Variable(0), the next is Variable(1), etc.
-void RenameVariablesInOrder(vector<Sentence> * v, Substitution *s);
+void RenameVariablesInOrder(vector<Tuple> * v, Substitution *s);
 
 // try to put the pattern in a canonical form
 // I believe that this may be NP-hard, but let's at least make an attempt. 
-vector<Sentence> Canonicalize(const vector<Sentence> & v, Substitution *sub);
+vector<Tuple> Canonicalize(const vector<Tuple> & v, Substitution *sub);
 
-// Put a rule (an ordered pair of sentence vectors) in canonical form.
+// Put a rule (an ordered pair of tuple vectors) in canonical form.
 CandidateRule CanonicalizeRule(const CandidateRule & r);
 		 
 #endif

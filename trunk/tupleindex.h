@@ -17,35 +17,35 @@
 // Author: Noam Shazeer
 
 
-#ifndef _SENTENCEINDEX_H_
-#define _SENTENCEINDEX_H_
+#ifndef _TUPLEINDEX_H_
+#define _TUPLEINDEX_H_
 
 #include "util.h"
-#include "sentence.h"
+#include "tuple.h"
 
-// A SentenceIndex is, as it suggests, an index over sentences of literals, 
-// that allows the sentences to be searched by a pattern, which is a vector 
-// of sentences of literals and variables.
+// A TupleIndex is, as it suggests, an index over tuples of literals, 
+// that allows the tuples to be searched by a pattern, which is a vector 
+// of tuples of literals and variables.
 //
-// When a sentence is added to the index, it is stored internally.  The pointer
-// to that sentence returned by Add(), and all pointers to that sentence 
-// returned until that sentence is removed will be the same.  
-class SentenceIndex{
+// When a tuple is added to the index, it is stored internally.  The pointer
+// to that tuple returned by Add(), and all pointers to that tuple 
+// returned until that tuple is removed will be the same.  
+class TupleIndex{
  public:
-  SentenceIndex();
-  ~SentenceIndex();
-  // Adds a sentence to the index.  Returns a pointer to the static internal 
-  // copy of the sentence.
-  const Sentence * Add(const Sentence & s);
-  // Removes a sentence from the index.
-  void Remove (const Sentence & s);
+  TupleIndex();
+  ~TupleIndex();
+  // Adds a tuple to the index.  Returns a pointer to the static internal 
+  // copy of the tuple.
+  const Tuple * Add(const Tuple & s);
+  // Removes a tuple from the index.
+  void Remove (const Tuple & s);
   // s is composed of literals.
   // Returns a pointer to the static internal copy of s, or NULL if absent.
-  const Sentence * FindSentence(const Sentence & s);
-  // s is a sentence with literals and Variable(0).  The results do not 
+  const Tuple * FindTuple(const Tuple & s);
+  // s is a tuple with literals and Variable(0).  The results do not 
   // require all instances of Variable(0) have the same substitution.
-  void Lookup(const Sentence & s, vector<const Sentence*> * results);
-  // A histogram of the lengths of the sentences in the index.
+  void Lookup(const Tuple & s, vector<const Tuple*> * results);
+  // A histogram of the lengths of the tuples in the index.
   inline const map<uint64, uint64> & Lengths() const {return lengths_; }
   // Searches over the index to match a pattern.
   // Pattern can contain literals and variables.  Multiple instances of the
@@ -57,42 +57,42 @@ class SentenceIndex{
   // a non-null pointer for num_satisfactions.  
   // You can tell how much work the function did using the parameter actual_work
   // The function returns true if it doesn't run out of time
-  bool FindSatisfactions(const vector<Sentence> & pattern, 
+  bool FindSatisfactions(const vector<Tuple> & pattern, 
 			 vector<Substitution> * substitutions, // can be null
 			 uint64 * num_satisfactions,  // can be null
 			 int64 max_work, // -1 for no limit
 			 uint64 * actual_work); // can be null
-  // Get a random sentence containing all of the given words.  
+  // Get a random tuple containing all of the given words.  
   // If funky_distribution is set, we first choose uniformly over the positions
-  // in the sentence of the given words.  This over-represents sentences where
+  // in the tuple of the given words.  This over-represents tuples where
   // the words take a rare position.  
-  const Sentence * GetRandomSentenceContaining(const vector<int> & words, 
+  const Tuple * GetRandomTupleContaining(const vector<int> & words, 
 					       bool funky_distribution);
 					       
-  const Sentence * RandomSentence();
+  const Tuple * RandomTuple();
 
-  // returns all sentences containing a word.
-  void FindWord(int w, vector<const Sentence* >* results); 
+  // returns all tuples containing a word.
+  void FindWord(int w, vector<const Tuple* >* results); 
 
   // for testing.
   void Shell();  
  private:
   struct FullySpecifiedNode{
-    Sentence sentence_;
+    Tuple tuple_;
     int * pos_in_lists_;
   };
   struct UnderspecifiedNode{
     vector<FullySpecifiedNode *> specifications_;
-    // maps first word to number of sentences starting with that word
+    // maps first word to number of tuples starting with that word
     map<int, int> *first_word_counts_; // present if first word is variable
   };
   hash_map<uint64, FullySpecifiedNode*> fully_specified_;
   hash_map<uint64, UnderspecifiedNode*> underspecified_;
 
-  uint64 total_sentences_;
+  uint64 total_tuples_;
   map<uint64, uint64> lengths_; // number of stored sencences whith these lengths
 
-  void LookupInternal(const Sentence & s, 
+  void LookupInternal(const Tuple & s, 
 		      FullySpecifiedNode *** results, 
 		      uint64 * num_results);
 };

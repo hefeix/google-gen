@@ -22,9 +22,9 @@
 #define _MODEL_H_
 
 #include "util.h"
-#include "sentence.h"
+#include "tuple.h"
 #include "numbers.h"
-#include "sentenceindex.h"
+#include "tupleindex.h"
 #include "lexicon.h"
 #include "record.h"
 #include "component.h"
@@ -71,9 +71,9 @@ class Model {
   // We need a fingerprint function on rules so that we can avoid
   // creating duplicate rules.
   static uint64 RuleFingerprint(RuleType type,
-				const vector<Sentence> & precondition,
-				const vector<Sentence> & result,
-				const vector<Sentence> & target_precondition);
+				const vector<Tuple> & precondition,
+				const vector<Tuple> & result,
+				const vector<Tuple> & target_precondition);
   
   // We can look up a component by id.
   Component * GetComponent(int id) const;
@@ -81,9 +81,9 @@ class Model {
     return dynamic_cast<C *>(GetComponent(id));
   }
 
-  // Returns the representation of a sentence (a clause in a rule).
+  // Returns the representation of a tuple (a clause in a rule).
   // Used in determining the encoding of rules.
-  vector<Sentence> ComputeSentenceEncoding(const Sentence &s, int name);
+  vector<Tuple> ComputeTupleEncoding(const Tuple &s, int name);
   // A global sanity check that the Dependents(), Codependents(), Purposes(),
   // and Copurposes() functions are returning what they should
   void CheckConnections();
@@ -100,7 +100,7 @@ class Model {
   // parameters.
   // TODO, make actual_work a parameter, for uniformity sake.
   int64 FindSatisfactionsForProposition
-    ( const Sentence & s, 
+    ( const Tuple & s, 
       vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > 
       *results,
       int64 max_work,
@@ -108,28 +108,28 @@ class Model {
       bool return_subs_for_all_rules);
   
   // This is for editing and inspecting the model specification.
-  // Sentences can be forbidden or required.  Forbidden sentences can include
+  // Tuples can be forbidden or required.  Forbidden tuples can include
   // variable(0), multiple instances of which need not match the same literal.
-  // If a sentence is declared both forbidden and required, it is required and
+  // If a tuple is declared both forbidden and required, it is required and
   // not forbidden.  
-  bool IsRequired(const Sentence & s);
-  bool IsForbidden(const Sentence & s);
-  void MakeRequired(const Sentence & s);
-  void MakeNotRequired(const Sentence & s);
-  void MakeForbidden(const Sentence & s);
-  void MakeNotForbidden(const Sentence & s);
+  bool IsRequired(const Tuple & s);
+  bool IsForbidden(const Tuple & s);
+  void MakeRequired(const Tuple & s);
+  void MakeNotRequired(const Tuple & s);
+  void MakeForbidden(const Tuple & s);
+  void MakeNotForbidden(const Tuple & s);
   
   // The specification can be read from a file.  A line in the file like
   // [ foo goo *moo ]
-  // means that the sentence [ foo goo moo ] is required, and all other 
-  // three-word sentences starting with "foo goo" are forbidden.
+  // means that the tuple [ foo goo moo ] is required, and all other 
+  // three-word tuples starting with "foo goo" are forbidden.
   void ReadSpec(istream * input); // do this first.
   // Does the model comply with the specification.
   bool Legal();
 
-  // Makes this sentence given.  Creates a true proposition if one doesn't
+  // Makes this tuple given.  Creates a true proposition if one doesn't
   // exist, and flips the given bit to true.  
-  void MakeGiven(const Sentence & s);
+  void MakeGiven(const Tuple & s);
 
   // manipulation:
 
@@ -149,12 +149,12 @@ class Model {
   void SubtractArbitraryWord(int w);
 
   // Finds or adds a Precondition
-  Precondition * GetAddPrecondition(const vector<Sentence> & sentences);
+  Precondition * GetAddPrecondition(const vector<Tuple> & tuples);
 
   // Finds a TrueProposition
-  TrueProposition * FindTrueProposition(const Sentence & s);
+  TrueProposition * FindTrueProposition(const Tuple & s);
   // Finds or adds a TrueProposition
-  TrueProposition * GetAddTrueProposition(const Sentence & s);
+  TrueProposition * GetAddTrueProposition(const Tuple & s);
 
   // Records a change to the model in the history.
   void RecordChange(Change * change);
@@ -230,8 +230,8 @@ class Model {
   // data
   int next_id_;
   map<int, Component *> id_to_component_;
-  SentenceIndex sentence_index_; // stores pointers to Firings
-  map<const Sentence *, TrueProposition *> index_to_true_proposition_;
+  TupleIndex tuple_index_; // stores pointers to Firings
+  map<const Tuple *, TrueProposition *> index_to_true_proposition_;
   set<Component *> times_dirty_; //components whose times need fixing
   set<Component *> never_happen_; // components which never happen
   set<Component *> required_never_happen_; // required and never happen
@@ -246,8 +246,8 @@ class Model {
   double ln_likelihood_;
 
   // the spec
-  map<uint64, Sentence> required_;
-  map<uint64, Sentence> forbidden_;
+  map<uint64, Tuple> required_;
+  map<uint64, Tuple> forbidden_;
   set<TrueProposition *> present_forbidden_;
   set<uint64> absent_required_;  
 

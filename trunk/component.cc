@@ -39,9 +39,9 @@ Model::Component::Component(Model * model, int id){
 Model::Component::~Component(){
 }
 Model::Precondition::Precondition(Model * model, 
-				  const vector<Sentence> & sentences, int id)
+				  const vector<Tuple> & tuples, int id)
   : Component(model, id){
-  clauses_ = sentences;
+  clauses_ = tuples;
   for (uint i=0; i<clauses_.size(); i++){
     model_->clause_to_precondition_
       [clauses_[i].MakeVariableInsensitive().Fingerprint()]
@@ -53,13 +53,13 @@ Model::Precondition::Precondition(Model * model,
   ComputeSetTime();
   // vector<int> arbitrary_words;
   precondition_ln_likelihood_ = 0.0;
-  //    = SentencesLnLikelihood(vector<Sentence>(), clauses_, &arbitrary_words);
+  //    = TuplesLnLikelihood(vector<Tuple>(), clauses_, &arbitrary_words);
   //   for (uint i=0; i<arbitrary_words.size(); i++) 
   //   model_->AddArbitraryWord(arbitrary_words[i]);
   ln_likelihood_per_sat_ = 0.0;
   uint64 num_sat;
   uint64 work;
-  model_->sentence_index_.FindSatisfactions(clauses_, 0, &num_sat, -1, &work);
+  model_->tuple_index_.FindSatisfactions(clauses_, 0, &num_sat, -1, &work);
   num_satisfactions_ = num_sat;
   ComputeSetLnLikelihood();
   model_->RecordAddComponent(this);
@@ -74,7 +74,7 @@ void Model::Precondition::Destroy(){
       model_->clause_to_precondition_.erase(fp);
   }
   //vector<int> arbitrary_words;
-  //SentencesLnLikelihood(vector<Sentence>(), clauses_, &arbitrary_words);
+  //TuplesLnLikelihood(vector<Tuple>(), clauses_, &arbitrary_words);
   //for (uint i=0; i<arbitrary_words.size(); i++) 
   //  model_->SubtractArbitraryWord(arbitrary_words[i]);
 }
@@ -83,15 +83,15 @@ Model::Satisfaction::Satisfaction(Precondition * precondition,
   :Component(precondition->model_, id) {
   Satisfaction ** sp = precondition->satisfactions_ % sub.Fingerprint();
   CHECK(!sp);
-  vector<Sentence> substituted_precondition = precondition->clauses_;
+  vector<Tuple> substituted_precondition = precondition->clauses_;
   sub.Substitute(&substituted_precondition);
   for (uint i=0; i<substituted_precondition.size(); i++) {
     for (uint j=0; j<substituted_precondition[i].size(); j++) {
       if (substituted_precondition[i][j] < 0) {
 	cerr << "Bad satisfaction " << endl
-	     << SentenceVectorToString(precondition->clauses_) << endl
+	     << TupleVectorToString(precondition->clauses_) << endl
 	     << sub.ToString() << endl
-	     << SentenceVectorToString(substituted_precondition) << endl;
+	     << TupleVectorToString(substituted_precondition) << endl;
 	CHECK(false);
       }
     }
@@ -100,12 +100,12 @@ Model::Satisfaction::Satisfaction(Precondition * precondition,
   precondition->satisfactions_[sub.Fingerprint()] = this;
   precondition_ = precondition;
   substitution_ = sub;
-  vector<Sentence> props = precondition->clauses_;
+  vector<Tuple> props = precondition->clauses_;
   sub.Substitute(&props);
   for (uint i=0; i<props.size(); i++) {
-    const Sentence * sentence = model_->sentence_index_.FindSentence(props[i]);
-    CHECK(sentence);
-    TrueProposition * t = model_->index_to_true_proposition_[sentence];
+    const Tuple * tuple = model_->tuple_index_.FindTuple(props[i]);
+    CHECK(tuple);
+    TrueProposition * t = model_->index_to_true_proposition_[tuple];
     CHECK(t);
     // we need this if statement, since one proposition can be used twice.
     if (!(propositions_ % t)) { 
@@ -125,7 +125,7 @@ void Model::Satisfaction::Destroy(){
 }
 Model::Rule::Rule(Precondition * precondition, EncodedNumber delay, 
 		  RuleType type, Rule * target_rule,
-		  vector<Sentence> result, EncodedNumber strength,
+		  vector<Tuple> result, EncodedNumber strength,
 		  EncodedNumber strength2,
 		  bool just_this, // don't add satisfactions or firing prop
 		  bool no_firing_prop, int id) // don't add a firing proposition
@@ -144,7 +144,7 @@ Model::Rule::Rule(Precondition * precondition, EncodedNumber delay,
     string relation_name = "RULE_" + itoa(id_);
     set<int> vars = Union(GetVariables(result), 
 			  GetVariables(precondition_->clauses_));
-    Sentence firing_prop;
+    Tuple firing_prop;
     firing_prop.push_back(LEXICON.GetAddID(relation_name));
     forall(run, vars) firing_prop.push_back(*run);
     result.push_back(firing_prop);
@@ -169,10 +169,10 @@ Model::Rule::Rule(Precondition * precondition, EncodedNumber delay,
   ComputeSetTime();  
   //vector<int> arbitrary_words;
   rule_ln_likelihood_ = 0.0;
-  // =SentencesLnLikelihood(precondition_->clauses_, result_, &arbitrary_words);
+  // =TuplesLnLikelihood(precondition_->clauses_, result_, &arbitrary_words);
   //  for (uint i=0; i<arbitrary_words.size(); i++) 
   //   model_->AddArbitraryWord(arbitrary_words[i]);
-  vector<Sentence> encoding = ComputeEncoding();
+  vector<Tuple> encoding = ComputeEncoding();
   for (uint i=0; i<encoding.size(); i++) {
     TrueProposition * p = model_->GetAddTrueProposition(encoding[i]);
     encoding_.push_back(p);
@@ -184,7 +184,7 @@ Model::Rule::Rule(Precondition * precondition, EncodedNumber delay,
     vector<Substitution> substitutions;  
     uint64 num_sat;
     uint64 work;
-    model_->sentence_index_.FindSatisfactions(precondition_->clauses_, 
+    model_->tuple_index_.FindSatisfactions(precondition_->clauses_, 
 					      &substitutions,
 					      &num_sat, -1, &work);
     for (uint i=0; i<substitutions.size(); i++) {
@@ -235,7 +235,7 @@ Model::Firing::Firing(RuleSat * rule_sat, Substitution right_substitution,
   rule_sat_->ComputeSetLnLikelihood();
   right_substitution_ = right_substitution;
   model_->RecordAddComponent(this);
-  vector<Sentence> results = rule_sat->rule_->result_;
+  vector<Tuple> results = rule_sat->rule_->result_;
   Substitution & left_substitution_ref = rule_sat->satisfaction_->substitution_;
   for (uint i=0; i<results.size(); i++){
     left_substitution_ref.Substitute(&(results[i]));
@@ -258,7 +258,7 @@ Model::Firing::~Firing(){
 }
 Model::TrueProposition::TrueProposition(Model * model, 
 					const vector<Firing *> & causes, 
-					Sentence proposition,
+					Tuple proposition,
 					bool just_this, int id)
   :Component(model, id){
   causes_.insert(causes.begin(), causes.end());
@@ -269,7 +269,7 @@ Model::TrueProposition::TrueProposition(Model * model,
   forall(run, causes) {
     (*run)->true_propositions_.insert(this);
   }
-  const Sentence * prop = model_->sentence_index_.Add(proposition);
+  const Tuple * prop = model_->tuple_index_.Add(proposition);
   model_->index_to_true_proposition_[prop] = this;
   ComputeSetTime();
   model_->RecordAddComponent(this);
@@ -349,7 +349,7 @@ void Model::Rule::Destroy(){
     target_rule_->inhibitors_.erase(this);
   }
   vector<int> arbitrary_words;
-  //SentencesLnLikelihood(precondition_->clauses_, result_, &arbitrary_words);
+  //TuplesLnLikelihood(precondition_->clauses_, result_, &arbitrary_words);
   //for (uint i=0; i<arbitrary_words.size(); i++) 
   //  model_->SubtractArbitraryWord(arbitrary_words[i]);
 }
@@ -367,10 +367,10 @@ void Model::TrueProposition::Destroy(){
   forall (run, causes_) {
     (*run)->true_propositions_.erase(this);
   }
-  const Sentence * prop = model_->sentence_index_.FindSentence(proposition_);
+  const Tuple * prop = model_->tuple_index_.FindTuple(proposition_);
   CHECK(prop);
   CHECK(model_->index_to_true_proposition_[prop] == this);
-  model_->sentence_index_.Remove(proposition_);
+  model_->tuple_index_.Remove(proposition_);
   model_->index_to_true_proposition_.erase(prop);
 }
 
@@ -525,10 +525,10 @@ Record Model::Component::RecordForDisplay() const{
 }
 Record Model::Precondition::RecordForDisplayInternal() const{
   Record r;
-  r["precondition"] = SentenceVectorToString(clauses_);
+  r["precondition"] = TupleVectorToString(clauses_);
   forall(run, rules_){
     r["rules"] += (*run)->HTMLLink(itoa((*run)->id_)) + " " 
-      + SentenceVectorToString((*run)->result_) + "<br>";
+      + TupleVectorToString((*run)->result_) + "<br>";
   }
   return r;
 }
@@ -551,7 +551,7 @@ Record Model::Rule::RecordForDisplayInternal() const{
 }
 Record Model::Satisfaction::RecordForDisplayInternal() const{
   Record r;
-  r["precondition"] = precondition_->HTMLLink(SentenceVectorToString(precondition_->clauses_));
+  r["precondition"] = precondition_->HTMLLink(TupleVectorToString(precondition_->clauses_));
   r["substitution"] = substitution_.ToString();
   return r;
 }
@@ -607,7 +607,7 @@ Record Model::ComponentEssentials::ToRecord(){
   return r;
 }
 void Model::Precondition::Essentials::ToRecordInternal(Record &r){
-  r["clauses"] = SentenceVectorToString(clauses_);
+  r["clauses"] = TupleVectorToString(clauses_);
 }
 void Model::Satisfaction::Essentials::ToRecordInternal(Record &r){
   r["precondition"] = itoa(precondition_id_);
@@ -617,7 +617,7 @@ void Model::Rule::Essentials::ToRecordInternal(Record &r){
   r["precondition"] = itoa(precondition_id_);
   r["delay"] = delay_.ToSortableString();
   r["rule_type"] = RuleTypeToString(type_);
-  r["result"] = SentenceVectorToString(result_);
+  r["result"] = TupleVectorToString(result_);
   r["strength"] = strength_.ToSortableString();
   r["strength2"] = strength2_.ToSortableString();
   if (type_==NEGATIVE_RULE) {
@@ -639,7 +639,7 @@ void Model::TrueProposition::Essentials::ToRecordInternal(Record &r){
 }
 
 void Model::Precondition::Essentials::FromRecordInternal(Record r){  
-  clauses_ = StringToSentenceVector(r["clauses"]);
+  clauses_ = StringToTupleVector(r["clauses"]);
 }
 void Model::Satisfaction::Essentials::FromRecordInternal(Record r){  
   precondition_id_ = atoi(r["precondition"]);
@@ -649,7 +649,7 @@ void Model::Rule::Essentials::FromRecordInternal(Record r){
   precondition_id_ = atoi(r["precondition"]);
   delay_ = EncodedNumber(r["delay"]);
   type_ = StringToRuleType(r["rule_type"]);
-  result_ = StringToSentenceVector(r["result"]);
+  result_ = StringToTupleVector(r["result"]);
   strength_ = EncodedNumber(r["strength"]);
   strength2_ = EncodedNumber(r["strength2"]);
   if (type_ == NEGATIVE_RULE) target_rule_id_ = atoi(r["target_id"]);
