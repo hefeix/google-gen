@@ -17,15 +17,15 @@
 // Author: Noam Shazeer
 
 
-#include "sentenceindex.h"
+#include "tupleindex.h"
 #include "numbers.h"
 #include "model.h"
 #include <fstream>
 int main(int argc, char ** argv) {
   string command;
   if (argc>1) command = argv[1];
-  if (command=="sentenceindex") {
-    SentenceIndex index;
+  if (command=="tupleindex") {
+    TupleIndex index;
     index.Shell();
   } else if (command=="numbers") {
     TestNumbersShell();

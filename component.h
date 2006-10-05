@@ -227,12 +227,12 @@ template<class C> struct CPtr{
 // Here we have the six types of components.
 
 // A Precondition represents the preconditions of a rule, which are a vector
-// of sentences containing variables.
+// of tuples containing variables.
 struct Precondition : public Component {
   // fundamental data
-  vector<Sentence> clauses_;
+  vector<Tuple> clauses_;
   struct Essentials : public ComponentEssentials {
-    vector<Sentence> clauses_;
+    vector<Tuple> clauses_;
     void ToRecordInternal(Record &r);
     ComponentType Type() const;
     void FromRecordInternal(Record r);
@@ -253,7 +253,7 @@ struct Precondition : public Component {
   // of the precondition for which none of the associated rules are satisfied.
   double ln_likelihood_per_sat_;
 
-  Precondition(Model * model, const vector<Sentence> & sentences,
+  Precondition(Model * model, const vector<Tuple> & tuples,
 	       int id);
   ~Precondition();
   // Functions of the superclass Component()
@@ -310,7 +310,7 @@ struct Satisfaction : public Component {
   Record RecordForDisplayInternal() const;
   inline bool NeedsPurpose(); // yes
   vector<Component *> Dependents(); // the rule_sats
-  vector<vector<Component *> > Codependents(); // Preconditions, sentences
+  vector<vector<Component *> > Codependents(); // Preconditions, tuples
   vector<Component *> Purposes(); // the rule_sats
   bool HasPurpose();
 };
@@ -324,7 +324,7 @@ struct Rule : public Component{
   // with the rule, so as to allow for higher and lower precedence rules. 
   EncodedNumber delay_;
   RuleType type_;
-  vector<Sentence> result_;
+  vector<Tuple> result_;
   // If the rule is simple or creative, strength_ is the probability for each
   // satisfaction that the rule fires at least once.
   // If the rule is negative, 1-strength_ is a multiplier on the prior
@@ -340,7 +340,7 @@ struct Rule : public Component{
     int precondition_id_;
     EncodedNumber delay_;
     RuleType type_;
-    vector<Sentence> result_;
+    vector<Tuple> result_;
     EncodedNumber strength_;
     EncodedNumber strength2_;
     int target_rule_id_;
@@ -375,7 +375,7 @@ struct Rule : public Component{
   // that this rule shouldn't get an extra "firing proposition" in the result.
   Rule(Precondition * precondition, EncodedNumber delay, 
        RuleType type, Rule * target_rule,
-       vector<Sentence> result, EncodedNumber strength,
+       vector<Tuple> result, EncodedNumber strength,
        EncodedNumber strength2, 
        bool just_this,
        bool no_firing_prop,
@@ -415,7 +415,7 @@ struct Rule : public Component{
   // may leave some times dirty.
   void ChangeDelay(EncodedNumber new_delay);
   // Returns the propositions that encode the rule.  
-  vector<Sentence> ComputeEncoding();
+  vector<Tuple> ComputeEncoding();
 
   // Functions of the parent class Component
   void Destroy();
@@ -515,10 +515,10 @@ struct Firing : public Component{
 // A proposition which is true in our model
 struct TrueProposition : public Component{
   // fundamental
-  Sentence proposition_;  
+  Tuple proposition_;  
 
   struct Essentials : public ComponentEssentials {
-    Sentence proposition_;
+    Tuple proposition_;
     vector<int> cause_ids_;
     bool given_;
     void ToRecordInternal(Record &r);
@@ -543,7 +543,7 @@ struct TrueProposition : public Component{
 
   TrueProposition(Model * model, 
 		  const vector<Firing *> & causes, 
-		  Sentence proposition, bool just_this,
+		  Tuple proposition, bool just_this,
 		  int id);
   ~TrueProposition();
 

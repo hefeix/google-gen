@@ -38,7 +38,7 @@ CXXFLAGS = -Wall -Wno-deprecated -g $(INCLUDES)
 
 #-----File Dependencies----------------------
 
-SRC = optimization.cc hash.cc util.cc probutil.cc record.cc numbers.cc lexicon.cc sentence.cc sentenceindex.cc model.cc component.cc t.cc
+SRC = optimization.cc hash.cc util.cc probutil.cc record.cc numbers.cc lexicon.cc tuple.cc tupleindex.cc model.cc component.cc t.cc
 
 OBJ = $(addsuffix .o, $(basename $(SRC)))
 
@@ -58,9 +58,9 @@ probutil.o: probutil.h
 record.o: record.h util.h
 numbers.o: numbers.h util.h
 lexicon.o: lexicon.h util.h
-sentence.o: sentence.h util.h lexicon.h
-sentenceindex.o: sentenceindex.h util.h sentence.h lexicon.h
-component.o: model.h util.h sentence.h numbers.h sentenceindex.h
-optimization.o: model.h util.h sentence.h numbers.h sentenceindex.h
-model.o: model.h util.h sentence.h numbers.h sentenceindex.h
-test.o: model.h util.h sentence.h numbers.h sentenceindex.h
+tuple.o: tuple.h util.h lexicon.h
+tupleindex.o: tupleindex.h util.h tuple.h lexicon.h
+component.o: model.h util.h tuple.h numbers.h tupleindex.h
+optimization.o: model.h util.h tuple.h numbers.h tupleindex.h
+model.o: model.h util.h tuple.h numbers.h tupleindex.h
+test.o: model.h util.h tuple.h numbers.h tupleindex.h

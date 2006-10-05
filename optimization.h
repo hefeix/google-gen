@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+!// Copyright (C) 2006 Google Inc.
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,8 +41,8 @@ bool TrySpecifyCreativeRule(Model *m,
 			    bool fix_times);
 // TODO, document this
 bool TryAddImplicationRule(Model *m,
-			   const vector<Sentence> & preconditions, 
-			   const vector<Sentence> & result, 
+			   const vector<Tuple> & preconditions, 
+			   const vector<Tuple> & result, 
 			   RollbackCriterion criterion, bool fix_times);
 
   
@@ -128,12 +128,12 @@ void FulfillRequirements(Model *m); // call on an empty model
 void FixTimesFixCircularDependencies(Model *m);
 
 // Finds possible pairs of rules and substitutions such that the 
-// preconditios are satisfied, and one of the results is the given sentence.
+// preconditios are satisfied, and one of the results is the given tuple.
 // You can exclude some TruePropositions as dependents, for example to 
 // aviod circular causation.  In the results, if the value of a variable 
 // does not matter, 
 // returns work, or -1 if we ran out of time.
-int64 FindExplanationsForResult (Model *m, const Sentence & s, 
+int64 FindExplanationsForResult (Model *m, const Tuple & s, 
 				 vector<pair<Rule *, Substitution> > *results,
 				 set<Component *> * excluded_dependents,
 				 int64 max_work); 

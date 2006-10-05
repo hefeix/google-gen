@@ -32,9 +32,9 @@ void OptimizeRound(Model *m){
   }
 }
 
-pair<vector<Sentence>, vector<Sentence> >
+pair<vector<Tuple>, vector<Tuple> >
 FindRandomCandidateRule(Model *m, Tactic tactic){
-  pair<vector<Sentence>, vector<Sentence> > ret;
+  pair<vector<Tuple>, vector<Tuple> > ret;
   while (!MaybeFindRandomCandidateRule(m, &ret, tactic));
   return ret;
 }
@@ -50,7 +50,7 @@ bool MaybeFindRandomCandidateRule(Model *m, CandidateRule *ret,
   }
 }
 TrueProposition * GetRandomTrueProposition(Model *m){
-  return m->index_to_true_proposition_[sentence_index_.RandomSentence()];  
+  return m->index_to_true_proposition_[tuple_index_.RandomTuple()];  
 }
 
 
@@ -75,9 +75,9 @@ bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic){
   case GENERALIZE_ONE: {
     int literal = -1;
     for (int try_num=0; try_num<10; try_num++) {
-      const vector<Sentence> & v = ((rand()%2)?cand.first:cand.second);
+      const vector<Tuple> & v = ((rand()%2)?cand.first:cand.second);
       if (v.size()==0) continue;
-      const Sentence & s = v[rand()%v.size()];
+      const Tuple & s = v[rand()%v.size()];
       int l = s[rand() % s.size()];
       if (!IsVariable(l)) {
 	literal = l;
@@ -109,12 +109,12 @@ bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
   int64 max_work = (uint)(10/pow(RandomFraction(), 1.0));
   uint num_clauses = 1;
   while (RandomFraction() < 0.7) num_clauses++;  
-  vector<Sentence> p;
+  vector<Tuple> p;
   Substitution sub;
   int next_var = 0;
-  set<const Sentence *> used_sentences;
-  const Sentence * s1 = m->sentence_index_.RandomSentence();
-  used_sentences.insert(s1);
+  set<const Tuple *> used_tuples;
+  const Tuple * s1 = m->tuple_index_.RandomTuple();
+  used_tuples.insert(s1);
   p.push_back(*s1);
   int tries = 100;
   while (p.size() < num_clauses) {
@@ -133,11 +133,11 @@ bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
       anchors.insert(w);
     }
     vector<int> v_anchors(anchors.begin(), anchors.end());
-    const Sentence * s 
-      = m->sentence_index_.GetRandomSentenceContaining(v_anchors, true);
+    const Tuple * s 
+      = m->tuple_index_.GetRandomTupleContaining(v_anchors, true);
     if (!s) continue;
-    if (used_sentences % s) continue;
-    used_sentences.insert(s);
+    if (used_tuples % s) continue;
+    used_tuples.insert(s);
     p.push_back(*s);
     forall(run, anchors){
       sub.Add(Variable(next_var++), *run);
@@ -163,31 +163,31 @@ bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
 bool VetteCandidateRule(Model *m, CandidateRule r, 
 			CandidateRule * simplified_rule, 
 			int64 max_work) {
-  vector<Sentence> p = Concat(r);
+  vector<Tuple> p = Concat(r);
   uint64 num_satisfactions;
   vector<Substitution> subs;
   bool success = 
-    m->sentence_index_.FindSatisfactions(p, &subs, &num_satisfactions,
+    m->tuple_index_.FindSatisfactions(p, &subs, &num_satisfactions,
 					 max_work, 0);
   if (max_work >=0 && num_satisfactions > (uint64)max_work) success = false;
   if (!success) return false;
   if (num_satisfactions < 2) return false;
   
   // check that the preconditions aren't too much work to searh for.
-  vector<Sentence> preconditions = r.first;
+  vector<Tuple> preconditions = r.first;
   uint64 preconditions_num_satisfactions = 0;
   bool preconditions_success = 
-    m->sentence_index_.FindSatisfactions(preconditions, 0, 
+    m->tuple_index_.FindSatisfactions(preconditions, 0, 
 				      &preconditions_num_satisfactions, 
 				      max_work, 0);
 if (max_work>=0 && preconditions_num_satisfactions > (uint64)max_work) 
     preconditions_success = false;
   if (!preconditions_success) return false;
   for (uint i=0; i<preconditions.size(); i++) {
-    vector<Sentence> simplified_preconditions 
+    vector<Tuple> simplified_preconditions 
       = RemoveFromVector(preconditions, i);
     uint64 simplified_num_satisfactions = 0;
-    if (m->sentence_index_.FindSatisfactions(simplified_preconditions, 0, 
+    if (m->tuple_index_.FindSatisfactions(simplified_preconditions, 0, 
 					     &simplified_num_satisfactions, 
 					     max_work, 0)) {
       if (simplified_num_satisfactions == preconditions_num_satisfactions){
@@ -212,8 +212,8 @@ if (max_work>=0 && preconditions_num_satisfactions > (uint64)max_work)
   boring_variables.Substitute(&r.first);
   boring_variables.Substitute(&r.second);
   if (GetVariables(r.second).size()==0) return false;
-  r.first = RemoveVariableFreeSentences(r.first);
-  r.second = RemoveVariableFreeSentences(r.second);
+  r.first = RemoveVariableFreeTuples(r.first);
+  r.second = RemoveVariableFreeTuples(r.second);
   *simplified_rule = CanonicalizeRule(r);
   return true;
 } 
@@ -271,7 +271,7 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     // firing depend on its results.  If so, skip it. 
     set<Component *> codependents; 
     set<TrueProposition *> dependents;
-    vector<Sentence> preconditions = (*r)->precondition_->clauses_;
+    vector<Tuple> preconditions = (*r)->precondition_->clauses_;
     sub.Substitute(&preconditions);
     bool preconditions_found = true;
     for (uint i=0; i<preconditions.size(); i++) {
@@ -284,7 +284,7 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     }
     if (!preconditions_found) break;
     codependents.insert(*r);
-    vector<Sentence> results = (*r)->result_;
+    vector<Tuple> results = (*r)->result_;
     sub.Substitute(&results);
     for (uint i=0; i<results.size(); i++) {
       TrueProposition * tp = FindTrueProposition(results[i]);
@@ -387,7 +387,7 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 					   (*alt_r)->result_)),
 		 EncodedNumber(),
 		 NEGATIVE_RULE, *alt_r,
-		 vector<Sentence>(),
+		 vector<Tuple>(),
 		 EncodedNumber(),
 		 EncodedNumber(),
 		 false,
@@ -413,25 +413,25 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
   return cp.KeepChanges();
 }
 
-bool Model::TryAddImplicationRule(const vector<Sentence> & preconditions,
-				  const vector<Sentence> & result,
+bool Model::TryAddImplicationRule(const vector<Tuple> & preconditions,
+				  const vector<Tuple> & result,
 				  RollbackCriterion criterion, 
 				  bool fix_times) {
   OptimizationCheckpoint cp(this, criterion, fix_times);
   cerr << "TryAddImplicationRule cp=" << cp.cp_ << endl;
   vector<Substitution> subs;
-  vector<Sentence> combined = preconditions;
+  vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
-  sentence_index_.FindSatisfactions(combined, &subs, 0, -1, 0);
+  tuple_index_.FindSatisfactions(combined, &subs, 0, -1, 0);
   set<int>precondition_vars = GetVariables(preconditions);
   set<int> result_vars = GetVariables(result);
   result_vars = result_vars-precondition_vars;
   RuleType type = result_vars.size()?CREATIVE_RULE:SIMPLE_RULE;
   VLOG(0) << "Contemplating creating rule " 
-	  << SentenceVectorToString(preconditions)
-	  << " ->" << SentenceVectorToString(result) << endl;
+	  << TupleVectorToString(preconditions)
+	  << " ->" << TupleVectorToString(result) << endl;
   if (rule_index_ % RuleFingerprint(type, preconditions, 
-				    result, vector<Sentence>())) {
+				    result, vector<Tuple>())) {
     VLOG(2) << "rule already exists" << endl;
     return false;    
   }
@@ -449,8 +449,8 @@ bool Model::TryAddImplicationRule(const vector<Sentence> & preconditions,
   VLOG(2) << "optimized strength: " << ln_likelihood_ << endl;
   if (cp.KeepChanges()) {
     VLOG(0) << " Created rule "
-	    << SentenceVectorToString(preconditions)
-	    << " ->" << SentenceVectorToString(result)
+	    << TupleVectorToString(preconditions)
+	    << " ->" << TupleVectorToString(result)
 	    << " model likelihood: " << ln_likelihood_
 	    << " gain=" << cp.Gain() << endl;
   }
@@ -477,7 +477,7 @@ bool Model::TrySpecifyCreativeRule(Rule *r, RollbackCriterion criterion,
     const vector<StablePtr<Firing> > & firings = run->second;
     if (firings.size() >= 3) {
       OptimizationCheckpoint cp2(this, REQUIRE_BETTER, false);
-      vector<Sentence> new_result = r->result_;
+      vector<Tuple> new_result = r->result_;
       Substitution additional_sub;
       additional_sub.Add(var, value);
       additional_sub.Substitute(&new_result);
@@ -644,7 +644,7 @@ void Explain(Model *m, TrueProposition *p,
     CHECK(excluded && (*excluded % (Component *)(*run)));
   }
   vector<pair<Rule *, Substitution> > explanations;
-  Sentence s = p->proposition_;
+  Tuple s = p->proposition_;
   FindExplanationsForResult(m, s, &explanations, excluded, -1);
   if (explanations.size()==0) {
     Rule * r = m->GetAddNaiveRule(s.size());
@@ -688,7 +688,7 @@ void Model::FixTimesFixCircularDependencies() {
   // }
 }
 
-int64 FindExplanationsForResult(Model *m, const Sentence & s, 
+int64 FindExplanationsForResult(Model *m, const Tuple & s, 
 				vector<pair<Rule *, Substitution> > *results, 
 				set<Component *> *excluded_dependents,
 				int64 max_work){
@@ -702,7 +702,7 @@ int64 FindExplanationsForResult(Model *m, const Sentence & s,
       if (excluded_dependents && ((*excluded_dependents) % ((Component*)rule))) continue;
       int clause_num = run->second;
       Substitution partial_sub;
-      vector<Sentence> simplified_precondition = rule->precondition_->clauses_;
+      vector<Tuple> simplified_precondition = rule->precondition_->clauses_;
       
       if (!ComputeSubstitution(rule->result_[clause_num], s, &partial_sub))
 	continue;
@@ -710,7 +710,7 @@ int64 FindExplanationsForResult(Model *m, const Sentence & s,
       uint64 num_complete_subs;
       uint64 work = 0;
       vector<Substitution> complete_subs;
-      if (!sentence_index_.FindSatisfactions
+      if (!tuple_index_.FindSatisfactions
 	  (simplified_precondition, 
 	   &complete_subs,
 	   &num_complete_subs,
@@ -725,7 +725,7 @@ int64 FindExplanationsForResult(Model *m, const Sentence & s,
 	    complete_subs[i].Add(*run_v, LEXICON.GetAddID("whatever"));
 	  }
 	}
-	vector<Sentence> substituted_precondition = rule->precondition_->clauses_;
+	vector<Tuple> substituted_precondition = rule->precondition_->clauses_;
 	complete_subs[i].Substitute(&substituted_precondition);
 	if (excluded_dependents) {
 	  bool bad = false;
@@ -746,7 +746,7 @@ int64 FindExplanationsForResult(Model *m, const Sentence & s,
 
 void FulfillRequirements(Model *m) {
   forall(run, m->required_){
-    Sentence s = run->second;
+    Tuple s = run->second;
     Explain(m, m->GetAddTrueProposition(s), 0, true);
   }
   m->FixTimes();

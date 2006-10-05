@@ -19,11 +19,11 @@
 
 #include <sstream>
 #include <math.h>
-#include "sentence.h"
+#include "tuple.h"
 #include "lexicon.h"
 #include "probutil.h"
 
-string Sentence::ToString() const{
+string Tuple::ToString() const{
   string ret;
   ret += "[ ";
   for (uint i=0; i<words_.size(); i++) {
@@ -33,7 +33,7 @@ string Sentence::ToString() const{
   ret += "]";
   return ret;
 }
-void Sentence::FromString(const string & s){
+void Tuple::FromString(const string & s){
   words_.clear();
   istringstream istr(s.c_str());
   string w;
@@ -43,7 +43,7 @@ void Sentence::FromString(const string & s){
     words_.push_back(i);
   }
 }
-bool Sentence::HasDuplicateVariables() const {
+bool Tuple::HasDuplicateVariables() const {
   set<int> vars;
   for (uint i=0; i<words_.size(); i++) {
     if (words_[i] < 0) {
@@ -53,17 +53,17 @@ bool Sentence::HasDuplicateVariables() const {
   }
   return false;
 }
-bool operator==(const Sentence & s1, const Sentence & s2){
+bool operator==(const Tuple & s1, const Tuple & s2){
   if (s1.size() != s2.size()) return false;
   for (uint i=0; i<s1.size(); i++) if (s1[i]!=s2[i]) return false;
   return true;
 }
-Sentence AllVar0(int num_words){
-  Sentence s;
+Tuple AllVar0(int num_words){
+  Tuple s;
   s.words_ = vector<int>(num_words, Variable(0));
   return s;
 }
-GeneralizationIterator::GeneralizationIterator(const Sentence & s) {
+GeneralizationIterator::GeneralizationIterator(const Tuple & s) {
   max_ = 1 << s.size();
   s_ = generalized_ = s;
   pattern_ = 0;
@@ -79,7 +79,7 @@ void GeneralizationIterator::operator++(){
   }
 }
 bool GeneralizationIterator::done() const{ return (pattern_ >= max_); }
-const Sentence & GeneralizationIterator::generalized() const { 
+const Tuple & GeneralizationIterator::generalized() const { 
   return generalized_; 
 }
 int GeneralizationIterator::pattern() const{ 
@@ -95,7 +95,7 @@ int Substitution::Lookup(int variable) const{
 void Substitution::Add(int variable, int literal){
   sub_[variable] = literal;
 }
-void Substitution::Substitute(Sentence * s) const{
+void Substitution::Substitute(Tuple * s) const{
   for (uint i=0; i<s->words_.size(); i++) {
     s->words_[i] = Lookup(s->words_[i]);
   }
@@ -128,21 +128,21 @@ Substitution Substitution::Restrict(const set<int> & variables) const{
   }
   return ret;
 }
-set<int> GetVariables(const vector<Sentence> & v) {
+set<int> GetVariables(const vector<Tuple> & v) {
   set<int> ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
       if (v[i][j]<0) ret.insert(v[i][j]);
   return ret;
 }
-vector<Sentence> RemoveVariableFreeSentences(const vector<Sentence> &v) {
-  vector<Sentence> ret;
+vector<Tuple> RemoveVariableFreeTuples(const vector<Tuple> &v) {
+  vector<Tuple> ret;
   for (uint i=0; i<v.size(); i++) {
     if (v[i].HasVariables()) ret.push_back(v[i]);    
   }
   return ret;
 }
-bool ComputeSubstitution(const Sentence & pre_sub, const Sentence & post_sub,
+bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
 			 Substitution * sub){
   sub->sub_.clear();
   CHECK(pre_sub.size() == post_sub.size());
@@ -157,29 +157,29 @@ bool ComputeSubstitution(const Sentence & pre_sub, const Sentence & post_sub,
   }
   return true;
 }
-set<int> GetAllWords(const vector<Sentence> & v) {
+set<int> GetAllWords(const vector<Tuple> & v) {
   set<int> ret;
   for (uint i=0; i<v.size(); i++) ret.insert(v[i].words_.begin(), v[i].words_.end());
   return ret;
 }
 
-Sentence StringToSentence(const string & s){
-  Sentence ret;
+Tuple StringToTuple(const string & s){
+  Tuple ret;
   ret.FromString(s);
   return ret;
 }
-string SentenceVectorToString(const vector<Sentence> &v){
+string TupleVectorToString(const vector<Tuple> &v){
   vector<string> vs;
   for (uint i=0; i<v.size(); i++) vs.push_back(v[i].ToString());
   return Join(vs, ',');
 }
-vector<Sentence> StringToSentenceVector(const string & s){
+vector<Tuple> StringToTupleVector(const string & s){
   vector<string> v = Split(s, ',');  
-  vector<Sentence> ret;
-  for (uint i=0; i<v.size(); i++) ret.push_back(StringToSentence(v[i]));
+  vector<Tuple> ret;
+  for (uint i=0; i<v.size(); i++) ret.push_back(StringToTuple(v[i]));
   return ret;
 }
-string ToString(const Sentence & s, const Substitution & sub){
+string ToString(const Tuple & s, const Substitution & sub){
   string ret;
   ret += "[ ";
   for (uint i=0; i<s.size(); i++) {
@@ -194,18 +194,18 @@ string ToString(const Sentence & s, const Substitution & sub){
   ret += "]";
   return ret;
 }
-double SentencesLnLikelihood(const vector<Sentence> &context, 
-			     const vector<Sentence> &to_encode, 
+double TuplesLnLikelihood(const vector<Tuple> &context, 
+			     const vector<Tuple> &to_encode, 
 			     vector<int> * arbitrary_words){
   arbitrary_words->clear();
   CHECK(arbitrary_words);
   set<int> words_seen;
   double ret = 0;
   bool encoding = false;
-  // CHEAT: we should really encode the lengths of sentences
+  // CHEAT: we should really encode the lengths of tuples
   for (uint i=0; i<context.size()+to_encode.size(); i++) {
     if (i == context.size()) encoding = true;
-    const Sentence & s 
+    const Tuple & s 
       = (i<context.size())?context[i]:to_encode[i-context.size()];
     for (uint j=0; j<s.size(); j++) {
       int w = s[j];
@@ -221,7 +221,7 @@ double SentencesLnLikelihood(const vector<Sentence> &context,
   return ret;  
 }
 
-void RenameVariablesInOrder(vector<Sentence> * v, Substitution *s){
+void RenameVariablesInOrder(vector<Tuple> * v, Substitution *s){
   int next_var = 0;
   Substitution sub;
   for (uint i=0; i<v->size(); i++) {
@@ -237,9 +237,9 @@ void RenameVariablesInOrder(vector<Sentence> * v, Substitution *s){
   if (s) *s = sub;
 }
 
-vector<Sentence> Canonicalize(const vector<Sentence> & v, Substitution *sub){
+vector<Tuple> Canonicalize(const vector<Tuple> & v, Substitution *sub){
   vector<uint64> fprints;
-  vector<Sentence> ret;
+  vector<Tuple> ret;
   map<uint64, int> sorted;
   for (uint i=0; i<v.size(); i++) {
     fprints.push_back(v[i].MakeVariableInsensitive().Fingerprint());
@@ -279,15 +279,15 @@ vector<Sentence> Canonicalize(const vector<Sentence> & v, Substitution *sub){
 
 
 CandidateRule CanonicalizeRule(const CandidateRule & r) {
-  const vector<Sentence> & preconditions = r.first;
-  const vector<Sentence> & result = r.second;
+  const vector<Tuple> & preconditions = r.first;
+  const vector<Tuple> & result = r.second;
   Substitution sub;
-  vector<Sentence> c_pre = Canonicalize(preconditions, &sub);
+  vector<Tuple> c_pre = Canonicalize(preconditions, &sub);
   int last_variable_in_preconditions = -1;
   forall(run, sub.sub_) 
     last_variable_in_preconditions >?= Variable(run->second);
   int next_var = last_variable_in_preconditions+1;
-  vector<Sentence> c_res = result;
+  vector<Tuple> c_res = result;
   for (uint i=0; i<c_res.size(); i++) 
     for (uint j=0; j<c_res[i].size(); j++) {
       int & w_ref = c_res[i][j];
