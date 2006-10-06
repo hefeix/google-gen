@@ -51,11 +51,11 @@ Model::Precondition::Precondition(Model * model,
   CHECK(!(model_->precondition_index_ % fprint));
   model_->precondition_index_[fprint] = this;
   ComputeSetTime();
-  // vector<int> arbitrary_words;
+  // vector<int> arbitrary_terms;
   precondition_ln_likelihood_ = 0.0;
-  //    = TuplesLnLikelihood(vector<Tuple>(), clauses_, &arbitrary_words);
-  //   for (uint i=0; i<arbitrary_words.size(); i++) 
-  //   model_->AddArbitraryWord(arbitrary_words[i]);
+  //    = TuplesLnLikelihood(vector<Tuple>(), clauses_, &arbitrary_terms);
+  //   for (uint i=0; i<arbitrary_terms.size(); i++) 
+  //   model_->AddArbitraryTerm(arbitrary_terms[i]);
   ln_likelihood_per_sat_ = 0.0;
   uint64 num_sat;
   uint64 work;
@@ -73,10 +73,10 @@ void Model::Precondition::Destroy(){
     if (model_->clause_to_precondition_[fp].size()==0) 
       model_->clause_to_precondition_.erase(fp);
   }
-  //vector<int> arbitrary_words;
-  //TuplesLnLikelihood(vector<Tuple>(), clauses_, &arbitrary_words);
-  //for (uint i=0; i<arbitrary_words.size(); i++) 
-  //  model_->SubtractArbitraryWord(arbitrary_words[i]);
+  //vector<int> arbitrary_terms;
+  //TuplesLnLikelihood(vector<Tuple>(), clauses_, &arbitrary_terms);
+  //for (uint i=0; i<arbitrary_terms.size(); i++) 
+  //  model_->SubtractArbitraryTerm(arbitrary_terms[i]);
 }
 Model::Satisfaction::Satisfaction(Precondition * precondition, 
 				  const Substitution & sub, int id)
@@ -167,11 +167,11 @@ Model::Rule::Rule(Precondition * precondition, EncodedNumber delay,
   CHECK(!(model_->rule_index_ % fprint));
   model_->rule_index_[fprint] = this;
   ComputeSetTime();  
-  //vector<int> arbitrary_words;
+  //vector<int> arbitrary_terms;
   rule_ln_likelihood_ = 0.0;
-  // =TuplesLnLikelihood(precondition_->clauses_, result_, &arbitrary_words);
-  //  for (uint i=0; i<arbitrary_words.size(); i++) 
-  //   model_->AddArbitraryWord(arbitrary_words[i]);
+  // =TuplesLnLikelihood(precondition_->clauses_, result_, &arbitrary_terms);
+  //  for (uint i=0; i<arbitrary_terms.size(); i++) 
+  //   model_->AddArbitraryTerm(arbitrary_terms[i]);
   vector<Tuple> encoding = ComputeEncoding();
   for (uint i=0; i<encoding.size(); i++) {
     TrueProposition * p = model_->GetAddTrueProposition(encoding[i]);
@@ -251,7 +251,7 @@ Model::Firing::Firing(RuleSat * rule_sat, Substitution right_substitution,
     }
   }
   ComputeSetTime();
-  forall (run, right_substitution_.sub_)  model_->AddArbitraryWord(run->second);
+  forall (run, right_substitution_.sub_)  model_->AddArbitraryTerm(run->second);
 }
 Model::Firing::~Firing(){ 
   ComponentDestroy(); 
@@ -330,7 +330,7 @@ void Model::Firing::Destroy(){
   rule_sat_->firings_.erase(right_substitution_.Fingerprint());
   rule_sat_->ComputeSetLnLikelihood();
   forall (run, right_substitution_.sub_)
-    model_->SubtractArbitraryWord(run->second);
+    model_->SubtractArbitraryTerm(run->second);
 }
 void Model::Rule::Destroy(){
   precondition_->rules_.erase(this);
@@ -348,10 +348,10 @@ void Model::Rule::Destroy(){
     precondition_->negative_rules_.erase(this);
     target_rule_->inhibitors_.erase(this);
   }
-  vector<int> arbitrary_words;
-  //TuplesLnLikelihood(precondition_->clauses_, result_, &arbitrary_words);
-  //for (uint i=0; i<arbitrary_words.size(); i++) 
-  //  model_->SubtractArbitraryWord(arbitrary_words[i]);
+  vector<int> arbitrary_terms;
+  //TuplesLnLikelihood(precondition_->clauses_, result_, &arbitrary_terms);
+  //for (uint i=0; i<arbitrary_terms.size(); i++) 
+  //  model_->SubtractArbitraryTerm(arbitrary_terms[i]);
 }
 void Model::TrueProposition::Destroy(){
   if (required_) model_->absent_required_.insert(proposition_.Fingerprint());

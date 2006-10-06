@@ -46,9 +46,9 @@ const Tuple * TupleIndex::RandomTuple(){
   return 0;
 }
 const Tuple * 
-TupleIndex::GetRandomTupleContaining(const vector<int> & words, 
+TupleIndex::GetRandomTupleContaining(const vector<int> & terms, 
 					   bool funky_distribution){
-  int n = words.size();
+  int n = terms.size();
   // okay, for now we'll always use the funky distribution
   vector<pair<FullySpecifiedNode **, int> > patterns;
   forall(run, lengths_) {
@@ -57,14 +57,14 @@ TupleIndex::GetRandomTupleContaining(const vector<int> & words,
       const vector<int> & perm = run_p.current();
       Tuple s;
       for (uint i=0; i<perm.size(); i++) {
-	s.push_back((perm[i]==-1)?-1:words[perm[i]]);
+	s.push_back((perm[i]==-1)?-1:terms[perm[i]]);
       }
       if (funky_distribution && (s[0] == -1)) {
 	UnderspecifiedNode ** unp = underspecified_ % s.Fingerprint();
 	if (!unp) continue;
 	UnderspecifiedNode * un = *unp;
-	CHECK(un->first_word_counts_);
-	forall(run, (*un->first_word_counts_)){
+	CHECK(un->first_term_counts_);
+	forall(run, (*un->first_term_counts_)){
 	  s[0] = run->first;
 	  VLOG(2) << "Expecting " << run->second << " tuples matching " 
 		  << s.ToString() << endl;
@@ -154,12 +154,12 @@ const Tuple * TupleIndex::Add(const Tuple & s) {
     UnderspecifiedNode * un = underspecified_[gfp];
     if (un==0) {
       un = underspecified_[gfp] = new UnderspecifiedNode;
-      un->first_word_counts_ = 0;
-      if (g[0]==-1) un->first_word_counts_ = new map<int, int>;
+      un->first_term_counts_ = 0;
+      if (g[0]==-1) un->first_term_counts_ = new map<int, int>;
     }
     n->pos_in_lists_[pattern] = un->specifications_.size();
     un->specifications_.push_back(n);
-    if (un->first_word_counts_) (*un->first_word_counts_)[s[0]]++;
+    if (un->first_term_counts_) (*un->first_term_counts_)[s[0]]++;
   }
   return &(n->tuple_);
 }
@@ -191,13 +191,13 @@ void TupleIndex::Remove(const Tuple & s) {
 	= un->specifications_[un->specifications_.size()-1];
       un->specifications_[pos_in_list]->pos_in_lists_[pattern] = pos_in_list;
     }
-    if (un->first_word_counts_) {
-      SparseAdd(un->first_word_counts_, s[0], -1);
+    if (un->first_term_counts_) {
+      SparseAdd(un->first_term_counts_, s[0], -1);
     }
     un->specifications_.pop_back();
     if (un->specifications_.size()==0) {
       underspecified_.erase(gfp);
-      if (un->first_word_counts_) delete un->first_word_counts_;
+      if (un->first_term_counts_) delete un->first_term_counts_;
       delete un;
     }
   }
@@ -322,7 +322,7 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
   if (actual_work) *actual_work = total_work;
   return true;
 }
-void TupleIndex::FindWord(int w, vector<const Tuple *> *results){
+void TupleIndex::FindTerm(int w, vector<const Tuple *> *results){
   results->clear();
   set<const Tuple *> found;
   vector<const Tuple *> foo;

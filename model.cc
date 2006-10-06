@@ -93,11 +93,11 @@ set<int> Model::Rule::RightVariables(){
 set<int> Model::Rule::LeftVariables(){
   return GetVariables(precondition_->clauses_);
 }
-string WordEscape(string s){
+string TermEscape(string s){
   if (s[0]=='$' || s[0]=='_') return '_'+s;
   return s;
 }
-string WordUnescape(string s){
+string TermUnescape(string s){
   if (s[0]=='_' && s.size() > 1) return s.substr(1);
   return s;
 }
@@ -108,7 +108,7 @@ vector<Tuple> Model::ComputeTupleEncoding(const Tuple & s, int name){
     x.push_back(LEXICON.GetAddID("IN_POS"));
     x.push_back(name);
     x.push_back(LEXICON.GetAddID("POS_" + itoa(i)));
-    x.push_back(LEXICON.GetAddID(WordEscape(LEXICON.GetString(s[i]))));
+    x.push_back(LEXICON.GetAddID(TermEscape(LEXICON.GetString(s[i]))));
     ret.push_back(x);
   }
   return ret; 
@@ -334,8 +334,8 @@ Model::TrueProposition::GetCauseTruePropositions() const{
 Model::Model(){
   next_id_ = 0;
   ln_likelihood_ = 0.0;
-  arbitrary_word_ln_likelihood_ = 0.0;
-  total_arbitrary_words_ = 0;
+  arbitrary_term_ln_likelihood_ = 0.0;
+  total_arbitrary_terms_ = 0;
 }
 
 Model::~Model(){
@@ -364,14 +364,14 @@ void Model::ReleaseID(int id) {
   id_to_component_.erase(id);
 }
 
-// if there are k distinct words and n total words, and the frequency of
-// word i is f_i, and E is our favorite probabilitiy distribution over 
-// non-negative integers then arbitrary_word_ln_likelihood_ is the log of:
+// if there are k distinct terms and n total terms, and the frequency of
+// term i is f_i, and E is our favorite probabilitiy distribution over 
+// non-negative integers then arbitrary_term_ln_likelihood_ is the log of:
 // E(k) PROD[f_i! E(f_i-1)] k! / n!
 
-// this is the change in arbitrary_word_ln_likelihood_ when adding 1 to f_i
+// this is the change in arbitrary_term_ln_likelihood_ when adding 1 to f_i
 double DProb(int f_i, // before 1 is added
-	     int k, // including word i
+	     int k, // including term i
 	     int n) { // before 1 is added
   double d_prob = 0;
   d_prob += log(f_i+1) - log(n+1);
@@ -386,23 +386,23 @@ double DProb(int f_i, // before 1 is added
 }
 
 
-void Model::AddArbitraryWord(int w){ // TODO: more to encode here.
-  arbitrary_word_counts_[w]++;
-  double d_prob = DProb(arbitrary_word_counts_[w]-1, 
-			arbitrary_word_counts_.size(), 
-			total_arbitrary_words_);
-  total_arbitrary_words_++;
-  arbitrary_word_ln_likelihood_ += d_prob;
+void Model::AddArbitraryTerm(int w){ // TODO: more to encode here.
+  arbitrary_term_counts_[w]++;
+  double d_prob = DProb(arbitrary_term_counts_[w]-1, 
+			arbitrary_term_counts_.size(), 
+			total_arbitrary_terms_);
+  total_arbitrary_terms_++;
+  arbitrary_term_ln_likelihood_ += d_prob;
   ln_likelihood_ += d_prob;
 }
-void Model::SubtractArbitraryWord(int w){
-  arbitrary_word_counts_[w]--;
-  total_arbitrary_words_--;
-  double d_prob = DProb(arbitrary_word_counts_[w], 
-			arbitrary_word_counts_.size(),
-			total_arbitrary_words_);
-  if (arbitrary_word_counts_[w]==0) arbitrary_word_counts_.erase(w);
-  arbitrary_word_ln_likelihood_ -= d_prob;
+void Model::SubtractArbitraryTerm(int w){
+  arbitrary_term_counts_[w]--;
+  total_arbitrary_terms_--;
+  double d_prob = DProb(arbitrary_term_counts_[w], 
+			arbitrary_term_counts_.size(),
+			total_arbitrary_terms_);
+  if (arbitrary_term_counts_[w]==0) arbitrary_term_counts_.erase(w);
+  arbitrary_term_ln_likelihood_ -= d_prob;
   ln_likelihood_ -= d_prob;
 }
 
@@ -529,13 +529,13 @@ void Model::KillComponent(Component * to_kill, bool just_this){
 Record Model::ModelInfo() {
   Record r;
   r["Ln Likelihood"] = dtoa(ln_likelihood_);
-  r["Ln likelihood(arbitrary words)"] = dtoa(arbitrary_word_ln_likelihood_);
+  r["Ln likelihood(arbitrary terms)"] = dtoa(arbitrary_term_ln_likelihood_);
   r["absent required"] = itoa(absent_required_.size());
   r["present forbidden"] = itoa(present_forbidden_.size());
   string awc;
-  forall(run, arbitrary_word_counts_) 
+  forall(run, arbitrary_term_counts_) 
     awc += itoa(run->second) + " : " + LEXICON.GetString(run->first) + "<br>\n";
-  r["Word Counts (arbitrary words)"] = awc;
+  r["Term Counts (arbitrary terms)"] = awc;
   return r;  
 }
 string Model::LinkBar(){
@@ -593,7 +593,7 @@ void Model::CheckConnections(){
 }
 
 void Model::CheckLikelihood(){
-  double total = arbitrary_word_ln_likelihood_;
+  double total = arbitrary_term_ln_likelihood_;
   forall(run, id_to_component_){
     if (fabs(run->second->LnLikelihood() - run->second->ln_likelihood_) > 1e-6){
       cerr << "likelihood for component " << run->second->id_ << " out of date"
@@ -986,7 +986,7 @@ Model::Rule * Model::GetAddNaiveRule(int length) {
   vector<Tuple> precondition;
   vector<Tuple> result(1);
   vector<Tuple> target_precondition;
-  for (int i=0; i<length; i++) result[0].words_.push_back(-1-i);
+  for (int i=0; i<length; i++) result[0].terms_.push_back(-1-i);
   Rule ** rp = rule_index_ 
     % RuleFingerprint(CREATIVE_RULE, precondition, result, 
 		      target_precondition);
@@ -1099,16 +1099,16 @@ void Model::Shell(istream  * input) {
       string l;
       GetLine((*input), &l);
       istringstream istr(l);
-      vector<int> words;      
+      vector<int> terms;      
       string w;
       while (istr >> w){
 	int wid;
 	CHECK(LEXICON.GetID(w, &wid));
-	words.push_back(wid);
+	terms.push_back(wid);
       }
       for (int i=0; i<10; i++) {
 	const Tuple * s 
-	  = tuple_index_.GetRandomTupleContaining(words, true);
+	  = tuple_index_.GetRandomTupleContaining(terms, true);
 	if(s) {
 	  cout << s->ToString() << endl;
 	}
