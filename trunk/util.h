@@ -23,6 +23,7 @@
 #ifndef _UTIL_H_
 #define _UTIL_H_
 
+#include "hash.h"
 #include <vector>
 #include <string>  
 #include <hash_map.h>
