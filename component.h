@@ -59,6 +59,27 @@ static char * RuleTypeName [];
 static RuleType StringToRuleType(const string & s);
 static string RuleTypeToString(RuleType t);
 
+
+// user responsible for deallocation
+ComponentEssentials * ComponentEssentialsFromRecord(const Record & r);
+template<class C> struct StablePtr{
+  Model * model_;
+  int id_;
+  StablePtr(C & c) { id_ = c.id_; model_=c.model_;}
+  StablePtr(C * c) { id_ = c->id_; model_=c->model_;}
+  bool IsValid() const{ return model_->GetComponent(id_);}
+  C* operator *() const{
+    return model_->GetComponent<C>(id_);
+  }
+  bool operator== (const StablePtr<C> & o) const{
+    return (id_==o.id_);
+  }
+  bool operator<(const StablePtr<C> & o) const{
+    return (id_<o.id_);
+  }
+};
+
+
 struct Component{
   // All functions of Component() (including virtual) defined in component.cc
   
@@ -567,5 +588,6 @@ struct TrueProposition : public Component{
   // answer, even with unlimited time.
   void CheckForbiddenRequired();
 };
+
 
 #endif
