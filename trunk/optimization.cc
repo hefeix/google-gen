@@ -126,9 +126,9 @@ bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
     while (anchors.size() < num_anchors) {
       tries2--; if (tries2<0) break;
       int clause = rand() % p.size();
-      int word_in_clause 
+      int term_in_clause 
 	= (RandomFraction()<0.05)?0:(1+(rand() % (p[clause].size()-1)));
-      int w = p[clause][word_in_clause];
+      int w = p[clause][term_in_clause];
       if (w<0) continue;
       anchors.insert(w);
     }

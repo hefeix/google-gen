@@ -23,45 +23,45 @@
 #include <map>
 #include "util.h"
 
-// We encode words as integers, non-negative integers being literals, 
+// We encode terms as integers, non-negative integers being literals, 
 // and negative integers being variables.  Variables are numbered starting
 // at 0, and variable i is represented as -1-i.  Note that the Variable()
 // function is its own inverse.  
 inline int Variable(int i) { return -1-i;} // its own inverse
 inline bool IsVariable(int i) { return (i<0);}
 
-// A Tuple is a tuple of words.
+// A Tuple is a tuple of terms.
 struct Tuple{
-  vector <int> words_;
+  vector <int> terms_;
   Tuple() {}
-  Tuple(const Tuple & o) { words_ = o.words_; }
-  uint size() const { return words_.size(); }
+  Tuple(const Tuple & o) { terms_ = o.terms_; }
+  uint size() const { return terms_.size(); }
   // A tuple can be represented as a string for human readability and 
-  // writablility.  The words are converted by the LexiconWithVariables LEXICON
+  // writablility.  The terms are converted by the LexiconWithVariables LEXICON
   // and are space-separated.  The whole thing is surrounded by brackets.
   // e.g. (-3, 17, 17, 22) might translate to "[ $2 foo foo moo ]" 
   string ToString() const;
   void FromString(const string & s);
   // for convenience
-  int & operator [](int i) {return words_[i];}
-  const int & operator [](int i) const {return words_[i];}
-  void push_back(int i) { words_.push_back(i);}
+  int & operator [](int i) {return terms_[i];}
+  const int & operator [](int i) const {return terms_[i];}
+  void push_back(int i) { terms_.push_back(i);}
   // turns all of the variables to Variable(0).
   Tuple MakeVariableInsensitive() const {
     Tuple ret = *this;
-    for (uint i=0; i<words_.size(); i++) 
+    for (uint i=0; i<terms_.size(); i++) 
       ret[i] = max(ret[i], -1);
     return ret;
   }  
   uint64 Fingerprint(uint64 level = 0) const 
-  { return ::Fingerprint(words_, level); }
-  // Creates an int with bits representing whether each word is a variable.
+  { return ::Fingerprint(terms_, level); }
+  // Creates an int with bits representing whether each term is a variable.
   int Pattern() const {
     CHECK(size()<32)
     int ret = 0;
     int x=1;
     for (uint i=0; i<size(); i++) {
-      if (IsVariable(words_[i])) ret |= x;
+      if (IsVariable(terms_[i])) ret |= x;
       x<<=1;
     }
     return ret;
@@ -72,13 +72,13 @@ struct Tuple{
   bool HasDuplicateVariables() const;
 };
 bool operator==(const Tuple & s1, const Tuple & s2);
-Tuple AllVar0(int num_words);
+Tuple AllVar0(int num_terms);
 inline uint64 Fingerprint(const Tuple & s, uint64 level = 0){
   return s.Fingerprint(level);
 }
 // Iterates over generalizations of a tuple.  The tuple must be entirely
 // literals, and the generalized tuple iterates over all tuples for which
-// a possibly empty or full subset of the words of s have been changed to 
+// a possibly empty or full subset of the terms of s have been changed to 
 // Variable(0).
 struct GeneralizationIterator {
   GeneralizationIterator(const Tuple & s) ;
@@ -142,7 +142,7 @@ vector<Tuple> RemoveVariableFreeTuples(const vector<Tuple> & v);
 bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
 			 Substitution * sub);
 
-set<int> GetAllWords(const vector<Tuple> & v);
+set<int> GetAllTerms(const vector<Tuple> & v);
 
 Tuple StringToTuple(const string & s);
 string TupleVectorToString(const vector<Tuple> &v);
@@ -152,11 +152,11 @@ string ToString(const Tuple & s, const Substitution & sub);
 
 // The likelihood according to a particular encoding of a vector of tuples,
 // given another vector of tuples has already been encoded as context.  
-// The user is responsible for adding in the ln likelihood of the words passed
-// back in arbitrary_words .
+// The user is responsible for adding in the ln likelihood of the terms passed
+// back in arbitrary_terms .
 double TuplesLnLikelihood(const vector<Tuple> &context, 
 			     const vector<Tuple> &to_encode, 
-			     vector<int> * arbitrary_words);
+			     vector<int> * arbitrary_terms);
 
 // Given a vector of tuples, with variables, we rename the variables
 // so that the first variable to occur in the vector of tuples is 

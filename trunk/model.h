@@ -122,7 +122,7 @@ class Model {
   // The specification can be read from a file.  A line in the file like
   // [ foo goo *moo ]
   // means that the tuple [ foo goo moo ] is required, and all other 
-  // three-word tuples starting with "foo goo" are forbidden.
+  // three-term tuples starting with "foo goo" are forbidden.
   void ReadSpec(istream * input); // do this first.
   // Does the model comply with the specification.
   bool Legal();
@@ -139,14 +139,14 @@ class Model {
   // When a component is deleted, removes it from the id_to_component_ map.
   void ReleaseID(int id);
 
-  // In some parts of the model, we need to encode words, where context doesn't
-  // help us.  This is accounted for by a global arbitrary word encoder, which
-  // accounts for the entropy of encoding a sequence of words, using the 
-  // frequencies of the words to reduce complexity, but not their order. 
-  // The following functions are called to add and remove a word from that 
+  // In some parts of the model, we need to encode terms, where context doesn't
+  // help us.  This is accounted for by a global arbitrary term encoder, which
+  // accounts for the entropy of encoding a sequence of terms, using the 
+  // frequencies of the terms to reduce complexity, but not their order. 
+  // The following functions are called to add and remove a term from that 
   // encoder, and to update the global likelihood.
-  void AddArbitraryWord(int w);
-  void SubtractArbitraryWord(int w);
+  void AddArbitraryTerm(int w);
+  void SubtractArbitraryTerm(int w);
 
   // Finds or adds a Precondition
   Precondition * GetAddPrecondition(const vector<Tuple> & tuples);
@@ -240,9 +240,9 @@ class Model {
   hash_map<uint64, Precondition *> precondition_index_;
   map<uint64, Rule *> rule_index_;
   vector<Change *> history_;
-  map<int, int> arbitrary_word_counts_;
-  int total_arbitrary_words_;
-  double arbitrary_word_ln_likelihood_; // superfluous
+  map<int, int> arbitrary_term_counts_;
+  int total_arbitrary_terms_;
+  double arbitrary_term_ln_likelihood_; // superfluous
   double ln_likelihood_;
 
   // the spec

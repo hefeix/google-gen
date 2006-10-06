@@ -62,17 +62,17 @@ class TupleIndex{
 			 uint64 * num_satisfactions,  // can be null
 			 int64 max_work, // -1 for no limit
 			 uint64 * actual_work); // can be null
-  // Get a random tuple containing all of the given words.  
+  // Get a random tuple containing all of the given terms.  
   // If funky_distribution is set, we first choose uniformly over the positions
-  // in the tuple of the given words.  This over-represents tuples where
-  // the words take a rare position.  
-  const Tuple * GetRandomTupleContaining(const vector<int> & words, 
+  // in the tuple of the given terms.  This over-represents tuples where
+  // the terms take a rare position.  
+  const Tuple * GetRandomTupleContaining(const vector<int> & terms, 
 					       bool funky_distribution);
 					       
   const Tuple * RandomTuple();
 
-  // returns all tuples containing a word.
-  void FindWord(int w, vector<const Tuple* >* results); 
+  // returns all tuples containing a term.
+  void FindTerm(int w, vector<const Tuple* >* results); 
 
   // for testing.
   void Shell();  
@@ -83,8 +83,8 @@ class TupleIndex{
   };
   struct UnderspecifiedNode{
     vector<FullySpecifiedNode *> specifications_;
-    // maps first word to number of tuples starting with that word
-    map<int, int> *first_word_counts_; // present if first word is variable
+    // maps first term to number of tuples starting with that term
+    map<int, int> *first_term_counts_; // present if first term is variable
   };
   hash_map<uint64, FullySpecifiedNode*> fully_specified_;
   hash_map<uint64, UnderspecifiedNode*> underspecified_;

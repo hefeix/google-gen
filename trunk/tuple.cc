@@ -26,29 +26,29 @@
 string Tuple::ToString() const{
   string ret;
   ret += "[ ";
-  for (uint i=0; i<words_.size(); i++) {
-    ret += LEXICON.GetString(words_[i]); // + "(" + itoa(words_[i]) + ")";
+  for (uint i=0; i<terms_.size(); i++) {
+    ret += LEXICON.GetString(terms_[i]); // + "(" + itoa(terms_[i]) + ")";
     ret += " ";
   }
   ret += "]";
   return ret;
 }
 void Tuple::FromString(const string & s){
-  words_.clear();
+  terms_.clear();
   istringstream istr(s.c_str());
   string w;
   istr >> w;
   while ((istr >> w) && (w!="]")) {
     int i = LEXICON.GetAddID(w);
-    words_.push_back(i);
+    terms_.push_back(i);
   }
 }
 bool Tuple::HasDuplicateVariables() const {
   set<int> vars;
-  for (uint i=0; i<words_.size(); i++) {
-    if (words_[i] < 0) {
-      if (vars % words_[i]) return true;
-      vars.insert(words_[i]);
+  for (uint i=0; i<terms_.size(); i++) {
+    if (terms_[i] < 0) {
+      if (vars % terms_[i]) return true;
+      vars.insert(terms_[i]);
     }
   }
   return false;
@@ -58,9 +58,9 @@ bool operator==(const Tuple & s1, const Tuple & s2){
   for (uint i=0; i<s1.size(); i++) if (s1[i]!=s2[i]) return false;
   return true;
 }
-Tuple AllVar0(int num_words){
+Tuple AllVar0(int num_terms){
   Tuple s;
-  s.words_ = vector<int>(num_words, Variable(0));
+  s.terms_ = vector<int>(num_terms, Variable(0));
   return s;
 }
 GeneralizationIterator::GeneralizationIterator(const Tuple & s) {
@@ -73,8 +73,8 @@ void GeneralizationIterator::operator++(){
   pattern_++;
   if (pattern_ >= max_) return;
   for (uint i=0; change != 0; i++) {
-    if (pattern_ & (1 << i)) generalized_.words_[i] = -1;
-    else generalized_.words_[i] = s_.words_[i];
+    if (pattern_ & (1 << i)) generalized_.terms_[i] = -1;
+    else generalized_.terms_[i] = s_.terms_[i];
     change >>=1;
   }
 }
@@ -96,8 +96,8 @@ void Substitution::Add(int variable, int literal){
   sub_[variable] = literal;
 }
 void Substitution::Substitute(Tuple * s) const{
-  for (uint i=0; i<s->words_.size(); i++) {
-    s->words_[i] = Lookup(s->words_[i]);
+  for (uint i=0; i<s->terms_.size(); i++) {
+    s->terms_[i] = Lookup(s->terms_[i]);
   }
 }
 string Substitution::ToString() const{
@@ -157,9 +157,9 @@ bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
   }
   return true;
 }
-set<int> GetAllWords(const vector<Tuple> & v) {
+set<int> GetAllTerms(const vector<Tuple> & v) {
   set<int> ret;
-  for (uint i=0; i<v.size(); i++) ret.insert(v[i].words_.begin(), v[i].words_.end());
+  for (uint i=0; i<v.size(); i++) ret.insert(v[i].terms_.begin(), v[i].terms_.end());
   return ret;
 }
 
@@ -196,10 +196,10 @@ string ToString(const Tuple & s, const Substitution & sub){
 }
 double TuplesLnLikelihood(const vector<Tuple> &context, 
 			     const vector<Tuple> &to_encode, 
-			     vector<int> * arbitrary_words){
-  arbitrary_words->clear();
-  CHECK(arbitrary_words);
-  set<int> words_seen;
+			     vector<int> * arbitrary_terms){
+  arbitrary_terms->clear();
+  CHECK(arbitrary_terms);
+  set<int> terms_seen;
   double ret = 0;
   bool encoding = false;
   // CHEAT: we should really encode the lengths of tuples
@@ -209,11 +209,11 @@ double TuplesLnLikelihood(const vector<Tuple> &context,
       = (i<context.size())?context[i]:to_encode[i-context.size()];
     for (uint j=0; j<s.size(); j++) {
       int w = s[j];
-      if (words_seen % w) {
-	if (encoding) ret -= log(words_seen.size());
+      if (terms_seen % w) {
+	if (encoding) ret -= log(terms_seen.size());
       } else {
-	if (encoding) arbitrary_words->push_back((w<0)?-1:w);
-	words_seen.insert(w);
+	if (encoding) arbitrary_terms->push_back((w<0)?-1:w);
+	terms_seen.insert(w);
       }
     }    
   }
