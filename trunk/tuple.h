@@ -85,17 +85,18 @@ inline static CandidateRule SplitOffLast(const vector<Tuple> & p) {
 
 
 
-// a substitution from variables to literals.
+// a substitution from terms to terms.
+// either may be a variable or a constant term
 struct Substitution {
   map<int, int> sub_;
   Substitution() {}
   Substitution(const string & s) { FromString(s);}
-  void Add(int variable, int literal);
+  void Add(int from_term, int to_term);
   void Add(const Substitution & o) {
     sub_.insert(o.sub_.begin(), o.sub_.end());
   }
-  int Lookup(int variable) const; // returns variable if not found
-  bool Contains(int variable) const {return sub_ % variable;}
+  int Lookup(int term) const; // returns term if not found
+  bool Contains(int term) const {return sub_ % term;}
   void Substitute(Tuple * s) const;
   void Substitute(vector<Tuple> * v) const {
     for (uint i=0; i<v->size(); i++) Substitute(&((*v)[i]));
@@ -109,7 +110,8 @@ struct Substitution {
   uint64 Fingerprint(uint64 level = 0) const { 
     return ::Fingerprint(sub_, level);
   }
-  Substitution Restrict(const set<int> & variables) const;
+  // Provide a restricted substitution to a set of terms
+  Substitution Restrict(const set<int> & terms) const;
 };
 inline uint64 Fingerprint(const Substitution & s, uint64 level = 0){
   return s.Fingerprint(level);

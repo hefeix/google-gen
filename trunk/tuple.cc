@@ -87,13 +87,13 @@ int GeneralizationIterator::pattern() const{
 }
 
 
-int Substitution::Lookup(int variable) const{
-  const int * look = sub_ % variable;
+int Substitution::Lookup(int term) const{
+  const int * look = sub_ % term;
   if (look) return *look;
-  return variable;
+  return term;
 }
-void Substitution::Add(int variable, int literal){
-  sub_[variable] = literal;
+void Substitution::Add(int from_term, int to_term){
+  sub_[from_term] = to_term;
 }
 void Substitution::Substitute(Tuple * s) const{
   for (uint i=0; i<s->terms_.size(); i++) {
@@ -121,10 +121,10 @@ void Substitution::FromString(const string & s) {
     sub_[LEXICON.GetAddID(old)] = LEXICON.GetAddID(nu);
   }
 }
-Substitution Substitution::Restrict(const set<int> & variables) const{
+Substitution Substitution::Restrict(const set<int> & terms) const{
   Substitution ret;
   forall(run, sub_) {
-    if (variables%run->first) ret.Add(run->first, run->second);
+    if (terms%run->first) ret.Add(run->first, run->second);
   }
   return ret;
 }
