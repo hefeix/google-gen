@@ -147,31 +147,26 @@ template <class K, class V> class MapRemoveChange : public Change {
   V val_;
 };
 
-// Calls the Create() method on an object, and the Destroy() method on rollback.
-template <class C> class CreateDestroyChange : public Change {
- public:
-  CreateDestroyChange(C * object) {
-    object_ = object;
-    object_->Create();
-  }
-  ~CreateDestroyChange(){
-    object_->Destroy();
-  }
- private:
-  C * object_;
-};
+// Takes a class instance and two void member functions with no arguments,
+// and calls the first one on creation and the second one on desrtuction.
+//
+// Sample Usage:
+// cl.MakeChange(new MemberCallChange<Employee>(&fred, &Employee::Hire,
+//                                              &Employee::Fire));
 
-// Calls the Destroy() method on an object, and the Create() method on rollback.
-template <class C> class DestroyCreateChange : public Change {
+template <class C> class MemberCallChange : public Change {
  public:
-  DestroyCreateChange(C * object) {
+  MemberCallChange(C * object, 
+		   void (C::*change_function)(),
+		   void (C::*revert_function)()) {
     object_ = object;
-    object_->Destroy();
+    revert_function_ = revert_function;
+    (object_->*change_function)();
   }
-  ~DestroyCreateChange(){
-    object_->Create();
+  ~MemberCallChange(){
+    (object_->*revert_function_)();
   }
- private:
+  void (C::*revert_function_)(); 
   C * object_;
 };
 
