@@ -38,24 +38,29 @@ class Change;
 // to MakeChange.  For example:
 // 
 // Checkpoint cp = my_changelist.GetCheckpoint();
-// my_changelist.MakeChange(new MySubclassOfChange(params));
+// my_changelist.Make(new MySubclassOfChange(params));
 // if (UnhappyWithResults()) {
 //    my_changelist.Rollback(cp);
 // }
 
 class Changelist {
  public:
-  void MakeChange(Change * c); // Make a change (use 'new' to create c inline)
+  void Make(Change * c); // Make a change (use 'new' to create c inline)
   Checkpoint GetCheckpoint();  // Create a checkpoint.
   void Rollback(Checkpoint cp); // Roll back to a checkpoint.
+  void MakeChangesPermanent(); // Invalidates checkpoints and frees memory.
  private:
   vector<Change *> history_;
 };
 
-// Subclass this.  Use the constructor to make changes and the destructor to 
-// undo them.
+// Subclass this.  
+// Use the constructor to make changes and the Undo() function to undo them.
+// You can optionally implement the MakePermanent() function which is called
+// if a change becomes permanent.  This is generally used for freeing up memory.
 class Change {
  public:
+  virtual void Undo() = 0;
+  virtual void MakePermanent() {};
   virtual ~Change(){};
 };
 
@@ -68,7 +73,7 @@ template <class C> class SimpleChange : public Change{
     old_val_ = *location_;
     *location_ = new_val;
   }
-  ~SimpleChange(){
+  void Undo(){
     *location_ = old_val_;
   }
  private:
@@ -85,7 +90,7 @@ template <class C> class SetInsertChange : public Change {
     CHECK(! (*location % val_));
     location->insert(val_);
   }
-  ~SetInsertChange(){
+  void Undo(){
     location_->erase(val_);
   }
  private:
@@ -102,7 +107,7 @@ template <class C> class SetRemoveChange : public Change {
     CHECK(*location % val_);
     location->erase(val_);
   }
-  ~SetRemoveChange(){
+  void Undo(){
     location_->insert(val_);
   }
  private:
@@ -120,7 +125,7 @@ template <class K, class V> class MapInsertChange : public Change {
     CHECK(! (*location % key));
     (*location)[key] = val;
   }
-  ~MapInsertChange(){
+  void Undo(){
     location_->erase(key_);
   }
  private:
@@ -138,7 +143,7 @@ template <class K, class V> class MapRemoveChange : public Change {
     val_ = (*location)[key_];
     location->erase(key_);
   }
-  ~MapRemoveChange(){
+  void Undo(){
     (*location_)[key_] = val_;
   }
   map<K,V> * location_;
@@ -149,24 +154,32 @@ template <class K, class V> class MapRemoveChange : public Change {
 
 // Takes a class instance and two void member functions with no arguments,
 // and calls the first one on creation and the second one on desrtuction.
+// You can also pass a MakePermanent function, or NULL.  
 //
 // Sample Usage:
-// cl.MakeChange(new MemberCallChange<Employee>(&fred, &Employee::Hire,
-//                                              &Employee::Fire));
+// cl.Make(new MemberCallChange<Employee>(&fred, &Employee::Hire,
+//                                              &Employee::Fire, 0));
 
 template <class C> class MemberCallChange : public Change {
  public:
   MemberCallChange(C * object, 
 		   void (C::*change_function)(),
-		   void (C::*revert_function)()) {
+		   void (C::*revert_function)(),
+		   void (C::*make_permanent_function)() = 0) {
     object_ = object;
     revert_function_ = revert_function;
+    make_permanent_function_ = make_permanent_function;
     (object_->*change_function)();
   }
-  ~MemberCallChange(){
+  void Undo(){
     (object_->*revert_function_)();
   }
+  void MakePermanent(){
+    if (make_permanent_function_) 
+      (object_->*make_permanent_function_)();
+  }
   void (C::*revert_function_)(); 
+  void (C::*make_permanent_function_)(); 
   C * object_;
 };
 

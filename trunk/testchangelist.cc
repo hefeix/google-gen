@@ -26,9 +26,11 @@ struct Employee {
   Employee(string name) { name_ = name;}
   void Hire() { cout << "Hired " << name_ << endl; }
   void Fire() { cout << "Fired " << name_ << endl; }
+  void GiveTenure() { cout << "Gave Tenure to " << name_ << endl; }
   string name_;
 };
 Employee fred("Fred");
+Employee mary("Mary");
 void ShowWorldState(){
   cout << "cl_size=" << cl.GetCheckpoint()
        << " s=" << s
@@ -47,28 +49,35 @@ void ShowWorldState(){
 void TestChangelist(){
   s = "original_string";
   Checkpoint cp0 = cl.GetCheckpoint();
+  cl.Make(new SetInsertChange<int>(&my_set, 2)); 
+  ShowWorldState();
+  cl.Make(new MemberCallChange<Employee>(&mary, &Employee::Hire,
+					       &Employee::Fire,
+					       &Employee::GiveTenure));
+  ShowWorldState();
+  cl.MakeChangesPermanent();
+  cout << "Made Changes Permanent" << endl;
   cout << "Set checkpoint cp0" << endl;
+  cl.Make(new SimpleChange<string>(&s, "new_string")); 
   ShowWorldState();
-  cl.MakeChange(new SimpleChange<string>(&s, "new_string")); 
+  cl.Make(new SetInsertChange<int>(&my_set, 4)); 
   ShowWorldState();
-  cl.MakeChange(new SetInsertChange<int>(&my_set, 4)); 
+  cl.Make(new SetInsertChange<int>(&my_set, 6)); 
   ShowWorldState();
-  cl.MakeChange(new SetInsertChange<int>(&my_set, 6)); 
+  cl.Make(new SetRemoveChange<int>(&my_set, 4)); 
   ShowWorldState();
-  cl.MakeChange(new SetRemoveChange<int>(&my_set, 4)); 
+  cl.Make(new MapInsertChange<string, string>(&my_map, "key1", "val1")); 
   ShowWorldState();
-  cl.MakeChange(new MapInsertChange<string, string>(&my_map, "key1", "val1")); 
-  ShowWorldState();
-  cl.MakeChange(new MapInsertChange<string, string>(&my_map, "key2", "val2")); 
+  cl.Make(new MapInsertChange<string, string>(&my_map, "key2", "val2")); 
   ShowWorldState();
   Checkpoint cp1 = cl.GetCheckpoint();
   cout << "Set checkpoint cp1" << endl;
-  cl.MakeChange(new MapRemoveChange<string, string>(&my_map, "key1")); 
+  cl.Make(new MapRemoveChange<string, string>(&my_map, "key1")); 
   ShowWorldState();
-  cl.MakeChange(new MemberCallChange<Employee>(&fred, &Employee::Hire,
+  cl.Make(new MemberCallChange<Employee>(&fred, &Employee::Hire,
 					       &Employee::Fire));
   ShowWorldState();
-  cl.MakeChange(new MemberCallChange<Employee>(&fred, &Employee::Fire,
+  cl.Make(new MemberCallChange<Employee>(&fred, &Employee::Fire,
 					       &Employee::Hire));
   ShowWorldState();
   cout << "Rolling back to cp1" << endl;

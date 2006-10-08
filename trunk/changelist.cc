@@ -18,7 +18,7 @@
 
 #include "changelist.h"
 
-void Changelist::MakeChange(Change * c){
+void Changelist::Make(Change * c){
   history_.push_back(c);
 }
 Checkpoint Changelist::GetCheckpoint(){
@@ -27,7 +27,15 @@ Checkpoint Changelist::GetCheckpoint(){
 void Changelist::Rollback(Checkpoint cp){
   CHECK(history_.size() >= cp);
   while (history_.size() > cp){
+    history_.back()->Undo();
     delete history_.back();
     history_.pop_back();
   }
+}
+void Changelist::MakeChangesPermanent(){
+  for (int i=0; i<history_.size(); i++) {
+    history_[i]->MakePermanent();
+    delete history_[i];
+  }
+  history_.clear();
 }
