@@ -49,14 +49,14 @@ bool MaybeFindRandomCandidateRule(Model *m, CandidateRule *ret,
     break;
   }
 }
-TrueProposition * GetRandomTrueProposition(Model *m){
+TrueTuple * GetRandomTrueTuple(Model *m){
   return m->index_to_true_proposition_[tuple_index_.RandomTuple()];  
 }
 
 
 bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic){
   int64 max_work = (uint)(100/pow(RandomFraction(), 1.0));
-  TrueProposition * tp = GetRandomTrueProposition(m);
+  TrueTuple * tp = GetRandomTrueTuple(m);
   CHECK(tp->causes_.size());
   Firing * f = *(tp->causes_.begin());
   RuleSat * rs = f->rule_sat_;
@@ -270,12 +270,12 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     // we're going to try to check whether any of the preconditions of this
     // firing depend on its results.  If so, skip it. 
     set<Component *> codependents; 
-    set<TrueProposition *> dependents;
+    set<TrueTuple *> dependents;
     vector<Tuple> preconditions = (*r)->precondition_->clauses_;
     sub.Substitute(&preconditions);
     bool preconditions_found = true;
     for (uint i=0; i<preconditions.size(); i++) {
-      TrueProposition * tp = FindTrueProposition(preconditions[i]);
+      TrueTuple * tp = FindTrueTuple(preconditions[i]);
       if (!tp) {
 	preconditions_found = false;
 	break;
@@ -287,10 +287,10 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     vector<Tuple> results = (*r)->result_;
     sub.Substitute(&results);
     for (uint i=0; i<results.size(); i++) {
-      TrueProposition * tp = FindTrueProposition(results[i]);
+      TrueTuple * tp = FindTrueTuple(results[i]);
       if (tp) dependents.insert(tp);
     }
-    set<TrueProposition *> dependents_explained = dependents;
+    set<TrueTuple *> dependents_explained = dependents;
     /*forall(run_d, dependents) {
       Component * d = *run_d;
       bool depended_on = false;
@@ -304,7 +304,7 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     VLOG(1) << "Added firing " << sub.ToString() << endl;
     CHECK(f);
     forall(run, dependents_explained) {
-      TrueProposition * tp = *run;
+      TrueTuple * tp = *run;
       forall (run_f, tp->causes_) {
 	Firing * other_firing = *run_f;
 	if (other_firing == NULL) continue;
@@ -529,7 +529,7 @@ ComputationResult RequiresCodependent(Component *dependent,
 
 ComputationResult IsEssential(Component *c, int max_work, 
 			      int * actual_work){
-  if (c->Type() == TRUEPROPOSITION && ((TrueProposition*)c)->IsRequired())
+  if (c->Type() == TRUETUPLE && ((TrueTuple*)c)->IsRequired())
     return RESULT_TRUE;
   int so_far = 1;
   if (actual_work) *actual_work = so_far;
@@ -637,7 +637,7 @@ void OptimizeStrength(Rule *r){
   }
 }
 
-void Explain(Model *m, TrueProposition *p, 
+void Explain(Model *m, TrueTuple *p, 
 	     set<Component *> *excluded, bool fix_times) {
   // CHECK(p->causes_.size()==0);
   forall(run, p->causes_) {
@@ -673,8 +673,8 @@ void Model::FixTimesFixCircularDependencies() {
     FixTimes();
     if (required_never_happen_.size()) {
       VLOG(1) << "  explaining a required proposition" << endl;
-      TrueProposition * p 
-	= (TrueProposition *)(*required_never_happen_.begin());
+      TrueTuple * p 
+	= (TrueTuple *)(*required_never_happen_.begin());
       Explain(p, &never_happen_, false);
       VLOG(1) << "   explained " << p->id_ << endl;
       if (GetVerbosity() >= 1) ToHTML("html");
@@ -730,7 +730,7 @@ int64 FindExplanationsForResult(Model *m, const Tuple & s,
 	if (excluded_dependents) {
 	  bool bad = false;
 	  forall(run, substituted_precondition) {
-	    TrueProposition *prop = FindTrueProposition(*run);
+	    TrueTuple *prop = FindTrueTuple(*run);
 	    CHECK(prop);
 	    if ((*excluded_dependents) % ((Component*)prop)) bad = true;
 	  }
@@ -747,7 +747,7 @@ int64 FindExplanationsForResult(Model *m, const Tuple & s,
 void FulfillRequirements(Model *m) {
   forall(run, m->required_){
     Tuple s = run->second;
-    Explain(m, m->GetAddTrueProposition(s), 0, true);
+    Explain(m, m->GetAddTrueTuple(s), 0, true);
   }
   m->FixTimes();
 }
