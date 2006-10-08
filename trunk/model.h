@@ -151,10 +151,10 @@ class Model {
   // Finds or adds a Precondition
   Precondition * GetAddPrecondition(const vector<Tuple> & tuples);
 
-  // Finds a TrueProposition
-  TrueProposition * FindTrueProposition(const Tuple & s);
-  // Finds or adds a TrueProposition
-  TrueProposition * GetAddTrueProposition(const Tuple & s);
+  // Finds a TrueTuple
+  TrueTuple * FindTrueTuple(const Tuple & s);
+  // Finds or adds a TrueTuple
+  TrueTuple * GetAddTrueTuple(const Tuple & s);
 
   // Records a change to the model in the history.
   void RecordChange(Change * change);
@@ -231,7 +231,7 @@ class Model {
   int next_id_;
   map<int, Component *> id_to_component_;
   TupleIndex tuple_index_; // stores pointers to Firings
-  map<const Tuple *, TrueProposition *> index_to_true_proposition_;
+  map<const Tuple *, TrueTuple *> index_to_true_proposition_;
   set<Component *> times_dirty_; //components whose times need fixing
   set<Component *> never_happen_; // components which never happen
   set<Component *> required_never_happen_; // required and never happen
@@ -248,7 +248,7 @@ class Model {
   // the spec
   map<uint64, Tuple> required_;
   map<uint64, Tuple> forbidden_;
-  set<TrueProposition *> present_forbidden_;
+  set<TrueTuple *> present_forbidden_;
   set<uint64> absent_required_;  
 
 };

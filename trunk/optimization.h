@@ -1,4 +1,4 @@
-!// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc.
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic);
 // OPTIMIZATION STEPS
 void OptimizeRound(Model *m);
 
-TrueProposition * GetRandomTrueProposition(Model *m);
+TrueTuple * GetRandomTrueTuple(Model *m);
 
 ComputationResult DependsOn(Component * dependent, Component * dependee, 
 			    int64 max_work);
@@ -114,12 +114,12 @@ struct OptimizationCheckpoint {
   
 void OptimizeStrength(Rule *r);
 
-  // Takes an unexplained TrueProposition, and finds the most probable firing 
-  // to add to the model that will explain that TrueProposition.  
+  // Takes an unexplained TrueTuple, and finds the most probable firing 
+  // to add to the model that will explain that TrueTuple.  
   // If an "excluded" set is given, we avoid adding firings which depend on
-  // the excluded TruePropositions.
+  // the excluded TrueTuples.
 void Explain(Model *m,
-	     TrueProposition * p,
+	     TrueTuple * p,
 	     set<Component *> * excluded,
 	     bool fix_times); // satisfies in the best way it can
 // Explain all of the required propositions.
@@ -129,7 +129,7 @@ void FixTimesFixCircularDependencies(Model *m);
 
 // Finds possible pairs of rules and substitutions such that the 
 // preconditios are satisfied, and one of the results is the given tuple.
-// You can exclude some TruePropositions as dependents, for example to 
+// You can exclude some TrueTuples as dependents, for example to 
 // aviod circular causation.  In the results, if the value of a variable 
 // does not matter, 
 // returns work, or -1 if we ran out of time.

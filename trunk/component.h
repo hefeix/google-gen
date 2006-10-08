@@ -31,7 +31,7 @@ struct Rule;
 struct Satisfaction; // An instance of a Precondition being satisfied.
 struct RuleSat;      // An instance of a rule being satisfied.
 struct Firing;       // An instance of a rule firing.
-struct TrueProposition;
+struct TrueTuple;
 
 enum ComponentType {
   PRECONDITION,
@@ -39,7 +39,7 @@ enum ComponentType {
   SATISFACTION,
   RULESAT,
   FIRING,
-  TRUEPROPOSITION,
+  TRUETUPLE,
   NUM_COMPONENT_TYPES,
 };
 
@@ -314,7 +314,7 @@ struct Satisfaction : public Component {
     
   // computed data
   // The propositions that satisfy the precondition
-  set<TrueProposition *> propositions_;
+  set<TrueTuple *> propositions_;
 
   // The associated RuleSat objects for rules which have this precondition.
   // (only the ones that are represented explicitly)
@@ -387,7 +387,7 @@ struct Rule : public Component{
   // The rule only comes into the model once the propositions that describe
   // its causes come true.  These are the propositions that describe the
   // rule.
-  vector<TrueProposition *> encoding_;
+  vector<TrueTuple *> encoding_;
    
   // Create a new rule and add it to the model.
   // In genereal, creating a rule also adds other components.  If just_this
@@ -512,7 +512,7 @@ struct Firing : public Component{
   };
 
   // computed
-  set<TrueProposition *> true_propositions_; // if it's a positive rule
+  set<TrueTuple *> true_propositions_; // if it's a positive rule
     
   Firing(RuleSat * rule_sat, Substitution right_substitution, bool just_this,
 	 int id);
@@ -529,12 +529,12 @@ struct Firing : public Component{
   vector<Component *> Dependents();
   vector<vector<Component *> > Codependents();
   vector<Component *> Copurposes();
-  bool InvolvesProposition(TrueProposition * p) const;    
+  bool InvolvesProposition(TrueTuple * p) const;    
   Substitution GetFullSubstitution();
 };
 
 // A proposition which is true in our model
-struct TrueProposition : public Component{
+struct TrueTuple : public Component{
   // fundamental
   Tuple proposition_;  
 
@@ -562,11 +562,11 @@ struct TrueProposition : public Component{
   // Is this proposition given externally.
   bool given_;
 
-  TrueProposition(Model * model, 
+  TrueTuple(Model * model, 
 		  const vector<Firing *> & causes, 
 		  Tuple proposition, bool just_this,
 		  int id);
-  ~TrueProposition();
+  ~TrueTuple();
 
   // Functions of the superclass Component
   void Destroy();
@@ -574,8 +574,8 @@ struct TrueProposition : public Component{
   ComponentEssentials * ToEssentials() const;
   Record RecordForDisplayInternal() const;
   set<Firing *> GetResultFirings() const;
-  set<TrueProposition *> GetResultTruePropositions() const;
-  set<TrueProposition *> GetCauseTruePropositions() const;
+  set<TrueTuple *> GetResultTrueTuples() const;
+  set<TrueTuple *> GetCauseTrueTuples() const;
   vector<Component *> Dependents();
   vector<vector<Component *> > Codependents();
 

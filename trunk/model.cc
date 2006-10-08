@@ -32,7 +32,7 @@ char * Model::ComponentTypeName [] = {
     "SATISFACTION",
     "RULESAT",
     "FIRING",
-    "TRUEPROPOSITION",
+    "TRUETUPLE",
 };
 Model::ComponentType Model::StringToComponentType(const string & s) {
   for (int i=0; i<NUM_COMPONENT_TYPES; i++) {
@@ -196,7 +196,7 @@ Substitution Model::Firing::GetFullSubstitution() {
   ret.Add(rule_sat_->satisfaction_->substitution_);
   return ret;
 }
-bool Model::Firing::InvolvesProposition(TrueProposition * p) const {
+bool Model::Firing::InvolvesProposition(TrueTuple * p) const {
   return
     ((true_propositions_ % p) || (rule_sat_->satisfaction_->propositions_ % p));
 }
@@ -272,8 +272,8 @@ string Model::RuleSat::ImplicationString(const Firing * firing) const {
   ret += rule_->HTMLLink("r") + " " + HTMLLink("rs") + " " ;
   if (firing) ret += firing->HTMLLink("f") + " ";
   for (uint i=0; i<preconditions.size(); i++) {
-    TrueProposition * tp 
-      = model_->FindTrueProposition(substituted_preconditions[i]);
+    TrueTuple * tp 
+      = model_->FindTrueTuple(substituted_preconditions[i]);
     CHECK(tp);
     ret += tp->HTMLLink(ToString(preconditions[i], sub)) 
       + " (" + tp->time_.ToSortableString() + ")"
@@ -282,8 +282,8 @@ string Model::RuleSat::ImplicationString(const Firing * firing) const {
   ret += "-> ";
   for (uint i=0; i<results.size(); i++) {
     if (!substituted_results[i].HasVariables()) {
-      TrueProposition * tp 
-	= model_->FindTrueProposition(substituted_results[i]);      
+      TrueTuple * tp 
+	= model_->FindTrueTuple(substituted_results[i]);      
       if (tp){
 	ret += tp->HTMLLink(ToString(results[i], sub)) + " (" 
 	  + tp->time_.ToSortableString() + ") ";
@@ -300,7 +300,7 @@ string Model::Firing::ImplicationString() const{
   if (this==NULL) return "SPONTANEOUS";
   return rule_sat_->ImplicationString(this);
 }
-set<Model::Firing *> Model::TrueProposition::GetResultFirings() const {
+set<Model::Firing *> Model::TrueTuple::GetResultFirings() const {
   set<Firing *> ret;
   forall(run_s, satisfactions_)
     forall(run_rs, (*run_s)->rule_sats_)
@@ -309,9 +309,9 @@ set<Model::Firing *> Model::TrueProposition::GetResultFirings() const {
   return ret;
 }
 
-set<Model::TrueProposition *> 
-Model::TrueProposition::GetResultTruePropositions() const{
-  set<TrueProposition *> ret;
+set<Model::TrueTuple *> 
+Model::TrueTuple::GetResultTrueTuples() const{
+  set<TrueTuple *> ret;
   forall(run_s, satisfactions_)
     forall(run_rs, (*run_s)->rule_sats_)
     forall(run_f, (*run_rs)->firings_)
@@ -320,9 +320,9 @@ Model::TrueProposition::GetResultTruePropositions() const{
   return ret;  
 }
 
-set<Model::TrueProposition *> 
-Model::TrueProposition::GetCauseTruePropositions() const{
-  set<TrueProposition *> ret;
+set<Model::TrueTuple *> 
+Model::TrueTuple::GetCauseTrueTuples() const{
+  set<TrueTuple *> ret;
   forall(run_f, causes_)
     forall(run_tp, (*run_f)->rule_sat_->satisfaction_->propositions_)
     ret.insert(*run_tp);
@@ -662,17 +662,17 @@ Model::Precondition * Model::GetAddPrecondition(const vector<Tuple> & tuples) {
   return new Precondition(this, tuples);
 }
 
-Model::TrueProposition * Model::FindTrueProposition(const Tuple & s) {
+Model::TrueTuple * Model::FindTrueTuple(const Tuple & s) {
   const Tuple * tuple = tuple_index_.FindTuple(s);
   if (!tuple) return 0;
-  TrueProposition ** tp = index_to_true_proposition_ % tuple;
+  TrueTuple ** tp = index_to_true_proposition_ % tuple;
   if (tp) return *tp;
   return 0;
 }
-Model::TrueProposition * Model::GetAddTrueProposition(const Tuple & s) {
-  TrueProposition * ret = FindTrueProposition(s);
+Model::TrueTuple * Model::GetAddTrueTuple(const Tuple & s) {
+  TrueTuple * ret = FindTrueTuple(s);
   if (ret) return ret;
-  ret = new TrueProposition(this, vector<Firing *>(), s, false);
+  ret = new TrueTuple(this, vector<Firing *>(), s, false);
   return ret;
 }
 
@@ -706,12 +706,12 @@ uint64 Model::RuleFingerprint(RuleType type,
   return ret;
 }
 
-void Model::TrueProposition::AddCause(Firing * cause){
+void Model::TrueTuple::AddCause(Firing * cause){
   if (cause != NULL) cause->true_propositions_.insert(this);
   causes_.insert(cause);
   ComputeSetTime();
 }
-void Model::TrueProposition::RemoveCause(Firing * cause){
+void Model::TrueTuple::RemoveCause(Firing * cause){
   cause->true_propositions_.erase(this);
   causes_.erase(cause);
   // CHECK(causes_.size());
@@ -855,8 +855,8 @@ Model::ComponentEssentials * Model::ComponentEssentialsFromRecord(const
   case FIRING:
     ret = new Firing::Essentials();
     break;
-  case TRUEPROPOSITION:
-    ret = new TrueProposition::Essentials();
+  case TRUETUPLE:
+    ret = new TrueTuple::Essentials();
     break;
   default:
     CHECK(false);
@@ -893,7 +893,7 @@ bool Model::IsForbidden(const Tuple & s){
   }
   return false;
 }
-void Model::TrueProposition::CheckForbiddenRequired(){
+void Model::TrueTuple::CheckForbiddenRequired(){
   required_ = model_->IsRequired(proposition_);
   forbidden_ = model_->IsForbidden(proposition_);
   if (forbidden_) model_->present_forbidden_.insert(this);
@@ -902,7 +902,7 @@ void Model::TrueProposition::CheckForbiddenRequired(){
 }
 void Model::MakeRequired(const Tuple & s){
   required_[s.Fingerprint()] = s;
-  TrueProposition * tp = FindTrueProposition(s);
+  TrueTuple * tp = FindTrueTuple(s);
   if (tp) {
     tp->CheckForbiddenRequired();
   } else {
@@ -911,7 +911,7 @@ void Model::MakeRequired(const Tuple & s){
 }
 void Model::MakeNotRequired(const Tuple & s) {
   required_.erase(s.Fingerprint());
-  TrueProposition * tp = FindTrueProposition(s);
+  TrueTuple * tp = FindTrueTuple(s);
   if (tp) {
     tp->CheckForbiddenRequired();
   }
@@ -936,8 +936,8 @@ void Model::MakeNotForbidden(const Tuple & s){
   }
 }
 void Model::MakeGiven(const Tuple & s){
-  TrueProposition *tp = FindTrueProposition(s);
-  if (!tp) tp = new TrueProposition(this, vector<Firing *>(), s, false);
+  TrueTuple *tp = FindTrueTuple(s);
+  if (!tp) tp = new TrueTuple(this, vector<Firing *>(), s, false);
   tp->given_ = true;
   tp->ComputeSetTime();
 }

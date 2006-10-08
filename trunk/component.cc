@@ -105,7 +105,7 @@ Model::Satisfaction::Satisfaction(Precondition * precondition,
   for (uint i=0; i<props.size(); i++) {
     const Tuple * tuple = model_->tuple_index_.FindTuple(props[i]);
     CHECK(tuple);
-    TrueProposition * t = model_->index_to_true_proposition_[tuple];
+    TrueTuple * t = model_->index_to_true_proposition_[tuple];
     CHECK(t);
     // we need this if statement, since one proposition can be used twice.
     if (!(propositions_ % t)) { 
@@ -174,7 +174,7 @@ Model::Rule::Rule(Precondition * precondition, EncodedNumber delay,
   //   model_->AddArbitraryTerm(arbitrary_terms[i]);
   vector<Tuple> encoding = ComputeEncoding();
   for (uint i=0; i<encoding.size(); i++) {
-    TrueProposition * p = model_->GetAddTrueProposition(encoding[i]);
+    TrueTuple * p = model_->GetAddTrueTuple(encoding[i]);
     encoding_.push_back(p);
     p->rule_encoded_ = this;
     // model_->MakeRequired(encoding[i]);
@@ -240,12 +240,12 @@ Model::Firing::Firing(RuleSat * rule_sat, Substitution right_substitution,
   for (uint i=0; i<results.size(); i++){
     left_substitution_ref.Substitute(&(results[i]));
     right_substitution.Substitute(&(results[i]));
-    TrueProposition * tp = model_->FindTrueProposition(results[i]);
+    TrueTuple * tp = model_->FindTrueTuple(results[i]);
     if (tp) {
       tp->AddCause(this);
     } else {
       if (!just_this) {
-	new TrueProposition(model_, 
+	new TrueTuple(model_, 
 			    vector<Firing *>(1, this), results[i], false);
       }
     }
@@ -256,7 +256,7 @@ Model::Firing::Firing(RuleSat * rule_sat, Substitution right_substitution,
 Model::Firing::~Firing(){ 
   ComponentDestroy(); 
 }
-Model::TrueProposition::TrueProposition(Model * model, 
+Model::TrueTuple::TrueTuple(Model * model, 
 					const vector<Firing *> & causes, 
 					Tuple proposition,
 					bool just_this, int id)
@@ -291,7 +291,7 @@ Model::TrueProposition::TrueProposition(Model * model,
     }
   }
 }
-Model::TrueProposition::~TrueProposition(){ 
+Model::TrueTuple::~TrueTuple(){ 
   ComponentDestroy(); 
 }
 Model::ComponentEssentials::~ComponentEssentials(){}
@@ -323,7 +323,7 @@ void Model::RuleSat::Destroy() {
 }
 void Model::Firing::Destroy(){
   while (true_propositions_.size()){
-    TrueProposition * tp = *(true_propositions_.begin());
+    TrueTuple * tp = *(true_propositions_.begin());
     //CHECK(tp->causes_.size() > 1);
     tp->RemoveCause(this);
   }
@@ -353,7 +353,7 @@ void Model::Rule::Destroy(){
   //for (uint i=0; i<arbitrary_terms.size(); i++) 
   //  model_->SubtractArbitraryTerm(arbitrary_terms[i]);
 }
-void Model::TrueProposition::Destroy(){
+void Model::TrueTuple::Destroy(){
   if (required_) model_->absent_required_.insert(proposition_.Fingerprint());
   if (forbidden_) model_->present_forbidden_.erase(this);
 
@@ -390,8 +390,8 @@ Model::ComponentType Model::Satisfaction::Type() const { return SATISFACTION; }
 Model::ComponentType Model::Rule::Type() const { return RULE; }
 Model::ComponentType Model::RuleSat::Type() const { return RULESAT; }
 Model::ComponentType Model::Firing::Type() const { return FIRING; }
-Model::ComponentType Model::TrueProposition::Type() const 
-{ return TRUEPROPOSITION; }
+Model::ComponentType Model::TrueTuple::Type() const 
+{ return TRUETUPLE; }
 Model::ComponentType Model::Precondition::Essentials::Type() const 
 { return PRECONDITION; }
 Model::ComponentType Model::Satisfaction::Essentials::Type() const 
@@ -401,8 +401,8 @@ Model::ComponentType Model::RuleSat::Essentials::Type() const
 { return RULESAT; }
 Model::ComponentType Model::Firing::Essentials::Type() const 
 { return FIRING; }
-Model::ComponentType Model::TrueProposition::Essentials::Type() const 
-{ return TRUEPROPOSITION; }
+Model::ComponentType Model::TrueTuple::Essentials::Type() const 
+{ return TRUETUPLE; }
 
 string Model::Component::TypeName(){ return ComponentTypeName[Type()]; }
 string Model::ComponentEssentials::TypeName(){ 
@@ -448,7 +448,7 @@ Model::ComponentEssentials * Model::Firing::ToEssentials() const{
   e->right_substitution_ = right_substitution_;
   return e;
 }
-Model::ComponentEssentials * Model::TrueProposition::ToEssentials() const{
+Model::ComponentEssentials * Model::TrueTuple::ToEssentials() const{
   Essentials * e = new Essentials;
   e->id_ = id_;
   e->proposition_ = proposition_;
@@ -502,13 +502,13 @@ Model::Component * Model::Firing::Essentials::AddToModelInternal(Model *m){
   CHECK(rule_sat);
   return new Firing(rule_sat, right_substitution_, true, id_);
 }
-Model::Component * Model::TrueProposition::Essentials::AddToModelInternal(Model *m){
+Model::Component * Model::TrueTuple::Essentials::AddToModelInternal(Model *m){
   vector<Firing *> causes;
   forall (run, cause_ids_) {
     Firing * c = m->GetComponent<Firing>(*run);
     if (c) causes.push_back(c);
   }
-  return new TrueProposition(m, causes, proposition_, true, id_);
+  return new TrueTuple(m, causes, proposition_, true, id_);
 }
 
 string Model::Component::HTMLLink(string text) const{
@@ -580,7 +580,7 @@ Record Model::Firing::RecordForDisplayInternal() const{
     r["true_propositions"] += (*run)->HTMLLink((*run)->proposition_.ToString());
   return r;
 }
-Record Model::TrueProposition::RecordForDisplayInternal() const {
+Record Model::TrueTuple::RecordForDisplayInternal() const {
   Record r;
   r["Proposition"] = proposition_.ToString();
   forall(run, causes_) {
@@ -632,7 +632,7 @@ void Model::Firing::Essentials::ToRecordInternal(Record &r){
   r["rule_sat"] = itoa(rule_sat_id_);
   r["right_substitution"] = right_substitution_.ToString();
 }
-void Model::TrueProposition::Essentials::ToRecordInternal(Record &r){
+void Model::TrueTuple::Essentials::ToRecordInternal(Record &r){
   r["proposition"] = proposition_.ToString();
   r["causes"] = IntVectorToString(cause_ids_);
   if (given_) r["given"] = "true";
@@ -662,7 +662,7 @@ void Model::Firing::Essentials::FromRecordInternal(Record r){
   rule_sat_id_ = atoi(r["rule_sat"]);
   right_substitution_.FromString(r["right_substitution"]);
 }
-void Model::TrueProposition::Essentials::FromRecordInternal(Record r){  
+void Model::TrueTuple::Essentials::FromRecordInternal(Record r){  
   proposition_.FromString(r["proposition"]);
   cause_ids_ = StringToIntVector(r["causes"]);
   if (r["given"]=="true") given_ = true;
@@ -697,7 +697,7 @@ vector<Model::Component *> Model::Firing::Dependents(){
   }
   return ret;
 }
-vector<Model::Component *> Model::TrueProposition::Dependents(){
+vector<Model::Component *> Model::TrueTuple::Dependents(){
   vector<Component *> ret;
   ret.insert(ret.end(), satisfactions_.begin(), satisfactions_.end());
   if (rule_encoded_) ret.push_back(rule_encoded_);
@@ -742,7 +742,7 @@ vector<vector<Model::Component *> > Model::Firing::Codependents(){
   ret.push_back(vector<Component *>(1, rule_sat_));
   return ret;
 }
-vector<vector<Model::Component *> > Model::TrueProposition::Codependents(){
+vector<vector<Model::Component *> > Model::TrueTuple::Codependents(){
   vector<vector<Component *> > ret;
   if (!given_) 
     ret.push_back(vector<Component *>(causes_.begin(), causes_.end()));
@@ -836,7 +836,7 @@ void Model::Component::SetTime(Time new_time, bool adjust_dirty_bits){
   if (new_time == time_) { MakeTimeClean(); return; }
   if (time_.IsNever()) {
     model_->never_happen_.erase(this);
-    if (Type()==TRUEPROPOSITION && ((TrueProposition*)this)->required_)
+    if (Type()==TRUETUPLE && ((TrueTuple*)this)->required_)
       model_->required_never_happen_.erase(this);
   }
   time_ = new_time;
@@ -851,7 +851,7 @@ void Model::Component::SetTime(Time new_time, bool adjust_dirty_bits){
   }
   if (time_.IsNever()){
     model_->never_happen_.insert(this);
-    if (Type()==TRUEPROPOSITION && ((TrueProposition*)this)->required_)
+    if (Type()==TRUETUPLE && ((TrueTuple*)this)->required_)
       model_->required_never_happen_.insert(this);
   }
 }
