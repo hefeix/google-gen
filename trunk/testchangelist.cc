@@ -22,11 +22,13 @@ Changelist cl;
 string s;
 set<int> my_set;
 map<string, string> my_map;
-struct Foo {
-  void Create() { cout << "CREATED A FOO" << endl; }
-  void Destroy() { cout << "DESTROYED A FOO" << endl; }
+struct Employee {
+  Employee(string name) { name_ = name;}
+  void Hire() { cout << "Hired " << name_ << endl; }
+  void Fire() { cout << "Fired " << name_ << endl; }
+  string name_;
 };
-Foo foo;
+Employee fred("Fred");
 void ShowWorldState(){
   cout << "cl_size=" << cl.GetCheckpoint()
        << " s=" << s
@@ -63,9 +65,11 @@ void TestChangelist(){
   cout << "Set checkpoint cp1" << endl;
   cl.MakeChange(new MapRemoveChange<string, string>(&my_map, "key1")); 
   ShowWorldState();
-  cl.MakeChange(new CreateDestroyChange<Foo>(&foo)); 
+  cl.MakeChange(new MemberCallChange<Employee>(&fred, &Employee::Hire,
+					       &Employee::Fire));
   ShowWorldState();
-  cl.MakeChange(new DestroyCreateChange<Foo>(&foo));
+  cl.MakeChange(new MemberCallChange<Employee>(&fred, &Employee::Fire,
+					       &Employee::Hire));
   ShowWorldState();
   cout << "Rolling back to cp1" << endl;
   cl.Rollback(cp1);
