@@ -58,7 +58,7 @@ void TestChangelist(){
   cl.MakeChangesPermanent();
   cout << "Made Changes Permanent" << endl;
   cout << "Set checkpoint cp0" << endl;
-  cl.Make(new SimpleChange<string>(&s, "new_string")); 
+  cl.Make(new ValueChange<string>(&s, "new_string")); 
   ShowWorldState();
   cl.Make(new SetInsertChange<int>(&my_set, 4)); 
   ShowWorldState();

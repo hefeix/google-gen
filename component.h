@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,16 +14,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
+// Author: Noam Shazeer and Georges Harik
 
 
 #ifndef _COMPONENT_H_
 #define _COMPONENT_H_
 
+// A note on ensuring model consistency:
+// We classify functions that modify the model into layers.  Each layer 
+// must also respect the restrictions of lower layers.  
+//
+// Layer 0: Anything goes.
+//
+// Layer 1: The effects can be completely rolled back using the changelist.
+//          Layer 1 is genreally for simple modification functions.
+//
+// Layer 2: The following local consistency criteria are maintained:
+//           a. Component and model likelihoods are correct.
+//           b. Links are bidirectional
+//           c. Component times are correct, or the time_dirty_ flag is on.
+//           d. All of the indices kept by the model are up to date.
+//               TODO( include list of indices )
+//
+// Layer 3: Global consistency:
+//           a. The times are all clean.
+//           b. All required tuples happen, and no forbidden ones do.
+//           c. No times are set to NEVER.
+
 
 struct Model;
 struct Component; //  a basic part of the model.  There are several subtypes.
-struct ComponentEssentials; // a representation of a component for storage
 
 // These are the types of components
 struct Precondition;  // The preconditions of a rule
@@ -48,6 +68,7 @@ static char * ComponentTypeName []; // indexed by the enum above.
 static ComponentType StringToComponentType(const string & s); 
 static string ComponentTypeToString(ComponentType t);
 
+// These are the types of rules.
 enum RuleType {
   INVALID_RULE, // not used
   SIMPLE_RULE,  // no new variables on RHS.  Can fire only once per rule_sat
@@ -59,46 +80,68 @@ static char * RuleTypeName [];
 static RuleType StringToRuleType(const string & s);
 static string RuleTypeToString(RuleType t);
 
-
-// user responsible for deallocation
-ComponentEssentials * ComponentEssentialsFromRecord(const Record & r);
-template<class C> struct StablePtr{
-  Model * model_;
-  int id_;
-  StablePtr(C & c) { id_ = c.id_; model_=c.model_;}
-  StablePtr(C * c) { id_ = c->id_; model_=c->model_;}
-  bool IsValid() const{ return model_->GetComponent(id_);}
-  C* operator *() const{
-    return model_->GetComponent<C>(id_);
-  }
-  bool operator== (const StablePtr<C> & o) const{
-    return (id_==o.id_);
-  }
-  bool operator<(const StablePtr<C> & o) const{
-    return (id_<o.id_);
-  }
-};
-
-
 struct Component{
-  // All functions of Component() (including virtual) defined in component.cc
-  
-  // The component needs to be told what model it is a part of.
-  // If you pass -1 as the id, an id will be assigned automatically,
-  // otherwise, you better know that the id you give it is free.
-  Component(Model * model, int id);
+
+  private: // All data should only be touched by reversible functions.
+
+  // If we delete a component and want to restore it on rollback, we want to
+  // avoid invalidating pointers and storing the data elswhere.  Thus we just 
+  // set the exists_ variable to false and pretend that it doesn't exist.
+  bool exists_;
+  int id_;  
+  Model * model_;
+  // contribution of this component to the ln_likelihood_ of the model
+  double ln_likelihood_;
+  Time time_;
+  // time_dirty_ is set to true unless the time is set correctly based on the 
+  // codependents of this component (though not necessarily globally).
+  bool time_dirty_;
+
+  // The constructor should leave the exists_ bit false, and the destructor
+  // should CHECK that it is false.  The constructor and destructor should 
+  // not touch the rest of the model.
+  Component(Model * model, int id = -1);
   virtual ~Component();
-  void ComponentDestroy();
-  virtual void Destroy() = 0; // subclass-dependent destructor
+
+  // Layer 1 functions:  Use these instead of accessing the data directly.
+
+  // These things just modify the actual values.
+  void L1_SetExists(bool val);
+  void L1_SetTime(const Time & new_time);
+  void L1_SetTimeDirty(bool val);
+  void L1_SetLnLikelihood(double new_ln_likelihood); 
+
+
+  // The time_ field is set lazily to save time.  Sometimes it is locally 
+  // correct (clean) and sometimes it might be localy incorrect (dirty).  
+  // Clean does not mean globally correct, and calling ComputeSetTime()
+  // on every component does not make all the times clean or correct.
+  // Call FixTimes() on the model to make all of the times clean and correct.
+  // If the adjust_dirty_bits parameter is true, as it should usually be, 
+  // the dirty bit on this component is updated to false, and those on its 
+  // dependents are updated to true if necessary.  
+  //
+  // All Layer 2 requirements are maintained except that the time being
+  // set may not be correct, and if adjust_dirty_bits is set to false,
+  // times and dirty bits may be incorrect all over the model.  
+  void L1_SetTimeMaintainConsistency(Time new_time, bool adjust_dirty_bits);
+
+  // Layer 2 functions
+
+  void ComputeSetTime(); // Compute and set the time.  
+  // Computes and sets the ln_likelihood_ for this component, and adjusts
+  // the total ln likelihood of the model. 
+  void ComputeSetLnLikelihood();
+  // If the time of a component changes, we call this function, which 
+  // adjusts the ln_likelihood_ of this and other components if necessary.
+  virtual void AdjustLnLikelihoodForNewTime();
   
-  // Changes id_.  Revises the history of the model to indicate this change.
-  // You need to tell it from what point the history needs revision.
-  void Renumber(int new_id, int revise_history_from);
+  
+  public:
+  
+  // Const functions
   virtual ComponentType Type() const = 0;
-  string TypeName();
-  
-  // Converts to a ComponentEssentials object for storage.
-  virtual ComponentEssentials * ToEssentials() const = 0;
+  string TypeName() const;
   
   // A link to this component in the HTML viewer.
   string HTMLLink(string text) const;
@@ -109,18 +152,16 @@ struct Component{
   // Type-specific key-value pairs.  Called by RecordForDisplay()
   virtual Record RecordForDisplayInternal() const = 0;
   
-  // Convert to a set of key-value pairs for storage. 
-  // (uses a ComponentEssentials object)
-  Record ToRecord();
-  
+
   // Returns pointers to the components that depend in some way on this 
   // component.  They may have other options for existing, so they don't 
   // necessarily disappear when this component does.
-  virtual vector<Component *> Dependents();
+  virtual vector<Component *> Dependents() const;
   
+  // TODO: maybe get rid of this
   // Components that absolutely need to disappear before this one does.
   // The code breaks if you remove this component while some of these exist.
-  virtual vector<Component *> HardDependents();
+  virtual vector<Component *> HardDependents() const;
 
   // Components that this component depens on. 
   // The vector of vectors is to be interpreted as an AND of ORs.
@@ -129,120 +170,38 @@ struct Component{
   //   the component never happens.  It means that the model is invalid, but
   //   it can be an intermediate state in the search, and doesn't break the
   //   code.
-  virtual vector<vector<Component *> > Codependents();
+  virtual vector<vector<Component *> > Codependents() const;
   
   // Some components have no reason to exist without other components.
   // These other componets are their "Purposes" for existing.  When the last 
   // one gets deleted, the component is automatically deleted.  Other 
   // components do not need a purpose to exist. (see NeedsPurpose()). 
-  virtual vector<Component *> Purposes();
+  virtual vector<Component *> Purposes() const;
   
   // Components which have this component as a purpose.
-  virtual vector<Component *> Copurposes(); // inverse of above
+  virtual vector<Component *> Copurposes() const; // inverse of above
 
   // Does this component need a purpose.
-  virtual bool NeedsPurpose(); // defaults to false unless overriden.
-  virtual bool HasPurpose();  // Does it have a purpose.
-  inline bool IsSuperfluous() {return NeedsPurpose() && !HasPurpose();}    
-  
-  // Returns a sufficient set of codependents that allow this component to 
-  // exist.  This is used when storing the model in an order that allows it to
-  // be reconstructed.
-  vector<Component *> RequiredCodependents(); // a sufficient set
+  virtual bool NeedsPurpose() const; // defaults to false unless overriden.
+  virtual bool HasPurpose() const;  // Does it have a purpose.
+  inline bool IsSuperfluous() const {return NeedsPurpose() && !HasPurpose();}  
   
   // Computes the time_ of the component.  This is in general equal to the 
   // maximinimum time of its Codependents() (or NEVER if it is missing the
   // required codependents to exist), but some component types have an 
   // additional time delay. 
-  // You can specify an excluded set of components.  The function pretens
+  // You can specify an excluded set of components.  The function pretends
   // that these components do not exist in the model. 
-  Time ComputeTime(set<Component *> * excluded); 
-  virtual inline bool HasTimeDelay(){ return false;}
+  Time ComputeTime(set<Component *> * excluded) const; 
+  virtual inline bool HasTimeDelay() const{ return false;}
   // The time delay is the coordinate of the time that gets incremented by 1
-  virtual inline EncodedNumber GetTimeDelay() { return EncodedNumber();}
-  
-  // The time_ field is set lazily to save time.  Sometimes it is locally 
-  // correct (clean) and sometimes it might be localy incorrect (dirty).  
-  // Clean does not mean globally correct, and calling ComputeSetTime()
-  // on every component does not make all the times clean or correct.
-  // Call FixTimes() on the model to make all of the times clean and correct.
-  // If the adjust_dirty_bits parameter is true, as it should usually be, 
-  // the dirty bit on this component is updated to false, and those on its 
-  // dependents are updated to true if necessary.  adjust_dirty_bits can be
-  // set to false, but only if you know what you're doing.
-  void SetTime(Time new_time, bool adjust_dirty_bits);
-  void ComputeSetTime(); // Compute and set the time.  
-  
-  // MakeTimeClean() just flips the dirty bit.  It doesn't change the time
-  // or check for correctness.  
-  void MakeTimeClean();
-  void MakeTimeDirty();
-  
-
-  // If the time of a component changes, we call this function, which 
-  // adjusts the ln_likelihood_ of this and other components if necessary.
-  virtual void AdjustLnLikelihoodForNewTime();
+  virtual inline EncodedNumber GetTimeDelay() const { return EncodedNumber();}
   
   // Computes the local contribution of this component to the ln likelihood 
   // of the model.
   virtual double LnLikelihood() const;
-  // Computes and sets the ln_likelihood_ for this component, and adjusts
-  // the total ln likelihood of the model. 
-  void ComputeSetLnLikelihood();
   // Some simple sanity checks on the connection structure.
-  void CheckConnections(); // checks that Co<X>() is the iverse of <X>()
-
-  int id_;
-  Time time_;
-  bool time_dirty_; // is the time correct based on the codependents
-  bool being_destroyed_; // set to true if this component is being destroyed.
-  Model * model_;
-  double ln_likelihood_; // changed by ComputeLikelihood()
-};
-
-// This is a structure that contains no pointers to the model or its other
-// components (so it can be stored), but contains all relevent data needed 
-// to reconstruct a component and add it back into the model.
-// This is an abstract base class that is subclassed once for each subclass
-// of Component.
-struct ComponentEssentials{
-  int id_;
-  Record ToRecord();
-  string TypeName();
-  virtual ComponentType Type() const = 0;
-  virtual void ToRecordInternal(Record & r) = 0;
-  virtual void FromRecordInternal(Record r) = 0;
-  Component * AddToModel(Model * m);
-  virtual Component * AddToModelInternal(Model * m) = 0;
-  virtual ~ComponentEssentials();
-};
-// user responsible for deallocation
-ComponentEssentials * ComponentEssentialsFromRecord(const Record & r);
-
-
-// This is a pointer to a component that works by remembering the id_.
-// Thus it is still valid even if the component has been deleted and added 
-// again.  You can also ask it whether it is valid.  
-template<class C> struct CPtr{
-  Model * model_;
-  int id_;
-  CPtr(C & c) { id_ = c.id_; model_=c.model_;}
-  CPtr(C * c) { id_ = c->id_; model_=c->model_;}
-  template<class D> CPtr<C>(const CPtr<D> & o) {
-    model_ = o.model_;
-    id_ = o.id_;
-  }
-  bool IsValid() const{ return model_->GetComponent(id_);}
-  // Returns a regular pointer.
-  C & operator *() const{
-    return *model_->GetComponent<C>(id_);
-  }
-  bool operator== (const CPtr<C> & o) const{
-    return (id_==o.id_);
-  }
-  bool operator<(const CPtr<C> & o) const{
-    return (id_<o.id_);
-  }
+  void CheckConnections() const; // checks that Co<X>() is the iverse of <X>()
 };
 
 // Here we have the six types of components.
@@ -252,17 +211,10 @@ template<class C> struct CPtr{
 struct Precondition : public Component {
   // fundamental data
   vector<Tuple> clauses_;
-  struct Essentials : public ComponentEssentials {
-    vector<Tuple> clauses_;
-    void ToRecordInternal(Record &r);
-    ComponentType Type() const;
-    void FromRecordInternal(Record r);
-    Component * AddToModelInternal(Model * m);
-  };
     
   // computed data
   set<Rule *> rules_; // the rules that have this precondition.
-  set<Rule *> negative_rules_; // the negative ones among the above.
+  set<Rule *> negative_rules_; // the negative ones (a subset of the above)
   // The total number of substitutions that satisfy the precondition.
   int num_satisfactions_;
   // maps fingerprint of substitution to satisfaction.
@@ -280,7 +232,6 @@ struct Precondition : public Component {
   // Functions of the superclass Component()
   void Destroy();
   ComponentType Type() const;
-  ComponentEssentials * ToEssentials() const;
   Record RecordForDisplayInternal() const;
   bool HasPurpose();
   vector<Component *> Purposes(); // Rules
@@ -303,15 +254,6 @@ struct Satisfaction : public Component {
   Precondition * precondition_;
   Substitution substitution_;
 
-  struct Essentials : public ComponentEssentials {
-    int precondition_id_;
-    Substitution substitution_;
-    void ToRecordInternal(Record &r); 
-    ComponentType Type() const;
-    void FromRecordInternal(Record r);
-    Component * AddToModelInternal(Model * m);
-  };
-    
   // computed data
   // The propositions that satisfy the precondition
   set<TrueTuple *> propositions_;
@@ -327,7 +269,6 @@ struct Satisfaction : public Component {
   // Functions of the superclass Component:
   void Destroy();
   ComponentType Type() const;
-  ComponentEssentials * ToEssentials() const;
   Record RecordForDisplayInternal() const;
   inline bool NeedsPurpose(); // yes
   vector<Component *> Dependents(); // the rule_sats
@@ -357,21 +298,6 @@ struct Rule : public Component{
   // in the case of a negative rule, the rule that is inhibited
   Rule * target_rule_; 
 
-  struct Essentials : public ComponentEssentials {
-    int precondition_id_;
-    EncodedNumber delay_;
-    RuleType type_;
-    vector<Tuple> result_;
-    EncodedNumber strength_;
-    EncodedNumber strength2_;
-    int target_rule_id_;
-    void ToRecordInternal(Record &r); 
-    ComponentType Type() const;
-    void FromRecordInternal(const Record r);
-    Component * AddToModelInternal(Model * m);
-  };
-
-    
   // computed
   set<Rule *> inhibitors_; // negative rules affecting this one.
   // floating point representation of the rule strength
@@ -441,7 +367,6 @@ struct Rule : public Component{
   // Functions of the parent class Component
   void Destroy();
   ComponentType Type() const;
-  ComponentEssentials * ToEssentials() const;
   Record RecordForDisplayInternal() const;
   vector<Component *> Dependents();
   vector<vector<Component *> > Codependents();
@@ -459,15 +384,6 @@ struct RuleSat : public Component{ // an instance of a rule coming true
   // the corresponding satisfaction of the preconditions
   Satisfaction * satisfaction_; 
 
-  struct Essentials : public ComponentEssentials {
-    int rule_id_;
-    int satisfaction_id_;
-    void ToRecordInternal(Record &r); 
-    ComponentType Type() const;
-    void FromRecordInternal(const Record r);
-    Component * AddToModelInternal(Model * m);
-  };
-    
   // computed
   map<uint64, Firing *> firings_;     // The effects  
   RuleSat * target_rule_sat_; // the inhibited RuleSat if it's a negative rule
@@ -480,7 +396,6 @@ struct RuleSat : public Component{ // an instance of a rule coming true
   // Functions of the superclass Component
   void Destroy();
   ComponentType Type() const;
-  ComponentEssentials * ToEssentials() const;
   Record RecordForDisplayInternal() const;
   bool NeedsPurpose();
   Firing * GetAddFiring(const Substitution & sub);
@@ -502,15 +417,6 @@ struct Firing : public Component{
   Substitution right_substitution_; // substitution for new rhs variables
   RuleSat * rule_sat_;  // the corresponding satisfaction of the rule
 
-  struct Essentials : public ComponentEssentials {
-    Substitution right_substitution_;
-    int rule_sat_id_;
-    void ToRecordInternal(Record &r); 
-    ComponentType Type() const;
-    void FromRecordInternal(const Record r);
-    Component * AddToModelInternal(Model * m);
-  };
-
   // computed
   set<TrueTuple *> true_propositions_; // if it's a positive rule
     
@@ -521,7 +427,6 @@ struct Firing : public Component{
   // Functions of the superclass Component
   void Destroy();
   ComponentType Type() const;
-  ComponentEssentials * ToEssentials() const;
   Record RecordForDisplayInternal() const;
   string ImplicationString() const;
   inline Rule * GetRule() { return rule_sat_->rule_; } 
@@ -537,16 +442,6 @@ struct Firing : public Component{
 struct TrueTuple : public Component{
   // fundamental
   Tuple proposition_;  
-
-  struct Essentials : public ComponentEssentials {
-    Tuple proposition_;
-    vector<int> cause_ids_;
-    bool given_;
-    void ToRecordInternal(Record &r);
-    ComponentType Type() const;
-    void FromRecordInternal(const Record r);
-    Component * AddToModelInternal(Model * m);
-  };
 
   // computed
   // the firings that would make this proposition true 
@@ -571,7 +466,6 @@ struct TrueTuple : public Component{
   // Functions of the superclass Component
   void Destroy();
   ComponentType Type() const;
-  ComponentEssentials * ToEssentials() const;
   Record RecordForDisplayInternal() const;
   set<Firing *> GetResultFirings() const;
   set<TrueTuple *> GetResultTrueTuples() const;

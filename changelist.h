@@ -66,9 +66,9 @@ class Change {
 
 // Changes the value of a variable.  
 // The variable must have a working copy constructor.
-template <class C> class SimpleChange : public Change{
+template <class C> class ValueChange : public Change{
  public:
-  SimpleChange(C * location, const C & new_val) {
+  ValueChange(C * location, const C & new_val) {
     location_ = location;
     old_val_ = *location_;
     *location_ = new_val;
