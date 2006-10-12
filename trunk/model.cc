@@ -59,27 +59,23 @@ Model::RuleType Model::StringToRuleType(const string & s) {
 }
 string Model::RuleTypeToString(RuleType t) { return RuleTypeName[t]; }
 
-
-
-
-Model::Satisfaction * Model::Precondition::GetAddSatisfaction(const 
-							 Substitution & sub) {
-  Satisfaction ** sp = satisfactions_ % sub.Fingerprint();
-  if (sp) {
-    return *sp;
+void Model::L1_InsertIntoClauseToPreconditionMap(Precodition *p){
+  for (uint i=0; i<p->clauses_.size(); i++){
+    model_->changelist_.
+      Make(new HashMapOfSetsInsertChange<uint64, pair<Precondition *, int>
+	   (&model->clause_to_precondition_, 
+	    p->clauses_[i].MakeVariableInsensitive().Fingerprint(), 
+	    make_pair(p, i)));
   }
-  vector<Tuple> props = clauses_;
-  sub.Substitute(&props);
-  for (uint i=0; i<props.size(); i++) 
-
-    if (!model_->tuple_index_.FindTuple(props[i])) return NULL;
-  Satisfaction * ret = new Satisfaction(this, sub);
-  return ret;
 }
-
-void Model::Precondition::AddToNumSatisfactions(int delta){
-  num_satisfactions_ += delta;
-  ComputeSetLnLikelihood();
+void Model::L1_RemoveFromClauseToPreconditionMap(Precondition *p){
+  for (uint i=0; i<p->clauses_.size(); i++){
+    model_->changelist_.
+      Make(new HashMapOfSetsRemoveChange<uint64, pair<Precondition *, int>
+	   (&model->clause_to_precondition_, 
+	    p->clauses_[i].MakeVariableInsensitive().Fingerprint(), 
+	    make_pair(p, i)));
+  }
 }
 
 Model::RuleSat * Model::Rule::GetAddRuleSat(Satisfaction * sat) {
@@ -1133,5 +1129,6 @@ void Model::Shell(istream  * input) {
     cout << "?";
   }
 }
+
 
  
