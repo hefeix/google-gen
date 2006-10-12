@@ -24,17 +24,19 @@
 #include <fstream.h>
 #include <math.h>
 
-bool FLAGS_firing_proposition = false;
+bool FLAGS_firing_tuple = false;
 
 // COMPONENT
 Component::Component(Model * model, int id){
+  model_->changelist_.Make(new NewChange<Component>(this));
   model_ = model;
   exists_ = false;
   time_ = CREATION;
   time_dirty_ = true;
-  if (id==-1) model_->AssignNewID(this);
-  else model->AssignSpecificID(this, id);
+  if (id==-1) model_->L1_AssignNewID(this);
+  else model->L1_AssignSpecificID(this, id);
   ln_likelihood_ = 0.0;
+  L1_SetExists(true);
 }
 Component::~Component(){
   CHECK(exists_ == false);
@@ -55,101 +57,146 @@ void Component::L1_SetLnLikelihood(double new_ln_likelihood){
   if (new_ln_likelihood == ln_likelihood_) return;
   model_->changelist_.Make(new ValueChange<double>(&model_ln_, val));
 }
-
-
+void Component::Erase(){
+  EraseSubclass();
+  L1_RemoveFromModel;
+}
+void Component::L1_RemoveFromModel(){
+  L1_SetExists(false);
+  model_->L1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
+}
 
 
 Precondition::Precondition(Model * model, 
-				  const vector<Tuple> & tuples, int id)
+			   const vector<Tuple> & tuples, int id)
   : Component(model, id){
   clauses_ = tuples;
-  for (uint i=0; i<clauses_.size(); i++){
-    model_->clause_to_precondition_
-      [clauses_[i].MakeVariableInsensitive().Fingerprint()]
-      .insert(make_pair(this, i));
-  }
-  uint64 fprint = Fingerprint(clauses_);
-  CHECK(!(model_->precondition_index_ % fprint));
-  model_->precondition_index_[fprint] = this;
-  ComputeSetTime();
-  // vector<int> arbitrary_terms;
-  precondition_ln_likelihood_ = 0.0;
-  //    = TuplesLnLikelihood(vector<Tuple>(), clauses_, &arbitrary_terms);
-  //   for (uint i=0; i<arbitrary_terms.size(); i++) 
-  //   model_->AddArbitraryTerm(arbitrary_terms[i]);
   ln_likelihood_per_sat_ = 0.0;
+  num_satisfactions_ = 0;
+  
+  model_->L1_InsertIntoClauseToPreconditionMap(this);
+
+  uint64 fprint = Fingerprint(clauses_);
+  model_->changelist_.
+    Make(new HashMapInsertChange<uint64, Precodition *>
+	 (precondition_index_, fprint, this));
+  ComputeSetTime();
   uint64 num_sat;
   uint64 work;
   model_->tuple_index_.FindSatisfactions(clauses_, 0, &num_sat, -1, &work);
   num_satisfactions_ = num_sat;
   ComputeSetLnLikelihood();
-  model_->RecordAddComponent(this);
 }
-Precondition::~Precondition(){ ComponentDestroy(); }
-void Precondition::Destroy(){
-  model_->precondition_index_.erase(Fingerprint(clauses_));
-  for (uint i=0; i<clauses_.size(); i++){
-    uint64 fp = clauses_[i].MakeVariableInsensitive().Fingerprint(); 
-    model_->clause_to_precondition_[fp].erase(make_pair(this, i));
-    if (model_->clause_to_precondition_[fp].size()==0) 
-      model_->clause_to_precondition_.erase(fp);
-  }
-  //vector<int> arbitrary_terms;
-  //TuplesLnLikelihood(vector<Tuple>(), clauses_, &arbitrary_terms);
-  //for (uint i=0; i<arbitrary_terms.size(); i++) 
-  //  model_->SubtractArbitraryTerm(arbitrary_terms[i]);
+
+void Precondition::EraseSubclass(){
+  L1_RemoveFromModel();
+  model_->changelist_.
+    Make(new HashMapRemoveChange<uint64, Precodition *>
+	 (precondition_index_, fprint, this));
+  model_->L1_RemoveFromModelClauseToPreconditionMap(this);
 }
+
+void L1_AddRule(Rule *r){
+  model_->changelist_.Make(new SetInsertChange<Rule *>(&rules_, r));
+}
+void L1_RemoveRule(Rule *r){
+  model_->changelist_.Make(new SetRemoveChange<Rule *>(&rules_, r));
+}
+void L1_AddNegativeRule(Rule *r){
+  model_->changelist_.Make(new SetInsertChange<Rule *>(&negative_rules_, r));
+}
+void L1_RemoveNegatieveRule(Rule *r){
+  model_->changelist_.Make(new SetRemoveChange<Rule *>(&negative_rules_, r));
+}
+void L1_AddSatisfaction(Satisfaction * sat){
+  model_->changelist_.
+    Make(new MapInsertChange<Uint64, Satisfaction *>
+	 (&satisfactions_, sat->substitution_.Fingerprint(), sat));
+}
+void L1_RemoveSatisfaction(Satisfaction *sat){
+  model_->changelist_.
+    Make(new MapRemoveChange<uint64, Satisfaction *>
+	 (&satisfactions_, sat->substitution_.Fingerprint()));
+}
+void L1_SetPreconditionLnLikelihood(double val){
+  model_->changelist_.
+    Make(new ValueChange<double>(&precondition_ln_likelihood_, val));
+}
+void Precondition::L1_SetLnLikelihoodPerSat(double val){
+  model_->changelist_.
+    Make(new ValueChange<double>(&ln_likelihood_per_sat_,val));
+}
+
+void Precondition::L1_AddToNumSatisfactions(int delta){
+  model_->changelist_.
+    Make(new ValueChange<int>(&num_satisfactions_, num_satisfactions_+delta));
+}
+Satisfaction * Precondition::L1_GetAddSatisfaction(const Substitution & sub){
+  Satisfaction ** sp = satisfactions_ % sub.Fingerprint();
+  if (sp) return *sp;
+  Satisfaction * ret = new Satisfaction(this, sub);
+  return ret;
+}
+
+
 Satisfaction::Satisfaction(Precondition * precondition, 
-				  const Substitution & sub, int id)
+			   const Substitution & sub, int id)
   :Component(precondition->model_, id) {
-  Satisfaction ** sp = precondition->satisfactions_ % sub.Fingerprint();
-  CHECK(!sp);
+  precondition_ = precondition;
+  substitution_ = sub;
+  
+  // This loop checks that all of the variables in the precondition are
+  // in the substitution.
   vector<Tuple> substituted_precondition = precondition->clauses_;
   sub.Substitute(&substituted_precondition);
   for (uint i=0; i<substituted_precondition.size(); i++) {
-    for (uint j=0; j<substituted_precondition[i].size(); j++) {
-      if (substituted_precondition[i][j] < 0) {
-	cerr << "Bad satisfaction " << endl
-	     << TupleVectorToString(precondition->clauses_) << endl
-	     << sub.ToString() << endl
-	     << TupleVectorToString(substituted_precondition) << endl;
-	CHECK(false);
-      }
-    }
-  }
-  
-  precondition->satisfactions_[sub.Fingerprint()] = this;
-  precondition_ = precondition;
-  substitution_ = sub;
-  vector<Tuple> props = precondition->clauses_;
-  sub.Substitute(&props);
-  for (uint i=0; i<props.size(); i++) {
-    const Tuple * tuple = model_->tuple_index_.FindTuple(props[i]);
-    CHECK(tuple);
-    TrueTuple * t = model_->index_to_true_proposition_[tuple];
+    CHECK(!substituted_precondition[i].HasVariables());
+    TrueTuple * t = model_->FindTrueTuple(substituted_precondition[i]);
     CHECK(t);
-    // we need this if statement, since one proposition can be used twice.
-    if (!(propositions_ % t)) { 
-      propositions_.insert(t);
-      t->satisfactions_.insert(this);
+    CHECK(t->Exists());
+    // we need this if statement, since the substituted precondition can 
+    // have a repeated clause.
+    if (!(true_tuples_ % t)) { 
+      L1_AddTrueTuple(t);
+      t->L1_AddSatisfaction(this);
     }
   }
+  precondition_->L1_AddSatisfaction(this);
   ComputeSetTime();
-  model_->RecordAddComponent(this);
 }
-Satisfaction::~Satisfaction(){ ComponentDestroy(); }
-void Satisfaction::Destroy(){
-  precondition_->satisfactions_.erase(substitution_.Fingerprint());
-  forall(run, propositions_) {
-    (*run)->satisfactions_.erase(this);
+
+void Satisfaction::EraseSubclass()
+  precondition_->L1_RemoveSatisfaction(this);
+  forall(run, true_tuples_) {    
+    (*run)->L1_RemoveSatisfaction(this);
   }
 }
+
+void Satisfaction::L1_AddTrueTuple(TrueTuple *t){
+  model_->changelist_.
+    Make(new SetInsertChange<TruleTuple *>(&true_tuples, t));
+}
+void Satisfaction::L1_RemoveTrueTueple(TrueTuple *t){
+  model_->changelist_.
+    Make(new SetRemoveChange<TruleTuple *>(&true_tuples, t));
+}
+void Satisfaction::L1_AddRuleSat(RuleSat *rs){
+  model_->changelist_.
+    Make(new SetInsertChange<RuleSat *>(&rule_sats_, rs));
+}
+void Satisfaction::L1_RemoveRuleSat(RuleSat *rs){
+  model_->changelist_.
+    Make(new SetRemoveChange<RuleSat *>(&rule_sats_, rs));
+}
+
+
+
 Rule::Rule(Precondition * precondition, EncodedNumber delay, 
-		  RuleType type, Rule * target_rule,
-		  vector<Tuple> result, EncodedNumber strength,
-		  EncodedNumber strength2,
-		  bool just_this, // don't add satisfactions or firing prop
-		  bool no_firing_prop, int id) // don't add a firing proposition
+	   RuleType type, Rule * target_rule,
+	   vector<Tuple> result, EncodedNumber strength,
+	   EncodedNumber strength2,
+	   bool just_this, // don't add satisfactions or firing prop
+	   bool no_firing_tuple, int id) // don't add a firing tuple
   :Component(precondition->model_, id){
   precondition_ = precondition;
   precondition_->rules_.insert(this);
@@ -159,16 +206,16 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   if (target_rule_) target_rule_->inhibitors_.insert(this);
   delay_ = delay;
   type_ = type;
-  // add a firing proposition to the result if it is warranted
-  if (FLAGS_firing_proposition && type != NEGATIVE_RULE && !just_this
-      && !no_firing_prop) {
+  // add a firing tuple to the result if it is warranted
+  if (FLAGS_firing_tupleosition && type != NEGATIVE_RULE && !just_this
+      && !no_firing_tuple) {
     string relation_name = "RULE_" + itoa(id_);
     set<int> vars = Union(GetVariables(result), 
 			  GetVariables(precondition_->clauses_));
-    Tuple firing_prop;
-    firing_prop.push_back(LEXICON.GetAddID(relation_name));
-    forall(run, vars) firing_prop.push_back(*run);
-    result.push_back(firing_prop);
+    Tuple firing_tuple;
+    firing_tuple.push_back(LEXICON.GetAddID(relation_name));
+    forall(run, vars) firing_tuple.push_back(*run);
+    result.push_back(firing_tuple);
   }
   result_ = result;
   for (uint i=0; i<result_.size(); i++){
@@ -279,23 +326,23 @@ Firing::~Firing(){
 }
 TrueTuple::TrueTuple(Model * model, 
 					const vector<Firing *> & causes, 
-					Tuple proposition,
+					Tuple tuple,
 					bool just_this, int id)
   :Component(model, id){
   causes_.insert(causes.begin(), causes.end());
-  proposition_ = proposition;
+  tuple_ = tuple;
   rule_encoded_ = NULL;
   CheckForbiddenRequired();
   given_ = false;
   forall(run, causes) {
-    (*run)->true_propositions_.insert(this);
+    (*run)->true_tuples_.insert(this);
   }
-  const Tuple * prop = model_->tuple_index_.Add(proposition);
-  model_->index_to_true_proposition_[prop] = this;
+  const Tuple * prop = model_->tuple_index_.Add(tuple);
+  model_->index_to_true_tuple_[prop] = this;
   ComputeSetTime();
   model_->RecordAddComponent(this);
   vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > satisfactions;
-  model_->FindSatisfactionsForProposition(*prop, &satisfactions, -1, 
+  model_->FindSatisfactionsForTuple(*prop, &satisfactions, -1, 
 					  true, false);  
   for (uint i=0; i<satisfactions.size(); i++) {
     Precondition * precondition = satisfactions[i].first;
@@ -342,8 +389,8 @@ void RuleSat::Destroy() {
     target_rule_sat_->inhibitors_.erase(this);
 }
 void Firing::Destroy(){
-  while (true_propositions_.size()){
-    TrueTuple * tp = *(true_propositions_.begin());
+  while (true_tuples_.size()){
+    TrueTuple * tp = *(true_tuples_.begin());
     //CHECK(tp->causes_.size() > 1);
     tp->RemoveCause(this);
   }
@@ -374,24 +421,24 @@ void Rule::Destroy(){
   //  model_->SubtractArbitraryTerm(arbitrary_terms[i]);
 }
 void TrueTuple::Destroy(){
-  if (required_) model_->absent_required_.insert(proposition_.Fingerprint());
+  if (required_) model_->absent_required_.insert(tuple_.Fingerprint());
   if (forbidden_) model_->present_forbidden_.erase(this);
 
   vector<pair<Precondition *, pair<uint64, vector<Substitution> > > >satisfactions;
-  model_->FindSatisfactionsForProposition(proposition_, 
+  model_->FindSatisfactionsForTuple(tuple_, 
 					  &satisfactions, -1, false, false);
   for (uint i=0; i<satisfactions.size(); i++) {
     satisfactions[i].first
       ->AddToNumSatisfactions(-satisfactions[i].second.first);
   }
   forall (run, causes_) {
-    (*run)->true_propositions_.erase(this);
+    (*run)->true_tuples_.erase(this);
   }
-  const Tuple * prop = model_->tuple_index_.FindTuple(proposition_);
+  const Tuple * prop = model_->tuple_index_.FindTuple(tuple_);
   CHECK(prop);
-  CHECK(model_->index_to_true_proposition_[prop] == this);
-  model_->tuple_index_.Remove(proposition_);
-  model_->index_to_true_proposition_.erase(prop);
+  CHECK(model_->index_to_true_tuple_[prop] == this);
+  model_->tuple_index_.Remove(tuple_);
+  model_->index_to_true_tuple_.erase(prop);
 }
 
 ComponentType Precondition::Type() const { return PRECONDITION; }
@@ -469,13 +516,13 @@ Record Firing::RecordForDisplayInternal() const{
   Record r;
   r["rule_sat"] = rule_sat_->HTMLLink(itoa(rule_sat_->id_));
   r["implication"] = ImplicationString();
-  forall(run, true_propositions_)
-    r["true_propositions"] += (*run)->HTMLLink((*run)->proposition_.ToString());
+  forall(run, true_tuples_)
+    r["true_tuples"] += (*run)->HTMLLink((*run)->tuple_.ToString());
   return r;
 }
 Record TrueTuple::RecordForDisplayInternal() const {
   Record r;
-  r["Proposition"] = proposition_.ToString();
+  r["Tuple"] = tuple_.ToString();
   forall(run, causes_) {
     Firing *f = *run;
     r["causes"] += f->ImplicationString();
@@ -510,7 +557,7 @@ vector<Component *> RuleSat::Dependents() const{
 }
 vector<Component *> Firing::Dependents() const{
   vector<Component *> ret;
-  forall(run, true_propositions_){
+  forall(run, true_tuples_){
     ret.push_back(*run);
   }
   return ret;
@@ -528,7 +575,7 @@ vector<vector<Component *> > Component::Codependents() const{
 vector<vector<Component *> > Satisfaction::Codependents() const {
   vector<vector<Component *> > ret;
   ret.push_back(vector<Component *>(1, precondition_));
-  forall(run, propositions_) { /// TODO (should be called tuples)
+  forall(run, tuples_) {
     ret.push_back(vector<Component *>(1, *run));
   }
   return ret;

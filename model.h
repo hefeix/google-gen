@@ -226,6 +226,10 @@ class Model {
   void Shell(istream * input);
 
 
+  // Simple L1 modifiers
+  void L1_InsertIntoClauseToPreconditionMap(Precondition *p);
+  void L1_RemoveFromClauseToPreconditionMap(Precondition *p);
+
 
   // data
   int next_id_;

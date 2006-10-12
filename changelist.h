@@ -133,6 +133,28 @@ template <class K, class V> class MapInsertChange : public Change {
   K key_;
 };
 
+// Inserts a key/value pair into a hash_map of sets.
+// MK is map key, SV is the set value type
+template <class MK, class SV> class HashMapOfSetsInsertChange : public Change {
+ public:
+  HashMapOfSetsInsertChange(hash_map<MK, set<SV> > * location, const MK & key, 
+			    const SV & value) {
+    location_ = location;
+    key_ = key;
+    value_ = value;
+    CHECK(!(*location_[key_] % value_));
+    (*location_)[key_].insert(value_);
+  }
+  void Undo(){
+    (*location_)[key].erase(value_);
+    if ((*location_)[key_].size()==0) location_->erase(key_);
+  }
+ private:
+  hash_map<MK,set<SV> > * location_;
+  K key_;
+  SV value_
+};
+
 // Removes a key/value pair from a map.
 template <class K, class V> class MapRemoveChange : public Change {
  public:
@@ -150,6 +172,19 @@ template <class K, class V> class MapRemoveChange : public Change {
  private:
   K key_;
   V val_;
+};
+
+// Create one of these when you new an object
+template <class C> class NewChange : public Change {
+ public:
+  NewChange(C * object){
+    object_ = object;
+  }
+  void Undo(){
+    delete object_;
+  }
+ private:
+  C object_;
 };
 
 // Takes a class instance and two void member functions with no arguments,

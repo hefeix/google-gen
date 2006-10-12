@@ -29,18 +29,27 @@
 // Layer 1: The effects can be completely rolled back using the changelist.
 //          Layer 1 is genreally for simple modification functions.
 //
+// 
+//
 // Layer 2: The following local consistency criteria are maintained:
 //           a. Component and model likelihoods are correct.
 //           b. Links are bidirectional
 //           c. Component times are correct, or the time_dirty_ flag is on.
 //           d. All of the indices kept by the model are up to date.
 //               TODO( include list of indices )
+//           e. Components that need a purpose have a purpose.
 //
 // Layer 3: Global consistency:
 //           a. The times are all clean.
 //           b. All required tuples happen, and no forbidden ones do.
 //           c. No times are set to NEVER.
-
+//
+// About the Component subclass constructors:  All of them obey all criteria
+// for layer 2, except that components can exist without a purpose.  
+// Also, objects may not be created on the stack, as they push a change on the
+// changelist which calls delete on a rollback. 
+//  TODO: make the constructors private and write factory methods which
+// specify layers.
 
 struct Model;
 struct Component; //  a basic part of the model.  There are several subtypes.
@@ -126,6 +135,10 @@ struct Component{
   // times and dirty bits may be incorrect all over the model.  
   void L1_SetTimeMaintainConsistency(Time new_time, bool adjust_dirty_bits);
 
+  // Sets the exists bit to false, removes the likelihood from the model
+  // likelihood.
+  void L1_RemoveFromModel();
+
   // Layer 2 functions
 
   void ComputeSetTime(); // Compute and set the time.  
@@ -135,6 +148,10 @@ struct Component{
   // If the time of a component changes, we call this function, which 
   // adjusts the ln_likelihood_ of this and other components if necessary.
   virtual void AdjustLnLikelihoodForNewTime();
+  void Erase(); // but don't delete.
+  virtual void EraseSubclass() = 0;
+  
+  
   
   
   public:
@@ -208,6 +225,8 @@ struct Component{
 
 // A Precondition represents the preconditions of a rule, which are a vector
 // of tuples containing variables.
+// The ln_likelihood_ aggregates the likelihood of all of its rules never
+// firing.
 struct Precondition : public Component {
   // fundamental data
   vector<Tuple> clauses_;
@@ -217,8 +236,9 @@ struct Precondition : public Component {
   set<Rule *> negative_rules_; // the negative ones (a subset of the above)
   // The total number of substitutions that satisfy the precondition.
   int num_satisfactions_;
-  // maps fingerprint of substitution to satisfaction.
-  map<uint64, Satisfaction *> satisfactions_; // some are omitted
+  // maps fingerprint of substitution to satisfaction object
+  // some satisfactions are not represented if they are not interesting
+  map<uint64, Satisfaction *> satisfactions_; 
   // The prior of the precondition existing, excluding parts accounted
   // for elsewhere in the model.  
   double precondition_ln_likelihood_;
@@ -228,24 +248,33 @@ struct Precondition : public Component {
 
   Precondition(Model * model, const vector<Tuple> & tuples,
 	       int id);
-  ~Precondition();
+
+  // L1 functions
+  void L1_AddRule(Rule *r);
+  void L1_RemoveRule(Rule *r);
+  void L1_AddNegativeRule(Rule *r);
+  void L1_RemoveNegatieveRule(Rule *r);
+  void L1_AddSatisfaction(Satisfaction * sat);
+  void L1_RemoveSatisfaction(Satisfaction *sat);
+  void L1_SetPreconditionLnLikelihood(double val);
+  void L1_SetLnLikelihoodPerSat(double val);
+
+  // Changes the total number of satisfactions (including ones not represented)
+  void L1_AddToNumSatisfactions(int delta);
+  // Given a precondition and a substitution that satisfies the precondition, 
+  // creates a satisfaction object and links it to the precondition. 
+  // If the satisfaction object already exists, it just returns it. 
+  Satisfaction * L1_GetAddSatisfaction(const Substitution & sub);
+  
   // Functions of the superclass Component()
-  void Destroy();
+  void EraseSubclass();
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
-  bool HasPurpose();
-  vector<Component *> Purposes(); // Rules
-  vector<Component *> Dependents(); // Rules, Satisfactions
-  bool NeedsPurpose(); // yes
+  bool HasPurpose() const;
+  vector<Component *> Purposes() const; // Rules
+  vector<Component *> Dependents() const; // Rules, Satisfactions
+  bool NeedsPurpose() const; // yes
   double LnLikelihood() const;
-
-
-  // Functions that are specific to this component type:
-
-  // Adds a satisfiction (to be explicitly represented.
-  Satisfaction * GetAddSatisfaction(const Substitution & sub_);
-  // Changes the total number of satisfactions
-  void AddToNumSatisfactions(int delta);
 };
   
 // instance of a precondition being satisfied
@@ -255,8 +284,8 @@ struct Satisfaction : public Component {
   Substitution substitution_;
 
   // computed data
-  // The propositions that satisfy the precondition
-  set<TrueTuple *> propositions_;
+  // The TrueTuples that satisfy the precondition
+  set<TrueTuple *> true_tuples_;
 
   // The associated RuleSat objects for rules which have this precondition.
   // (only the ones that are represented explicitly)
@@ -265,16 +294,21 @@ struct Satisfaction : public Component {
   Satisfaction(Precondition * precondition, const Substitution & sub,
 	       int id);
   ~Satisfaction();
+
+  void L1_AddTrueTuple(TrueTuple *t);
+  void L1_RemoveTrueTueple(TrueTuple *t);
+  void L1_AddRuleSat(RuleSat *rs);
+  void L1_RemoveRuleSat(RuleSat *rs);  
  
   // Functions of the superclass Component:
-  void Destroy();
+  void EraseSubclass();
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
-  inline bool NeedsPurpose(); // yes
-  vector<Component *> Dependents(); // the rule_sats
-  vector<vector<Component *> > Codependents(); // Preconditions, tuples
-  vector<Component *> Purposes(); // the rule_sats
-  bool HasPurpose();
+  inline bool NeedsPurpose() const; // yes
+  vector<Component *> Dependents() const; // the rule_sats
+  vector<vector<Component *> > Codependents() const; // Preconditions, tuples
+  vector<Component *> Purposes() const; // the rule_sats
+  bool HasPurpose() const;
 };
 
 struct Rule : public Component{
@@ -310,16 +344,16 @@ struct Rule : public Component{
   // The ln likelihood of the rule existing 
   // (exclding its satisfactions/firings)
   double rule_ln_likelihood_;
-  // The rule only comes into the model once the propositions that describe
-  // its causes come true.  These are the propositions that describe the
+  // The rule only comes into the model once the TrueTuples that describe
+  // its causes come true.  These are the TrueTuples that describe the
   // rule.
   vector<TrueTuple *> encoding_;
    
   // Create a new rule and add it to the model.
   // In genereal, creating a rule also adds other components.  If just_this
   // is set, it doesn't.  This is useful for model loading and rollbacks.  
-  // no_firing_prop can be set if FLAGS_firing_proposition is on, to indicate
-  // that this rule shouldn't get an extra "firing proposition" in the result.
+  // no_firing_prop can be set if FLAGS_firing_tuple is on, to indicate
+  // that this rule shouldn't get an extra "firing tuple" in the result.
   Rule(Precondition * precondition, EncodedNumber delay, 
        RuleType type, Rule * target_rule,
        vector<Tuple> result, EncodedNumber strength,
@@ -361,11 +395,11 @@ struct Rule : public Component{
   // Changes the delay on the rule.
   // may leave some times dirty.
   void ChangeDelay(EncodedNumber new_delay);
-  // Returns the propositions that encode the rule.  
+  // Returns the tuples that encode the rule.  
   vector<Tuple> ComputeEncoding();
 
   // Functions of the parent class Component
-  void Destroy();
+  void EraseSubclass();
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   vector<Component *> Dependents();
@@ -394,7 +428,7 @@ struct RuleSat : public Component{ // an instance of a rule coming true
   ~RuleSat();
 
   // Functions of the superclass Component
-  void Destroy();
+  void EraseSubclass();
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   bool NeedsPurpose();
@@ -418,14 +452,14 @@ struct Firing : public Component{
   RuleSat * rule_sat_;  // the corresponding satisfaction of the rule
 
   // computed
-  set<TrueTuple *> true_propositions_; // if it's a positive rule
+  set<TrueTuple *> true_tuples_; // if it's a positive rule
     
   Firing(RuleSat * rule_sat, Substitution right_substitution, bool just_this,
 	 int id);
   ~Firing();
 
   // Functions of the superclass Component
-  void Destroy();
+  void EraseSubclass();
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   string ImplicationString() const;
@@ -434,17 +468,17 @@ struct Firing : public Component{
   vector<Component *> Dependents();
   vector<vector<Component *> > Codependents();
   vector<Component *> Copurposes();
-  bool InvolvesProposition(TrueTuple * p) const;    
+  bool InvolvesTrueTuple(TrueTuple * p) const;    
   Substitution GetFullSubstitution();
 };
 
-// A proposition which is true in our model
+// A tuple which is true in our model
 struct TrueTuple : public Component{
   // fundamental
-  Tuple proposition_;  
+  Tuple tuple_;  
 
   // computed
-  // the firings that would make this proposition true 
+  // the firings that would make this tuple true 
   // (though only the temporally first really does).
   set<Firing *> causes_;
   // Satisfactions in which this proposition takes part.
@@ -464,7 +498,7 @@ struct TrueTuple : public Component{
   ~TrueTuple();
 
   // Functions of the superclass Component
-  void Destroy();
+  void EraseSubclass();
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   set<Firing *> GetResultFirings() const;
