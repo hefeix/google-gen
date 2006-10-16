@@ -243,6 +243,7 @@ class Model {
   hash_map<uint64, set<pair<Rule *, int> > > clause_to_result_;
   hash_map<uint64, Precondition *> precondition_index_;
   map<uint64, Rule *> rule_index_;
+  map<Tuple, set<Prohibition *> > prohibition_index_;
   vector<Change *> history_;
   map<int, int> arbitrary_term_counts_;
   int total_arbitrary_terms_;

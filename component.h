@@ -33,7 +33,7 @@
 //
 // Layer 2: The following local consistency criteria are maintained:
 //           a. Component and model likelihoods are correct.
-//           b. Links are bidirectional
+//           b. Links are bidirectional ( and the other side exists )
 //           c. Component times are correct, or the time_dirty_ flag is on.
 //           d. All of the indices kept by the model are up to date.
 //               TODO( include list of indices )
@@ -51,16 +51,23 @@
 //  TODO: make the constructors private and write factory methods which
 // specify layers.
 
-struct Model;
-struct Component; //  a basic part of the model.  There are several subtypes.
+class Model;
+class Component; //  a basic part of the model.  There are several subtypes.
 
 // These are the types of components
-struct Precondition;  // The preconditions of a rule
-struct Rule;
-struct Satisfaction; // An instance of a Precondition being satisfied.
-struct RuleSat;      // An instance of a rule being satisfied.
-struct Firing;       // An instance of a rule firing.
-struct TrueTuple;
+class Precondition;  // The preconditions of a rule
+class Rule;
+class Satisfaction; // An instance of a Precondition being satisfied.
+class RuleSat;      // An instance of a rule being satisfied.
+class Firing;       // An instance of a rule firing.
+class TrueTuple;
+
+// Something else entirely
+class Prohibition;
+
+#define ADD_FRIEND_COMPONENT_CLASSES friend class Precondition; \
+  friend class Rule; friend class Satisfaction; friend class RuleSat;	\
+  friend class Firing; friend class TrueTuple;
 
 enum ComponentType {
   PRECONDITION,
@@ -89,57 +96,16 @@ static char * RuleTypeName [];
 static RuleType StringToRuleType(const string & s);
 static string RuleTypeToString(RuleType t);
 
-struct Component{
-
-  private: // All data should only be touched by reversible functions.
-
-  // If we delete a component and want to restore it on rollback, we want to
-  // avoid invalidating pointers and storing the data elswhere.  Thus we just 
-  // set the exists_ variable to false and pretend that it doesn't exist.
-  bool exists_;
-  int id_;  
-  Model * model_;
-  // contribution of this component to the ln_likelihood_ of the model
-  double ln_likelihood_;
-  Time time_;
-  // time_dirty_ is set to true unless the time is set correctly based on the 
-  // codependents of this component (though not necessarily globally).
-  bool time_dirty_;
-
-  // The constructor should leave the exists_ bit false, and the destructor
-  // should CHECK that it is false.  The constructor and destructor should 
-  // not touch the rest of the model.
-  Component(Model * model, int id = -1);
-  virtual ~Component();
-
-  // Layer 1 functions:  Use these instead of accessing the data directly.
-
-  // These things just modify the actual values.
-  void L1_SetExists(bool val);
-  void L1_SetTime(const Time & new_time);
-  void L1_SetTimeDirty(bool val);
-  void L1_SetLnLikelihood(double new_ln_likelihood); 
+class Component{
+ public:
+  ADD_FRIEND_COMPONENT_CLASSES;
 
 
-  // The time_ field is set lazily to save time.  Sometimes it is locally 
-  // correct (clean) and sometimes it might be localy incorrect (dirty).  
-  // Clean does not mean globally correct, and calling ComputeSetTime()
-  // on every component does not make all the times clean or correct.
-  // Call FixTimes() on the model to make all of the times clean and correct.
-  // If the adjust_dirty_bits parameter is true, as it should usually be, 
-  // the dirty bit on this component is updated to false, and those on its 
-  // dependents are updated to true if necessary.  
-  //
-  // All Layer 2 requirements are maintained except that the time being
-  // set may not be correct, and if adjust_dirty_bits is set to false,
-  // times and dirty bits may be incorrect all over the model.  
-  void L1_SetTimeMaintainConsistency(Time new_time, bool adjust_dirty_bits);
+  // ----- LAYER 2 FUNCTIONS -----
 
-  // Sets the exists bit to false, removes the likelihood from the model
-  // likelihood.
-  void L1_RemoveFromModel();
-
-  // Layer 2 functions
+  // This function makes the component not exist.  It also first erases its
+  // StructuralDependents, and its Copurposes that no loner have a purpose.  
+  void Erase(); // but don't delete.
 
   void ComputeSetTime(); // Compute and set the time.  
   // Computes and sets the ln_likelihood_ for this component, and adjusts
@@ -148,15 +114,10 @@ struct Component{
   // If the time of a component changes, we call this function, which 
   // adjusts the ln_likelihood_ of this and other components if necessary.
   virtual void AdjustLnLikelihoodForNewTime();
-  void Erase(); // but don't delete.
-  virtual void EraseSubclass() = 0;
-  
-  
-  
-  
-  public:
-  
-  // Const functions
+
+
+  // ----- CONST FUNCTIONS -----
+
   virtual ComponentType Type() const = 0;
   string TypeName() const;
   
@@ -169,16 +130,15 @@ struct Component{
   // Type-specific key-value pairs.  Called by RecordForDisplay()
   virtual Record RecordForDisplayInternal() const = 0;
   
-
   // Returns pointers to the components that depend in some way on this 
   // component.  They may have other options for existing, so they don't 
   // necessarily disappear when this component does.
-  virtual vector<Component *> Dependents() const;
+  virtual vector<Component *> TemporalDependents() const;
   
   // TODO: maybe get rid of this
   // Components that absolutely need to disappear before this one does.
   // The code breaks if you remove this component while some of these exist.
-  virtual vector<Component *> HardDependents() const;
+  virtual vector<Component *> HardTemporalDependents() const;
 
   // Components that this component depens on. 
   // The vector of vectors is to be interpreted as an AND of ORs.
@@ -187,7 +147,7 @@ struct Component{
   //   the component never happens.  It means that the model is invalid, but
   //   it can be an intermediate state in the search, and doesn't break the
   //   code.
-  virtual vector<vector<Component *> > Codependents() const;
+  virtual vector<vector<Component *> > TemporalCodependents() const;
   
   // Some components have no reason to exist without other components.
   // These other componets are their "Purposes" for existing.  When the last 
@@ -204,7 +164,7 @@ struct Component{
   inline bool IsSuperfluous() const {return NeedsPurpose() && !HasPurpose();}  
   
   // Computes the time_ of the component.  This is in general equal to the 
-  // maximinimum time of its Codependents() (or NEVER if it is missing the
+  // maximinimum time of its TemporalCodependents() (or NEVER if it is missing the
   // required codependents to exist), but some component types have an 
   // additional time delay. 
   // You can specify an excluded set of components.  The function pretends
@@ -219,6 +179,64 @@ struct Component{
   virtual double LnLikelihood() const;
   // Some simple sanity checks on the connection structure.
   void CheckConnections() const; // checks that Co<X>() is the iverse of <X>()
+
+ private:
+
+
+  // ----- CONSTRUCTOR(S) -----
+
+  // The constructor should leave the exists_ bit false, and the destructor
+  // should CHECK that it is false.  The constructor and destructor should 
+  // not touch the rest of the model.
+  Component(Model * model, int id = -1);
+  virtual ~Component();
+
+
+  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+
+  // The time_ field is set lazily to save time.  Sometimes it is locally 
+  // correct (clean) and sometimes it might be localy incorrect (dirty).  
+  // Clean does not mean globally correct, and calling ComputeSetTime()
+  // on every component does not make all the times clean or correct.
+  // Call FixTimes() on the model to make all of the times clean and correct.
+  // If the adjust_dirty_bits parameter is true, as it should usually be, 
+  // the dirty bit on this component is updated to false, and those on its 
+  // dependents are updated to true if necessary.  
+  //
+  // All Layer 2 requirements are maintained except that the time being
+  // set may not be correct, and if adjust_dirty_bits is set to false,
+  // times and dirty bits may be incorrect all over the model.  
+  void L1_SetTimeMaintainConsistency(Time new_time, bool adjust_dirty_bits);
+
+  // the subclass-specific parts of the erase function.
+  virtual void L1_EraseSubclass() = 0;
+
+
+  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+
+  // These things just modify the actual values.
+  void A1_SetExists(bool val);
+  void A1_SetTime(const Time & new_time);
+  void A1_SetTimeDirty(bool val);
+  void A1_SetLnLikelihood(double new_ln_likelihood); 
+
+
+  // ----- DATA -----
+
+  // All data should only be touched by reversible functions.
+  
+  // If we delete a component and want to restore it on rollback, we want to
+  // avoid invalidating pointers and storing the data elswhere.  Thus we just 
+  // set the exists_ variable to false and pretend that it doesn't exist.
+  bool exists_;
+  int id_;  
+  Model * model_;
+  // contribution of this component to the ln_likelihood_ of the model
+  double ln_likelihood_;
+  Time time_;
+  // time_dirty_ is set to true unless the time is set correctly based on the 
+  // codependents of this component (though not necessarily globally).
+  bool time_dirty_;
 };
 
 // Here we have the six types of components.
@@ -227,7 +245,57 @@ struct Component{
 // of tuples containing variables.
 // The ln_likelihood_ aggregates the likelihood of all of its rules never
 // firing.
-struct Precondition : public Component {
+class Precondition : public Component {
+ public:
+  ADD_FRIEND_COMPONENT_CLASSES;
+
+  // ----- LAYER 2 FUNCTIONS -----
+  
+
+  // ----- CONST FUNCTIONS -----
+
+  ComponentType Type() const;
+  Record RecordForDisplayInternal() const;
+  bool HasPurpose() const;
+  vector<Component *> Purposes() const; // Rules
+  vector<Component *> TemporalDependents() const; // Rules, Satisfactions
+  bool NeedsPurpose() const; // yes
+  double LnLikelihood() const;
+
+
+ private:
+  // ----- CONSTRUCTOR(S) -----
+
+  Precondition(Model * model, const vector<Tuple> & tuples, int id);
+
+
+  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+
+  // Given a precondition and a substitution that satisfies the precondition, 
+  // creates a satisfaction object and links it to the precondition. 
+  // If the satisfaction object already exists, it just returns it. 
+  Satisfaction * L1_GetAddSatisfaction(const Substitution & sub);
+  
+  // Functions of the superclass Component()
+  void L1_EraseSubclass();
+
+
+  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+
+  void A1_AddRule(Rule *r);
+  void A1_RemoveRule(Rule *r);
+  void A1_AddNegativeRule(Rule *r);
+  void A1_RemoveNegatieveRule(Rule *r);
+  void A1_AddSatisfaction(Satisfaction * sat);
+  void A1_RemoveSatisfaction(Satisfaction *sat);
+  void A1_SetPreconditionLnLikelihood(double val);
+  void A1_SetLnLikelihoodPerSat(double val);
+  // Changes the total number of satisfactions (including ones not represented)
+  void A1_AddToNumSatisfactions(int delta);
+
+
+  // ----- DATA -----
+
   // fundamental data
   vector<Tuple> clauses_;
     
@@ -245,40 +313,50 @@ struct Precondition : public Component {
   // The additional ln likelihood added to the model for each satisfaction
   // of the precondition for which none of the associated rules are satisfied.
   double ln_likelihood_per_sat_;
-
-  Precondition(Model * model, const vector<Tuple> & tuples,
-	       int id);
-
-  // L1 functions
-  void L1_AddRule(Rule *r);
-  void L1_RemoveRule(Rule *r);
-  void L1_AddNegativeRule(Rule *r);
-  void L1_RemoveNegatieveRule(Rule *r);
-  void L1_AddSatisfaction(Satisfaction * sat);
-  void L1_RemoveSatisfaction(Satisfaction *sat);
-  void L1_SetPreconditionLnLikelihood(double val);
-  void L1_SetLnLikelihoodPerSat(double val);
-
-  // Changes the total number of satisfactions (including ones not represented)
-  void L1_AddToNumSatisfactions(int delta);
-  // Given a precondition and a substitution that satisfies the precondition, 
-  // creates a satisfaction object and links it to the precondition. 
-  // If the satisfaction object already exists, it just returns it. 
-  Satisfaction * L1_GetAddSatisfaction(const Substitution & sub);
-  
-  // Functions of the superclass Component()
-  void EraseSubclass();
-  ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
-  bool HasPurpose() const;
-  vector<Component *> Purposes() const; // Rules
-  vector<Component *> Dependents() const; // Rules, Satisfactions
-  bool NeedsPurpose() const; // yes
-  double LnLikelihood() const;
 };
+
   
 // instance of a precondition being satisfied
-struct Satisfaction : public Component { 
+class Satisfaction : public Component { 
+ public:
+  ADD_FRIEND_COMPONENT_CLASSES;
+
+  // ----- LAYER 2 FUNCTIONS -----
+
+
+  // ----- CONST FUNCTIONS -----
+
+  ComponentType Type() const;
+  Record RecordForDisplayInternal() const;
+  inline bool NeedsPurpose() const; // yes
+  vector<Component *> TemporalDependents() const; // the rule_sats
+  vector<vector<Component *> > TemporalCodependents() const; // Preconditions, tuples
+  vector<Component *> Purposes() const; // the rule_sats
+  bool HasPurpose() const;
+
+
+ private:
+  // ----- CONSTRUCTOR(S) -----
+
+  Satisfaction(Precondition * precondition, const Substitution & sub,
+	       int id);
+
+
+  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+
+  void L1_EraseSubclass();
+
+
+  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+
+  void A1_AddTrueTuple(TrueTuple *t);
+  void A1_RemoveTrueTueple(TrueTuple *t);
+  void A1_AddRuleSat(RuleSat *rs);
+  void A1_RemoveRuleSat(RuleSat *rs);  
+ 
+
+  // ----- DATA -----
+
   // fundamental data
   Precondition * precondition_;
   Substitution substitution_;
@@ -290,43 +368,117 @@ struct Satisfaction : public Component {
   // The associated RuleSat objects for rules which have this precondition.
   // (only the ones that are represented explicitly)
   set<RuleSat *> rule_sats_;
-    
-  Satisfaction(Precondition * precondition, const Substitution & sub,
-	       int id);
-  ~Satisfaction();
 
-  void L1_AddTrueTuple(TrueTuple *t);
-  void L1_RemoveTrueTueple(TrueTuple *t);
-  void L1_AddRuleSat(RuleSat *rs);
-  void L1_RemoveRuleSat(RuleSat *rs);  
- 
-  // Functions of the superclass Component:
-  void EraseSubclass();
-  ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
-  inline bool NeedsPurpose() const; // yes
-  vector<Component *> Dependents() const; // the rule_sats
-  vector<vector<Component *> > Codependents() const; // Preconditions, tuples
-  vector<Component *> Purposes() const; // the rule_sats
-  bool HasPurpose() const;
 };
 
-struct Rule : public Component{
+
+class Rule : public Component{
+ public:
+  ADD_FRIEND_COMPONENT_CLASSES;
+
+  // ----- LAYER 2 FUNCTIONS -----
+
+  // Adds a firing, possibly also adding a satisfaction, a rulesat, and
+  // some truetuples.  If one already exists, just returns it.
+  Firing * GetAddFiring(const Substitution & sub);
+  // Changes the strength of the rule, keeping the model likelihood updated
+  void ChangeStrength(EncodedNumber new_strength, 
+		      EncodedNumber new_strength2);
+  // Changes the delay on the rule.
+  // may leave some times dirty.
+  void ChangeDelay(EncodedNumber new_delay);
+  // Returns the tuples that encode the rule.
+
+
+  // ----- CONST FUNCTIONS -----
+
+   vector<Tuple> ComputeEncoding() const;
+  ComponentType Type() const;
+  Record RecordForDisplayInternal() const;
+  vector<Component *> TemporalDependents() const;
+  vector<vector<Component *> > TemporalCodependents() const;
+  vector<Component *> Copurposes() const;
+  double LnLikelihood() const;
+  uint64 RuleFingerprint() const;
+  // Variables in the precondition
+  set<int> LeftVariables() const;
+  // Variables in the result which are not in the precondition.
+  set<int> RightVariables() const;
+  // Does this rule ever fire?
+  bool HasFiring() const;
+  // How many times does this rule fire?
+  int NumFirings() const;
+  // Number of satisfactions for which this rule fires at least once.
+  int NumFirstFirings() const;
+  // Returns all firings for this rule
+  vector<Firing *> Firings() const;
+  // Displays this rule for the HTML browser
+  string ImplicationString() const;
+
+
+ private:
+  // ----- CONSTRUCTOR(S) -----
+
+  // TODO: write a public factory method Rule * Model::MakeNewRule(...);
+  // Create a new rule and add it to the model.
+  // In genereal, creating a rule also adds other components.  If just_this
+  // is set, it doesn't.  This is useful for model loading and rollbacks.  
+  // no_firing_prop can be set if FLAGS_firing_tuple is on, to indicate
+  // that this rule shouldn't get an extra "firing tuple" in the result.
+  Rule(Precondition * precondition, EncodedNumber delay, 
+       RuleType type, Rule * target_rule,
+       vector<Tuple> result, EncodedNumber strength,
+       EncodedNumber strength2, 
+       bool just_this,
+       bool no_firing_prop,
+       int id);
+
+
+  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+
+  // gets/adds a RuleSat object for this rule and a particular satisfaction.
+  RuleSat * L1_GetAddRuleSat(Satisfaction * sat, int id);
+  //  Convenience
+  RuleSat * L1_GetAddRuleSat(const Substitution & sub) {
+    Satisfaction * sat = precondition_->L1_GetAddSatisfaction(sub);
+    CHECK(sat);
+    return GetAddRuleSat(sat);
+  }
+  void L1_EraseSubclass();
+
+
+  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+
+  // Simple L1 Accessors
+  void A1_SetDelay(EncodedNumber value);
+  void A1_SetStrength(EncodedNumber value);
+  void A1_SetStrength2(EncodedNumber value);
+  void A1_AddRuleSat(Satisfaction * s, RuleSat * rs);
+  void A1_RemoveRuleSat(Satisfaction * s, RuleSat * rs);
+  void A1_SetRuleLnLikelihood(double val);
+
+
+  // ----- DATA -----
+
   // fundamental
   Precondition * precondition_;
   // For positive rules, we need a time delay between the preconditions and
   // the results, so as to make circular causation impossible.  We introduce
-  // this delay at the RuleSat, but the "duration" of the delay is associated
-  // with the rule, so as to allow for higher and lower precedence rules. 
+  // this delay at the RuleSat (between the satisfaction and the rulesat), 
+  // but the "duration" of the delay is associated with the rule, so as to 
+  // allow for higher and lower precedence rules. 
   EncodedNumber delay_;
   RuleType type_;
+  // postconditions
   vector<Tuple> result_;
   // If the rule is simple or creative, strength_ is the probability for each
   // satisfaction that the rule fires at least once.
-  // If the rule is negative, 1-strength_ is a multiplier on the prior
+  // If the rule is negative, 1-strength_ is a multiplier on the prior of the
+  // target rule_sat having at least one firing. 
   EncodedNumber strength_;
-  // If the rule is creative, then strength2_ is the parameter on the 
-  // geometric distribution of how many additional times it fires.
+  // If the rule is creative, then it fires a number of times given by 
+  // a geometric distribution with parameter (1-strength2_), i.e. if it has 
+  // fired at least once, it has a probability of strength2_ of firing again.
   // Otherwise, this value is not used.
   EncodedNumber strength2_;
   // in the case of a negative rule, the rule that is inhibited
@@ -347,69 +499,33 @@ struct Rule : public Component{
   // The rule only comes into the model once the TrueTuples that describe
   // its causes come true.  These are the TrueTuples that describe the
   // rule.
+  // TODO, make sure no encoding can be a subset of another encoding.
   vector<TrueTuple *> encoding_;
-   
-  // Create a new rule and add it to the model.
-  // In genereal, creating a rule also adds other components.  If just_this
-  // is set, it doesn't.  This is useful for model loading and rollbacks.  
-  // no_firing_prop can be set if FLAGS_firing_tuple is on, to indicate
-  // that this rule shouldn't get an extra "firing tuple" in the result.
-  Rule(Precondition * precondition, EncodedNumber delay, 
-       RuleType type, Rule * target_rule,
-       vector<Tuple> result, EncodedNumber strength,
-       EncodedNumber strength2, 
-       bool just_this,
-       bool no_firing_prop,
-       int id);
-  ~Rule();
-    
-  // Variables in the precondition
-  set<int> LeftVariables();
-  // Variables in the result which are not in the precondition.
-  set<int> RightVariables();
-  // gets/adds a RuleSat object for this rule and a particular satisfaction.
-  RuleSat * GetAddRuleSat(Satisfaction * sat, int id);
-  //  Convenience
-  RuleSat * GetAddRuleSat(const Substitution & sub) {
-    Satisfaction * sat = precondition_->GetAddSatisfaction(sub);
-    CHECK(sat); // I don't think this shouldn't fail, but if it fails for a
-    // good reason, uncomment the next line.
-    // if (!sat) return NULL;
-    return GetAddRuleSat(sat);
-  }
-  // Adds a firing, possibly also adding a Satisfaction and a RuleSat.
-  Firing * GetAddFiring(const Substitution & sub);
-  // Does this rule ever fire?
-  bool HasFiring();
-  // How many times does this rule fire?
-  int NumFirings() const;
-  // Number of satisfactions for which this rule fires at least once.
-  int NumFirstFirings() const;
-  // Returns all firings for this rule
-  vector<Firing *> Firings() const;
-  // Displays this rule for the HTML browser
-  string ImplicationString() const;
-  // Changes the strength of the rule, keeping the model likelihood updated
-  void ChangeStrength(EncodedNumber new_strength, 
-		      EncodedNumber new_strength2);
-  // Changes the delay on the rule.
-  // may leave some times dirty.
-  void ChangeDelay(EncodedNumber new_delay);
-  // Returns the tuples that encode the rule.  
-  vector<Tuple> ComputeEncoding();
-
-  // Functions of the parent class Component
-  void EraseSubclass();
-  ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
-  vector<Component *> Dependents();
-  vector<vector<Component *> > Codependents();
-  vector<Component *> Copurposes();
-  double LnLikelihood() const;
-  uint64 RuleFingerprint();
 };
 
-struct RuleSat : public Component{ // an instance of a rule coming true
+class RuleSat : public Component{ // an instance of a rule coming true
+ public:
+  ADD_FRIEND_COMPONENT_CLASSES;
+
+
+  // ----- LAYER 2 FUNCTIONS -----
+
+
+  // ----- CONST FUNCTIONS -----
+
+ private:
+
+
+  // ----- CONSTRUCTOR(S) -----
+
+
+  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+
+
+  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+
+
+  // ----- DATA -----
   // fundamental
 
   // The rule that is applied
@@ -428,14 +544,14 @@ struct RuleSat : public Component{ // an instance of a rule coming true
   ~RuleSat();
 
   // Functions of the superclass Component
-  void EraseSubclass();
+  void L1_EraseSubclass();
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   bool NeedsPurpose();
   Firing * GetAddFiring(const Substitution & sub);
   string ImplicationString(const Firing *firing) const;
-  vector<Component *> Dependents();
-  vector<vector<Component *> > Codependents();
+  vector<Component *> TemporalDependents();
+  vector<vector<Component *> > TemporalCodependents();
   vector<Component *> Purposes();
   vector<Component *> Copurposes();
   inline bool HasTimeDelay(){ return (rule_->type_!=NEGATIVE_RULE);}
@@ -446,7 +562,29 @@ struct RuleSat : public Component{ // an instance of a rule coming true
 };
 
 // An instane of a rule firing
-struct Firing : public Component{
+class Firing : public Component{
+ public:
+  ADD_FRIEND_COMPONENT_CLASSES;
+
+
+  // ----- LAYER 2 FUNCTIONS -----
+
+
+  // ----- CONST FUNCTIONS -----
+
+ private:
+
+
+  // ----- CONSTRUCTOR(S) -----
+
+
+  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+
+
+  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+
+
+  // ----- DATA -----
   // fundamental
   Substitution right_substitution_; // substitution for new rhs variables
   RuleSat * rule_sat_;  // the corresponding satisfaction of the rule
@@ -459,21 +597,43 @@ struct Firing : public Component{
   ~Firing();
 
   // Functions of the superclass Component
-  void EraseSubclass();
+  void L1_EraseSubclass();
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   string ImplicationString() const;
   inline Rule * GetRule() { return rule_sat_->rule_; } 
-  vector<Component *> HardDependents();
-  vector<Component *> Dependents();
-  vector<vector<Component *> > Codependents();
+  vector<Component *> HardTemporalDependents();
+  vector<Component *> TemporalDependents();
+  vector<vector<Component *> > TemporalCodependents();
   vector<Component *> Copurposes();
   bool InvolvesTrueTuple(TrueTuple * p) const;    
   Substitution GetFullSubstitution();
 };
 
 // A tuple which is true in our model
-struct TrueTuple : public Component{
+class TrueTuple : public Component{
+ public:
+  ADD_FRIEND_COMPONENT_CLASSES;
+
+
+  // ----- LAYER 2 FUNCTIONS -----
+
+
+  // ----- CONST FUNCTIONS -----
+
+ private:
+
+
+  // ----- CONSTRUCTOR(S) -----
+
+
+  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+
+
+  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+
+
+  // ----- DATA -----
   // fundamental
   Tuple tuple_;  
 
@@ -498,14 +658,14 @@ struct TrueTuple : public Component{
   ~TrueTuple();
 
   // Functions of the superclass Component
-  void EraseSubclass();
+  void L1_EraseSubclass();
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   set<Firing *> GetResultFirings() const;
   set<TrueTuple *> GetResultTrueTuples() const;
   set<TrueTuple *> GetCauseTrueTuples() const;
-  vector<Component *> Dependents();
-  vector<vector<Component *> > Codependents();
+  vector<Component *> TemporalDependents();
+  vector<vector<Component *> > TemporalCodependents();
 
   // other functions
   void AddCause(Firing * cause);
@@ -516,6 +676,5 @@ struct TrueTuple : public Component{
   // answer, even with unlimited time.
   void CheckForbiddenRequired();
 };
-
 
 #endif
