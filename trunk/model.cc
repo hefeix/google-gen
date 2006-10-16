@@ -444,7 +444,7 @@ void Model::FixTimes() {
     Time new_time = c->ComputeTime(&times_dirty_);
     /*if (GetVerbosity() >= 3) {
       cerr << "id=" << c->id_ << " time=" << t.ToSortableString();
-      vector<vector<Component *> > codep = c->Codependents();
+      vector<vector<Component *> > codep = c->TemporalCodependents();
       for (uint i=0; i<codep.size(); i++) {
 	cerr << " ; ";
 	for (uint j=0; j<codep[i].size(); j++) 

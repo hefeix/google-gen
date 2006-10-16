@@ -36,34 +36,43 @@ Component::Component(Model * model, int id){
   if (id==-1) model_->L1_AssignNewID(this);
   else model->L1_AssignSpecificID(this, id);
   ln_likelihood_ = 0.0;
-  L1_SetExists(true);
+  A1_SetExists(true);
 }
 Component::~Component(){
   CHECK(exists_ == false);
 }
-void Component::L1_SetExists(bool val){
+void Component::A1_SetExists(bool val){
   CHECK(exists_ != val);
   model_->changelist_.Make(new ValueChange<bool>(&exists_, val));
 }
-void Component::L1_SetTime(const Time & new_time){
+void Component::A1_SetTime(const Time & new_time){
   if (time_ == new_time) return;
   model_->changelist_.Make(MakeValueChange(&time_, new_time));  
 }
-void Component::L1_SetTimeDirty(bool new_val){
+void Component::A1_SetTimeDirty(bool new_val){
   if (time_dirty_ == val) return;
   model_->changelist_.Make(new ValueChange<bool>(&time_dirty_, val));
 }
-void Component::L1_SetLnLikelihood(double new_ln_likelihood){
+void Component::A1_SetLnLikelihood(double new_ln_likelihood){
   if (new_ln_likelihood == ln_likelihood_) return;
   model_->changelist_.Make(new ValueChange<double>(&model_ln_, val));
 }
 void Component::Erase(){
-  EraseSubclass();
-  L1_RemoveFromModel;
-}
-void Component::L1_RemoveFromModel(){
-  L1_SetExists(false);
-  model_->L1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
+  vector<Component *> dep = StructuralDependents();
+  vector<Component *> copurposes = Copurposes();
+  for (int i=0; i<dep.size(); i++) {
+    if (dep[i]->Exists()) dep[i]->Erase();
+  }
+  if (!Exists()) return;
+
+  L1_EraseSubclass();
+  A1_SetExists(false);
+  model_->A1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
+
+  for (int i=0; i<copurposes.size(); i++) {
+    if (copurposes[i].Exists() && copurposes[i].IsSuperfluous()) 
+      copurposes[i]->Erase();
+  }
 }
 
 
@@ -89,45 +98,45 @@ Precondition::Precondition(Model * model,
 }
 
 void Precondition::EraseSubclass(){
-  L1_RemoveFromModel();
+  A1_RemoveFromModel();
   model_->changelist_.
     Make(new HashMapRemoveChange<uint64, Precodition *>
 	 (precondition_index_, fprint, this));
-  model_->L1_RemoveFromModelClauseToPreconditionMap(this);
+  model_->A1_RemoveFromModelClauseToPreconditionMap(this);
 }
 
-void L1_AddRule(Rule *r){
+void A1_AddRule(Rule *r){
   model_->changelist_.Make(new SetInsertChange<Rule *>(&rules_, r));
 }
-void L1_RemoveRule(Rule *r){
+void A1_RemoveRule(Rule *r){
   model_->changelist_.Make(new SetRemoveChange<Rule *>(&rules_, r));
 }
-void L1_AddNegativeRule(Rule *r){
+void A1_AddNegativeRule(Rule *r){
   model_->changelist_.Make(new SetInsertChange<Rule *>(&negative_rules_, r));
 }
-void L1_RemoveNegatieveRule(Rule *r){
+void A1_RemoveNegatieveRule(Rule *r){
   model_->changelist_.Make(new SetRemoveChange<Rule *>(&negative_rules_, r));
 }
-void L1_AddSatisfaction(Satisfaction * sat){
+void A1_AddSatisfaction(Satisfaction * sat){
   model_->changelist_.
     Make(new MapInsertChange<Uint64, Satisfaction *>
 	 (&satisfactions_, sat->substitution_.Fingerprint(), sat));
 }
-void L1_RemoveSatisfaction(Satisfaction *sat){
+void A1_RemoveSatisfaction(Satisfaction *sat){
   model_->changelist_.
     Make(new MapRemoveChange<uint64, Satisfaction *>
 	 (&satisfactions_, sat->substitution_.Fingerprint()));
 }
-void L1_SetPreconditionLnLikelihood(double val){
+void A1_SetPreconditionLnLikelihood(double val){
   model_->changelist_.
     Make(new ValueChange<double>(&precondition_ln_likelihood_, val));
 }
-void Precondition::L1_SetLnLikelihoodPerSat(double val){
+void Precondition::A1_SetLnLikelihoodPerSat(double val){
   model_->changelist_.
     Make(new ValueChange<double>(&ln_likelihood_per_sat_,val));
 }
 
-void Precondition::L1_AddToNumSatisfactions(int delta){
+void Precondition::A1_AddToNumSatisfactions(int delta){
   model_->changelist_.
     Make(new ValueChange<int>(&num_satisfactions_, num_satisfactions_+delta));
 }
@@ -157,34 +166,34 @@ Satisfaction::Satisfaction(Precondition * precondition,
     // we need this if statement, since the substituted precondition can 
     // have a repeated clause.
     if (!(true_tuples_ % t)) { 
-      L1_AddTrueTuple(t);
-      t->L1_AddSatisfaction(this);
+      A1_AddTrueTuple(t);
+      t->A1_AddSatisfaction(this);
     }
   }
-  precondition_->L1_AddSatisfaction(this);
+  precondition_->A1_AddSatisfaction(this);
   ComputeSetTime();
 }
 
 void Satisfaction::EraseSubclass()
-  precondition_->L1_RemoveSatisfaction(this);
+  precondition_->A1_RemoveSatisfaction(this);
   forall(run, true_tuples_) {    
-    (*run)->L1_RemoveSatisfaction(this);
+    (*run)->A1_RemoveSatisfaction(this);
   }
 }
 
-void Satisfaction::L1_AddTrueTuple(TrueTuple *t){
+void Satisfaction::A1_AddTrueTuple(TrueTuple *t){
   model_->changelist_.
     Make(new SetInsertChange<TruleTuple *>(&true_tuples, t));
 }
-void Satisfaction::L1_RemoveTrueTueple(TrueTuple *t){
+void Satisfaction::A1_RemoveTrueTueple(TrueTuple *t){
   model_->changelist_.
     Make(new SetRemoveChange<TruleTuple *>(&true_tuples, t));
 }
-void Satisfaction::L1_AddRuleSat(RuleSat *rs){
+void Satisfaction::A1_AddRuleSat(RuleSat *rs){
   model_->changelist_.
     Make(new SetInsertChange<RuleSat *>(&rule_sats_, rs));
 }
-void Satisfaction::L1_RemoveRuleSat(RuleSat *rs){
+void Satisfaction::A1_RemoveRuleSat(RuleSat *rs){
   model_->changelist_.
     Make(new SetRemoveChange<RuleSat *>(&rule_sats_, rs));
 }
@@ -364,7 +373,7 @@ TrueTuple::~TrueTuple(){
 }
 
 void Component::ComponentDestroy() {
-  CHECK(HardDependents().size()==0);
+  CHECK(StructuralDependents().size()==0);
   SetTime(NEVER, true); // will appropriately flip time dirty bit for dependents
   int id = id_;
   Model *  model = model_;
@@ -533,46 +542,46 @@ Record TrueTuple::RecordForDisplayInternal() const {
   return r;
 }
  
-vector<Component *> Component::Dependents() const{
+vector<Component *> Component::TemporalDependents() const{
   return vector<Component *>();
 }
-vector<Component *> Precondition::Dependents() const{
+vector<Component *> Precondition::TemporalDependents() const{
   vector<Satisfaction*> v = VectorOfValues(satisfactions_);
   vector<Component *> ret(v.begin(), v.end());
   ret.insert(ret.end(), rules_.begin(), rules_.end());
   return ret;
 }
-vector<Component *> Satisfaction::Dependents() const {
+vector<Component *> Satisfaction::TemporalDependents() const {
   return vector<Component *>(rule_sats_.begin(), rule_sats_.end());
 }
-vector<Component *> Rule::Dependents() const{
+vector<Component *> Rule::TemporalDependents() const{
   vector<RuleSat*> v = VectorOfValues(rule_sats_);
   vector<Component *> ret(v.begin(), v.end());
   ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
   return ret;
 }
-vector<Component *> RuleSat::Dependents() const{
+vector<Component *> RuleSat::TemporalDependents() const{
   vector<Firing*> v = VectorOfValues(firings_);
   return vector<Component*>(v.begin(), v.end());
 }
-vector<Component *> Firing::Dependents() const{
+vector<Component *> Firing::TemporalDependents() const{
   vector<Component *> ret;
   forall(run, true_tuples_){
     ret.push_back(*run);
   }
   return ret;
 }
-vector<Component *> TrueTuple::Dependents() const{
+vector<Component *> TrueTuple::TemporalDependents() const{
   vector<Component *> ret;
   ret.insert(ret.end(), satisfactions_.begin(), satisfactions_.end());
   if (rule_encoded_) ret.push_back(rule_encoded_);
   return ret;
 }
 
-vector<vector<Component *> > Component::Codependents() const{
+vector<vector<Component *> > Component::TemporalCodependents() const{
   return vector<vector<Component *> >();
 }
-vector<vector<Component *> > Satisfaction::Codependents() const {
+vector<vector<Component *> > Satisfaction::TemporalCodependents() const {
   vector<vector<Component *> > ret;
   ret.push_back(vector<Component *>(1, precondition_));
   forall(run, tuples_) {
@@ -580,7 +589,7 @@ vector<vector<Component *> > Satisfaction::Codependents() const {
   }
   return ret;
 }
-vector<vector<Component *> > Rule::Codependents() const{
+vector<vector<Component *> > Rule::TemporalCodependents() const{
   vector<vector<Component *> > ret;
   ret.push_back(vector<Component *>(1, precondition_));
   if (type_==NEGATIVE_RULE) ret.push_back(vector<Component *>(1, target_rule_));
@@ -588,18 +597,18 @@ vector<vector<Component *> > Rule::Codependents() const{
     ret.push_back(vector<Component *>(1, encoding_[i]));
   return ret;
 }
-vector<vector<Component *> > RuleSat::Codependents() const{
+vector<vector<Component *> > RuleSat::TemporalCodependents() const{
   vector<vector<Component *> > ret;
   ret.push_back(vector<Component *>(1, satisfaction_));
   ret.push_back(vector<Component *>(1, rule_));
   return ret;
 }
-vector<vector<Component *> > Firing::Codependents() const{
+vector<vector<Component *> > Firing::TemporalCodependents() const{
   vector<vector<Component *> > ret;
   ret.push_back(vector<Component *>(1, rule_sat_));
   return ret;
 }
-vector<vector<Component *> > TrueTuple::Codependents() const{
+vector<vector<Component *> > TrueTuple::TemporalCodependents() const{
   vector<vector<Component *> > ret;
   if (!given_) 
     ret.push_back(vector<Component *>(causes_.begin(), causes_.end()));
@@ -659,7 +668,7 @@ void Component::ComputeSetTime(){
 }
 Time Component::ComputeTime(set<Component *> *excluded){
   Time ret;
-  vector<vector<Component *> > codep = Codependents();
+  vector<vector<Component *> > codep = TemporalCodependents();
   for (uint i=0; i<codep.size(); i++) {
     Time first = NEVER;
     for (uint j=0; j<codep[i].size(); j++) {
@@ -677,21 +686,21 @@ Time Component::ComputeTime(set<Component *> *excluded){
 }
 void Component::L1_SetTimeMaintainConsistency(Time new_time, 
 					      bool adjust_dirty_bits){
-  if (new_time == time_) { L1_SetTimeDirty(false); return; }
+  if (new_time == time_) { A1_SetTimeDirty(false); return; }
   if (time_.IsNever()) {
     model_->L1_EraseFromNeverHappen(this);
     if (Type()==TRUETUPLE && ((TrueTuple*)this)->required_)
       model_->L1_EraseFromRequiredNeverHappen(this);
   }
-  L1_SetTime(new_time);
+  A1_SetTime(new_time);
   AdjustLnLikelihoodForNewTime();
   if (adjust_dirty_bits) {
     vector<Component *> dep = Dependents();
     for(uint i=0; i<dep.size(); i++) {
       if (dep[i]->ComputeTime(NULL) != dep[i]->time_)
-	dep[i]->L1_SetTimeDirty(true);
+	dep[i]->A1_SetTimeDirty(true);
     }
-    L1_SetTimeDirty(false);
+    A1_SetTimeDirty(false);
   }
   if (time_.IsNever()){
     model_->L1_InsertIntoNeverHappen(this);
@@ -757,12 +766,12 @@ void Component::ComputeSetLnLikelihood(){
   double new_val = ln_likelihood_;
   CHECK(finite(old_val));
   CHECK(finite(new_val));
-  L1_SetLnLikelihood(new_val);
-  model_->L1_SetLnLikelihood(model_->ln_likelihood_ + new_val - old_val);
+  A1_SetLnLikelihood(new_val);
+  model_->A1_SetLnLikelihood(model_->ln_likelihood_ + new_val - old_val);
 }
 
 void Component::CheckConnections(){
-  vector<vector<Component *> > vv = Codependents();
+  vector<vector<Component *> > vv = TemporalCodependents();
   forall(run, vv) forall(run2, *run) {
     if (*run2 ==0) continue;
     CHECK((*run2)->Dependents() % this);
