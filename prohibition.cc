@@ -23,30 +23,32 @@ Prohibition::L1_MakeProhibition(Model *m, Tuple prohibited){
   return new Prohibition(m, prohibited);
 }
 
+Prohibition::Prohibition(Model *m, Tuple prohibited){
+  model_ = m;
+  prohibited_ = prohibited;
+  exists_ = true;
+  model_->changelist_->Add(new DeleteOnRollbackChange<Prohibition>(this));
+  vector<const Tuple*> matches;
+  model_->tuple_index_.Lookup(prohibited_, &matches);
+  for (uint i=0; i<results.size(); i++) {
+    TrueTuple *t = model_->FindTrueTuple(matches[i]);
+    CHECK(t);
+    L1_AddViolation(t);
+  }
+  model_->A1_AddToProhibitionIndex(prohibited_, this);
+}
+
 void Prohibition::L1_Erase(){
-  while (violations_.size()){
+  while (violations_.size() > 0){
     L1_RemoveViolation(*(violations_.begin()));
   }
   model_->A1_RemoveFromProhibitionIndex(prohibited_, this);
   A1_SetExists(false);
 }
 
-Prohibition::Prohibition(Model *m, Tuple prohibited){
-  model_ = m;
-  prohibited_ = prohibited;
-  exists_ = true;
-  model_->changelist_->Add(new NewChange<Prohibition>(this));  
-  vector<const Tuple*> results;
-  model_->tuple_index_.Lookup(s, &results);
-  for (uint i=0; i<results.size(); i++) {
-    TrueTuple *t = index_to_true_tuple_[results[i]];
-    L1_AddViolation(t);
-  }
-  model_->A1_AddToProhibitionIndex(prohibited_, this);
-}
-
 // ----- Complicated L1 functions
 void Prohibition::L1_AddException(Tuple exception){
+  CHECK(MatchesWithWildcards(prohibited_, exception); 
   CHECK(!(exceptions_ % exception));
   A1_AddException(exception);
   TrueTuple * tt = model_->FindTrueTuple(exception);
@@ -65,18 +67,19 @@ void Prohibition::L1_RemoveException(Tuple exception){
 }
 void Prohibition::L1_AddViolation(TrueTuple *t){
   CHECK(!(violations_ % t));
-  if (violations_.size()==0) model_->L1_AddViolatedProhibition(this);
+  if (violations_.size()==0) model_->A1_AddViolatedProhibition(this);
   A1_AddViolation(t);
-  tt->L1_AddViolatedProhibition(this);
+  t->A1_AddViolatedProhibition(this);
 }
 void Prohibition::L1_RemoveViolation(TrueTuple *t){
   CHECK(violations_ % t);
   A1_RemoveViolation(t);
-  if (violations_.size()==0) model_->L1_RemoveViolatedPrecondition(this);
-  tt->L1_RemoveViolatedProhibition(this);
+  if (violations_.size()==0) model_->A1_RemoveViolatedProhibition(this);
+  t->A1_RemoveViolatedProhibition(this);
 }
 
-void Prohibition::L1_CheckForViolation(TrueTuple *t){
+void Prohibition::L1_CheckAddViolation(TrueTuple *t){
+  CHECK(MatchesWithWildcards(prohibited_, t->tuple_));
   if (!(exceptions_ % t)) L1_AddViolation(t);
 }
 

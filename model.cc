@@ -77,18 +77,6 @@ void Model::L1_RemoveFromClauseToPreconditionMap(Precondition *p){
 	    make_pair(p, i)));
   }
 }
-
-Model::RuleSat * Model::Rule::GetAddRuleSat(Satisfaction * sat) {
-  RuleSat ** rsp = rule_sats_ % sat;
-   if (rsp) return *rsp;
-   return new RuleSat(this, sat->substitution_);
-}
-set<int> Model::Rule::RightVariables(){
-  return GetVariables(result_)-LeftVariables();
-}
-set<int> Model::Rule::LeftVariables(){
-  return GetVariables(precondition_->clauses_);
-}
 string TermEscape(string s){
   if (s[0]=='$' || s[0]=='_') return '_'+s;
   return s;
@@ -109,193 +97,9 @@ vector<Tuple> Model::ComputeTupleEncoding(const Tuple & s, int name){
   }
   return ret; 
 }
-vector<Tuple> Model::Rule::ComputeEncoding(){
-  vector<Tuple> ret;
-  Tuple s;
-  s.push_back(LEXICON.GetAddID("IS_RULE"));
-  s.push_back(LEXICON.GetAddID("RULE_"+itoa(id_)));
-  if (type_==NEGATIVE_RULE) {
-    s.push_back(LEXICON.GetAddID("NEGATIVE"));
-    s.push_back(LEXICON.GetAddID("RULE_"+itoa(target_rule_->id_)));
-  } else {
-    s.push_back(LEXICON.GetAddID("POSITIVE"));
-  }
-  ret.push_back(s);
-  const vector<Tuple> & pre = precondition_->clauses_;
-  bool contains_result = false;
-  if (type_ == NEGATIVE_RULE) {
-    contains_result = true;
-    for (uint i=0; i<target_rule_->result_.size(); i++) {
-      if (!(pre % target_rule_->result_[i])) contains_result = false;
-    }
-    if (contains_result) {
-      Tuple x;
-      x.push_back(LEXICON.GetAddID("CONTAINS_RESULT"));
-      x.push_back(LEXICON.GetAddID("RULE_"+itoa(id_)));      
-    }
-  }
-  for (uint i=0; i<pre.size(); i++) {
-    if (type_==NEGATIVE_RULE) {
-      if (target_rule_->precondition_->clauses_ % pre[i]) continue;
-      if (contains_result && (target_rule_->result_ % pre[i])) continue;
-    }
-    int name = LEXICON.GetAddID("RULE_" + itoa(id_) + "_PREC_" + itoa(i));
-    Tuple x;
-    x.push_back(LEXICON.GetAddID("HAS_PRECONDITION"));
-    x.push_back(LEXICON.GetAddID("RULE_"+itoa(id_)));      
-    x.push_back(name);
-    ret.push_back(x);
-    vector<Tuple> v = model_->ComputeTupleEncoding(pre[i], name);
-    ret.insert(ret.end(), v.begin(), v.end());
-  }
-  for (uint i=0; i<result_.size(); i++) {
-    int name = LEXICON.GetAddID("RULE_" + itoa(id_) + "_RES_" + itoa(i));
-    Tuple x;
-    x.push_back(LEXICON.GetAddID("HAS_RESULT"));
-    x.push_back(LEXICON.GetAddID("RULE_"+itoa(id_)));      
-    x.push_back(name);
-    ret.push_back(x);
-    vector<Tuple> v = model_->ComputeTupleEncoding(result_[i], name);
-    ret.insert(ret.end(), v.begin(), v.end());
-  }
-  return ret;
-}
-Model::Firing * Model::Rule::GetAddFiring(const Substitution & sub) {
-  RuleSat * rs = GetAddRuleSat(sub.Restrict(LeftVariables()));
-  if (!rs) {
-    VLOG(2) << "rule sat not found " << sub.Restrict(LeftVariables()).ToString()
-	    << endl;
-    return NULL;
-  }
-  Firing * ret = rs->GetAddFiring(sub.Restrict(RightVariables()));
-  VLOG(2) << "left sub=" << sub.Restrict(LeftVariables()).ToString()
-	  << "left sub=" << sub.Restrict(RightVariables()).ToString() << endl;
-  return ret;
-}
-bool Model::Rule::HasFiring(){
-  forall(run, rule_sats_){
-    if (run->second->firings_.size()) return true;
-  }
-  return false;
-}
-Model::Firing * Model::RuleSat::GetAddFiring(const Substitution & right_sub){
-  Firing ** f = firings_ % right_sub.Fingerprint();
-  if (f) {
-    cerr << "Firing found :" << right_sub.ToString() << endl;
-    return *f;
-  }
-  //cerr << "creating new firing" << endl;
-  return new Firing(this, right_sub, false);
-}
-Substitution Model::Firing::GetFullSubstitution() {
-  Substitution ret = right_substitution_;
-  ret.Add(rule_sat_->satisfaction_->substitution_);
-  return ret;
-}
-bool Model::Firing::InvolvesProposition(TrueTuple * p) const {
-  return
-    ((true_propositions_ % p) || (rule_sat_->satisfaction_->propositions_ % p));
-}
 
 
-void Model::Rule::ChangeStrength(EncodedNumber new_strength,
-				 EncodedNumber new_strength2) {
-  model_->RecordChangeStrength(this, strength_, strength2_);
-  double old_strength_d_ = strength_d_;
-  strength_ = new_strength;
-  strength_d_ = strength_.ToOpenInterval();
-  strength2_ = new_strength2;
-  strength2_d_ = strength2_.ToOpenInterval();
-  if (type_ != NEGATIVE_RULE) {
-    precondition_->ln_likelihood_per_sat_ +=
-      log(1-strength_d_) - log(1-old_strength_d_);
-    precondition_->ComputeSetLnLikelihood();
-  }
-  ComputeSetLnLikelihood();
-  forall(run, rule_sats_)  run->second->ComputeSetLnLikelihood();
-  if (type_ == NEGATIVE_RULE) {
-    forall(run, rule_sats_) 
-      run->second->target_rule_sat_->ComputeSetLnLikelihood();
-  }
-}
-void Model::Rule::ChangeDelay(EncodedNumber new_delay) {
-  model_->RecordChangeDelay(this, delay_);
-  delay_ = new_delay;
-  forall(run, rule_sats_) run->second->ComputeSetTime();
-  ComputeSetLnLikelihood();
-}
-int Model::Rule::NumFirings() const {
-  int ret = 0;
-  forall(run, rule_sats_){
-    ret += run->second->firings_.size();
-  }
-  return ret;
-}
-int Model::Rule::NumFirstFirings() const {
-  // TODO: track this instead of computing it.
-  int ret = 0;
-  forall(run, rule_sats_){
-    if (run->second->firings_.size() > 0) ret++;
-  }
-  return ret;
-}
-vector<Model::Firing *> Model::Rule::Firings() const{
-  vector<Firing *> ret;
-  forall(run, rule_sats_) {
-    forall(run_f, run->second->firings_) {
-      ret.push_back(run_f->second);
-    }
-  }
-  return ret;
-}
 
-string Model::Rule::ImplicationString() const {
-  return TupleVectorToString(precondition_->clauses_) + " -> " 
-    + TupleVectorToString(result_);
-}
-string Model::RuleSat::ImplicationString(const Firing * firing) const {
-  vector<Tuple> preconditions = rule_->precondition_->clauses_;
-  vector<Tuple> results = rule_->result_;
-  vector<Tuple> substituted_preconditions = preconditions;
-  vector<Tuple> substituted_results = results;
-  Substitution sub = satisfaction_->substitution_;
-  if (firing) sub.Add(firing->right_substitution_);
-  sub.Substitute(&substituted_preconditions);
-  sub.Substitute(&substituted_results);
-
-  string ret;
-  // ret += rule_sat_->satisfaction_->substitution_.ToString();
-  ret += rule_->HTMLLink("r") + " " + HTMLLink("rs") + " " ;
-  if (firing) ret += firing->HTMLLink("f") + " ";
-  for (uint i=0; i<preconditions.size(); i++) {
-    TrueTuple * tp 
-      = model_->FindTrueTuple(substituted_preconditions[i]);
-    CHECK(tp);
-    ret += tp->HTMLLink(ToString(preconditions[i], sub)) 
-      + " (" + tp->time_.ToSortableString() + ")"
-      + " ";
-  }
-  ret += "-> ";
-  for (uint i=0; i<results.size(); i++) {
-    if (!substituted_results[i].HasVariables()) {
-      TrueTuple * tp 
-	= model_->FindTrueTuple(substituted_results[i]);      
-      if (tp){
-	ret += tp->HTMLLink(ToString(results[i], sub)) + " (" 
-	  + tp->time_.ToSortableString() + ") ";
-      } else {
-	ret += "Error - proposition not found  ";
-      }
-    } else {
-      ret += ToString(results[i], sub) + " ";
-    }
-  }
-  return ret;
-}
-string Model::Firing::ImplicationString() const{
-  if (this==NULL) return "SPONTANEOUS";
-  return rule_sat_->ImplicationString(this);
-}
 set<Model::Firing *> Model::TrueTuple::GetResultFirings() const {
   set<Firing *> ret;
   forall(run_s, satisfactions_)
@@ -311,7 +115,7 @@ Model::TrueTuple::GetResultTrueTuples() const{
   forall(run_s, satisfactions_)
     forall(run_rs, (*run_s)->rule_sats_)
     forall(run_f, (*run_rs)->firings_)
-    forall(run_tp, run_f->second->true_propositions_)
+    forall(run_tp, run_f->second->true_tuples_)
     ret.insert(*run_tp);
   return ret;  
 }
@@ -320,7 +124,7 @@ set<Model::TrueTuple *>
 Model::TrueTuple::GetCauseTrueTuples() const{
   set<TrueTuple *> ret;
   forall(run_f, causes_)
-    forall(run_tp, (*run_f)->rule_sat_->satisfaction_->propositions_)
+    forall(run_tp, (*run_f)->rule_sat_->satisfaction_->tuples_)
     ret.insert(*run_tp);
   return ret; 
 }
@@ -605,7 +409,7 @@ void Model::CheckLikelihood(){
     CHECK(false);
   }
 }
-int64 Model::FindSatisfactionsForProposition
+int64 Model::FindSatisfactionsForTuple
 ( const Tuple & s, 
   vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > *results,
   int64 max_work,
@@ -661,7 +465,7 @@ Model::Precondition * Model::GetAddPrecondition(const vector<Tuple> & tuples) {
 Model::TrueTuple * Model::FindTrueTuple(const Tuple & s) {
   const Tuple * tuple = tuple_index_.FindTuple(s);
   if (!tuple) return 0;
-  TrueTuple ** tp = index_to_true_proposition_ % tuple;
+  TrueTuple ** tp = index_to_true_tuple_ % tuple;
   if (tp) return *tp;
   return 0;
 }
@@ -683,32 +487,14 @@ vector<Tuple> GetTupleVector(istream * input) {
   }
   return result;
 }
-		      
-uint64 Model::Rule::RuleFingerprint() {
-  return Model::RuleFingerprint
-    (type_, precondition_->clauses_, 
-     (type_==NEGATIVE_RULE)?target_rule_->result_:result_, 	
-     (type_==NEGATIVE_RULE)?target_rule_->precondition_->clauses_:
-     vector<Tuple>());
-}
-uint64 Model::RuleFingerprint(RuleType type,
-			      const vector<Tuple> & precondition,
-			      const vector<Tuple> & result,
-			      const vector<Tuple> & target_precondition){
-  uint64 ret = type * 23948723983ll;
-  ret += Fingerprint(precondition) * 28472462521325ll;
-  ret += Fingerprint(result) * 21394285729853473ll;
-  ret += Fingerprint(target_precondition) * 98654692435589ll;
-  return ret;
-}
 
 void Model::TrueTuple::AddCause(Firing * cause){
-  if (cause != NULL) cause->true_propositions_.insert(this);
+  if (cause != NULL) cause->true_tuples_.insert(this);
   causes_.insert(cause);
   ComputeSetTime();
 }
 void Model::TrueTuple::RemoveCause(Firing * cause){
-  cause->true_propositions_.erase(this);
+  cause->true_tuples_.erase(this);
   causes_.erase(cause);
   // CHECK(causes_.size());
   ComputeSetTime(); // TODO: think about this
@@ -890,11 +676,11 @@ bool Model::IsForbidden(const Tuple & s){
   return false;
 }
 void Model::TrueTuple::CheckForbiddenRequired(){
-  required_ = model_->IsRequired(proposition_);
-  forbidden_ = model_->IsForbidden(proposition_);
+  required_ = model_->IsRequired(tuple_);
+  forbidden_ = model_->IsForbidden(tuple_);
   if (forbidden_) model_->present_forbidden_.insert(this);
   else model_->present_forbidden_.erase(this);
-  if (required_) model_->absent_required_.erase(proposition_.Fingerprint());  
+  if (required_) model_->absent_required_.erase(tuple_.Fingerprint());  
 }
 void Model::MakeRequired(const Tuple & s){
   required_[s.Fingerprint()] = s;
@@ -919,7 +705,7 @@ void Model::MakeForbidden(const Tuple & s){
   tuple_index_.Lookup(s, &results);
   for (uint i=0; i<results.size(); i++) {
     if (IsRequired(*(results[i]))) continue;
-    index_to_true_proposition_[results[i]]->CheckForbiddenRequired();
+    index_to_true_tuple_[results[i]]->CheckForbiddenRequired();
   }
 }
 void Model::MakeNotForbidden(const Tuple & s){
@@ -928,7 +714,7 @@ void Model::MakeNotForbidden(const Tuple & s){
   tuple_index_.Lookup(s, &results);
   for (uint i=0; i<results.size(); i++) {
     if (IsRequired(*(results[i]))) continue;
-    index_to_true_proposition_[results[i]]->CheckForbiddenRequired();
+    index_to_true_tuple_[results[i]]->CheckForbiddenRequired();
   }
 }
 void Model::MakeGiven(const Tuple & s){
@@ -992,7 +778,7 @@ Model::Rule * Model::GetAddNaiveRule(int length) {
 		      result, EncodedNumber(), EncodedNumber(), 
 		      false, true);
   forall(run, r->encoding_) {
-    MakeGiven((*run)->proposition_);
+    MakeGiven((*run)->tuple_);
     (*run)->ComputeSetTime();
   }
   r->ComputeSetTime();

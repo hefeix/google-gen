@@ -128,15 +128,15 @@ Substitution Substitution::Restrict(const set<int> & terms) const{
   }
   return ret;
 }
-set<int> GetVariables(const vector<Tuple> & v) {
+set<int> GetVariables(const Pattern & v) {
   set<int> ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
       if (v[i][j]<0) ret.insert(v[i][j]);
   return ret;
 }
-vector<Tuple> RemoveVariableFreeTuples(const vector<Tuple> &v) {
-  vector<Tuple> ret;
+Pattern RemoveVariableFreeTuples(const Pattern &v) {
+  Pattern ret;
   for (uint i=0; i<v.size(); i++) {
     if (v[i].HasVariables()) ret.push_back(v[i]);    
   }
@@ -157,7 +157,7 @@ bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
   }
   return true;
 }
-set<int> GetAllTerms(const vector<Tuple> & v) {
+set<int> GetAllTerms(const Pattern & v) {
   set<int> ret;
   for (uint i=0; i<v.size(); i++) ret.insert(v[i].terms_.begin(), v[i].terms_.end());
   return ret;
@@ -168,14 +168,14 @@ Tuple StringToTuple(const string & s){
   ret.FromString(s);
   return ret;
 }
-string TupleVectorToString(const vector<Tuple> &v){
+string TupleVectorToString(const Pattern &v){
   vector<string> vs;
   for (uint i=0; i<v.size(); i++) vs.push_back(v[i].ToString());
   return Join(vs, ',');
 }
-vector<Tuple> StringToTupleVector(const string & s){
+Pattern StringToTupleVector(const string & s){
   vector<string> v = Split(s, ',');  
-  vector<Tuple> ret;
+  Pattern ret;
   for (uint i=0; i<v.size(); i++) ret.push_back(StringToTuple(v[i]));
   return ret;
 }
@@ -194,8 +194,8 @@ string ToString(const Tuple & s, const Substitution & sub){
   ret += "]";
   return ret;
 }
-double TuplesLnLikelihood(const vector<Tuple> &context, 
-			     const vector<Tuple> &to_encode, 
+double TuplesLnLikelihood(const Pattern &context, 
+			     const Pattern &to_encode, 
 			     vector<int> * arbitrary_terms){
   arbitrary_terms->clear();
   CHECK(arbitrary_terms);
@@ -221,7 +221,7 @@ double TuplesLnLikelihood(const vector<Tuple> &context,
   return ret;  
 }
 
-void RenameVariablesInOrder(vector<Tuple> * v, Substitution *s){
+void RenameVariablesInOrder(Pattern * v, Substitution *s){
   int next_var = 0;
   Substitution sub;
   for (uint i=0; i<v->size(); i++) {
@@ -237,9 +237,9 @@ void RenameVariablesInOrder(vector<Tuple> * v, Substitution *s){
   if (s) *s = sub;
 }
 
-vector<Tuple> Canonicalize(const vector<Tuple> & v, Substitution *sub){
+Pattern Canonicalize(const Pattern & v, Substitution *sub){
   vector<uint64> fprints;
-  vector<Tuple> ret;
+  Pattern ret;
   map<uint64, int> sorted;
   for (uint i=0; i<v.size(); i++) {
     fprints.push_back(v[i].MakeVariableInsensitive().Fingerprint());
@@ -279,15 +279,15 @@ vector<Tuple> Canonicalize(const vector<Tuple> & v, Substitution *sub){
 
 
 CandidateRule CanonicalizeRule(const CandidateRule & r) {
-  const vector<Tuple> & preconditions = r.first;
-  const vector<Tuple> & result = r.second;
+  const Pattern & preconditions = r.first;
+  const Pattern & result = r.second;
   Substitution sub;
-  vector<Tuple> c_pre = Canonicalize(preconditions, &sub);
+  Pattern c_pre = Canonicalize(preconditions, &sub);
   int last_variable_in_preconditions = -1;
   forall(run, sub.sub_) 
     last_variable_in_preconditions >?= Variable(run->second);
   int next_var = last_variable_in_preconditions+1;
-  vector<Tuple> c_res = result;
+  Pattern c_res = result;
   for (uint i=0; i<c_res.size(); i++) 
     for (uint j=0; j<c_res[i].size(); j++) {
       int & w_ref = c_res[i][j];

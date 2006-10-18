@@ -42,8 +42,8 @@ class TupleIndex{
   // s is composed of literals.
   // Returns a pointer to the static internal copy of s, or NULL if absent.
   const Tuple * FindTuple(const Tuple & s);
-  // s is a tuple with literals and Variable(0).  The results do not 
-  // require all instances of Variable(0) have the same substitution.
+  // s is a tuple with literals and wildcards.  The results do not 
+  // require all instances of wildcard have the same substitution.
   void Lookup(const Tuple & s, vector<const Tuple*> * results);
   // A histogram of the lengths of the tuples in the index.
   inline const map<uint64, uint64> & Lengths() const {return lengths_; }

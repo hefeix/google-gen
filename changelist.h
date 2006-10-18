@@ -175,9 +175,9 @@ template <class K, class V> class MapRemoveChange : public Change {
 };
 
 // Create one of these when you new an object
-template <class C> class NewChange : public Change {
+template <class C> class DeleteOnRollbackChange : public Change {
  public:
-  NewChange(C * object){
+  DeleteOnRollbackChange(C * object){
     object_ = object;
   }
   void Undo(){

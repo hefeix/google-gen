@@ -150,7 +150,7 @@ class Model {
 
   // Finds or adds a Precondition
   Precondition * GetAddPrecondition(const vector<Tuple> & tuples);
-
+  
   // Finds a TrueTuple
   TrueTuple * FindTrueTuple(const Tuple & s);
   // Finds or adds a TrueTuple
@@ -227,22 +227,32 @@ class Model {
 
 
   // Simple L1 modifiers
-  void L1_InsertIntoClauseToPreconditionMap(Precondition *p);
-  void L1_RemoveFromClauseToPreconditionMap(Precondition *p);
+  void A1_InsertIntoWildcardTupleToPreconditionMap
+    (Tuple t, Precondition *p, int position);
+  void A1_RemoveFromWildcardTupleToPreconditionMap
+    (Tuple t, Precondition *p, int position);
+  void A1_InsertIntoWildcardTupleToResultMap
+    (Tuple t, Rule *r, int position);
+  void A1_RemoveFromWildcardTupleToResultMap
+    (Tuple t, Rule *r, int position);
+
 
 
   // data
   int next_id_;
   map<int, Component *> id_to_component_;
   TupleIndex tuple_index_; // stores pointers to Firings
-  map<const Tuple *, TrueTuple *> index_to_true_proposition_;
+  map<const Tuple *, TrueTuple *> index_to_true_tuple_;
   set<Component *> times_dirty_; //components whose times need fixing
   set<Component *> never_happen_; // components which never happen
   set<Component *> required_never_happen_; // required and never happen
-  hash_map<uint64, set<pair<Precondition *, int> > > clause_to_precondition_;
-  hash_map<uint64, set<pair<Rule *, int> > > clause_to_result_;
-  hash_map<uint64, Precondition *> precondition_index_;
-  map<uint64, Rule *> rule_index_;
+  // maps clauses found in preconditions
+  hash_map<Tuple, set<pair<Precondition *, int> > > clause_to_precondition_;
+  // same thing for the results of rules.  
+  hash_map<Tuple, set<pair<Rule *, int> > > clause_to_result_;
+  hash_map<vector<Tuple>, Precondition *> precondition_index_;
+  map<uint64, Rule *> rule_index_; // TODO: change the key type
+  // maps the prohibited tuple of a prohibition to the prohibition.  
   map<Tuple, set<Prohibition *> > prohibition_index_;
   vector<Change *> history_;
   map<int, int> arbitrary_term_counts_;
