@@ -588,7 +588,6 @@ class Firing : public Component{
   vector<Component *> TemporalDependents() const;
   vector<vector<Component *> > TemporalCodependents() const;
   vector<Component *> Copurposes() const;
-  bool InvolvesTrueTuple(TrueTuple * p) const;    
   Substitution GetFullSubstitution() const;
 
  private:
@@ -615,7 +614,7 @@ class Firing : public Component{
 
   // computed
   // vector of true tuples aligned with the result_ of the Rule.
-  vector<TrueTuple *> true_tuples_;
+  set<TrueTuple *> true_tuples_;
 };
 
 // A tuple which is true in our model
@@ -651,12 +650,12 @@ class TrueTuple : public Component{
   set<Firing *> causes_;
   // Satisfactions in which this proposition takes part.
   set<Satisfaction *> satisfactions_;
-  // If this proposition helps encode a rule, what is it, else NULL
+  // What rules does this Tuple help encode?
   set<Rule *> rules_caused_;
   // Is this proposition required/forbidden in the problem specification
   bool required_;
-  bool forbidden_;
-  // Is this proposition given externally.
+  set<Prohibition *> violated_prohibitions_;
+  // Is this tuple given externally.
   bool given_;
 
   TrueTuple(Model * model, 
