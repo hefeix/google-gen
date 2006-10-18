@@ -510,33 +510,37 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
   rule_sat_->ComputeSetLnLikelihood();
   // perform the substitution to find the TrueTuples.
   vector<Tuple> results = rule_sat->rule_->result_;
-  const Substitution & left_sub = rule_sat->satisfaction_->substitution_;
-  left_sub.Substitute(&results);
-  right_substitution_.Substitute(&results);
+  GetFullSubstitution().Substitute(&results);
   // Now we have the vector of constant tuples which come true.
   for (uint i=0; i<results.size(); i++){
     TrueTuple * tp = model_->FindTrueTuple(results[i]);
-    if (tp) {
-      tp->AddCause(this);
-    } else {
-      tp = new TrueTuple(model_, vector<Firing *>(1, this), results[i], false);
-    }
-    true_tuples_.insert(tp);
+    if (!tp)
+      tp = new TrueTuple(model_, results[i]);
+    true_tuples_.insert(tp); // Note: duplicate insertions OK.
   }
+  // Note: we need two loops because of duplicates.
+  forall(run, true_tuples_) { 
+    (*run)->AddCause(this);
+  }
+  // For creative rules, this counts the names and adjusts the naming costs.
+  forall (run, right_substitution_.sub_)  
+    model_->L1_AddArbitraryTerm(run->second);
   ComputeSetTime();
-  forall (run, right_substitution_.sub_)  model_->AddArbitraryTerm(run->second);
+  ComputeSetLnLikelihood();
 }
-Firing::~Firing(){ 
-  ComponentDestroy(); 
+void Firing::EraseSubclass() {
+  forall(run, true_tuples_) {
+    (*run)->A1_RemoveCause(this);
+  }
+  rule_sat_->A1_RemoveFiring(right_substitution_);
+  rule_sat_->ComputeSetLnLikelihood();
+  forall (run, right_substitution_.sub_)
+    model_->L1_SubtractArbitraryTerm(run->second);
 }
 Substitution Firing::GetFullSubstitution() const{
   Substitution ret = right_substitution_;
   ret.Add(rule_sat_->satisfaction_->substitution_);
   return ret;
-}
-bool Firing::InvolvesTuple(TrueTuple * p) const {
-  return
-    ((true_tuples_ % p) || (rule_sat_->satisfaction_->tuples_ % p));
 }
 string Firing::ImplicationString() const{
   if (this==NULL) return "SPONTANEOUS";
@@ -596,17 +600,6 @@ void Component::ComponentDestroy() {
   model->ReleaseID(id);
 }
 
-void Firing::Destroy(){
-  while (true_tuples_.size()){
-    TrueTuple * tp = *(true_tuples_.begin());
-    //CHECK(tp->causes_.size() > 1);
-    tp->RemoveCause(this);
-  }
-  rule_sat_->firings_.erase(right_substitution_.Fingerprint());
-  rule_sat_->ComputeSetLnLikelihood();
-  forall (run, right_substitution_.sub_)
-    model_->SubtractArbitraryTerm(run->second);
-}
 void TrueTuple::Destroy(){
   if (required_) model_->absent_required_.insert(tuple_.Fingerprint());
   if (forbidden_) model_->present_forbidden_.erase(this);
