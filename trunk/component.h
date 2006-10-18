@@ -106,8 +106,15 @@ class Component{
   // This function makes the component not exist.  It also first erases its
   // StructuralDependents, and its Copurposes that no loner have a purpose.  
   void Erase(); // but don't delete.
-
-  void ComputeSetTime(); // Compute and set the time.  
+  // The time_ field is set lazily to save time.  Sometimes it is locally 
+  // correct (clean) and sometimes it might be localy incorrect (dirty).  
+  // Clean does not mean globally correct, and calling ComputeSetTime()
+  // on every component does not make all the times clean or correct.
+  // Call FixTimes() on the model to make all of the times clean and correct.
+  // This function computes and sets the time for this component, and makes
+  // the dirty bit for this component false.  It may make the dirty bits 
+  // for other components true.
+  void ComputeSetTime(); 
   // Computes and sets the ln_likelihood_ for this component, and adjusts
   // the total ln likelihood of the model. 
   void ComputeSetLnLikelihood();
@@ -194,11 +201,7 @@ class Component{
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
-  // The time_ field is set lazily to save time.  Sometimes it is locally 
-  // correct (clean) and sometimes it might be localy incorrect (dirty).  
-  // Clean does not mean globally correct, and calling ComputeSetTime()
-  // on every component does not make all the times clean or correct.
-  // Call FixTimes() on the model to make all of the times clean and correct.
+  // Set the time to new_time.
   // If the adjust_dirty_bits parameter is true, as it should usually be, 
   // the dirty bit on this component is updated to false, and those on its 
   // dependents are updated to true if necessary.  
@@ -211,13 +214,17 @@ class Component{
   // the subclass-specific parts of the erase function.
   virtual void L1_EraseSubclass() = 0;
 
+  // flips the dirty bit on, and inserts into global set of dirty components.
+  void L1_MakeTimeDirty();
+  // flips the dirty bit off, and removes from global set of dirty components.
+  void L1_MakeTimeClean();
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS -----
 
   // These things just modify the actual values.
   void A1_SetExists(bool val);
   void A1_SetTime(const Time & new_time);
-  void A1_SetTimeDirty(bool val);
+  void A1_SetTimeDirty(bool val); // Use the L1 functions above instead!
   void A1_SetLnLikelihood(double new_ln_likelihood); 
 
 
@@ -297,16 +304,21 @@ class Precondition : public Component {
   // ----- DATA -----
 
   // fundamental data
-  vector<Tuple> clauses_;
+  vector<Tuple> pattern_;
     
   // computed data
   set<Rule *> rules_; // the rules that have this precondition.
   set<Rule *> negative_rules_; // the negative ones (a subset of the above)
+  // The following two indices are for finding rules based on a description:
+  // positive rules are indexed by their result
+  map<Pattern, set<Rule *> > positive_rule_index_;
+  // negative rules are indexed on the inhibited rule. 
+  map<Rule *, set<Rule *> > negative_rule_index_;
   // The total number of substitutions that satisfy the precondition.
   int num_satisfactions_;
-  // maps fingerprint of substitution to satisfaction object
+  // maps substitution to satisfaction object
   // some satisfactions are not represented if they are not interesting
-  map<uint64, Satisfaction *> satisfactions_; 
+  map<Substitution, Satisfaction *> satisfactions_; 
   // The prior of the precondition existing, excluding parts accounted
   // for elsewhere in the model.  
   double precondition_ln_likelihood_;
@@ -378,9 +390,17 @@ class Rule : public Component{
 
   // ----- LAYER 2 FUNCTIONS -----
 
+  // This is how new rules are created.
+  static Rule * MakeNewRule (Precondition * precondition, EncodedNumber delay,
+			     RuleType type, Rule * target_rule,
+			     vector<Tuple> result, 
+			     EncodedNumber strength, EncodedNumber strength2){
+    return 
+      new Rule(precondition,delay, target_rule, result, strength, strength2);
+  }
   // Adds a firing, possibly also adding a satisfaction, a rulesat, and
   // some truetuples.  If one already exists, just returns it.
-  Firing * GetAddFiring(const Substitution & sub);
+  Firing * AddFiring(const Substitution & sub);
   // Changes the strength of the rule, keeping the model likelihood updated
   void ChangeStrength(EncodedNumber new_strength, 
 		      EncodedNumber new_strength2);
@@ -392,14 +412,14 @@ class Rule : public Component{
 
   // ----- CONST FUNCTIONS -----
 
-   vector<Tuple> ComputeEncoding() const;
+  Firing * GetFiring(const Substitution &sub) const;
+  vector<Tuple> ComputeCauses() const;
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   vector<Component *> TemporalDependents() const;
   vector<vector<Component *> > TemporalCodependents() const;
   vector<Component *> Copurposes() const;
   double LnLikelihood() const;
-  uint64 RuleFingerprint() const;
   // Variables in the precondition
   set<int> LeftVariables() const;
   // Variables in the result which are not in the precondition.
@@ -415,35 +435,22 @@ class Rule : public Component{
   // Displays this rule for the HTML browser
   string ImplicationString() const;
 
-
  private:
   // ----- CONSTRUCTOR(S) -----
 
-  // TODO: write a public factory method Rule * Model::MakeNewRule(...);
   // Create a new rule and add it to the model.
-  // In genereal, creating a rule also adds other components.  If just_this
-  // is set, it doesn't.  This is useful for model loading and rollbacks.  
-  // no_firing_prop can be set if FLAGS_firing_tuple is on, to indicate
-  // that this rule shouldn't get an extra "firing tuple" in the result.
-  Rule(Precondition * precondition, EncodedNumber delay, 
+  Rule(Precondition * precondition, EncodedNumber delay,
        RuleType type, Rule * target_rule,
-       vector<Tuple> result, EncodedNumber strength,
-       EncodedNumber strength2, 
-       bool just_this,
-       bool no_firing_prop,
-       int id);
-
+       vector<Tuple> result, 
+       EncodedNumber strength, EncodedNumber strength2);
+  
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
   // gets/adds a RuleSat object for this rule and a particular satisfaction.
-  RuleSat * L1_GetAddRuleSat(Satisfaction * sat, int id);
+  RuleSat * L1_GetAddRuleSat(Satisfaction * sat);
   //  Convenience
-  RuleSat * L1_GetAddRuleSat(const Substitution & sub) {
-    Satisfaction * sat = precondition_->L1_GetAddSatisfaction(sub);
-    CHECK(sat);
-    return GetAddRuleSat(sat);
-  }
+  RuleSat * L1_GetAddRuleSat(const Substitution & sub);
   void L1_EraseSubclass();
 
 
@@ -453,10 +460,13 @@ class Rule : public Component{
   void A1_SetDelay(EncodedNumber value);
   void A1_SetStrength(EncodedNumber value);
   void A1_SetStrength2(EncodedNumber value);
+  void A1_SetStrengthD(double value);
+  void A1_SetStrength2D(double value);
   void A1_AddRuleSat(Satisfaction * s, RuleSat * rs);
   void A1_RemoveRuleSat(Satisfaction * s, RuleSat * rs);
   void A1_SetRuleLnLikelihood(double val);
-
+  void A1_AddInhibitor(Rule * inhibitor);
+  void A1_RemoveInhibitor(Rule * inhibitor);
 
   // ----- DATA -----
 
@@ -493,14 +503,11 @@ class Rule : public Component{
   // These are the ones with firings or that are inhibited, or all RuleSats
   // for a negative rule.
   map<Satisfaction *, RuleSat *> rule_sats_;
-  // The ln likelihood of the rule existing 
-  // (exclding its satisfactions/firings)
-  double rule_ln_likelihood_;
   // The rule only comes into the model once the TrueTuples that describe
   // its causes come true.  These are the TrueTuples that describe the
   // rule.
   // TODO, make sure no encoding can be a subset of another encoding.
-  vector<TrueTuple *> encoding_;
+  vector<TrueTuple *> causing_tuples_;
 };
 
 class RuleSat : public Component{ // an instance of a rule coming true
@@ -509,21 +516,44 @@ class RuleSat : public Component{ // an instance of a rule coming true
 
 
   // ----- LAYER 2 FUNCTIONS -----
-
-
+  
+  Firing * AddFiring(const Substitution & sub);
+  
   // ----- CONST FUNCTIONS -----
+
+  Firing * GetFiring(const Substitution &sub) const;
+  int NumFirings() const { return firings_.size(); }
+  ComponentType Type() const;
+  Record RecordForDisplayInternal() const;
+  bool NeedsPurpose() const;
+  string ImplicationString(const Firing *firing) const;
+  vector<Component *> TemporalDependents() const;
+  vector<vector<Component *> > TemporalCodependents() const;
+  vector<Component *> Purposes() const;
+  vector<Component *> Copurposes() const;
+  inline bool HasTimeDelay() const { return (rule_->type_!=NEGATIVE_RULE);}
+  inline EncodedNumber GetTimeDelay() const { return rule_->delay_;}
+  double LnLikelihood() const;
+  bool HasPurpose() const;
 
  private:
 
 
   // ----- CONSTRUCTOR(S) -----
 
+  RuleSat(Rule * rule, const Substitution & sub);
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
+  void L1_EraseSubclass();
+  void F2_AdjustLnLikelihoodForNewTime();
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS -----
 
+  void A1_AddFiring(Substitution sub, Firing *f);
+  void A1_RemoveFiring(Substitution sub);
+  void A1_AddInhibitor(RuleSat *rs);
+  void A1_RemoveInhibitor(Rulesat *rs);
 
   // ----- DATA -----
   // fundamental
@@ -535,30 +565,9 @@ class RuleSat : public Component{ // an instance of a rule coming true
   Satisfaction * satisfaction_; 
 
   // computed
-  map<uint64, Firing *> firings_;     // The effects  
+  map<Substitution, Firing *> firings_;     // The effects  
   RuleSat * target_rule_sat_; // the inhibited RuleSat if it's a negative rule
   set<RuleSat *> inhibitors_; // Negative rule sats inhibiting this one
-  int num_firings() { return firings_.size(); }
-
-  RuleSat(Rule * rule, const Substitution & sub);
-  ~RuleSat();
-
-  // Functions of the superclass Component
-  void L1_EraseSubclass();
-  ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
-  bool NeedsPurpose();
-  Firing * GetAddFiring(const Substitution & sub);
-  string ImplicationString(const Firing *firing) const;
-  vector<Component *> TemporalDependents();
-  vector<vector<Component *> > TemporalCodependents();
-  vector<Component *> Purposes();
-  vector<Component *> Copurposes();
-  inline bool HasTimeDelay(){ return (rule_->type_!=NEGATIVE_RULE);}
-  inline EncodedNumber GetTimeDelay() { return rule_->delay_;}
-  void AdjustLnLikelihoodForNewTime();
-  double LnLikelihood() const;
-  bool HasPurpose();
 };
 
 // An instane of a rule firing
@@ -572,42 +581,41 @@ class Firing : public Component{
 
   // ----- CONST FUNCTIONS -----
 
+  ComponentType Type() const;
+  Record RecordForDisplayInternal() const;
+  string ImplicationString() const;
+  inline Rule * GetRule() const{ return rule_sat_->rule_; }
+  vector<Component *> TemporalDependents() const;
+  vector<vector<Component *> > TemporalCodependents() const;
+  vector<Component *> Copurposes() const;
+  bool InvolvesTrueTuple(TrueTuple * p) const;    
+  Substitution GetFullSubstitution() const;
+
  private:
 
 
   // ----- CONSTRUCTOR(S) -----
 
-
+  Firing(RuleSat * rule_sat, Substitution right_substitution);
+  
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
+  void L1_EraseSubclass();
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS -----
 
+  void A1_AddTrueTuple(TrueTuple *t);
+  void A1_RemoveTrueTuple(TrueTuple *t);
 
   // ----- DATA -----
+
   // fundamental
   Substitution right_substitution_; // substitution for new rhs variables
   RuleSat * rule_sat_;  // the corresponding satisfaction of the rule
 
   // computed
-  set<TrueTuple *> true_tuples_; // if it's a positive rule
-    
-  Firing(RuleSat * rule_sat, Substitution right_substitution, bool just_this,
-	 int id);
-  ~Firing();
-
-  // Functions of the superclass Component
-  void L1_EraseSubclass();
-  ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
-  string ImplicationString() const;
-  inline Rule * GetRule() { return rule_sat_->rule_; } 
-  vector<Component *> HardTemporalDependents();
-  vector<Component *> TemporalDependents();
-  vector<vector<Component *> > TemporalCodependents();
-  vector<Component *> Copurposes();
-  bool InvolvesTrueTuple(TrueTuple * p) const;    
-  Substitution GetFullSubstitution();
+  // vector of true tuples aligned with the result_ of the Rule.
+  vector<TrueTuple *> true_tuples_;
 };
 
 // A tuple which is true in our model
@@ -644,7 +652,7 @@ class TrueTuple : public Component{
   // Satisfactions in which this proposition takes part.
   set<Satisfaction *> satisfactions_;
   // If this proposition helps encode a rule, what is it, else NULL
-  Rule * rule_encoded_; 
+  set<Rule *> rules_caused_;
   // Is this proposition required/forbidden in the problem specification
   bool required_;
   bool forbidden_;

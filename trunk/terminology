@@ -1,0 +1,44 @@
+// Copyright (C) 2006 Google Inc. and Georges Harik
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// 
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Author: Noam Shazeer and Georges Harik
+
+(circular) Glossary:
+
+Term - represented by an integer or a string.  Can be one of
+     Constant - (a positive integer) (any string not starting with '*' or '$')
+     Wildcard - (0) ("*")
+     Variable - (negative integer)("$<-x>")
+     
+
+Tuple - An ordered set of terms.
+      Constant Tuple - May only have constants
+      Wildcard Tuple - May have only constants and Wildcards.
+      	       	       Matches constant tuple, where each wildcard can match 
+		       any constant.  There is no concept of a substitution. 
+      Variable Tuple - May have only constants and Variables.
+      	       	       Matches a constat tuple according to a substitution of
+		       constants for variables (two instances of the same
+		       variable must match the same constant).
+
+Pattern - A vector of variable tuples.  It matches a vector of constant tuples.
+	A match must respect order and respect a single substitution.
+	(we may at some point consider sets of tuples instead of vectors of 
+	tuples).  
+
+Substitution - A mapping of terms to terms.
+      	       	       
+

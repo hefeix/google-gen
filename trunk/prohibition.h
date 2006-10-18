@@ -37,8 +37,14 @@ class Prohibition {
   // make sure that Prohibitions are only created using new.  
   static Prohibition * L1_MakeProhibition(Model *m, Tuple prohibited);
   void L1_Erase();
+  // Adds the exception and possibly removes a violation
   void L1_AddException(Tuple exception);
+  // Removes the exception and possibly adds a violation
   void L1_RemoveException(Tuple exception);
+  // We call this function when a new TrueTuple is created and matches the
+  // prohibited pattern.  We check whether it is an exception, and if it
+  // isn't, add it as a violation.
+  void L1_CheckAddViolation(TrueTuple *t);
 
  private:
 
@@ -49,10 +55,6 @@ class Prohibition {
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
-  // We call this function when a new TrueTuple is created and matches the
-  // prohibited pattern.  We check whether it is an exception, and if it
-  // isn't, add it as a violation.
-  void L1_CheckForViolation(TrueTuple *t);
   // These are not just accessor functions.  They also add/remove links to the
   // prohibition from the violating TrueTuple, and from the model's set
   // of violated prohibitions.

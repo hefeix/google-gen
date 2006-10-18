@@ -58,6 +58,9 @@ Tuple AllVar0(int num_terms);
 inline uint64 Fingerprint(const Tuple & s, uint64 level = 0){
   return s.Fingerprint(level);
 }
+// Given a tuple with wildcards and a tuple of literals, do they match.
+bool MatchesWithWildcards(const Tuple & genreal, const Tuple & specific);
+			  
 // Iterates over generalizations of a tuple.  The tuple must be entirely
 // literals, and the generalized tuple iterates over all tuples for which
 // a possibly empty or full subset of the terms of s have been changed to 
@@ -73,15 +76,17 @@ struct GeneralizationIterator {
   Tuple s_;
   Tuple generalized_;
 };
+typedef vector<Tuple> Pattern;
+bool operator <(const Tuple & a, const Tuple & b){return (a.terms_ < b.terms_);}
 
 // TODO? maybe this stuff doesn't belong in this file
-typedef pair<vector<Tuple>, vector<Tuple> > CandidateRule;
-inline static vector<Tuple> Concat(const CandidateRule & r) {
-  vector<Tuple> ret = r.first; 
+typedef pair<Pattern, Pattern > CandidateRule;
+inline static Pattern Concat(const CandidateRule & r) {
+  Pattern ret = r.first; 
   ret.insert(ret.end(), r.second.begin(), r.second.end()); return ret; }
-inline static CandidateRule SplitOffLast(const vector<Tuple> & p) {
+inline static CandidateRule SplitOffLast(const Pattern & p) {
   return make_pair(RemoveFromVector(p, p.size()-1), 
-		   vector<Tuple>(1, p.back())); }
+		   Pattern(1, p.back())); }
 
 
 
@@ -98,7 +103,7 @@ struct Substitution {
   int Lookup(int term) const; // returns term if not found
   bool Contains(int term) const {return sub_ % term;}
   void Substitute(Tuple * s) const;
-  void Substitute(vector<Tuple> * v) const {
+  void Substitute(Pattern * v) const {
     for (uint i=0; i<v->size(); i++) Substitute(&((*v)[i]));
   }
   void Substitute(CandidateRule *c){
@@ -117,20 +122,20 @@ inline uint64 Fingerprint(const Substitution & s, uint64 level = 0){
   return s.Fingerprint(level);
 }
 
-set<int> GetVariables(const vector<Tuple> & v);
+set<int> GetVariables(const Pattern & v);
 
 // removes the tuples that have no variables
-vector<Tuple> RemoveVariableFreeTuples(const vector<Tuple> & v);
+Pattern RemoveVariableFreeTuples(const Pattern & v);
 
 // computes the substitution to get from one tuple to another
 bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
 			 Substitution * sub);
 
-set<int> GetAllTerms(const vector<Tuple> & v);
+set<int> GetAllTerms(const Pattern & v);
 
 Tuple StringToTuple(const string & s);
-string TupleVectorToString(const vector<Tuple> &v);
-vector<Tuple> StringToTupleVector(const string & s);
+string TupleVectorToString(const Pattern &v);
+Pattern StringToTupleVector(const string & s);
 // shows both unsubstituted and substituted variables
 string ToString(const Tuple & s, const Substitution & sub); 
 
@@ -138,18 +143,18 @@ string ToString(const Tuple & s, const Substitution & sub);
 // given another vector of tuples has already been encoded as context.  
 // The user is responsible for adding in the ln likelihood of the terms passed
 // back in arbitrary_terms .
-double TuplesLnLikelihood(const vector<Tuple> &context, 
-			     const vector<Tuple> &to_encode, 
+double TuplesLnLikelihood(const Pattern &context, 
+			     const Pattern &to_encode, 
 			     vector<int> * arbitrary_terms);
 
 // Given a vector of tuples, with variables, we rename the variables
 // so that the first variable to occur in the vector of tuples is 
 // Variable(0), the next is Variable(1), etc.
-void RenameVariablesInOrder(vector<Tuple> * v, Substitution *s);
+void RenameVariablesInOrder(Pattern * v, Substitution *s);
 
 // try to put the pattern in a canonical form
 // I believe that this may be NP-hard, but let's at least make an attempt. 
-vector<Tuple> Canonicalize(const vector<Tuple> & v, Substitution *sub);
+Pattern Canonicalize(const Pattern & v, Substitution *sub);
 
 // Put a rule (an ordered pair of tuple vectors) in canonical form.
 CandidateRule CanonicalizeRule(const CandidateRule & r);
