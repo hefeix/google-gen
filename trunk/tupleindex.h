@@ -36,9 +36,12 @@ class TupleIndex{
   ~TupleIndex();
   // Adds a tuple to the index.  Returns a pointer to the static internal 
   // copy of the tuple.
-  const Tuple * Add(const Tuple & s);
+  const Tuple * Add(const Tuple & t);
   // Removes a tuple from the index.
-  void Remove (const Tuple & s);
+  void Remove (const Tuple & t);
+  // The following two wrappers are to work with the changelist class.
+  void AddWrapper(Tuple t) { Add(t);}
+  void RemoveWrapper(Tuple t) { Remove(t);}
   // s is composed of literals.
   // Returns a pointer to the static internal copy of s, or NULL if absent.
   const Tuple * FindTuple(const Tuple & s);

@@ -82,13 +82,13 @@ Precondition::Precondition(Model * model,
   pattern_ = tuples;
   ln_likelihood_per_sat_ = 0.0;
   num_satisfactions_ = 0;
-  
   model_->L1_InsertIntoClauseToPreconditionMap(this);
-
-  uint64 fprint = Fingerprint(pattern_);
-  model_->changelist_.
-    Make(new HashMapInsertChange<uint64, Precodition *>
-	 (precondition_index_, fprint, this));
+  vector<int> arbitrary_terms;
+  direct_pattern_encoding_ln_likelihood_ = 
+    PatternLnLikelihood(Pattern(), pattern_, &arbitrary_terms);  
+  for (uint i=0; i<arbitrary_terms.size(); i++)
+    model_->L1_AddArbitraryTerm(arbitrary_terms[i]);
+  model_->A1_InsertIntoPreconditionIndex(pattern_, this);
   ComputeSetTime();
   uint64 num_sat;
   uint64 work;
@@ -99,12 +99,40 @@ Precondition::Precondition(Model * model,
 
 void Precondition::EraseSubclass(){
   A1_RemoveFromModel();
-  model_->changelist_.
-    Make(new HashMapRemoveChange<uint64, Precodition *>
-	 (precondition_index_, fprint, this));
+  model_->A1_RemoveFromPreconditionIndex(pattern_, this);
   model_->A1_RemoveFromModelClauseToPreconditionMap(this);
+  vector<int> arbitrary_terms;
+  PatternLnLikelihood(Pattern(), pattern_, &arbitrary_terms);  
+  for (uint i=0; i<arbitrary_terms.size(); i++)
+    model_->L1_RemoveArbitraryTerm(arbitrary_terms[i]);
 }
 
+/*
+void Precondition::L1_MakeDirectlyEncoded(){
+  vector<int> arbitrary_terms;
+  A1_SetDirectTupleEncodingLnLikelihood
+    (TuplesLnLikelihood(Pattern(), pattern_, &arbitrary_terms));
+  for (uint i=0; i<arbitrary_terms.size(); i++)
+    model_->L1_AddArbitraryWord(arbitrary_terms[i]);
+  A1_SetTupleEncoded(false);
+  ComputeSetLnLikelihood();
+}
+void Precondition::L1_MakeNotDirectlyEncoded(){
+  vector<int> arbitrary_terms;
+  TuplesLnLikelihood(Pattern(), pattern_, &arbitrary_terms);
+  for (int i=0; i<arbitrary_terms.size(); i++) {
+    model_->L1_SubtractArbitraryWord(arbitrary_terms[i]);
+  } 
+}
+void Precondition::L1_MakeTupleEncoded(){
+  vector<Tuple> causes = ComputeCauses();
+  for(int i=0; i<causes.size(); i++) {
+    TrueTuple *t = model_->L1_GetAddTrueTuple(causes[i]);
+    
+  }
+}
+void Precondition::L1_MakeNotTupleEncoded(){
+}*/
 void Precondition::A1_AddRule(Rule *r){
   model_->changelist_.Make(new SetInsertChange<Rule *>(&rules_, r));
 }
@@ -254,12 +282,20 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
     model_->A1_InsertIntoWildcardTupleToResultMap
       (VariableToWildcard(result_[i]), this, i);
   }
-  vector<Tuple> causes = ComputeCauses();
-  for (uint i=0; i<causes.size(); i++) {
-    TrueTuple * p = model_->GetAddTrueTuple(encoding[i]);
-    causing_tuples_.push_back(p);
-    p->A1_AddToRulesCaused(this);
-  }
+  vector<int> arbitrary_terms;
+  direct_pattern_encoding_ln_likelihood_ = 
+    PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);  
+  for (uint i=0; i<arbitrary_terms.size(); i++)
+    model_->L1_AddArbitraryTerm(arbitrary_terms[i]);
+
+  // TUPLE ENCODING STUFF
+  //vector<Tuple> causes = ComputeCauses();
+  //for (uint i=0; i<causes.size(); i++) {
+  //  TrueTuple * p = model_->GetAddTrueTuple(encoding[i]);
+  //  causing_tuples_.push_back(p);
+  //  p->A1_AddToRulesCaused(this);
+  // }
+
   ComputeSetTime();  
   if (type == NEGATIVE_RULE) {  // Make all the RuleSats exist.
     vector<Substitution> substitutions;
@@ -289,7 +325,11 @@ Rule::EraseSubclass(){
 	(VariableToWildcard(result_[i]), this, i);
     }
   }
-  forall(run, causing_tuples_) (*run)->A1_RemoveFromRulesCaused(this);
+  vector<int> arbitrary_terms;
+  PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);  
+  for (uint i=0; i<arbitrary_terms.size(); i++)
+    model_->L1_RemoveArbitraryTerm(arbitrary_terms[i]);
+  //forall(run, causing_tuples_) (*run)->A1_RemoveFromRulesCaused(this);
 }
 
 set<int> Rule::RightVariables() const{
@@ -300,6 +340,7 @@ set<int> Rule::LeftVariables() const{
 }
 
 // TODO: Revisit this.   
+/*
 vector<Tuple> Rule::ComputeTupleCauses() const{
   vector<Tuple> ret;
   Tuple s;
@@ -351,6 +392,7 @@ vector<Tuple> Rule::ComputeTupleCauses() const{
   }
   return ret;
 }
+*/
 bool Rule::HasFiring() const{
   forall(run, rule_sats_){
     if (run->second->firings_.size()) return true;
@@ -549,40 +591,58 @@ string Firing::ImplicationString() const{
 
 
 // ----- TRUETUPLE -----
-TrueTuple::TrueTuple(Model * model, 
-					const vector<Firing *> & causes, 
-					Tuple tuple,
-					bool just_this, int id)
-  :Component(model, id){
-  causes_.insert(causes.begin(), causes.end());
+TrueTuple::TrueTuple(Model * model, Tuple tuple)
+  :Component(model){
   tuple_ = tuple;
-  rule_encoded_ = NULL;
-  CheckForbiddenRequired();
-  given_ = false;
-  forall(run, causes) {
-    (*run)->true_tuples_.insert(this);
-  }
-  const Tuple * prop = model_->tuple_index_.Add(tuple);
-  model_->index_to_true_tuple_[prop] = this;
+  required_count_ = 0;
+  // Insert the tuple into the tuple index
+  model_->changelist_->Make
+    (new MemberCallChange<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
+					     &TupleIndex::AddWrapper,
+					     &TupleIndex::RemoveWrapper));
+  // Add it to the map from tuple to TrueTuple
+  model_->A1_InsertIntoTupleToTrueTuple(tuple_);
   ComputeSetTime();
-  model_->RecordAddComponent(this);
-  vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > satisfactions;
-  model_->FindSatisfactionsForTuple(*prop, &satisfactions, -1, 
-					  true, false);  
+  // Find the new satisfactions.
+  vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > 
+    satisfactions;
+  model_->FindSatisfactionsForTuple(tuple_, &satisfactions, -1, 
+				    true, false);
   for (uint i=0; i<satisfactions.size(); i++) {
     Precondition * precondition = satisfactions[i].first;
+    // The number of new satisfactions of thiss precondition.
     uint64 num_subs = satisfactions[i].second.first;
+    precondition->A1_AddToNumSatisfactions(num_subs);
+    precondition->ComputeSetLnLikelihood();
+    // Make RuleSats for the satisfactions of negative rules.
     const vector<Substitution> & subs = satisfactions[i].second.second;
-    precondition->AddToNumSatisfactions(num_subs);
-    if (!just_this) {
-      forall (run, precondition->negative_rules_) {
-	CHECK(subs.size() == num_subs);
-	for (uint j=0; j<subs.size(); j++) {
-	  new RuleSat(*run, subs[j]);
-	}	
+    forall (run, precondition->negative_rules_) {
+      CHECK(subs.size() == num_subs);
+      for (uint j=0; j<subs.size(); j++) {
+	new RuleSat(*run, subs[j]);
       }
     }
   }
+  // HERE Figure out whether any prohibitions are violated.  
+  ComputeSetLnLikelihood();
+}
+
+void TrueTuple::Destroy(){
+  vector<pair<Precondition *, pair<uint64, vector<Substitution> > > >satisfactions;
+  model_->FindSatisfactionsForTuple(tuple_, 
+					  &satisfactions, -1, false, false);
+  for (uint i=0; i<satisfactions.size(); i++) {
+    satisfactions[i].first
+      ->AddToNumSatisfactions(-satisfactions[i].second.first);
+  }
+  forall (run, causes_) {
+    (*run)->true_tuples_.erase(this);
+  }
+  const Tuple * prop = model_->tuple_index_.FindTuple(tuple_);
+  CHECK(prop);
+  CHECK(model_->index_to_true_tuple_[prop] == this);
+  model_->tuple_index_.Remove(tuple_);
+  model_->index_to_true_tuple_.erase(prop);
 }
 
 void Component::ComponentDestroy() {
@@ -600,26 +660,6 @@ void Component::ComponentDestroy() {
   model->ReleaseID(id);
 }
 
-void TrueTuple::Destroy(){
-  if (required_) model_->absent_required_.insert(tuple_.Fingerprint());
-  if (forbidden_) model_->present_forbidden_.erase(this);
-
-  vector<pair<Precondition *, pair<uint64, vector<Substitution> > > >satisfactions;
-  model_->FindSatisfactionsForTuple(tuple_, 
-					  &satisfactions, -1, false, false);
-  for (uint i=0; i<satisfactions.size(); i++) {
-    satisfactions[i].first
-      ->AddToNumSatisfactions(-satisfactions[i].second.first);
-  }
-  forall (run, causes_) {
-    (*run)->true_tuples_.erase(this);
-  }
-  const Tuple * prop = model_->tuple_index_.FindTuple(tuple_);
-  CHECK(prop);
-  CHECK(model_->index_to_true_tuple_[prop] == this);
-  model_->tuple_index_.Remove(tuple_);
-  model_->index_to_true_tuple_.erase(prop);
-}
 
 ComponentType Precondition::Type() const { return PRECONDITION; }
 ComponentType Satisfaction::Type() const { return SATISFACTION; }
@@ -902,12 +942,13 @@ double Component::LnLikelihood() const {
   return 0.0;
 }
 double Precondition::LnLikelihood() const {
-  double ret = precondition_ln_likelihood_;
+  double ret = direct_pattern_encoding_ln_likelihood_;
   ret += num_satisfactions_ * ln_likelihood_per_sat_;
   return ret;
 }
-double Rule::LnLikelihood() const {
+double Rule::LnLikelihood() const {  
   double ret = EncodedNumberLnLikelihood(strength_);
+  ret += direct_pattern_encoding_ln_likelihood_;
   if (type_ == CREATIVE_RULE) ret += EncodedNumberLnLikelihood(strength2_);
   if (type_ != NEGATIVE_RULE)  ret += EncodedNumberLnLikelihood(delay_);
   return ret;
