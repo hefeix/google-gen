@@ -193,8 +193,7 @@ template <class C> class DeleteOnRollbackChange : public Change {
 //
 // Sample Usage:
 // cl.Make(new MemberCallChange<Employee>(&fred, &Employee::Hire,
-//                                              &Employee::Fire, 0));
-
+//                                              &Employee::Fire));
 template <class C> class MemberCallChange : public Change {
  public:
   MemberCallChange(C * object, 
@@ -216,6 +215,35 @@ template <class C> class MemberCallChange : public Change {
   void (C::*revert_function_)(); 
   void (C::*make_permanent_function_)(); 
   C * object_;
+};
+
+// same as above with one parameter functions
+// Sample Usage:
+// cl.Make(new MemberCallChange<Company, Employee>
+// 	  (&webvan, fred, &Company::Hire, &Company::Fire));
+template <class C, class P> class MemberCallChange : public Change {
+ public:
+  MemberCallChange(C * object, P parameter, 
+		   void (C::*change_function)(P),
+		   void (C::*revert_function)(P),
+		   void (C::*make_permanent_function)(P) = 0) {
+    object_ = object;
+    parameter_ = parameter;
+    revert_function_ = revert_function;
+    make_permanent_function_ = make_permanent_function;
+    (object_->*change_function)(parameter_);
+  }
+  void Undo(){
+    (object_->*revert_function_)(parameter_);
+  }
+  void MakePermanent(){
+    if (make_permanent_function_) 
+      (object_->*make_permanent_function_)(parameter_);
+  }
+  void (C::*revert_function_)(P); 
+  void (C::*make_permanent_function_)(P); 
+  C * object_;
+  P parameter_;
 };
 
 #endif // _CHANGELIST_H_

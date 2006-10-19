@@ -194,30 +194,35 @@ string ToString(const Tuple & s, const Substitution & sub){
   ret += "]";
   return ret;
 }
-double TuplesLnLikelihood(const Pattern &context, 
-			     const Pattern &to_encode, 
-			     vector<int> * arbitrary_terms){
-  arbitrary_terms->clear();
+double PatternLnLikelihood(const Pattern &context, 
+			   const Pattern &to_encode, 
+			   vector<int> * arbitrary_terms){
   CHECK(arbitrary_terms);
+  arbitrary_terms->clear();
   set<int> terms_seen;
   double ret = 0;
   bool encoding = false;
-  // CHEAT: we should really encode the lengths of tuples
+  // encode the number of tuples in the pattern
+  ret += uintQuadraticLnProb(to_encode.size()); 
   for (uint i=0; i<context.size()+to_encode.size(); i++) {
     if (i == context.size()) encoding = true;
-    const Tuple & s 
+    const Tuple & s;
+    CHECK(s.size() > 0);
+    // encode the length of the tuple.
+    if (encoding) ret += uintQuadraticLnProb(s.size()-1);
       = (i<context.size())?context[i]:to_encode[i-context.size()];
     for (uint j=0; j<s.size(); j++) {
-      int w = s[j];
-      if (terms_seen % w) {
+      int t = s[j];
+      // specify whether it's a back-reference or not.
+      if (encoding) ret += log(0.5);
+      if (terms_seen % t) {
 	if (encoding) ret -= log(terms_seen.size());
       } else {
-	if (encoding) arbitrary_terms->push_back((w<0)?-1:w);
-	terms_seen.insert(w);
+	if (encoding) arbitrary_terms->push_back((t<0)?-1:t);
+	terms_seen.insert(t);
       }
     }    
   }
-  ret += uintQuadraticLnProb(to_encode.size());
   return ret;  
 }
 

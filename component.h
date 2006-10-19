@@ -258,7 +258,11 @@ class Precondition : public Component {
 
   // ----- LAYER 2 FUNCTIONS -----
   
-
+  // TUPLE ENCODING STUFF
+  // change encoding schemes.
+  //void SwitchToTupleEncoding();
+  //void SwitchToDirectEncoding();
+  
   // ----- CONST FUNCTIONS -----
 
   ComponentType Type() const;
@@ -268,6 +272,10 @@ class Precondition : public Component {
   vector<Component *> TemporalDependents() const; // Rules, Satisfactions
   bool NeedsPurpose() const; // yes
   double LnLikelihood() const;
+
+  // TUPLE ENCODING STUFF
+  // figures out what tuples cause the precondition under the tuple encoding.
+  // set<Tuple> ComputeTupleCauses() const;
 
 
  private:
@@ -286,6 +294,13 @@ class Precondition : public Component {
   // Functions of the superclass Component()
   void L1_EraseSubclass();
 
+  // TUPLE ENCODING STUFF
+  //  These functions add and remove the global costs associated with the
+  // different encoding schemes.   
+  //void L1_MakeDirectlyEncoded();
+  //void L1_MakeNotDirectlyEncoded();
+  //void L1_MakeTupleEncoded();
+  //void L1_MakeNotTupleEncoded();
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS -----
 
@@ -319,12 +334,26 @@ class Precondition : public Component {
   // maps substitution to satisfaction object
   // some satisfactions are not represented if they are not interesting
   map<Substitution, Satisfaction *> satisfactions_; 
-  // The prior of the precondition existing, excluding parts accounted
-  // for elsewhere in the model.  
-  double precondition_ln_likelihood_;
+  // Under direct encoding, the encoding cost of the tuples, excluding for
+  // universal naming costs accounted for elsewhere.
+  double direct_pattern_encoding_ln_likelihood_;
   // The additional ln likelihood added to the model for each satisfaction
   // of the precondition for which none of the associated rules are satisfied.
   double ln_likelihood_per_sat_;
+
+  // TUPLE ENCODING STUFF
+  // Under direct encoding, the encoding cost of the tuples, excluding
+  // universal naming costs accounted for elsewhere.
+  //double direct_pattern_encoding_ln_likelihood_;
+  // used if the rule is tuple encoded.
+  // The rule only comes into the model once the TrueTuples that describe
+  // its causes come true.  These are the TrueTuples that describe the
+  // rule.
+  // TODO, make sure no encoding can be a subset of another encoding.
+  //set<TrueTuple *> tuple_causes_;
+  // Is this object encoded (paid for) by tuples or directly (using the global
+  // naming scheme)
+  //bool tuple_encoded_;
 };
 
   
@@ -407,13 +436,18 @@ class Rule : public Component{
   // Changes the delay on the rule.
   // may leave some times dirty.
   void ChangeDelay(EncodedNumber new_delay);
-  // Returns the tuples that encode the rule.
+  // change encoding schemes.
+
+  // TUPLE ENCODING STUFF
+  // void SwitchToTupleEncoding();
+  // void SwitchToDirectEncoding();
 
 
   // ----- CONST FUNCTIONS -----
 
   Firing * GetFiring(const Substitution &sub) const;
-  vector<Tuple> ComputeCauses() const;
+  // figures out what tuples cause the rule under the tuple encoding.
+  set<Tuple> ComputeTupleCauses() const;
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   vector<Component *> TemporalDependents() const;
@@ -453,6 +487,13 @@ class Rule : public Component{
   RuleSat * L1_GetAddRuleSat(const Substitution & sub);
   void L1_EraseSubclass();
 
+  // TUPLE ENCODING STUFF
+  //  These functions add and remove the global costs associated with the
+  // different encoding schemes.   
+  //void L1_MakeDirectlyEncoded();
+  //void L1_MakeNotDirectlyEncoded();
+  //void L1_MakeTupleEncoded();
+  //void L1_MakeNotTupleEncoded();  
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS -----
 
@@ -503,11 +544,20 @@ class Rule : public Component{
   // These are the ones with firings or that are inhibited, or all RuleSats
   // for a negative rule.
   map<Satisfaction *, RuleSat *> rule_sats_;
+
+  // TUPLE ENCODING STUFF
+  // Under direct encoding, the encoding cost of the tuples, excluding
+  // universal naming costs accounted for elsewhere.
+  //double direct_pattern_encoding_ln_likelihood_;
+  // used if the rule is tuple encoded.
   // The rule only comes into the model once the TrueTuples that describe
   // its causes come true.  These are the TrueTuples that describe the
   // rule.
   // TODO, make sure no encoding can be a subset of another encoding.
-  vector<TrueTuple *> causing_tuples_;
+  //set<TrueTuple *> tuple_causes_;
+  // Is this object encoded (paid for) by tuples or directly (using the global
+  // naming scheme)
+  //bool tuple_encoded_;
 };
 
 class RuleSat : public Component{ // an instance of a rule coming true
@@ -625,21 +675,43 @@ class TrueTuple : public Component{
 
   // ----- LAYER 2 FUNCTIONS -----
 
+  void AddCause(Firing * cause);
+  void RemoveCause(Firing * cause);
 
   // ----- CONST FUNCTIONS -----
+
+  ComponentType Type() const;
+  Record RecordForDisplayInternal() const;
+  set<Firing *> GetResultFirings() const;
+  set<TrueTuple *> GetResultTrueTuples() const;
+  set<TrueTuple *> GetCauseTrueTuples() const;
+  vector<Component *> TemporalDependents() const;
+  vector<vector<Component *> > TemporalCodependents() const;
 
  private:
 
 
   // ----- CONSTRUCTOR(S) -----
 
+  TrueTuple(Model * model, Tuple tuple);
+
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+
+  void L1_EraseSubclass();
 
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS -----
 
-
+  void A1_AddViolatedProhibition(Prohibition *p);
+  void A1_RemoveViolatedProhibition(Prohibition *p);
+  void A1_MakeRequired(); // increases the required_ count by 1.
+  void A1_MakeNotRequired(); // decreases the required_ count by 1.
+  void A1_AddCause(Firing *cause);
+  void A1_RemoveCause(Firing *cause);
+  void A1_AddSatisfaction(Satisfaction *sat);
+  void A1_RemoveSatisfaction(Satisfaction *sat);
+  
   // ----- DATA -----
   // fundamental
   Tuple tuple_;  
@@ -651,37 +723,14 @@ class TrueTuple : public Component{
   // Satisfactions in which this proposition takes part.
   set<Satisfaction *> satisfactions_;
   // What rules does this Tuple help encode?
-  set<Rule *> rules_caused_;
-  // Is this proposition required/forbidden in the problem specification
-  bool required_;
+  //set<Rule *> rules_caused_;
+  
+  // How many things require this tuple to be true.
+  int required_count_;
+  // prohibitions we are violating (from the problem spec, or from the future 
+  // tuple encoding stuff).
   set<Prohibition *> violated_prohibitions_;
-  // Is this tuple given externally.
-  bool given_;
 
-  TrueTuple(Model * model, 
-		  const vector<Firing *> & causes, 
-		  Tuple proposition, bool just_this,
-		  int id);
-  ~TrueTuple();
-
-  // Functions of the superclass Component
-  void L1_EraseSubclass();
-  ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
-  set<Firing *> GetResultFirings() const;
-  set<TrueTuple *> GetResultTrueTuples() const;
-  set<TrueTuple *> GetCauseTrueTuples() const;
-  vector<Component *> TemporalDependents();
-  vector<vector<Component *> > TemporalCodependents();
-
-  // other functions
-  void AddCause(Firing * cause);
-  void RemoveCause(Firing * cause);
-  // Would removing this proposition cause the model to not fulfill its
-  // specifications.  You can limit the work done by setting max_work
-  // to something other than -1.  This is not guaranteed to give a conclusive
-  // answer, even with unlimited time.
-  void CheckForbiddenRequired();
 };
 
 #endif

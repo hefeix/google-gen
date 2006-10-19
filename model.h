@@ -99,7 +99,7 @@ class Model {
   // satisfactions may be omitted based on the settings of the last two 
   // parameters.
   // TODO, make actual_work a parameter, for uniformity sake.
-  int64 FindSatisfactionsForProposition
+  int64 FindSatisfactionsForTuple
     ( const Tuple & s, 
       vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > 
       *results,
@@ -242,10 +242,10 @@ class Model {
   int next_id_;
   map<int, Component *> id_to_component_;
   TupleIndex tuple_index_; // stores pointers to Firings
-  map<const Tuple *, TrueTuple *> index_to_true_tuple_;
+  map<Tuple, TrueTuple *> tuple_to_true_tuple_;
   set<Component *> times_dirty_; //components whose times need fixing
   set<Component *> never_happen_; // components which never happen
-  set<Component *> required_never_happen_; // required and never happen
+  set<TrueTuple *> required_never_happen_; // required and never happen
   // maps clauses found in preconditions
   hash_map<Tuple, set<pair<Precondition *, int> > > clause_to_precondition_;
   // same thing for the results of rules.  
