@@ -134,13 +134,14 @@ const Tuple * TupleIndex::RandomTupleContaining(int w){
   return 0;
 }
 */
+const Tuple * TupleIndex::GetAdd(const Tuple &s) {
+  const Tuple * t = FindTuple(s);
+  if (!t) return add(s);
+}
 const Tuple * TupleIndex::Add(const Tuple & s) {  
   CHECK(s.Pattern()==0);
+  CHECK(!FindTuple(s));
   uint64 fp = s.Fingerprint();
-  if (fully_specified_ % fp) {
-    cerr << "Tuple already exists: " << s.ToString() << endl;
-    return 0;
-  }
   lengths_[s.size()]++; total_tuples_++;
   FullySpecifiedNode * n = new FullySpecifiedNode;
   fully_specified_[fp] = n;

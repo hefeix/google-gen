@@ -91,8 +91,8 @@ class Model {
   // properly.
   void CheckLikelihood();
   
-  // Finds all satisfactions of preconditions that involve a given true 
-  // proposition.
+  // Finds all satisfactions of preconditions that involve a given tuple.
+  // If the tuple is not in the model, it pretends that it is.
   // returns work, or -1 if we run out of time.
   // In the results vector, it puts triples of precondition, number of
   // satisfactions, and actual satisfactions.  Some or all of the actual 
@@ -251,7 +251,6 @@ class Model {
   // same thing for the results of rules.  
   hash_map<Tuple, set<pair<Rule *, int> > > clause_to_result_;
   hash_map<vector<Tuple>, Precondition *> precondition_index_;
-  map<uint64, Rule *> rule_index_; // TODO: change the key type
   // maps the prohibited tuple of a prohibition to the prohibition.  
   map<Tuple, set<Prohibition *> > prohibition_index_;
   vector<Change *> history_;

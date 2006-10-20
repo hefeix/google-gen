@@ -414,7 +414,13 @@ int64 Model::FindSatisfactionsForTuple
   vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > *results,
   int64 max_work,
   bool return_subs_for_negative_rules = true,
-  bool return_subs_for_all_rules = false  ){
+  bool return_subs_for_all_rules = false){
+  DestructibleCheckpoint dcp(&changelist_);
+  if (!tuple_index_.FindTuple(s))
+    changelist_.Make
+      (new MemberCallChange<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
+					       &TupleIndex::AddWrapper,
+					       &TupleIndex::RemoveWrapper));
   if (results) results->clear();
   int64 total_work = 0;
   for (GeneralizationIterator run_g(s); !run_g.done(); ++run_g) {
@@ -424,10 +430,11 @@ int64 Model::FindSatisfactionsForTuple
       Precondition * precondition = run->first;
       int clause_num = run->second;
       Substitution partial_sub;
-      vector<Tuple> simplified_precondition = precondition->clauses_;
-      
-      if (!ComputeSubstitution(precondition->clauses_[clause_num], s, &partial_sub))
-	continue;
+      vector<Tuple> simplified_precondition = precondition->pattern_;
+      // This can fail (gracefully) if the clause contains the same variable 
+      // at two positions and the tuple doesn't.
+      if (!ComputeSubstitution(precondition->clauses_[clause_num], s, 
+			       &partial_sub)) continue;
       partial_sub.Substitute(&simplified_precondition);
       uint64 num_complete_subs;
       uint64 work = 0;

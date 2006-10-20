@@ -53,6 +53,15 @@ class Changelist {
   vector<Change *> history_;
 };
 
+class DestructibleCheckpoint{
+ public:
+  DestructibleCheckpoint(Changelist * cl);
+  ~DestructibleCheckpoint();
+ private:
+  Checkpoint cp_;
+  Changelist *cl_;
+};
+
 // Subclass this.  
 // Use the constructor to make changes and the Undo() function to undo them.
 // You can optionally implement the MakePermanent() function which is called
@@ -61,7 +70,7 @@ class Change {
  public:
   virtual void Undo() = 0;
   virtual void MakePermanent() {};
-  virtual ~Change(){};
+  ~Change();
 };
 
 // Changes the value of a variable.  

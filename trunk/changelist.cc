@@ -18,6 +18,14 @@
 
 #include "changelist.h"
 
+void DestructibleCheckpoint::DestructibleCheckpoint(Changelist *cl){
+  cl_ = cl;
+  cp_ = cl_->GetCheckpoint();
+}
+DestructibleCheckpoint::~DestructibleCheckpoint(){
+  cl_->Rollback(cp_);
+}
+
 void Changelist::Make(Change * c){
   history_.push_back(c);
 }
