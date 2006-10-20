@@ -38,6 +38,8 @@
 //           d. All of the indices kept by the model are up to date.
 //               TODO( include list of indices )
 //           e. Components that need a purpose have a purpose.
+//           f. All satisfactions of negative rules have their rulesats
+//              represented explicitly.
 //
 // Layer 3: Global consistency:
 //           a. The times are all clean.
@@ -105,6 +107,8 @@ class Component{
 
   // This function makes the component not exist.  It also first erases its
   // StructuralDependents, and its Copurposes that no loner have a purpose.  
+  // You can call Erase() on anything but Satisfaction and RuleSat objects.
+  // Those can't be removed in a Layer 2 manner, so call L1_Erase.
   void Erase(); // but don't delete.
   // The time_ field is set lazily to save time.  Sometimes it is locally 
   // correct (clean) and sometimes it might be localy incorrect (dirty).  
@@ -211,6 +215,11 @@ class Component{
   // times and dirty bits may be incorrect all over the model.  
   void L1_SetTimeMaintainConsistency(Time new_time, bool adjust_dirty_bits);
 
+  // Erase any object, and recursively erase its structural dependents, and
+  // anything that becomes purposeless. 
+  // This function is layer 2, except on Satisfaction and negative RuleSat 
+  // objects.
+  void L1_Erase();
   // the subclass-specific parts of the erase function.
   virtual void L1_EraseSubclass() = 0;
 
@@ -447,7 +456,7 @@ class Rule : public Component{
 
   Firing * GetFiring(const Substitution &sub) const;
   // figures out what tuples cause the rule under the tuple encoding.
-  set<Tuple> ComputeTupleCauses() const;
+  // set<Tuple> ComputeTupleCauses() const;
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   vector<Component *> TemporalDependents() const;

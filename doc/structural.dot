@@ -9,6 +9,7 @@ digraph components { // red green blue
 	NegRule -> NegRuleSat [color=green];
 	RuleSat -> NegRuleSat [color=green];
 	RuleSat -> Firing [color=green];
+	TrueTuple -> Satisfaction [color=green];
 	TrueTuple -> Firing [color=green];
 	TrueTuple -> Rule [color=green];
 	TrueTuple -> NegRule [color=green];

@@ -58,15 +58,21 @@ void Component::A1_SetLnLikelihood(double new_ln_likelihood){
   model_->changelist_.Make(new ValueChange<double>(&model_ln_, val));
 }
 void Component::Erase(){
+  CHECK(Type() != RULESAT && Type() != SATISFACTION);
+  L1_Erase();
+}
+void Component::L1_Erase(){
+  A1_SetExists(false);
   vector<Component *> dep = StructuralDependents();
   vector<Component *> copurposes = Copurposes();
   for (int i=0; i<dep.size(); i++) {
     if (dep[i]->Exists()) dep[i]->Erase();
   }
-  if (!Exists()) return;
+
+  model_->A1_RemoveFromNeverHappen(this);
+  model_->A1_RemoveFromTimesDirty(this);
 
   L1_EraseSubclass();
-  A1_SetExists(false);
   model_->A1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
 
   for (int i=0; i<copurposes.size(); i++) {
@@ -573,6 +579,7 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
 void Firing::EraseSubclass() {
   forall(run, true_tuples_) {
     (*run)->A1_RemoveCause(this);
+    (*run)->ComputeSetTime();
   }
   rule_sat_->A1_RemoveFiring(right_substitution_);
   rule_sat_->ComputeSetLnLikelihood();
@@ -623,43 +630,44 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
       }
     }
   }
-  // HERE Figure out whether any prohibitions are violated.  
+  // Figure out whether any prohibitions are violated.  
+  for (GerneralizationIterator run_g(tuple_); !run_g.done(); ++run_g) {
+    set<Prohibition *> * prohibitions 
+      = model_->prohibition_index_ % run_g.generalized();
+    if (prohibitions) forall(run_p, *prohibitions) {
+      (*run_p)->L1_CheckAddViolation(this);
+    }
+  }
   ComputeSetLnLikelihood();
 }
 
-void TrueTuple::Destroy(){
-  vector<pair<Precondition *, pair<uint64, vector<Substitution> > > >satisfactions;
-  model_->FindSatisfactionsForTuple(tuple_, 
-					  &satisfactions, -1, false, false);
+void TrueTuple::EraseSubclass(){
+  // We don't have to deal with firings, since they are structural dependents.
+  CHECK(required_count_ == 0);
+  // Caveat: we can't directly iterate over violated_prohibitions_, since
+  // we are implicitly erasing its elements. 
+  while (violated_prohibitions_.size()) {
+    (*violated_prohibitions_.begin())->L1_RemoveViolation(this);
+  }
+  // The satisfactions that are explicitly represented have been destroyed, 
+  // as they are structural dependents, but we still need to decrease the
+  // satisfaction counts at the preconditions.  
+  vector<pair<Precondition *, 
+    pair<uint64, vector<Substitution> > > >satisfactions;
+  model_->FindSatisfactionsForTuple(tuple_, &satisfactions, -1, false, false);
   for (uint i=0; i<satisfactions.size(); i++) {
     satisfactions[i].first
-      ->AddToNumSatisfactions(-satisfactions[i].second.first);
+      ->A1_AddToNumSatisfactions(-satisfactions[i].second.first);
+    satisfactions[i].first->ComputeSetLnLikelihood();
   }
-  forall (run, causes_) {
-    (*run)->true_tuples_.erase(this);
-  }
-  const Tuple * prop = model_->tuple_index_.FindTuple(tuple_);
-  CHECK(prop);
-  CHECK(model_->index_to_true_tuple_[prop] == this);
-  model_->tuple_index_.Remove(tuple_);
-  model_->index_to_true_tuple_.erase(prop);
+  
+  model_->A1_RemoveFromRequiredNeverHappen(this);
+  model_->A1_RemoveFromTupleToTrueTuple(tuple_);
+  model_->changelist_->Make
+    (new MemberCallChange<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
+					     &TupleIndex::RemoveWrapper,
+					     &TupleIndex::AddWrapper));
 }
-
-void Component::ComponentDestroy() {
-  CHECK(StructuralDependents().size()==0);
-  SetTime(NEVER, true); // will appropriately flip time dirty bit for dependents
-  int id = id_;
-  Model *  model = model_;
-  model_->RecordRemoveComponent(this);
-  model_->ln_likelihood_ -= ln_likelihood_;
-  ln_likelihood_ = 0.0;
-  MakeTimeClean();
-  model_->never_happen_.erase(this);
-  model_->required_never_happen_.erase(this);
-  Destroy();
-  model->ReleaseID(id);
-}
-
 
 ComponentType Precondition::Type() const { return PRECONDITION; }
 ComponentType Satisfaction::Type() const { return SATISFACTION; }
