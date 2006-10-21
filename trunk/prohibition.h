@@ -33,6 +33,14 @@ class Prohibition {
   // I have no friends.  Just use the public methods and we will be
   // acquaintances.  
  public:
+
+  // ----- CONST FUNCTIONS -----
+
+  void TupleIsProhibited(const Tuple & t) const;
+
+
+  // ----- COMPLICATED L1 FUNCTIONS -----
+
   // Factory constructor to adhere to the L1 naming convention and to
   // make sure that Prohibitions are only created using new.  
   static Prohibition * L1_MakeProhibition(Model *m, Tuple prohibited);
@@ -46,8 +54,8 @@ class Prohibition {
   // isn't, add it as a violation.
   void L1_CheckAddViolation(TrueTuple *t);
 
- private:
 
+ private:
   // ----- CONSTRUCTORS -----
 
   Prohibition(Model *m, Tuple prohibited);
