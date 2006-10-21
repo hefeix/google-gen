@@ -742,4 +742,10 @@ class TrueTuple : public Component{
 
 };
 
+// TUPLE ENCODING STUFF
+// Returns the representation of a tuple (a clause in a rule).
+// Used in determining the encoding of rules.
+// vector<Tuple> ComputeTupleEncoding(const Tuple &s, int name);
+
+
 #endif

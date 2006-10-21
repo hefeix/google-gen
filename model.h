@@ -35,109 +35,85 @@ typedef uint Checkpoint;
 
 class Model {
  public:
-  
-  // Changes are tracked for the purpose of rolling them back when something
-  // doesn't make the model better.
-  // These are the types of changes.
-  enum Action {
-    INVALID_ACTION,
-    ADD_COMPONENT,    // add a component to the model
-    REMOVE_COMPONENT, // remove a component from the model
-    CHANGE_STRENGTH,  // change the strength of a rule
-    CHANGE_DELAY,     // change the delay on a rule
-    NUM_ACTIONS,
-  };
-  struct Change{
-    Action action_;
-    // The component which was removed, if it was REMOVE_COMPONENT
-    // we own the object at the end of this pointer.
-    ComponentEssentials * component_essentials_; 
-    int component_id_;
-    EncodedNumber old_val_; // for change_strength or change_delay
-    EncodedNumber old_val2_; // for change_strength
-    string ToString() const; // just for debugging
-    Change();
-    ~Change();
-  };
-  // We keep a vector of changes as a history, and a checkpoint is simply
-  // an index into that vector.  To roll back, just pop until that point.
-  typedef uint Checkpoint;
-
-  // construction/destruction
+  // ----- LAYER 3 FUNCTIONS -----
 
   Model();
   ~Model();
+
+
+  // ----- LAYER 2 FUNCTIONS -----
+
+  // Add a requirement to the problem specification.
+  TrueTuple * AddRequirementToSpec(Tuple *t);
+
+  // Add a prohibition to the problem specification.  The first parameter
+  // is a wildcard tuple to be forbidden, and the second is a list of
+  // constant tuple exceptions.
+  Prohibition * AddProhibitionToSpec(Tuple *prohibited,
+                                     vector<Tuple> exceptions);
+
+  // The specification can be read from a file.  A line in the file like
+  // [ foo goo *moo ]
+  // means that the tuple [ foo goo moo ] is required, and all other
+  // three-term tuples starting with "foo goo" are forbidden.
+  void ReadSpec(istream * input); // do this first.
+
   
-  // We need a fingerprint function on rules so that we can avoid
-  // creating duplicate rules.
-  static uint64 RuleFingerprint(RuleType type,
-				const vector<Tuple> & precondition,
-				const vector<Tuple> & result,
-				const vector<Tuple> & target_precondition);
-  
+
+
+  // ----- CONST FUNCTIONS -----
+
   // We can look up a component by id.
   Component * GetComponent(int id) const;
   template <class C> C * GetComponent(int id) const{
     return dynamic_cast<C *>(GetComponent(id));
   }
 
-  // Returns the representation of a tuple (a clause in a rule).
-  // Used in determining the encoding of rules.
-  vector<Tuple> ComputeTupleEncoding(const Tuple &s, int name);
-  // A global sanity check that the Dependents(), Codependents(), Purposes(),
-  // and Copurposes() functions are returning what they should
-  void CheckConnections();
-  // A global check that we have been tracking the likelihood of the model
-  // properly.
-  void CheckLikelihood();
-  
+  // Checks that the ln_likelihood of the model is correctly the sum
+  // of the ln_likelihood of all of the components plus the arbitrary term
+  // naming costs.
+  void CheckLikelihood() const;
+  // Checks that all of the Layer 2 requirements are met.
+  void VerifyLayer2() const;
+
   // Finds all satisfactions of preconditions that involve a given tuple.
   // If the tuple is not in the model, it pretends that it is.
   // returns work, or -1 if we run out of time.
   // In the results vector, it puts triples of precondition, number of
-  // satisfactions, and actual satisfactions.  Some or all of the actual 
-  // satisfactions may be omitted based on the settings of the last two 
+  // satisfactions, and actual satisfactions.  Some or all of the actual
+  // satisfactions may be omitted based on the settings of the last two
   // parameters.
   // TODO, make actual_work a parameter, for uniformity sake.
   int64 FindSatisfactionsForTuple
-    ( const Tuple & s, 
-      vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > 
+    ( const Tuple & s,
+      vector<pair<Precondition *, pair<uint64, vector<Substitution> > > >
       *results,
       int64 max_work,
       bool return_subs_for_negative_rules,
-      bool return_subs_for_all_rules);
-  
-  // This is for editing and inspecting the model specification.
-  // Tuples can be forbidden or required.  Forbidden tuples can include
-  // variable(0), multiple instances of which need not match the same literal.
-  // If a tuple is declared both forbidden and required, it is required and
-  // not forbidden.  
-  bool IsRequired(const Tuple & s);
-  bool IsForbidden(const Tuple & s);
-  void MakeRequired(const Tuple & s);
-  void MakeNotRequired(const Tuple & s);
-  void MakeForbidden(const Tuple & s);
-  void MakeNotForbidden(const Tuple & s);
-  
-  // The specification can be read from a file.  A line in the file like
-  // [ foo goo *moo ]
-  // means that the tuple [ foo goo moo ] is required, and all other 
-  // three-term tuples starting with "foo goo" are forbidden.
-  void ReadSpec(istream * input); // do this first.
-  // Does the model comply with the specification.
-  bool Legal();
+      bool return_subs_for_all_rules) const;
 
-  // Makes this tuple given.  Creates a true proposition if one doesn't
-  // exist, and flips the given bit to true.  
-  void MakeGiven(const Tuple & s);
+  // Do any prohibitions forbid this tuple
+  bool IsForbidden(const Tuple & t) const;
+
+  // Does the model comply with layer 3 requirements
+  bool IsLayer3() const;
+
+
+  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+
+    // Assigns a fresh new ID to a component. 
+  void L1_AssignNewID(Component * component);
+  // When a component is deleted, removes it from the id_to_component_ map.
+  void L1_ReleaseID(int id);
+
 
   // manipulation:
 
   // Assigns a fresh new ID to a component. 
-  void AssignNewID(Component * component);
-  void AssignSpecificID(Component * component, int id);
+  void L1_AssignNewID(Component * component);
   // When a component is deleted, removes it from the id_to_component_ map.
-  void ReleaseID(int id);
+  void L1_ReleaseID(int id);
+
 
   // In some parts of the model, we need to encode terms, where context doesn't
   // help us.  This is accounted for by a global arbitrary term encoder, which
@@ -145,8 +121,8 @@ class Model {
   // frequencies of the terms to reduce complexity, but not their order. 
   // The following functions are called to add and remove a term from that 
   // encoder, and to update the global likelihood.
-  void AddArbitraryTerm(int w);
-  void SubtractArbitraryTerm(int w);
+  void L1_AddArbitraryTerm(int w);
+  void L1_SubtractArbitraryTerm(int w);
 
   // Finds or adds a Precondition
   Precondition * GetAddPrecondition(const vector<Tuple> & tuples);

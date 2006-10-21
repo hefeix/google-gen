@@ -59,6 +59,17 @@ Model::RuleType Model::StringToRuleType(const string & s) {
 }
 string Model::RuleTypeToString(RuleType t) { return RuleTypeName[t]; }
 
+bool IsForbidden(const Tuple & t){
+  for (GerneralizationIterator run_g(t); !run_g.done(); ++run_g) {
+    set<Prohibition *> * prohibitions 
+      = prohibition_index_ % run_g.generalized();
+    if (prohibitions) forall(run_p, *prohibitions) {
+      if ((*run_p)->TupleIsProhibited(t)) return true;
+    }
+  }
+  return false;
+}
+
 void Model::L1_InsertIntoClauseToPreconditionMap(Precodition *p){
   for (uint i=0; i<p->clauses_.size(); i++){
     model_->changelist_.
@@ -148,20 +159,14 @@ Model::Component * Model::GetComponent(int id) const{
 }
 
 
-void Model::AssignNewID(Component * component) {
+void Model::L1_AssignNewID(Component * component) {
   CHECK(!(id_to_component_ % next_id_));
-  component->id_ = next_id_;
-  id_to_component_[next_id_] = component;
-  next_id_++;
+  Component->A1_SetID(next_id);
+  A1_InsertIntoIDToComponent(next_id, component);
+  A1_IncrementNextID();
 }
-void Model::AssignSpecificID(Component * component, ind id){
-  CHECK(!(id_to_component_ % id));
-  component->id_ = id;
-  id_to_component_[id] = component;
-  next_id_ = max(next_id_, id + 1);  
-}
-void Model::ReleaseID(int id) {
-  id_to_component_.erase(id);
+void Model::L1_ReleaseID(int id) {
+  A1_RemoveFromIDToComponent(id);
 }
 
 // if there are k distinct terms and n total terms, and the frequency of
@@ -186,7 +191,7 @@ double DProb(int f_i, // before 1 is added
 }
 
 
-void Model::AddArbitraryTerm(int w){ // TODO: more to encode here.
+void Model::L1_AddArbitraryTerm(int w){ // TODO: more to encode here.
   arbitrary_term_counts_[w]++;
   double d_prob = DProb(arbitrary_term_counts_[w]-1, 
 			arbitrary_term_counts_.size(), 
@@ -195,7 +200,7 @@ void Model::AddArbitraryTerm(int w){ // TODO: more to encode here.
   arbitrary_term_ln_likelihood_ += d_prob;
   ln_likelihood_ += d_prob;
 }
-void Model::SubtractArbitraryTerm(int w){
+void Model::L1_SubtractArbitraryTerm(int w){
   arbitrary_term_counts_[w]--;
   total_arbitrary_terms_--;
   double d_prob = DProb(arbitrary_term_counts_[w], 
@@ -792,8 +797,9 @@ Model::Rule * Model::GetAddNaiveRule(int length) {
   return r;
 }
 
-bool Model::Legal(){
-  if (present_forbidden_.size() || absent_required_.size()) return false;
+bool Model::IsLayer3() const{
+  if (violated_prohibitions_.size()) return false;
+  if (times_dirty_.size()) return false;
   return true;
 }
 

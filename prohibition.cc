@@ -18,6 +18,11 @@
 
 #include "prohibition.h"
 
+bool Prohibition::TupleIsProhibited(const Tuple & t) const {
+  CHECK(MatchesWithWildcards(prohibited_, t->tuple_));
+  return (!(exceptions_ % t));
+}
+
 static Prohibition * 
 Prohibition::L1_MakeProhibition(Model *m, Tuple prohibited){
   return new Prohibition(m, prohibited);
@@ -79,8 +84,7 @@ void Prohibition::L1_RemoveViolation(TrueTuple *t){
 }
 
 void Prohibition::L1_CheckAddViolation(TrueTuple *t){
-  CHECK(MatchesWithWildcards(prohibited_, t->tuple_));
-  if (!(exceptions_ % t)) L1_AddViolation(t);
+  if (TupleIsProhibited(t->tuple_)) L1_AddViolation(t);
 }
 
 void Prohibition::A1_SetExists(bool val){

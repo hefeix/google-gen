@@ -1,5 +1,5 @@
 // Copyright (C) 2006 Google Inc. and Georges Harik
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -9,7 +9,7 @@
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
-// 
+//
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
@@ -47,7 +47,7 @@ void Component::A1_SetExists(bool val){
 }
 void Component::A1_SetTime(const Time & new_time){
   if (time_ == new_time) return;
-  model_->changelist_.Make(MakeValueChange(&time_, new_time));  
+  model_->changelist_.Make(MakeValueChange(&time_, new_time));
 }
 void Component::A1_SetTimeDirty(bool new_val){
   CHECK(time_dirty_ != val);
@@ -458,14 +458,14 @@ vector<Firing *> Rule::Firings() const{
 }
 
 string Rule::ImplicationString() const {
-  return TupleVectorToString(precondition_->pattern_) + " -> " 
+  return TupleVectorToString(precondition_->pattern_) + " -> "
     + TupleVectorToString(result_);
 }
 
 
 // ----- RULESAT -----
 
-RuleSat::RuleSat(Rule * rule, const Substitution & sub) 
+RuleSat::RuleSat(Rule * rule, const Substitution & sub)
   :Component(rule->model_) {
   rule_ = rule;
   satisfaction_ = rule_->precondition_->GetAddSatisfaction(sub);
@@ -475,7 +475,7 @@ RuleSat::RuleSat(Rule * rule, const Substitution & sub)
   if (rule->type_ == NEGATIVE_RULE) {
     Rule * target_rule = rule_->target_rule_;
     Precondition * target_precondition = target_rule->precondition_;
-    Substitution restricted_sub 
+    Substitution restricted_sub
       = sub.Restrict(GetVariables(target_precondition->pattern_));
     target_rule_sat_ = target_rule_->GetAddRuleSat(restricted_sub);
     target_rule_sat_->A1_AddInhibitor(this);
@@ -521,20 +521,20 @@ string RuleSat::ImplicationString(const Firing * firing) const {
   ret += rule_->HTMLLink("r") + " " + HTMLLink("rs") + " " ;
   if (firing) ret += firing->HTMLLink("f") + " ";
   for (uint i=0; i<preconditions.size(); i++) {
-    TrueTuple * tp 
+    TrueTuple * tp
       = model_->FindTrueTuple(substituted_preconditions[i]);
     CHECK(tp);
-    ret += tp->HTMLLink(ToString(preconditions[i], sub)) 
+    ret += tp->HTMLLink(ToString(preconditions[i], sub))
       + " (" + tp->time_.ToSortableString() + ")"
       + " ";
   }
   ret += "-> ";
   for (uint i=0; i<results.size(); i++) {
     if (!substituted_results[i].HasVariables()) {
-      TrueTuple * tp 
-	= model_->FindTrueTuple(substituted_results[i]);      
+      TrueTuple * tp
+	= model_->FindTrueTuple(substituted_results[i]);
       if (tp){
-	ret += tp->HTMLLink(ToString(results[i], sub)) + " (" 
+	ret += tp->HTMLLink(ToString(results[i], sub)) + " ("
 	  + tp->time_.ToSortableString() + ") ";
       } else {
 	ret += "Error - tuple not found  ";
