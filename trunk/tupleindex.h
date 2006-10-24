@@ -23,6 +23,8 @@
 #include "util.h"
 #include "tuple.h"
 
+#define UNLIMITED_WORK (-1)
+
 // A TupleIndex is, as it suggests, an index over tuples of literals, 
 // that allows the tuples to be searched by a pattern, which is a vector 
 // of tuples of literals and variables.

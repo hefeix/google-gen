@@ -27,14 +27,13 @@
 bool FLAGS_firing_tuple = false;
 
 // COMPONENT
-Component::Component(Model * model, int id){
+Component::Component(Model * model){
   model_->changelist_.Make(new NewChange<Component>(this));
   model_ = model;
   exists_ = false;
   time_ = CREATION;
   time_dirty_ = true;
-  if (id==-1) model_->L1_AssignNewID(this);
-  else model->L1_AssignSpecificID(this, id);
+  model_->L1_AssignNewID(this);
   ln_likelihood_ = 0.0;
   A1_SetExists(true);
 }
@@ -98,7 +97,8 @@ Precondition::Precondition(Model * model,
   ComputeSetTime();
   uint64 num_sat;
   uint64 work;
-  model_->tuple_index_.FindSatisfactions(pattern_, 0, &num_sat, -1, &work);
+  model_->tuple_index_.FindSatisfactions(pattern_, 0, &num_sat, 
+					 UNLIMITED_WORK, &work);
   num_satisfactions_ = num_sat;
   ComputeSetLnLikelihood();
 }
@@ -309,7 +309,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
     uint64 work;
     model_->tuple_index_.FindSatisfactions(precondition_->pattern_, 
 					   &substitutions,
-					   &num_sat, -1, &work);
+					   &num_sat, UNLIMITED_WORK, &work);
     for (uint i=0; i<substitutions.size(); i++) {
       new RuleSat(this, substitutions[i]);
     }
@@ -613,7 +613,7 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
   // Find the new satisfactions.
   vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > 
     satisfactions;
-  model_->FindSatisfactionsForTuple(tuple_, &satisfactions, -1, 
+  model_->FindSatisfactionsForTuple(tuple_, &satisfactions, UNLIMITED_WORK, 
 				    true, false);
   for (uint i=0; i<satisfactions.size(); i++) {
     Precondition * precondition = satisfactions[i].first;
@@ -654,7 +654,7 @@ void TrueTuple::EraseSubclass(){
   // satisfaction counts at the preconditions.  
   vector<pair<Precondition *, 
     pair<uint64, vector<Substitution> > > >satisfactions;
-  model_->FindSatisfactionsForTuple(tuple_, &satisfactions, -1, false, false);
+  model_->FindSatisfactionsForTuple(tuple_, &satisfactions, UNLIMITED_WORK, false, false);
   for (uint i=0; i<satisfactions.size(); i++) {
     satisfactions[i].first
       ->A1_AddToNumSatisfactions(-satisfactions[i].second.first);

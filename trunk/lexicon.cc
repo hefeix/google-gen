@@ -18,6 +18,7 @@
 
 
 #include "lexicon.h"
+#include "tuple.h"
 
 LexiconWithVariables LEXICON;
 
@@ -31,9 +32,9 @@ bool Lexicon::GetID(const string & s, int * id) const {
   } else return false;
 }
 bool LexiconWithVariables::GetID(const string & s, int * id) const{
-  if (s.size() && s[0]=='$') {
-    *id = -atoi(s.c_str()+1)-1;
-    return true;
+  if (s.size() && s[0]=='*') {
+    if (s.size()==1) return WILDCARD;
+    return Variable(atoi(s.c_str()+1));
   }
   return Lexicon::GetID(s, id);
 }
@@ -47,8 +48,9 @@ string Lexicon::GetString(int id) const {
   return id_to_string_[id];
 }
 string LexiconWithVariables::GetString(int id) const {
-  if (id<0) {
-    string ret ="$"+itoa(-id-1);
+  if (IsWildcard(id)) return "*";
+  if (IsVariable(id)) {
+    string ret ="*" + itoa(Variable(id));
     return ret;
   }
   return Lexicon::GetString(id);

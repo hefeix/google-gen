@@ -57,9 +57,9 @@ TupleIndex::GetRandomTupleContaining(const vector<int> & terms,
       const vector<int> & perm = run_p.current();
       Tuple s;
       for (uint i=0; i<perm.size(); i++) {
-	s.push_back((perm[i]==-1)?-1:terms[perm[i]]);
+	s.push_back((perm[i]==EMPTY_SLOT)?WILDCARD:terms[perm[i]]);
       }
-      if (funky_distribution && (s[0] == -1)) {
+      if (funky_distribution && (s[0] == WILDCARD)) {
 	UnderspecifiedNode ** unp = underspecified_ % s.Fingerprint();
 	if (!unp) continue;
 	UnderspecifiedNode * un = *unp;
@@ -156,7 +156,7 @@ const Tuple * TupleIndex::Add(const Tuple & s) {
     if (un==0) {
       un = underspecified_[gfp] = new UnderspecifiedNode;
       un->first_term_counts_ = 0;
-      if (g[0]==-1) un->first_term_counts_ = new map<int, int>;
+      if (g[0]==WILDCARD) un->first_term_counts_ = new map<int, int>;
     }
     n->pos_in_lists_[pattern] = un->specifications_.size();
     un->specifications_.push_back(n);
@@ -281,7 +281,7 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
   //     << " LookupInternal returned " << num_matches << " results\n"; 
   vector<Tuple> simplified_pattern = pattern;
   simplified_pattern.erase(simplified_pattern.begin()+best_clause);
-  if (max_work != -1 && least_work > max_work) return false;
+  if (max_work != UNLIMITED_WORK && least_work > max_work) return false;
   int total_work = least_work;
   uint64 total_num_satisfactions = 0;
   for (uint64 match=0; match<num_matches; match++){
@@ -298,11 +298,12 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
     uint64 added_work = 0;
     if (substitutions) {
       vector<Substitution> additional_substitutions;
-      if (!FindSatisfactions(substituted_pattern, 
-			     &additional_substitutions, 
-			     &additional_num_satisfactions,
-			     (max_work==-1)?-1:max_work-total_work,
-			     &added_work)) return false;
+      if (!FindSatisfactions
+	  (substituted_pattern, 
+	   &additional_substitutions, 
+	   &additional_num_satisfactions,
+	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
+	   &added_work)) return false;
       for (uint i=0; i<additional_substitutions.size(); i++) {
 	VLOG(2) << "partial=" << partial_sub.ToString() 
 		<< " additional=" << additional_substitutions[i].ToString();
@@ -311,10 +312,11 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
 	substitutions->push_back(additional_substitutions[i]);
       }
     } else {
-      if (!FindSatisfactions(substituted_pattern, 
-			     0, &additional_num_satisfactions, 
-			     (max_work==-1)?-1:max_work-total_work,
-			     &added_work)) return false;;
+      if (!FindSatisfactions
+	  (substituted_pattern, 
+	   0, &additional_num_satisfactions, 
+	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
+	   &added_work)) return false;
     }
     total_work += added_work;
     total_num_satisfactions += additional_num_satisfactions;
@@ -331,7 +333,7 @@ void TupleIndex::FindTerm(int w, vector<const Tuple *> *results){
     int length = run->first;
     for(int i=0; i<length; i++) {
       Tuple s;
-      for (int j=0; j<length; j++) s.push_back((j==i)?w:-1);      
+      for (int j=0; j<length; j++) s.push_back((j==i)?w:WILDCARD);      
       Lookup(s, &foo);
       found.insert(foo.begin(), foo.end());
     }

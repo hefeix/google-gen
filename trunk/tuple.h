@@ -5,12 +5,15 @@
 #include <map>
 #include "util.h"
 
-// We encode terms as integers, non-negative integers being literals, 
-// and negative integers being variables.  Variables are numbered starting
-// at 0, and variable i is represented as -1-i.  Note that the Variable()
-// function is its own inverse.  
-inline int Variable(int i) { return -1-i;} // its own inverse
-inline bool IsVariable(int i) { return (i<0);}
+// We encode terms as integers, non-negative integers representing literals, 
+// -1 representing a wildcard, and negative integers representing variables.  
+// Variables are numbered starting at 0, and variable i is represented as -2-i.
+// Note that the Variable() function is its own inverse.
+#define WILDCARD (-1)
+inline int Variable(int i) { return -2-i;} // its own inverse
+inline bool IsVariable(int i) { return (i<-1);}
+inline bool IsConstant(int i) { return (i>=0);}
+inline bool IsWildcard(int i) { return (i==-1);}
 
 // A Tuple is a tuple of terms.
 struct Tuple{
@@ -28,38 +31,43 @@ struct Tuple{
   int & operator [](int i) {return terms_[i];}
   const int & operator [](int i) const {return terms_[i];}
   void push_back(int i) { terms_.push_back(i);}
-  // turns all of the variables to Variable(0).
-  Tuple MakeVariableInsensitive() const {
+  // turns all of the variables to wildcards.
+  Tuple VariablesToWildcards() const {
     Tuple ret = *this;
     for (uint i=0; i<terms_.size(); i++) 
-      ret[i] = max(ret[i], -1);
+      if (IsVariable(ret[i])) ret[i] = WILDCARD;
     return ret;
   }  
   uint64 Fingerprint(uint64 level = 0) const 
   { return ::Fingerprint(terms_, level); }
-  // Creates an int with bits representing whether each term is a variable.
+  // Creates an int where each bit is on if and only if the corresponding term
+  // is either a variable or a wildcard.
   int Pattern() const {
-    CHECK(size()<32)
+    CHECK(size()<32);
     int ret = 0;
     int x=1;
     for (uint i=0; i<size(); i++) {
-      if (IsVariable(terms_[i])) ret |= x;
+      if (!IsConstant(terms_[i])) ret |= x;
       x<<=1;
     }
     return ret;
   }
-  // are there any variables
-  bool HasVariables() const { return Pattern(); }
+  // Does this tuple meet the requirements to be these kinds of tuples.
+  bool IsConstantTuple() const;
+  bool IsVariableTuple() const;
+  bool IsWildcardTuple() const;
   // are there any variables that occur twice.
   bool HasDuplicateVariables() const;
 };
 bool operator==(const Tuple & s1, const Tuple & s2);
-Tuple AllVar0(int num_terms);
+// Returns a tuple of all wildcards.
+Tuple AllWildcards(int num_terms);
 inline uint64 Fingerprint(const Tuple & s, uint64 level = 0){
   return s.Fingerprint(level);
 }
-// Given a tuple with wildcards and a tuple of literals, do they match.
-bool MatchesWithWildcards(const Tuple & genreal, const Tuple & specific);
+// Given a wildcard tuple and a constant tuple, do they match
+bool MatchesWildcardTuple(const Tuple & wildcard_tuple, 
+			  const Tuple & constant_tuple);
 			  
 // Iterates over generalizations of a tuple.  The tuple must be entirely
 // literals, and the generalized tuple iterates over all tuples for which
@@ -76,6 +84,7 @@ struct GeneralizationIterator {
   Tuple s_;
   Tuple generalized_;
 };
+
 typedef vector<Tuple> Pattern;
 bool operator <(const Tuple & a, const Tuple & b){return (a.terms_ < b.terms_);}
 
@@ -136,7 +145,7 @@ set<int> GetAllTerms(const Pattern & v);
 Tuple StringToTuple(const string & s);
 string TupleVectorToString(const Pattern &v);
 Pattern StringToTupleVector(const string & s);
-// shows both unsubstituted and substituted variables
+// shows both unsubstituted and substituted variables (for display)
 string ToString(const Tuple & s, const Substitution & sub); 
 
 // The likelihood according to a particular encoding of a vector of tuples,

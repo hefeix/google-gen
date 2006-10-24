@@ -225,7 +225,8 @@ ComputationResult DependsOn(Model *m, Component * dependent,
   multimap<Time, Component *> to_expand;
   to_expand.insert(make_pair(dependent->time_, dependent));
   while (to_expand.size()) {
-    if (max_work != -1 && total_work >= max_work) return RESULT_GAVE_UP;
+    if (max_work != UNLIMITED_WORK && total_work >= max_work) 
+      return RESULT_GAVE_UP;
     multimap<Time, Component *>::iterator last = to_expand.end(); last--;
     Component * c = last->second;//to_expand.rbegin()->second;
     to_expand.erase(last);
@@ -422,7 +423,7 @@ bool Model::TryAddImplicationRule(const vector<Tuple> & preconditions,
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
-  tuple_index_.FindSatisfactions(combined, &subs, 0, -1, 0);
+  tuple_index_.FindSatisfactions(combined, &subs, 0, UNLIMITED_WORK, 0);
   set<int>precondition_vars = GetVariables(preconditions);
   set<int> result_vars = GetVariables(result);
   result_vars = result_vars-precondition_vars;
@@ -645,7 +646,7 @@ void Explain(Model *m, TrueTuple *p,
   }
   vector<pair<Rule *, Substitution> > explanations;
   Tuple s = p->proposition_;
-  FindExplanationsForResult(m, s, &explanations, excluded, -1);
+  FindExplanationsForResult(m, s, &explanations, excluded, UNLIMITED_WORK);
   if (explanations.size()==0) {
     Rule * r = m->GetAddNaiveRule(s.size());
     Substitution right_sub;
@@ -699,7 +700,8 @@ int64 FindExplanationsForResult(Model *m, const Tuple & s,
       = clause_to_result_ % run_g.generalized().Fingerprint();
     if (rules) forall(run, (*rules)) {
       Rule * rule = run->first;
-      if (excluded_dependents && ((*excluded_dependents) % ((Component*)rule))) continue;
+      if (excluded_dependents && 
+	  ((*excluded_dependents) % ((Component*)rule))) continue;
       int clause_num = run->second;
       Substitution partial_sub;
       vector<Tuple> simplified_precondition = rule->precondition_->clauses_;
@@ -714,8 +716,8 @@ int64 FindExplanationsForResult(Model *m, const Tuple & s,
 	  (simplified_precondition, 
 	   &complete_subs,
 	   &num_complete_subs,
-	   (max_work==-1)?-1:max_work-total_work,
-	   &work)) return -1;
+	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
+	   &work)) return GAVE_UP;
       if (num_complete_subs == 0) continue;
       set<int> result_vars = GetVariables(rule->result_);
       for (uint i=0; i<complete_subs.size(); i++) {

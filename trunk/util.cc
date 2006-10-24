@@ -100,7 +100,7 @@ PermutationIterator::PermutationIterator(int num_items, int num_slots){
     done_ = true;
     return;
   }
-  slot_to_item_ = vector<int>(num_slots_, -1);
+  slot_to_item_ = vector<int>(num_slots_, EMPTY_SLOT);
   for (int i=0; i<num_items_; i++) {
     slot_to_item_[i] = i;
     item_to_slot_.push_back(i);
@@ -112,10 +112,10 @@ void PermutationIterator::Move(int item, int new_slot) {
   int old_slot = item_to_slot_[item];  
   if (new_slot==old_slot) return;
   int displaced_item = slot_to_item_[new_slot];
-  if (displaced_item >=0) item_to_slot_[displaced_item] = -1;
+  if (displaced_item >=0) item_to_slot_[displaced_item] = EMPTY_SLOT;
   item_to_slot_[item] = new_slot;
   slot_to_item_[new_slot] = item;
-  if (old_slot >= 0) slot_to_item_[old_slot] = -1;
+  if (old_slot >= 0) slot_to_item_[old_slot] = EMPTY_SLOT;
 }
 void PermutationIterator::operator++(){
   CHECK(!done_);

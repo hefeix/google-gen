@@ -31,6 +31,7 @@
 #include <set>
 #include <map>
 
+typedef GAVE_UP (-1)
 typedef uint Checkpoint;
 
 class Model {
@@ -42,6 +43,9 @@ class Model {
 
 
   // ----- LAYER 2 FUNCTIONS -----
+
+  // Finds or adds a TrueTuple
+  TrueTuple * GetAddTrueTuple(const Tuple & s);
 
   // Add a requirement to the problem specification.
   TrueTuple * AddRequirementToSpec(Tuple *t);
@@ -72,13 +76,20 @@ class Model {
   // Checks that the ln_likelihood of the model is correctly the sum
   // of the ln_likelihood of all of the components plus the arbitrary term
   // naming costs.
-  void CheckLikelihood() const;
+  // Checks that all of the component ln_likelihood_ values are up to date.
+  void VerifyLikelihoods() const;
+  
+  // Checks that the TemporalDependents() and TemporalCodependents() functions 
+  // of components are converses and that Purposes() and Copurposes() are
+  // converses.
+  void VerifyLinkBidirectionality() const;
+  
   // Checks that all of the Layer 2 requirements are met.
   void VerifyLayer2() const;
 
   // Finds all satisfactions of preconditions that involve a given tuple.
   // If the tuple is not in the model, it pretends that it is.
-  // returns work, or -1 if we run out of time.
+  // returns work, or GAVE_UP if we run out of time.
   // In the results vector, it puts triples of precondition, number of
   // satisfactions, and actual satisfactions.  Some or all of the actual
   // satisfactions may be omitted based on the settings of the last two
@@ -129,8 +140,6 @@ class Model {
   
   // Finds a TrueTuple
   TrueTuple * FindTrueTuple(const Tuple & s);
-  // Finds or adds a TrueTuple
-  TrueTuple * GetAddTrueTuple(const Tuple & s);
 
   // Records a change to the model in the history.
   void RecordChange(Change * change);
@@ -229,6 +238,11 @@ class Model {
   hash_map<vector<Tuple>, Precondition *> precondition_index_;
   // maps the prohibited tuple of a prohibition to the prohibition.  
   map<Tuple, set<Prohibition *> > prohibition_index_;
+  // The problem specification.  We don't really need to have this around, 
+  // but let's keep it around in case we need it later.
+  set<TrueTuple *> spec_requirements_;
+  set<Prohibition *> spec_prohibitions_;
+
   vector<Change *> history_;
   map<int, int> arbitrary_term_counts_;
   int total_arbitrary_terms_;

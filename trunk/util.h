@@ -213,10 +213,11 @@ double RandomFraction();
 #define RandomElement(A, B) typeof(B.begin()) A = B.begin(); int howfar = RandomInt() % B.size(); for (int count=0; count<howfar; count++) ++A;
 
 
+#define EMPTY_SLOT (-1)
 // runs through distinct assignments of a number of distincet items to a 
 // greater or equal number of slots (which can fit at most one item each). 
 // The items are represented by the first non-negative integers, and the
-// empty slots by -1.
+// empty slots by EMPTY_SLOT.
 class PermutationIterator {
  public:
   PermutationIterator(int num_items, int num_slots);

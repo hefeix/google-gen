@@ -199,7 +199,7 @@ class Component{
   // The constructor should leave the exists_ bit false, and the destructor
   // should CHECK that it is false.  The constructor and destructor should 
   // not touch the rest of the model.
-  Component(Model * model, int id = -1);
+  Component(Model * model);
   virtual ~Component();
 
 
