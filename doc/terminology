@@ -18,12 +18,22 @@
 
 (circular) Glossary:
 
-Term - represented by an integer or a string.  Can be one of
-     Constant - (a positive integer) (any string not starting with '*' or '$')
-     Wildcard - (0) ("*")
-     Variable - (negative integer)("$<-x>")
-     
+Term - Either a constant, wildcard or variable.   Terms are represented 
+     internally by integers and externally by strings.  
 
+  Constant - These are the basic building blocks of our language, similar to
+     "words" in english.  Most have no pre-loaded semantics.  Constants
+     are represented by non-negative integers, or by non-empty strings
+     which don't start with '*'.  
+  Wildcard - There is one wildcard.  It represents any constant.  It is 
+     represented by the integer -1, or by the string "*".
+  Variable - There are infinitely variables called Variable(x) where x is
+     a non-negative integer.  A variable can represent any constant, but within
+     a tuple or pattern (see below), two instances of the same variable must
+     represent the same constant.  Variable(x) is represented as the integer
+     -2-x, or as the string "*<x>" where <x> is the decimal ascii representation
+     of x.  For example, Variable(3) would be represented as -5 or as "*3".
+     
 Tuple - An ordered set of terms.
       Constant Tuple - May only have constants
       Wildcard Tuple - May have only constants and Wildcards.

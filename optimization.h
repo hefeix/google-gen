@@ -132,7 +132,7 @@ void FixTimesFixCircularDependencies(Model *m);
 // You can exclude some TrueTuples as dependents, for example to 
 // aviod circular causation.  In the results, if the value of a variable 
 // does not matter, 
-// returns work, or -1 if we ran out of time.
+// returns work, or GAVE_UP if we ran out of time.
 int64 FindExplanationsForResult (Model *m, const Tuple & s, 
 				 vector<pair<Rule *, Substitution> > *results,
 				 set<Component *> * excluded_dependents,

@@ -26,7 +26,7 @@
 #include <fstream.h>
 #include <math.h>
 
-char * Model::ComponentTypeName [] = {
+char * ComponentTypeName [] = {
     "PRECONDITION",
     "RULE",
     "SATISFACTION",
@@ -34,32 +34,89 @@ char * Model::ComponentTypeName [] = {
     "FIRING",
     "TRUETUPLE",
 };
-Model::ComponentType Model::StringToComponentType(const string & s) {
+ComponentType StringToComponentType(const string & s) {
   for (int i=0; i<NUM_COMPONENT_TYPES; i++) {
     if (s==ComponentTypeName[i]) return (ComponentType)i;
   }
   CHECK(false);
   return NUM_COMPONENT_TYPES;
 }
-string Model::ComponentTypeToString(ComponentType t) { 
+string ComponentTypeToString(ComponentType t) { 
   return ComponentTypeName[t]; 
 }
-char * Model::RuleTypeName [] = {
+char * RuleTypeName [] = {
   "INVALID_RULE",
   "SIMPLE_RULE",
   "NEGATIVE_RULE",
   "CREATIVE_RULE",
 };
-Model::RuleType Model::StringToRuleType(const string & s) {
+RuleType StringToRuleType(const string & s) {
   for (int i=0; i<NUM_RULE_TYPES; i++) {
     if (s==RuleTypeName[i]) return (RuleType)i;
   }
   CHECK(false);
   return INVALID_RULE;
 }
-string Model::RuleTypeToString(RuleType t) { return RuleTypeName[t]; }
+string RuleTypeToString(RuleType t) { return RuleTypeName[t]; }
 
-bool IsForbidden(const Tuple & t){
+// ----- LAYER 3 FUNCTIONS -----
+
+
+
+// ----- LAYER 2 FUNCTIONS -----
+
+TrueTuple * AddRequirementToSpec(Tuple t){
+  TrueTuple *tt = GetAddTrueTuple(t);
+  CHECK(!(spec_requirements_ % tt));
+  A1_InsertIntoSpecRequirements(tt);
+  tt->A1_MakeRequired();
+  if (t->time_ == NEVER && !(required_never_happen_ % tt)) {
+    A1_InsertIntoRequiredNeverHappen(tt);
+  }
+  return tt;
+}
+Prohibition * AddProhibitionToSpec(Tuple t, vector<Tuple> exceptions){
+  Prohibition *p = L1_MakeProhibition(this, t);
+  A1_InsertIntoSpecProhibitions(p);
+  for (int i=0; i<exceptions.size(); i++) {
+    p->L1_AddException(exceptions[i]);
+  }
+  return p;
+}
+
+void Model::ReadSpec(istream * input){
+  string w;
+  while ((*input) >> w) {
+    if (w != "[") continue;
+    string required = "[ ";
+    string forbidden = "[ ";
+    bool any_wildcards = false;
+    while ((*input) >> w) {
+      if (w == "]") break;
+      if (w[0]=='*') {
+	CHECK(w.size() > 1);
+	any_wildcards = true;
+	required += w.substr(1) + " ";
+	forbidden += "* ";
+      } else {
+	required += w + " ";
+	forbidden += w + " ";
+      }
+    }
+    required += "]";
+    forbidden += "]";
+    Tuple r;
+    r.FromString(required);
+    AddRequirementToSpec(r);
+    if (any_wildcards) {
+      Tuple f;
+      f.FromString(forbidden);
+      AddProhibitionToSpec(f, vector<Tuple>(1, r));
+    }
+  }
+}
+
+bool IsForbidden(const Tuple & t) const{
   for (GerneralizationIterator run_g(t); !run_g.done(); ++run_g) {
     set<Prohibition *> * prohibitions 
       = prohibition_index_ % run_g.generalized();
@@ -89,7 +146,7 @@ void Model::L1_RemoveFromClauseToPreconditionMap(Precondition *p){
   }
 }
 string TermEscape(string s){
-  if (s[0]=='$' || s[0]=='_') return '_'+s;
+  if (s[0]=='*' || s[0]=='_') return '_'+s;
   return s;
 }
 string TermUnescape(string s){
@@ -111,7 +168,7 @@ vector<Tuple> Model::ComputeTupleEncoding(const Tuple & s, int name){
 
 
 
-set<Model::Firing *> Model::TrueTuple::GetResultFirings() const {
+set<Firing *> TrueTuple::GetResultFirings() const {
   set<Firing *> ret;
   forall(run_s, satisfactions_)
     forall(run_rs, (*run_s)->rule_sats_)
@@ -120,8 +177,8 @@ set<Model::Firing *> Model::TrueTuple::GetResultFirings() const {
   return ret;
 }
 
-set<Model::TrueTuple *> 
-Model::TrueTuple::GetResultTrueTuples() const{
+set<TrueTuple *> 
+TrueTuple::GetResultTrueTuples() const{
   set<TrueTuple *> ret;
   forall(run_s, satisfactions_)
     forall(run_rs, (*run_s)->rule_sats_)
@@ -131,8 +188,8 @@ Model::TrueTuple::GetResultTrueTuples() const{
   return ret;  
 }
 
-set<Model::TrueTuple *> 
-Model::TrueTuple::GetCauseTrueTuples() const{
+set<TrueTuple *> 
+TrueTuple::GetCauseTrueTuples() const{
   set<TrueTuple *> ret;
   forall(run_f, causes_)
     forall(run_tp, (*run_f)->rule_sat_->satisfaction_->tuples_)
@@ -152,7 +209,7 @@ Model::Model(){
 Model::~Model(){
 }
 
-Model::Component * Model::GetComponent(int id) const{
+Component * Model::GetComponent(int id) const{
   Component *const* ret = id_to_component_%id;
   if (ret) return *ret;
   return 0;
@@ -211,7 +268,7 @@ void Model::L1_SubtractArbitraryTerm(int w){
   ln_likelihood_ -= d_prob;
 }
 
-vector<Model::Component *> 
+vector<Component *> 
 Model::SortIntoLegalInsertionOrder(const set<Component *> & to_insert) {
   set<Component *> temp = to_insert;
   vector<Component *> ret;
@@ -397,7 +454,7 @@ void Model::CheckConnections(){
   forall(run, id_to_component_) run->second->CheckConnections();  
 }
 
-void Model::CheckLikelihood(){
+void Model::VerifyLikelihoods() const{
   double total = arbitrary_term_ln_likelihood_;
   forall(run, id_to_component_){
     if (fabs(run->second->LnLikelihood() - run->second->ln_likelihood_) > 1e-6){
@@ -413,6 +470,34 @@ void Model::CheckLikelihood(){
     cerr << " total likelihood out of date " << endl;
     CHECK(false);
   }
+}
+void Model::VerifyLinkBidirectionality(){
+  set<pair<Component *, Component *> > td1, td2, p1, p2;
+  forall(run, id_to_component_){
+    Component *c = run->second;
+    vector<Component *> p = c->Purposes();
+    for (int i=0; i<p.size(); i++) {
+      p1.insert(make_pair(c, p[i]));
+    }
+    vector<Component *> cp = c->Copurposes();
+    for (int i=0; i<cp.size(); i++) {
+      p2.insert(make_pair(cp[i], c));
+    }
+    vector<Component *> td = TemporalDependents();
+    for (int i=0; i<td.size(); i++) {
+      td1.insert(make_pair(c, td[i]));
+    }
+    vector<vector<Component *> > tcd = TemporalCodependents();
+    for (int i=0; i<tcd.size(); i++) for (int j=0; j<tcd[i].size(); j++) {
+      td2.insert(make_pair(tcd[i][j], c));
+    }
+    CHECK(td1==td2);
+    CHECK(p1==p2);
+  }  
+}
+void Model:VerifyLayer2() const {
+  VerifyLikelihoods();
+  VerifyLinkBidirectionality();
 }
 int64 Model::FindSatisfactionsForTuple
 ( const Tuple & s, 
@@ -453,8 +538,8 @@ int64 Model::FindSatisfactionsForTuple
 	  (simplified_precondition, 
 	   return_subs?(&complete_subs):NULL,
 	   &num_complete_subs,
-	   (max_work==-1)?-1:max_work-total_work,
-	   &work)) return -1;
+	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
+	   &work)) return GAVE_UP;
       if (num_complete_subs > 0 && results) {
 	for (uint i=0; i<complete_subs.size(); i++) {
 	  complete_subs[i].Add(partial_sub);
@@ -468,20 +553,20 @@ int64 Model::FindSatisfactionsForTuple
   return total_work;
 }
 
-Model::Precondition * Model::GetAddPrecondition(const vector<Tuple> & tuples) {
+Precondition * Model::GetAddPrecondition(const vector<Tuple> & tuples) {
   Precondition ** p = precondition_index_ % Fingerprint(tuples);
   if (p) { return *p; }
   return new Precondition(this, tuples);
 }
 
-Model::TrueTuple * Model::FindTrueTuple(const Tuple & s) {
+TrueTuple * Model::FindTrueTuple(const Tuple & s) {
   const Tuple * tuple = tuple_index_.FindTuple(s);
   if (!tuple) return 0;
   TrueTuple ** tp = index_to_true_tuple_ % tuple;
   if (tp) return *tp;
   return 0;
 }
-Model::TrueTuple * Model::GetAddTrueTuple(const Tuple & s) {
+TrueTuple * Model::GetAddTrueTuple(const Tuple & s) {
   TrueTuple * ret = FindTrueTuple(s);
   if (ret) return ret;
   ret = new TrueTuple(this, vector<Firing *>(), s, false);
@@ -500,26 +585,26 @@ vector<Tuple> GetTupleVector(istream * input) {
   return result;
 }
 
-void Model::TrueTuple::AddCause(Firing * cause){
+void TrueTuple::AddCause(Firing * cause){
   if (cause != NULL) cause->true_tuples_.insert(this);
   causes_.insert(cause);
   ComputeSetTime();
 }
-void Model::TrueTuple::RemoveCause(Firing * cause){
+void TrueTuple::RemoveCause(Firing * cause){
   cause->true_tuples_.erase(this);
   causes_.erase(cause);
   // CHECK(causes_.size());
   ComputeSetTime(); // TODO: think about this
 }
 
-Model::Change::Change() {
+Change::Change() {
   action_ = INVALID_ACTION;
   component_essentials_ = 0;
 }
-Model::Change::~Change(){
+Change::~Change(){
   if (component_essentials_) delete component_essentials_;
 }
-string Model::Change::ToString() const{
+string Change::ToString() const{
   ostringstream ostr;
   if (action_ == ADD_COMPONENT) ostr<< "ADD_COMPONENT " << component_id_;
   if (action_ == REMOVE_COMPONENT) 
@@ -533,12 +618,12 @@ string Model::Change::ToString() const{
 				   << old_val_.ToSortableString();
   return ostr.str();
 }
-void Model::RecordChange(Change * change){
+void RecordChange(Change * change){
   VLOG(2) << string(history_.size()%20, ' ') 
 	  << "Pushing " << change->ToString() << endl;
   history_.push_back(change);
 }
-void Model::UndoChange(const Change & change){
+void UndoChange(const Change & change){
   VLOG(2) << string(history_.size()%20, ' ') 
 	  << "Popping " << change.ToString() << endl;
   switch(change.action_) {
@@ -575,7 +660,7 @@ void Model::UndoChange(const Change & change){
     break;
   }
 }
-void Model::Rollback(Checkpoint checkpoint) {
+void Rollback(Checkpoint checkpoint) {
   cerr << "Rolling back to " << checkpoint << endl;
   CHECK(checkpoint <= history_.size());
   while (checkpoint < history_.size()){
@@ -624,7 +709,7 @@ void Model::RecordChangeDelay(const Rule * r,
   RecordChange(ch);
 }
 
-Model::ComponentEssentials * Model::ComponentEssentialsFromRecord(const 
+ComponentEssentials * ComponentEssentialsFromRecord(const 
 								  Record & r){
   const string * ct = r % string("CT");
   const string * s_id = r % string("id");
@@ -661,7 +746,7 @@ Model::ComponentEssentials * Model::ComponentEssentialsFromRecord(const
   return ret;
 }
 
-Model::Component * Model::AddComponentFromRecord(Record r){
+Component * Model::AddComponentFromRecord(Record r){
   ComponentEssentials * e = ComponentEssentialsFromRecord(r);
   Component * ret = e->AddToModel(this);
   delete e;
@@ -735,52 +820,12 @@ void Model::MakeGiven(const Tuple & s){
   tp->given_ = true;
   tp->ComputeSetTime();
 }
-void Model::
-ReadSpec(istream * input){
-  string w;
-  while ((*input) >> w) {
-    if (w != "[") continue;
-    string required = "[ ";
-    string forbidden = "[ ";
-    bool any_wildcards = false;
-    bool any_pure_wildcards = false;
-    while ((*input) >> w) {
-      if (w == "]") break;
-      if (w == "*") {
-	any_pure_wildcards = true;
-	forbidden += "$0 ";
-      } else if (w[0]=='*') {
-	any_wildcards = true;
-	required += w.substr(1) + " ";
-	forbidden += "$0 ";
-      } else {
-	required += w + " ";
-	forbidden += w + " ";
-      }
-    }
-    required += "]";
-    forbidden += "]";
-    if (any_wildcards && any_pure_wildcards) {
-      CHECK(false);
-    }
-    if (!any_pure_wildcards) {
-      Tuple r;
-      r.FromString(required);
-      MakeRequired(r);
-    }
-    if (any_wildcards) {
-      Tuple f;
-      f.FromString(forbidden);
-      MakeForbidden(f);
-    }
-  }
-}
 
-Model::Rule * Model::GetAddNaiveRule(int length) {
+Rule * Model::GetAddNaiveRule(int length) {
   vector<Tuple> precondition;
   vector<Tuple> result(1);
   vector<Tuple> target_precondition;
-  for (int i=0; i<length; i++) result[0].terms_.push_back(-1-i);
+  for (int i=0; i<length; i++) result[0].terms_.push_back(Variable(i));
   Rule ** rp = rule_index_ 
     % RuleFingerprint(CREATIVE_RULE, precondition, result, 
 		      target_precondition);

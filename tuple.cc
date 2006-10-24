@@ -53,15 +53,39 @@ bool Tuple::HasDuplicateVariables() const {
   }
   return false;
 }
+bool Tuple::IsConstantTuple() const{
+  for (int i=0; i<size(); i++) if (!IsConstant(terms_[i])) return false;
+  return true;
+}
+bool Tuple::IsVariableTuple() const{
+  for (int i=0; i<size(); i++) if (IsWildcard(terms_[i])) return false;
+  return true;
+}
+bool Tuple::IsWildcardTuple() const{
+  for (int i=0; i<size(); i++) if (IsVariable(terms_[i])) return false;
+  return true;
+}
 bool operator==(const Tuple & s1, const Tuple & s2){
   if (s1.size() != s2.size()) return false;
   for (uint i=0; i<s1.size(); i++) if (s1[i]!=s2[i]) return false;
   return true;
 }
-Tuple AllVar0(int num_terms){
+Tuple AllWildcards(int num_terms){
   Tuple s;
-  s.terms_ = vector<int>(num_terms, Variable(0));
+  s.terms_ = vector<int>(num_terms, WILDCARD);
   return s;
+}
+// Given a wildcard tuple and a constant tuple, do they match
+bool MatchesWildcardTuple(const Tuple & wildcard_tuple, 
+			  const Tuple & constant_tuple){  
+  CHECK(wildcard_tuple.size() == constant_tuple.size());
+  CHECK(wildcard_tuple.IsWildcardTuple());
+  CHECK(constant_tuple.IsConstantTuple());
+  for (int i=0; i<wildcard_tuple.size(); i++){
+    if (IsConstant(wildcard_tuple[i]) && wildcard_tuple[i] != constant_tuple[i])
+      return false;
+  }
+  return true;
 }
 GeneralizationIterator::GeneralizationIterator(const Tuple & s) {
   max_ = 1 << s.size();
@@ -73,7 +97,7 @@ void GeneralizationIterator::operator++(){
   pattern_++;
   if (pattern_ >= max_) return;
   for (uint i=0; change != 0; i++) {
-    if (pattern_ & (1 << i)) generalized_.terms_[i] = -1;
+    if (pattern_ & (1 << i)) generalized_.terms_[i] = WILDCARD;
     else generalized_.terms_[i] = s_.terms_[i];
     change >>=1;
   }
@@ -159,7 +183,8 @@ bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
 }
 set<int> GetAllTerms(const Pattern & v) {
   set<int> ret;
-  for (uint i=0; i<v.size(); i++) ret.insert(v[i].terms_.begin(), v[i].terms_.end());
+  for (uint i=0; i<v.size(); i++) 
+    ret.insert(v[i].terms_.begin(), v[i].terms_.end());
   return ret;
 }
 
@@ -218,7 +243,9 @@ double PatternLnLikelihood(const Pattern &context,
       if (terms_seen % t) {
 	if (encoding) ret -= log(terms_seen.size());
       } else {
-	if (encoding) arbitrary_terms->push_back((t<0)?-1:t);
+	// if it's a new variable, we don't care its identity, so we 
+	// encode a wildcard meaning new variable.
+	if (encoding) arbitrary_terms->push_back((t<0)?WILDCARD:t);
 	terms_seen.insert(t);
       }
     }    
