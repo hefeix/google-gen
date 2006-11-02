@@ -40,6 +40,7 @@
 //           e. Components that need a purpose have a purpose.
 //           f. All satisfactions of negative rules have their rulesats
 //              represented explicitly.
+//           g. The preconditions' satisfaction counts are correct.
 //
 // Layer 3: Global consistency:
 //           a. The times are all clean.
@@ -108,7 +109,8 @@ class Component{
   // This function makes the component not exist.  It also first erases its
   // StructuralDependents, and its Copurposes that no loner have a purpose.  
   // You can call Erase() on anything but Satisfaction and RuleSat objects.
-  // Those can't be removed in a Layer 2 manner, so call L1_Erase.
+  // Those can't be removed in a Layer 2 manner (since all rule_sats of 
+  // a negative rule must be represented), so call L1_Erase.
   void Erase(); // but don't delete.
   // The time_ field is set lazily to save time.  Sometimes it is locally 
   // correct (clean) and sometimes it might be localy incorrect (dirty).  
@@ -131,6 +133,9 @@ class Component{
 
   virtual ComponentType Type() const = 0;
   string TypeName() const;
+
+  void VerifyLayer2() const;
+  virtual void VerifyLayer2Subclass() const;
   
   // A link to this component in the HTML viewer.
   string HTMLLink(string text) const;
@@ -281,6 +286,11 @@ class Precondition : public Component {
   vector<Component *> TemporalDependents() const; // Rules, Satisfactions
   bool NeedsPurpose() const; // yes
   double LnLikelihood() const;
+  // returns pointer to a satisfaction object if one exists.
+  Satisfaction * FindSatisfaction(const Substitution &sub) const;
+  virtual void VerifyLayer2Subclass() const;
+  Rule * FindPositiveRule(const vector<tuple> & result) const;
+  Rule * FindNegativeRule(Rule * target_rule) const;
 
   // TUPLE ENCODING STUFF
   // figures out what tuples cause the precondition under the tuple encoding.
@@ -426,16 +436,8 @@ class Rule : public Component{
  public:
   ADD_FRIEND_COMPONENT_CLASSES;
 
-  // ----- LAYER 2 FUNCTIONS -----
-
-  // This is how new rules are created.
-  static Rule * MakeNewRule (Precondition * precondition, EncodedNumber delay,
-			     RuleType type, Rule * target_rule,
-			     vector<Tuple> result, 
-			     EncodedNumber strength, EncodedNumber strength2){
-    return 
-      new Rule(precondition,delay, target_rule, result, strength, strength2);
-  }
+  // -----LAYER 2 FUNCTIONS -----
+  
   // Adds a firing, possibly also adding a satisfaction, a rulesat, and
   // some truetuples.  If one already exists, just returns it.
   Firing * AddFiring(const Substitution & sub);
@@ -477,6 +479,11 @@ class Rule : public Component{
   vector<Firing *> Firings() const;
   // Displays this rule for the HTML browser
   string ImplicationString() const;
+  // Finds a rulesat object if one exists.
+  RuleSat * FindRuleSat(Satisfaction * sat) const;
+  //  Convenience
+  RuleSat * FindRuleSat(const Substitution & sub) const;
+  virtual void VerifyLayer2Subclass() const;
 
  private:
   // ----- CONSTRUCTOR(S) -----

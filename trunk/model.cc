@@ -126,6 +126,13 @@ bool IsForbidden(const Tuple & t) const{
   }
   return false;
 }
+void Model::IsLayer3() const{
+  if (times_dirty_.size()) return false;
+  if (never_happen_.size()) return false;
+  if (violated_prohibitions_.size()) return false;
+  return true;
+}
+
 
 void Model::L1_InsertIntoClauseToPreconditionMap(Precodition *p){
   for (uint i=0; i<p->clauses_.size(); i++){
@@ -249,46 +256,22 @@ double DProb(int f_i, // before 1 is added
 
 
 void Model::L1_AddArbitraryTerm(int w){ // TODO: more to encode here.
-  arbitrary_term_counts_[w]++;
+  A1_AddToArbitraryTermCounts(w, 1);
+  A1_AddToTotalArbitraryTerms(1);
   double d_prob = DProb(arbitrary_term_counts_[w]-1, 
 			arbitrary_term_counts_.size(), 
-			total_arbitrary_terms_);
-  total_arbitrary_terms_++;
-  arbitrary_term_ln_likelihood_ += d_prob;
-  ln_likelihood_ += d_prob;
+			total_arbitrary_terms_-1);
+  A1_AddToArbitraryTermLnLikelihood(d_prob);
+  A1_AddToLnLikelihood(d_prob);
 }
 void Model::L1_SubtractArbitraryTerm(int w){
-  arbitrary_term_counts_[w]--;
-  total_arbitrary_terms_--;
-  double d_prob = DProb(arbitrary_term_counts_[w], 
+  double d_prob = DProb(arbitrary_term_counts_[w]-1, 
 			arbitrary_term_counts_.size(),
-			total_arbitrary_terms_);
-  if (arbitrary_term_counts_[w]==0) arbitrary_term_counts_.erase(w);
-  arbitrary_term_ln_likelihood_ -= d_prob;
-  ln_likelihood_ -= d_prob;
-}
-
-vector<Component *> 
-Model::SortIntoLegalInsertionOrder(const set<Component *> & to_insert) {
-  set<Component *> temp = to_insert;
-  vector<Component *> ret;
-  while (temp.size())
-    SortIntoLegalInsertionOrderInternal(&temp, &ret, *temp.begin());
-  return ret;
-}
-
-void Model::SortIntoLegalInsertionOrderInternal(set<Component *>* to_insert,
-						vector<Component*>*result,
-						Component * which){
-  if (!( (*to_insert) % which)) return;
-  to_insert->erase(which);
-  vector<Component *> to_do_first = which->RequiredCodependents();
-  forall(run, to_do_first) {
-    if ((*to_insert) % (*run)){
-      SortIntoLegalInsertionOrderInternal(to_insert, result, (*run));
-    }
-  }
-  result->push_back(which);
+			total_arbitrary_terms_-1);
+  A1_AddToArbitraryTermCounts(w, -1);
+  A1_AddToTotalArbitraryTerms(-1);
+  A1_AddToArbitraryTermLnLikelihood(-d_prob);
+  A1_AddToLnLikelihood(-d_prob);
 }
 
 // postcondition: no times dirty.
@@ -324,7 +307,7 @@ void Model::FixTimes() {
       }*/
     to_insert.erase(to_insert.begin());
     if (!c->time_dirty_) continue;
-    if (c->time_ != new_time) c->SetTime(new_time, false);
+    if (c->time_ != new_time) c->L1_SetTimeMaintainConsistency(new_time, false);
     vector<Component *> dep = c->Dependents();
     bool solid = true;
     forall(run, dep) {
@@ -333,7 +316,7 @@ void Model::FixTimes() {
 	   (d->ComputeTime(&times_dirty_) != d->time_)) solid = false;
     }
     if (solid) {
-      c->MakeTimeClean();
+      c->L1_MakeTimeClean();
     } else {
       to_insert.insert(make_pair(new_time, c));
     }
@@ -341,7 +324,7 @@ void Model::FixTimes() {
       Component * d = *run;
       Time dep_time = d->ComputeTime(&times_dirty_);
       if (dep_time != d->time_) {
-	d->MakeTimeDirty();
+	d->L1_MakeTimeDirty();
 	VLOG(3) << "making dirty id=" << d->id_ 
 		<< " time=" << d->time_.ToSortableString() << endl;
       }
@@ -352,22 +335,18 @@ void Model::FixTimes() {
   }
   while(times_dirty_.size()){
     Component *c = *times_dirty_.begin();
-    c->SetTime(NEVER, false);
-    c->MakeTimeClean();
+    c->L1_SetTimeMaintainConsistency(NEVER, false);
+    c->L1_MakeTimeClean();
   }
   VLOG(1) << "fixed times " << times_dirty_.size() << " dirty" << endl;
   CHECK(times_dirty_.size()==0);
 }
 
 void Model::DeleteNeverHappeningComponents() {
+  CHECK(times_dirty_.size()==0);
   while (never_happen_.size()) {
     Component * c = *never_happen_.begin();
-    if (!c->ComputeTime(&never_happen_).IsNever()){
-      cerr << "ID: " << c->id_ << endl;
-      ToHTML("html");
-      CHECK(false);
-    }
-    KillComponent(c);
+    c->L1_Erase();
   }
 }
 
@@ -454,16 +433,9 @@ void Model::CheckConnections(){
   forall(run, id_to_component_) run->second->CheckConnections();  
 }
 
-void Model::VerifyLikelihoods() const{
+void Model::VerifyLikelihood() const{
   double total = arbitrary_term_ln_likelihood_;
   forall(run, id_to_component_){
-    if (fabs(run->second->LnLikelihood() - run->second->ln_likelihood_) > 1e-6){
-      cerr << "likelihood for component " << run->second->id_ << " out of date"
-	   << " stored=" << run->second->LnLikelihood()
-	   << " computed=" << run->second->ln_likelihood_
-	   << endl;
-      CHECK(false);
-    }
     total += run->second->ln_likelihood_;
   }
   if (fabs(total-ln_likelihood_) > 1e-6) {
@@ -491,13 +463,21 @@ void Model::VerifyLinkBidirectionality(){
     for (int i=0; i<tcd.size(); i++) for (int j=0; j<tcd[i].size(); j++) {
       td2.insert(make_pair(tcd[i][j], c));
     }
-    CHECK(td1==td2);
-    CHECK(p1==p2);
   }  
+  CHECK(td1==td2);
+  CHECK(p1==p2);
 }
-void Model:VerifyLayer2() const {
-  VerifyLikelihoods();
+void Model::VerifyIndices() const {
+  // TODO: implement this
+}
+void Model::VerifyLayer2() const {
+  VerifyLikelihood();
   VerifyLinkBidirectionality();
+  VerifyIndices();
+  forall(run, id_to_component_) {
+    Component *c = run->second;
+    c->VerifyLayer2();
+  }
 }
 int64 Model::FindSatisfactionsForTuple
 ( const Tuple & s, 
@@ -553,24 +533,40 @@ int64 Model::FindSatisfactionsForTuple
   return total_work;
 }
 
-Precondition * Model::GetAddPrecondition(const vector<Tuple> & tuples) {
-  Precondition ** p = precondition_index_ % Fingerprint(tuples);
+
+Precondition * Model::FindPrecondition(const vector<Tuple> & tuples) const{
+  Precondition ** p = precondition_index_ % tuples;
+  if (p) return *p; 
+  else return NULL;
+}
+Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
+  Precondition * p = FindPrecondition(tuples);
   if (p) { return *p; }
-  return new Precondition(this, tuples);
+  else return new Precondition(this, tuples);
 }
 
-TrueTuple * Model::FindTrueTuple(const Tuple & s) {
-  const Tuple * tuple = tuple_index_.FindTuple(s);
-  if (!tuple) return 0;
-  TrueTuple ** tp = index_to_true_tuple_ % tuple;
-  if (tp) return *tp;
-  return 0;
+TrueTuple * Model::FindTrueTuple(const Tuple & s) const {
+  const Tuple ** tuple = tuple_to_true_tuple_ % s;
+  if (tuple) return *tuple;
+  return NULL;
 }
 TrueTuple * Model::GetAddTrueTuple(const Tuple & s) {
   TrueTuple * ret = FindTrueTuple(s);
   if (ret) return ret;
-  ret = new TrueTuple(this, vector<Firing *>(), s, false);
+  ret = new TrueTuple(this, s);
   return ret;
+}
+
+Rule * FindPositiveRule(vector<Tuple> precondition, vector<Tuple> result)
+  const{
+  Precondition *p = FindPrecondition(precondition);
+  if (!p) return NULL;
+  return p->FindPositiveRule(result);
+}
+Rule * FindNegativeRule(vector<Tuple> precondition, Rule * target_rule) const{
+  Precondition *p = FindPrecondition(precondition);
+  if (!p) return NULL;
+  return p->FindNegativeRule(target_rule);
 }
 
 vector<Tuple> GetTupleVector(istream * input) {
@@ -585,273 +581,145 @@ vector<Tuple> GetTupleVector(istream * input) {
   return result;
 }
 
-void TrueTuple::AddCause(Firing * cause){
-  if (cause != NULL) cause->true_tuples_.insert(this);
-  causes_.insert(cause);
-  ComputeSetTime();
-}
-void TrueTuple::RemoveCause(Firing * cause){
-  cause->true_tuples_.erase(this);
-  causes_.erase(cause);
-  // CHECK(causes_.size());
-  ComputeSetTime(); // TODO: think about this
-}
-
-Change::Change() {
-  action_ = INVALID_ACTION;
-  component_essentials_ = 0;
-}
-Change::~Change(){
-  if (component_essentials_) delete component_essentials_;
-}
-string Change::ToString() const{
-  ostringstream ostr;
-  if (action_ == ADD_COMPONENT) ostr<< "ADD_COMPONENT " << component_id_;
-  if (action_ == REMOVE_COMPONENT) 
-    ostr<< "REMOVE_COMPONENT " 
-	<< RecordToString(component_essentials_->ToRecord());
-  if (action_ == CHANGE_STRENGTH) ostr<< "CHANGE_STRENGTH " << component_id_
-				      << old_val_.ToSortableString()
-				      << " " 
-				      << old_val2_.ToSortableString();
-  if (action_ == CHANGE_DELAY) ostr<< "CHANGE_DELAY " << component_id_
-				   << old_val_.ToSortableString();
-  return ostr.str();
-}
-void RecordChange(Change * change){
-  VLOG(2) << string(history_.size()%20, ' ') 
-	  << "Pushing " << change->ToString() << endl;
-  history_.push_back(change);
-}
-void UndoChange(const Change & change){
-  VLOG(2) << string(history_.size()%20, ' ') 
-	  << "Popping " << change.ToString() << endl;
-  switch(change.action_) {
-  case ADD_COMPONENT: {
-    cerr << "rolling back add component " << change.component_id_ << endl;//HERE
-    Component * c = GetComponent(change.component_id_);
-    if (!c) {
-      //ToHTML("html");
-      CHECK(c);      
-    }
-    KillComponent(c, true);
-    break;
-  }
-  case REMOVE_COMPONENT: {
-    cerr << "Rolling back remove component " 
-	 << change.component_essentials_->id_ << endl;
-    change.component_essentials_->AddToModel(this);
-    break;
-  }
-  case CHANGE_STRENGTH: {
-    Rule * r = GetComponent<Rule>(change.component_id_);
-    CHECK(r);
-    r->ChangeStrength(change.old_val_, change.old_val2_);
-    break;
-  }
-  case CHANGE_DELAY: {
-    Rule * r = GetComponent<Rule>(change.component_id_);
-    CHECK(r);
-    r->ChangeDelay(change.old_val_);
-    break;
-  }    
-  default:
-    CHECK(false);
-    break;
-  }
-}
-void Rollback(Checkpoint checkpoint) {
-  cerr << "Rolling back to " << checkpoint << endl;
-  CHECK(checkpoint <= history_.size());
-  while (checkpoint < history_.size()){
-    uint i = history_.size()-1;
-    Change * c = history_[i];
-    history_.pop_back();
-    UndoChange(*c);
-    delete c;
-    while (history_.size() >i) {
-      delete history_.back(); 
-      history_.pop_back();
-    }
-  }    
-  cerr << "Rolled back to " << checkpoint << endl;
-}
-void Model::RecordAddComponent(const Component * c){
-  Change *ch = new Change;
-  ch->action_ = ADD_COMPONENT;
-  ch->component_id_ = c->id_;
-  RecordChange(ch);
-  cerr << "ADD_COMPONENT " << c->id_ << endl;
-}
-
-void Model::RecordRemoveComponent(const Component * c){
-  Change *ch = new Change;
-  ch->action_ = REMOVE_COMPONENT;
-  ch->component_essentials_ = c->ToEssentials();
-  RecordChange(ch);
-}
-void Model::RecordChangeStrength(const Rule * r, 
-				 EncodedNumber old_strength,
-				 EncodedNumber old_strength2){
-  Change *ch = new Change;
-  ch->action_ = CHANGE_STRENGTH;
-  ch->component_id_ = r->id_;
-  ch->old_val_ = old_strength;
-  ch->old_val2_ = old_strength2;
-  RecordChange(ch);
-}
-void Model::RecordChangeDelay(const Rule * r, 
-				   EncodedNumber old_delay){
-  Change *ch = new Change;
-  ch->action_ = CHANGE_DELAY;
-  ch->component_id_ = r->id_;
-  ch->old_val_ = old_delay;
-  RecordChange(ch);
-}
-
-ComponentEssentials * ComponentEssentialsFromRecord(const 
-								  Record & r){
-  const string * ct = r % string("CT");
-  const string * s_id = r % string("id");
-  CHECK(ct);
-  CHECK(s_id);
-  ComponentType type = StringToComponentType(*ct);
-  int id = atoi(s_id->c_str());
-  ComponentEssentials *ret = 0;
-  switch (type){
-  case PRECONDITION: 
-    ret = new Precondition::Essentials();
-    break;
-  case SATISFACTION:
-    ret = new Satisfaction::Essentials();
-    break;
-  case RULE:
-    ret = new Rule::Essentials();
-    break;
-  case RULESAT:
-    ret = new RuleSat::Essentials();
-    break;
-  case FIRING:
-    ret = new Firing::Essentials();
-    break;
-  case TRUETUPLE:
-    ret = new TrueTuple::Essentials();
-    break;
-  default:
-    CHECK(false);
-    break;
-  }
-  ret->FromRecordInternal(r);
-  ret->id_ = id;
-  return ret;
-}
-
-Component * Model::AddComponentFromRecord(Record r){
-  ComponentEssentials * e = ComponentEssentialsFromRecord(r);
-  Component * ret = e->AddToModel(this);
-  delete e;
-  return ret;
-}
-
-
-void Model::Load(istream * input) {
-  (*input) >> next_id_;
-  Record r;
-  while ((*input) >> r) {
-    AddComponentFromRecord(r);
-  }
-}
-bool Model::IsRequired(const Tuple & s){
-  return required_ % s.Fingerprint();
-}
-bool Model::IsForbidden(const Tuple & s){
-  if (IsRequired(s)) return false;
-  for (GeneralizationIterator run(s); !run.done(); ++run) {
-    if (forbidden_ % run.generalized().Fingerprint()) 
-      return true;
-  }
-  return false;
-}
-void Model::TrueTuple::CheckForbiddenRequired(){
-  required_ = model_->IsRequired(tuple_);
-  forbidden_ = model_->IsForbidden(tuple_);
-  if (forbidden_) model_->present_forbidden_.insert(this);
-  else model_->present_forbidden_.erase(this);
-  if (required_) model_->absent_required_.erase(tuple_.Fingerprint());  
-}
-void Model::MakeRequired(const Tuple & s){
-  required_[s.Fingerprint()] = s;
-  TrueTuple * tp = FindTrueTuple(s);
-  if (tp) {
-    tp->CheckForbiddenRequired();
-  } else {
-    absent_required_.insert(s.Fingerprint());
-  }
-}
-void Model::MakeNotRequired(const Tuple & s) {
-  required_.erase(s.Fingerprint());
-  TrueTuple * tp = FindTrueTuple(s);
-  if (tp) {
-    tp->CheckForbiddenRequired();
-  }
-  absent_required_.erase(s.Fingerprint());
-}
-void Model::MakeForbidden(const Tuple & s){
-  forbidden_[s.Fingerprint()] = s; 
-  vector<const Tuple*> results;
-  tuple_index_.Lookup(s, &results);
-  for (uint i=0; i<results.size(); i++) {
-    if (IsRequired(*(results[i]))) continue;
-    index_to_true_tuple_[results[i]]->CheckForbiddenRequired();
-  }
-}
-void Model::MakeNotForbidden(const Tuple & s){
-  forbidden_.erase(s.Fingerprint());
-  vector<const Tuple*> results;
-  tuple_index_.Lookup(s, &results);
-  for (uint i=0; i<results.size(); i++) {
-    if (IsRequired(*(results[i]))) continue;
-    index_to_true_tuple_[results[i]]->CheckForbiddenRequired();
-  }
-}
-void Model::MakeGiven(const Tuple & s){
-  TrueTuple *tp = FindTrueTuple(s);
-  if (!tp) tp = new TrueTuple(this, vector<Firing *>(), s, false);
-  tp->given_ = true;
-  tp->ComputeSetTime();
-}
-
 Rule * Model::GetAddNaiveRule(int length) {
   vector<Tuple> precondition;
   vector<Tuple> result(1);
   vector<Tuple> target_precondition;
   for (int i=0; i<length; i++) result[0].terms_.push_back(Variable(i));
-  Rule ** rp = rule_index_ 
-    % RuleFingerprint(CREATIVE_RULE, precondition, result, 
-		      target_precondition);
-  if (rp) return *rp;
-  Rule * r = new Rule(GetAddPrecondition(precondition), 
-		      EncodedNumber(), CREATIVE_RULE, 0, 
-		      result, EncodedNumber(), EncodedNumber(), 
-		      false, true);
-  forall(run, r->encoding_) {
-    MakeGiven((*run)->tuple_);
-    (*run)->ComputeSetTime();
-  }
-  r->ComputeSetTime();
-  return r;
+  Rule * r = FindPositiveRule(precondition, result);
+  if (r) return r;
+  return MakeNewRule(precondition, EncodedNumber(), CREATIVE_RULE, NULL,
+		     result, EncodedNumber(), EncodedNumber());
 }
 
-bool Model::IsLayer3() const{
-  if (violated_prohibitions_.size()) return false;
-  if (times_dirty_.size()) return false;
-  return true;
+// Simple L1 modifiers
+void Model::A1_InsertIndoIDToComponent(int id, Component *c) {
+  changelist_.Make
+    (new MapInsertChange<int, Component *>(&id_to_component_,id, c));
+}
+void Model::A1_RemoveFromIDToComponent(int id) {
+  changelist_.Make
+    (new MapRemoveChange<int, Component *>(&id_to_component_,id));
+}
+void Model::A1_InsertIntoTupleToTrueTuple(Tuple t, TrueTuple *tt) {
+  changelist_.Make
+    (new MapInsertChange<Tuple, TrueTuple *>(&tuple_to_true_tuple_, t, tt));
+}
+void Model::A1_RemoveFromTupleToTrueTuple(Tuple t) {
+  changelist_.Make
+    (new MapRemoveChange<Tuple, TrueTuple *>(&tuple_to_true_tuple_, t));
+}
+void Model::A1_InsertIntoTimesDirty(Component *c) {
+  changelist_.Make
+    (new SetInsertChange<Component *>(&times_dirty_, c));
+}
+void Model::A1_RemoveFromTimesDirty(Component *c) {
+  changelist_.Make
+    (new SetRemoveChange<Component *>(&times_dirty_, c));
+}
+void Model::A1_InsertIntoNeverHappen(Component *c) {
+  changelist_.Make
+    (new SetInsertChange<Component *>(&never_happen_, c));
+}
+void Model::A1_RemoveFromNeverHappen(Component *c) {
+  changelist_.Make
+    (new SetRemoveChange<Component *>(&never_happen_, c));
+}
+void Model::A1_InsertIntoRequiredNeverHappen(TrueTuple *c) {
+  changelist_.Make
+    (new SetInsertChange<TrueTuple *>(&required_never_happen_, c));
+}
+void Model::A1_RemoveFromRequiredNeverHappen(TrueTuple *c) {
+  changelist_.Make
+    (new SetRemoveChange<TrueTuple *>(&required_never_happen_, c));
+}  
+void Model::A1_InsertIntoWildcardTupleToPrecondition
+(Tuple t, Precondition *p, int position) {
+  changelist_.Make(new MapOfSetsInsertChange<Tuple, pair<Precondition *, int> >
+		   (&wildcard_tuple_to_precondition_, t, 
+		    make_pair(p, position)));
+}
+void Model::A1_RemoveFromWildcardTupleToPrecondition
+(Tuple t, Precondition *p, int position) {
+  changelist_.Make(new MapOfSetsRemoveChange<Tuple, pair<Precondition *, int> >
+		   (&wildcard_tuple_to_precondition_, t, 
+		    make_pair(p, position)));
+}
+void Model::A1_InsertIntoWildcardTupleToResult(Tuple t, Rule *r, int position) {
+  changelist_.Make(new MapOfSetsInsertChange<Tuple, pair<Rule *, int> >
+		   (&wildcard_tuple_to_result_, t, make_pair(p, position)));
+}
+void Model::A1_RemoveFromWildcardTupleToResult(Tuple t, Rule *r, int position) {
+  changelist_.Make(new MapOfSetsRemoveChange<Tuple, pair<Rule *, int> >
+		   (&wildcard_tuple_to_result_, t, make_pair(p, position)));
+}
+void Model::A1_InsertIntoPreconditionIndex(const Pattern &pat, Precondition *p){
+  changelist_.Make
+    (new MapInsertChange<Pattern, Precondition *>
+     (&tuple_to_true_tuple_, pat, p));  
+}
+void Model::A1_RemoveFromPreconditionIndex(const Pattern &pat) {
+  changelist_.Make
+    (new MapRemoveChange<Pattern, Precondition *>
+     (&tuple_to_true_tuple_, pat));  
+}
+void Model::A1_InsertIntoProhibitionIndex(Tuple t, Prohibition *p) {
+  changelist_.Make
+    (new MapOfSetsInsertChange<Tuple, Prohibition *>(&prohibition_index_,
+						     t, p));
+}
+void Model::A1_RemoveFromProhibitionIndex(Tuple t, Prohibition *p) {
+  changelist_.Make
+    (new MapOfSetsRemoveChange<Tuple, Prohibition *>(&prohibition_index_,
+						     t, p));
+}
+void Model::A1_InsertIntoSpecRequirements(TrueTuple *t) {
+  changelist_.Make
+    (new SetInsertChange<TrueTuple *>(&spec_requirements_, t));
+}
+void Model::A1_RemoveFromSpecRequirements(TrueTuple *t) {
+  changelist_.Make
+    (new SetRemoveChange<TrueTuple *>(&spec_requirements_, t));
+}
+void Model::A1_InsertIntoSpecProhibitions(Prohibition *p) {
+  changelist_.Make
+    (new SetInsertChange<Prohibition *>(&spec_prohibitions_, p));
+}
+void Model::A1_RemoveFromSpecProhibitions(Prohibition *p) {
+  changelist_.Make
+    (new SetRemoveChange<Prohibition *>(&spec_prohibitions_, p));
+}
+void Model::A1_AddToArbitraryTermCounts(int t, int delta) {
+  changelist_.Make
+    (new MapOfCountsAddChange<int, int>(&arbitrary_term_counts_, 
+					t, delta));
+}
+void Model::A1_AddToTotalArbitraryTerms(int delta) {
+  changelist_.Make
+    (new ValueChange<int>(&total_arbitrary_terms_, 
+			  total_arbitrary_terms_+delta));
+}
+void Model::A1_AddToArbitraryTermLnLikelihood(double delta) {
+  changelist_.Make
+    (new ValueChange<double>(&arbitrary_term_ln_likelihood_, 
+			     arbitrary_term_ln_likelihood_+delta));
+}
+void Model::A1_AddToLnLikelihood(double delta) {
+  changelist_.Make
+    (new ValueChange<double>(&ln_likelihood_, ln_likelihood_+delta));
+}
+void Model::A1_InsertIntoViolatedProhibitions(Prohibition *p) {
+  changelist_.Make
+    (new SetInsertChange<Prohibition *>(&violated_prohibitions_, p));
+}
+void Model::A1_RemoveFromViolatedProhibitions(Prohibition *p) {
+  changelist_.Make
+    (new SetRemoveChange<Prohibition *>(&violated_prohibitions_, p));
 }
 
 void Model::Shell(istream  * input) {
   string line;
   string command;
-  string subset = "ALL";
   map<string, Checkpoint> checkpoints;
   cout << "?";
   while ((*input) >> command) {
@@ -892,12 +760,12 @@ void Model::Shell(istream  * input) {
     else if (command == "checkpoint") {
       string cname;
       (*input) >> cname;
-      checkpoints[cname] = MakeCheckpoint();
+      checkpoints[cname] = changelist_.GetCheckpoint();
     }
     else if (command == "rollback") {
       string cname;
       (*input) >> cname;
-      Rollback(checkpoints[cname]);
+      changelist_.Rollback(checkpoints[cname]);
     }
     else if (command == "spec") {
       string fname;

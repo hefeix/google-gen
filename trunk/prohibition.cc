@@ -72,14 +72,14 @@ void Prohibition::L1_RemoveException(Tuple exception){
 }
 void Prohibition::L1_AddViolation(TrueTuple *t){
   CHECK(!(violations_ % t));
-  if (violations_.size()==0) model_->A1_AddViolatedProhibition(this);
+  if (violations_.size()==0) model_->A1_InsertIntoViolatedProhibitions(this);
   A1_AddViolation(t);
   t->A1_AddViolatedProhibition(this);
 }
 void Prohibition::L1_RemoveViolation(TrueTuple *t){
   CHECK(violations_ % t);
   A1_RemoveViolation(t);
-  if (violations_.size()==0) model_->A1_RemoveViolatedProhibition(this);
+  if (violations_.size()==0) model_->A1_RemoveFromViolatedProhibitions(this);
   t->A1_RemoveViolatedProhibition(this);
 }
 
