@@ -83,12 +83,12 @@ ComputationResult RequiresCodependent(Component * dependent,
 				      Component * codependent);
   
 
-  // Sometimes we want to roll back if the model has gotten less likely, and
-  // sometimes we only want to roll back if the model is invalid. 
-  enum RollbackCriterion {
-    REQUIRE_BETTER,
-    REQUIRE_VALID,
-  };
+// Sometimes we want to roll back if the model has gotten less likely, and
+// sometimes we only want to roll back if the model is invalid. 
+enum RollbackCriterion {
+  REQUIRE_BETTER,
+  REQUIRE_VALID,
+};
 // This is an object that can be created, which will set a checkpoint upon
 // creation, and automatically roll back the model if it doesn't like the
 // model when it goes out of scope.  
@@ -131,7 +131,7 @@ void FixTimesFixCircularDependencies(Model *m);
 // preconditios are satisfied, and one of the results is the given tuple.
 // You can exclude some TrueTuples as dependents, for example to 
 // aviod circular causation.  In the results, if the value of a variable 
-// does not matter, 
+// does not matter, TODO: complete this sentence
 // returns work, or GAVE_UP if we ran out of time.
 int64 FindExplanationsForResult (Model *m, const Tuple & s, 
 				 vector<pair<Rule *, Substitution> > *results,

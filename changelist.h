@@ -142,28 +142,6 @@ template <class K, class V> class MapInsertChange : public Change {
   K key_;
 };
 
-// Inserts a key/value pair into a hash_map of sets.
-// MK is map key, SV is the set value type
-template <class MK, class SV> class HashMapOfSetsInsertChange : public Change {
- public:
-  HashMapOfSetsInsertChange(hash_map<MK, set<SV> > * location, const MK & key, 
-			    const SV & value) {
-    location_ = location;
-    key_ = key;
-    value_ = value;
-    CHECK(!(*location_[key_] % value_));
-    (*location_)[key_].insert(value_);
-  }
-  void Undo(){
-    (*location_)[key].erase(value_);
-    if ((*location_)[key_].size()==0) location_->erase(key_);
-  }
- private:
-  hash_map<MK,set<SV> > * location_;
-  K key_;
-  SV value_
-};
-
 // Removes a key/value pair from a map.
 template <class K, class V> class MapRemoveChange : public Change {
  public:
@@ -182,6 +160,77 @@ template <class K, class V> class MapRemoveChange : public Change {
   K key_;
   V val_;
 };
+
+// Inserts a key/value pair into a map of sets.
+// might need to create a map entry and remove it on rollback.
+// MK is map key, SV is the set value type
+template <class MK, class SV> class MapOfSetsInsertChange : public Change {
+ public:
+  MapOfSetsInsertChange(map<MK, set<SV> > * location, const MK & key, 
+			    const SV & value) {
+    location_ = location;
+    key_ = key;
+    value_ = value;
+    CHECK(!(*location_[key_] % value_));
+    (*location_)[key_].insert(value_);
+  }
+  void Undo(){
+    (*location_)[key].erase(value_);
+    if ((*location_)[key_].size()==0) location_->erase(key_);
+  }
+ private:
+  map<MK,set<SV> > * location_;
+  K key_;
+  SV value_
+};
+
+// Removes a key/value pair into a map of sets.
+// Removes the map entry when the set is empty.
+// MK is map key, SV is the set value type
+template <class MK, class SV> class MapOfSetsRemoveChange : public Change {
+ public:
+  MapOfSetsInsertChange(map<MK, set<SV> > * location, const MK & key, 
+			const SV & value) {
+    location_ = location;
+    key_ = key;
+    value_ = value;
+    CHECK((*location_[key_] % value_));
+    (*location_)[key_].erase(value_);
+    if ((*location_)[key_].size()==0) location_->erase(key_);
+  }
+  void Undo(){
+    (*location_)[key].insert(value_);
+  }
+ private:
+  map<MK,set<SV> > * location_;
+  K key_;
+  SV value_
+};
+
+// Adds to the value associated with a particular key.  Keys are removed
+// when the associated values are 0.
+template <class K, class V> class MapOfCountsAddChange : public Change {
+ public:
+  MapOfCountsAddChange(map<K, V> * location, const K & key, const V & delta) {
+    location_ = location;
+    key_ = key;
+    old_value_ = (*location_)[key];
+    V new_value = old_value_ + delta;
+    if (new_value == 0) location_->erase(key);
+    else (*location_)[key] = new_value;
+  }
+  void Undo(){
+    if (old_value_==0) location_->erase(key);
+    else (*location_)[key] = old_value_;
+  }
+ private:
+  map<K,V> * location_;
+  K key_;
+  V old_value_
+};
+
+
+
 
 // Create one of these when you new an object
 template <class C> class DeleteOnRollbackChange : public Change {

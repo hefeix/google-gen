@@ -62,7 +62,28 @@ class Model {
   // three-term tuples starting with "foo goo" are forbidden.
   void ReadSpec(istream * input); // do this first.
 
+  // This is how new rules are created.
+  Rule * MakeNewRule(vector<Tuple> precondition, EncodedNumber delay,
+		     RuleType type, Rule * target_rule,
+		     vector<Tuple> result, 
+		     EncodedNumber strength, EncodedNumber strength2){
+    return
+      new Rule(L1_GetAddPrecondition(precondition),
+	       delay, target_rule, result, strength, strength2);
+  }
   
+  // Inserts or retrieces a creative rule with no preconditions and one 
+  // postcondition full of different variables.  Such rules can explain
+  // anything.
+  Rule * GetAddNaiveRule(int length); // {} -> { [ $0 $1 ... $(length-1)] }
+
+  // Makes all of the times correct and sets the dirty bits to false
+  // Some of the times may end up as NEVER
+  void FixTimes();
+
+  // Deletes all of the components whose times are NEVER
+  // Precondition: times are all clean.
+  void DeleteNeverHappeningComponents();
 
 
   // ----- CONST FUNCTIONS -----
@@ -76,13 +97,15 @@ class Model {
   // Checks that the ln_likelihood of the model is correctly the sum
   // of the ln_likelihood of all of the components plus the arbitrary term
   // naming costs.
-  // Checks that all of the component ln_likelihood_ values are up to date.
-  void VerifyLikelihoods() const;
+  void VerifyLikelihood() const;
   
   // Checks that the TemporalDependents() and TemporalCodependents() functions 
   // of components are converses and that Purposes() and Copurposes() are
   // converses.
   void VerifyLinkBidirectionality() const;
+
+  // Checks that all of the indices are up to date. 
+  void VerifyIndices() const;
   
   // Checks that all of the Layer 2 requirements are met.
   void VerifyLayer2() const;
@@ -103,6 +126,15 @@ class Model {
       bool return_subs_for_negative_rules,
       bool return_subs_for_all_rules) const;
 
+  // Finds a TrueTuple
+  TrueTuple * FindTrueTuple(const Tuple & s) const;
+
+  // Finds a positive rule
+  Rule * FindPositiveRule(vector<Tuple> precondition, vector<Tuple> result)
+    const;
+  // Finds a negative rule
+  Rule * FindNegativeRule(vector<Tuple> precondition, Rule * target_rule) const;
+
   // Do any prohibitions forbid this tuple
   bool IsForbidden(const Tuple & t) const;
 
@@ -118,14 +150,6 @@ class Model {
   void L1_ReleaseID(int id);
 
 
-  // manipulation:
-
-  // Assigns a fresh new ID to a component. 
-  void L1_AssignNewID(Component * component);
-  // When a component is deleted, removes it from the id_to_component_ map.
-  void L1_ReleaseID(int id);
-
-
   // In some parts of the model, we need to encode terms, where context doesn't
   // help us.  This is accounted for by a global arbitrary term encoder, which
   // accounts for the entropy of encoding a sequence of terms, using the 
@@ -136,71 +160,17 @@ class Model {
   void L1_SubtractArbitraryTerm(int w);
 
   // Finds or adds a Precondition
-  Precondition * GetAddPrecondition(const vector<Tuple> & tuples);
+  Precondition * L1_GetAddPrecondition(const vector<Tuple> & tuples);
   
-  // Finds a TrueTuple
-  TrueTuple * FindTrueTuple(const Tuple & s);
-
-  // Records a change to the model in the history.
-  void RecordChange(Change * change);
-  // Undoes a recorded change.
-  void UndoChange(const Change & change);
-  // These are methods for recording particular types of changes to the model.
-  void RecordAddComponent(const Component * c);
-  void RecordRemoveComponent(const Component * c);
-  void RecordChangeStrength(const Rule * r, EncodedNumber old_strength,
-			    EncodedNumber old_strength2);
-  void RecordChangeDelay(const Rule * r, EncodedNumber old_delay);
-  // Creates a checkpoint object that can be used in the future to roll back 
-  // the model to the current state. 
-  inline Checkpoint MakeCheckpoint() { return history_.size();}
-  // Rolls back the model to the state at which the checkpoint was created.
-  void Rollback(Checkpoint checkpoint);
-  // Adds a component to the model, given a record that was stored by a 
-  // ComponentEssentials object. 
-  Component * AddComponentFromRecord(Record r);
-
-  // Sort the components in the set into an order in which they could be
-  // inserted legally into the model, or could be legally removed in
-  // the opposite order.
-  vector<Component *> 
-    SortIntoLegalInsertionOrder(const set<Component *> & to_insert);
-  // A recursive subroutine of the above function.  
-  // Pre and post-condition: to_insert and result are disjoint.
-  // Adds the component "which" and all recursive necessary codependents in the 
-  // to_insert set to the result vector and removes them from the to_insert 
-  // set. 
-  void SortIntoLegalInsertionOrderInternal(set<Component *>* to_insert,
-					   vector<Component*>*result,
-					   Component * which);
-  
-  // removes a component, and if just_this is set to false, all of the
-  // components that are left purposeless by removing it.
-  void KillComponent(Component *to_kill, bool just_this = false);
-  // Makes all of the times correct and sets the dirty bits to false
-  // Some of the times may end up as NEVER
-  void FixTimes();
-  // Deletes all of the components whose times are NEVER
-  void DeleteNeverHappeningComponents();
-
   // misc.
-  // Inserts or retrieces a creative rule with no preconditions and one 
-  // postcondition full of different variables.  Such rules can explain
-  // anything.
-  Rule * GetAddNaiveRule(int length); // {} -> { [ $0 $1 ... $(length-1)] }
 
   // I/O
   // A bar of links to the files in the HTML display.
-  string LinkBar();
+  string LinkBar() const;
   // Writes the model to html in the given relative directory.
-  void ToHTML(string dirname);
+  void ToHTML(string dirname) const;
   // A record full of statistics about the model as a whole
-  Record ModelInfo();
-  // Stores the model in machine readable form.
-  void Store(ostream * output);
-  void StoreToFile(string filename);
-  // Loads a model
-  void Load(istream * input);
+  Record ModelInfo() const;
   
 
 
@@ -212,56 +182,72 @@ class Model {
 
 
   // Simple L1 modifiers
-  void A1_InsertIntoWildcardTupleToPreconditionMap
+  void A1_InsertIndoIDToComponent(int id, Component *c);
+  void A1_RemoveFromIDToComponent(int id);
+  void A1_InsertIntoTupleToTrueTuple(Tuple t, TrueTuple *tt);
+  void A1_RemoveFromTupleToTrueTuple(Tuple t);
+  void A1_InsertIntoTimesDirty(Component *c);
+  void A1_RemoveFromTimesDirty(Component *c);
+  void A1_InsertIntoNeverHappen(Component *c);
+  void A1_RemoveFromNeverHappen(Component *c);
+  void A1_InsertIntoRequiredNeverHappen(TrueTuple *c);
+  void A1_RemoveFromRequiredNeverHappen(TrueTuple *c);  
+  void A1_InsertIntoWildcardTupleToPrecondition
     (Tuple t, Precondition *p, int position);
-  void A1_RemoveFromWildcardTupleToPreconditionMap
+  void A1_RemoveFromWildcardTupleToPrecondition
     (Tuple t, Precondition *p, int position);
-  void A1_InsertIntoWildcardTupleToResultMap
-    (Tuple t, Rule *r, int position);
-  void A1_RemoveFromWildcardTupleToResultMap
-    (Tuple t, Rule *r, int position);
-
-
-
+  void A1_InsertIntoWildcardTupleToResult(Tuple t, Rule *r, int position);
+  void A1_RemoveFromWildcardTupleToResult(Tuple t, Rule *r, int position);
+  void A1_InsertIntoPreconditionIndex(const Pattern &pat, Precondition *p);
+  void A1_RemoveFromPreconditionIndex(const Pattern &pat);
+  void A1_InsertIntoProhibitionIndex(Tuple t, Prohibition *p);
+  void A1_RemoveFromProhibitionIndex(Tuple t, Prohibition *p);
+  void A1_InsertIntoSpecRequirements(TrueTuple *t);
+  void A1_RemoveFromSpecRequirements(TrueTuple *t);
+  void A1_InsertIntoSpecProhibitions(Prohibition *p);
+  void A1_RemoveFromSpecProhibitions(Prohibition *p);
+  void A1_AddToArbitraryTermCounts(int t, int delta);
+  void A1_AddToTotalArbitraryTerms(int delta);
+  void A1_AddToArbitraryTermLnLikelihood(double delta);
+  void A1_AddToLnLikelihood(double delta);
+  void A1_InsertIntoViolatedProhibitions(Prohibition *p);
+  void A1_RemoveFromViolatedProhibitions(Prohibition *p);
+    
   // data
+  // When components are added to the model, they get sequential ids.
   int next_id_;
+  // Maps id to the component with that ID (only com
   map<int, Component *> id_to_component_;
   TupleIndex tuple_index_; // stores pointers to Firings
   map<Tuple, TrueTuple *> tuple_to_true_tuple_;
   set<Component *> times_dirty_; //components whose times need fixing
   set<Component *> never_happen_; // components which never happen
   set<TrueTuple *> required_never_happen_; // required and never happen
-  // maps clauses found in preconditions
-  hash_map<Tuple, set<pair<Precondition *, int> > > clause_to_precondition_;
+  // We index the tuples in preconditions by turning their variables to
+  // wildcards.  The second element in the pair is the position of the tuple
+  // in the pattern.
+  map<Tuple, set<pair<Precondition *, int> > >  wildcard_tuple_to_precondition_;
   // same thing for the results of rules.  
-  hash_map<Tuple, set<pair<Rule *, int> > > clause_to_result_;
-  hash_map<vector<Tuple>, Precondition *> precondition_index_;
+  map<Tuple, set<pair<Rule *, int> > > wildcard_tuple_to_result_;
+  // Preconditions indexed by their pattern.
+  map<Pattern, Precondition *> precondition_index_;
   // maps the prohibited tuple of a prohibition to the prohibition.  
   map<Tuple, set<Prohibition *> > prohibition_index_;
   // The problem specification.  We don't really need to have this around, 
   // but let's keep it around in case we need it later.
   set<TrueTuple *> spec_requirements_;
   set<Prohibition *> spec_prohibitions_;
-
-  vector<Change *> history_;
+  
+  // Which prohibitions are currently violated
+  set<Prohibition *> violated_prohibitions_;
+  
   map<int, int> arbitrary_term_counts_;
   int total_arbitrary_terms_;
   double arbitrary_term_ln_likelihood_; // superfluous
   double ln_likelihood_;
 
-  // the spec
-  map<uint64, Tuple> required_;
-  map<uint64, Tuple> forbidden_;
-  set<TrueTuple *> present_forbidden_;
   set<uint64> absent_required_;  
 
 };
-
-// utility for turning vectors of pointers to components to vectors of stable 
-// pointers.
-template<class C> vector<Model::StablePtr<C> > 
-ToStablePtrVector(const vector<C*> &v) {
-  return vector<Model::StablePtr<C> >(v.begin(), v.end());
-}
 
 #endif

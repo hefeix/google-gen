@@ -65,7 +65,7 @@ void Component::L1_Erase(){
   vector<Component *> dep = StructuralDependents();
   vector<Component *> copurposes = Copurposes();
   for (int i=0; i<dep.size(); i++) {
-    if (dep[i]->Exists()) dep[i]->Erase();
+    if (dep[i]->Exists()) dep[i]->L1_Erase();
   }
 
   model_->A1_RemoveFromNeverHappen(this);
@@ -76,7 +76,7 @@ void Component::L1_Erase(){
 
   for (int i=0; i<copurposes.size(); i++) {
     if (copurposes[i].Exists() && copurposes[i].IsSuperfluous()) 
-      copurposes[i]->Erase();
+      copurposes[i]->L1_Erase();
   }
 }
 
@@ -174,11 +174,28 @@ void Precondition::A1_AddToNumSatisfactions(int delta){
   model_->changelist_.
     Make(new ValueChange<int>(&num_satisfactions_, num_satisfactions_+delta));
 }
-Satisfaction * Precondition::L1_GetAddSatisfaction(const Substitution & sub){
-  Satisfaction ** sp = satisfactions_ % sub.Fingerprint();
+Satisfaction * Precondition::FindSatisfaction(const Substitution &sub){
+  Satisfaction ** sp = satisfactions_ % sub;
   if (sp) return *sp;
-  Satisfaction * ret = new Satisfaction(this, sub);
-  return ret;
+  else return NULL;
+}
+Rule * Precondition::FindPositiveRule(const vector<Tuple> & result){
+  set<Rule *> * s = positive_rule_index_ % result;
+  if (!s) return NULL;
+  CHECK(s->size() > 0);
+  return *(s->begin());
+}
+Rule * Precondition::FindNegativeRule(const Rule * target_rule){
+  set<Rule *> * s = negative_rule_index_ % target_rule;
+  if (!s) return NULL;
+  CHECK(s->size() > 0);
+  return *(s->begin());
+}
+
+Satisfaction * Precondition::L1_GetAddSatisfaction(const Substitution & sub){
+  Satisfaction * s = FindSatisfaction(sub);
+  if (s) return s;
+  return new Satisfaction(this, sub);
 }
 
 
@@ -246,10 +263,20 @@ Firing * Rule::AddFiring(const Substitution & sub) {
 	  << "left sub=" << sub.Restrict(RightVariables()).ToString() << endl;
   return ret;
 }
-RuleSat * Rule::L1_GetAddRuleSat(Satisfaction * sat) {
+RuleSat * Rule::FindRuleSat(Satisfaction *sat) const{
   RuleSat ** rsp = rule_sats_ % sat;
-   if (rsp) return *rsp;
-   return new RuleSat(this, sat->substitution_);
+  if (rsp) return *rsp;  
+  else return NULL;
+}
+RuleSat * Rule::L1_GetAddRuleSat(Satisfaction * sat) {
+  RuleSat *rs = GetRuleSat(sat);
+  if (rs) return rs;
+  return new RuleSat(this, sat->substitution_);
+}
+RuleSat * Rule::FindRuleSat(const Substitution & sub) const {
+  Satisfaction *sat = precondition_->FindSatisfaction(sub);
+  if (!sat) return NULL;
+  return GetRuleSat(sat);
 }
 RuleSat * Rule::L1_GetAddRuleSat(const Substitution & sub) {
   Satisfaction * sat = precondition_->L1_GetAddSatisfaction(sub);
@@ -561,9 +588,7 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
   GetFullSubstitution().Substitute(&results);
   // Now we have the vector of constant tuples which come true.
   for (uint i=0; i<results.size(); i++){
-    TrueTuple * tp = model_->FindTrueTuple(results[i]);
-    if (!tp)
-      tp = new TrueTuple(model_, results[i]);
+    TrueTuple * tp = model_->GetAddTrueTuple(results[i]);
     true_tuples_.insert(tp); // Note: duplicate insertions OK.
   }
   // Note: we need two loops because of duplicates.
@@ -608,7 +633,7 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
 					     &TupleIndex::AddWrapper,
 					     &TupleIndex::RemoveWrapper));
   // Add it to the map from tuple to TrueTuple
-  model_->A1_InsertIntoTupleToTrueTuple(tuple_);
+  model_->A1_InsertIntoTupleToTrueTuple(tuple_, this);
   ComputeSetTime();
   // Find the new satisfactions.
   vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > 
@@ -991,7 +1016,42 @@ void Component::ComputeSetLnLikelihood(){
   CHECK(finite(old_val));
   CHECK(finite(new_val));
   A1_SetLnLikelihood(new_val);
-  model_->A1_SetLnLikelihood(model_->ln_likelihood_ + new_val - old_val);
+  model_->A1_AddToLnLikelihood(new_val - old_val);
+}
+
+void Component::VerifyLayer2() const {
+  CHECK(exists_);
+  // Check that the likelihood is up to date.
+  if (fabs(LnLikelihood() - ln_likelihood_) > 1e-6){
+    cerr << "likelihood for component " << id_ << " out of date"
+	 << " stored=" << LnLikelihood()
+	 << " computed=" << ln_likelihood_
+	 << endl;
+    CHECK(false);
+  }
+  // Check that the time is up to date or that time_dirty_ is set
+  CHECK(time_dirty_ || ComputeTime() == time_);
+  // Check that the component has a purpose if it needs one.
+  CHECK(!NeedsPurpose() || Purposes().size());
+  VerifyLayer2Subclass();
+}
+void Component::VerifyLayer2Subclass() const{}
+void Satisfaction::VerifyLayer2Subclass() const{
+  uint64 num_sat;
+  model_->tuple_index.
+    FindSatisfactionsForTuple(pattern_, NULL, &num_sat, UNLIMITED_WORK, NULL);
+  CHECK(num_sat == num_satisfactions_);
+}
+void Rule::VerifyLayer2Subclass() {
+  if (type == NEGATIVE_RULE) {  // Make all the RuleSats exist.
+    vector<Substitution> substitutions;
+    model_->tuple_index_.FindSatisfactions(precondition_->pattern_, 
+					   &substitutions,
+					   NULL, UNLIMITED_WORK, NULL);
+    for (uint i=0; i<substitutions.size(); i++) {
+      CHECK(GetRuleSat(substitutions[i]));
+    }
+  }  
 }
 
 void Component::CheckConnections(){
