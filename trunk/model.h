@@ -141,6 +141,7 @@ class Model {
   // Does the model comply with layer 3 requirements
   bool IsLayer3() const;
 
+  double GetLnLikelihood() const { return ln_likelihood_;}
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 

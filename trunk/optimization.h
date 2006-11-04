@@ -42,6 +42,7 @@ bool TryAddImplicationRule(Model *m,
 			   const vector<Tuple> & result, 
 			   RollbackCriterion criterion, bool fix_times);
 
+bool TryMakeFunctionalNegativeRule(Rule *r);
   
 enum Tactic {
   NEW_RULE,
