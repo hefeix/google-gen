@@ -61,6 +61,7 @@ void Component::Erase(){
   L1_Erase();
 }
 void Component::L1_Erase(){
+  CHECK(exists_);
   A1_SetExists(false);
   vector<Component *> dep = StructuralDependents();
   vector<Component *> copurposes = Copurposes();

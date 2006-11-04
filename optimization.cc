@@ -259,94 +259,50 @@ bool Model::TryRemoveFiring(Firing *f){
 
 bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs){
   Model *m = rule->GetModel();
+  // alternate explanations to remove, grouped by rule
   map<Rule *, set<Firing *> > to_remove;
   for (uint snum=0; snum<subs.size(); snum++) {
     CHECK(r.Exixts());
     const Substitution & sub = subs[snum];
-    set<TrueTuple *> dependents_explained = dependents;
-
-   // Let's find the TrueTuples which are the preconditions and results
-    // of this firing that we are going to add.
-    set<TrueTuple *> codependents; 
-    set<TrueTuple *> dependents;
-    vector<Tuple> preconditions = (*r)->precondition_->clauses_;
-    sub.Substitute(&preconditions);
-    bool preconditions_found = true;
-    for (uint i=0; i<preconditions.size(); i++) {
-      TrueTuple * tp = FindTrueTuple(preconditions[i]);
-      if (!tp) {
-	preconditions_found = false;
-	break;
-      }
-      codependents.insert(tp);
-    }
-    if (!preconditions_found) break; // continue? 
-    codependents.insert(*r);
-    vector<Tuple> results = (*r)->result_;
-    sub.Substitute(&results);
-    for (uint i=0; i<results.size(); i++) {
-      TrueTuple * tp = FindTrueTuple(results[i]);
-      if (tp) dependents.insert(tp);
-    }
-    // we're going to try to check whether any of the preconditions of this
-    // firing depend on its results.  If so, skip it. 
-    /*forall(run_d, dependents) {
-      Component * d = *run_d;
-      bool depended_on = false;
-      forall(run_c, codependents) {
-	if (DependsOn(*run_c, d, 100) == RESULT_TRUE) depended_on = true;
-      }
-      if (!depended_on) dependents_explained.insert(*run_d);
-    }
-    if (dependents_explained.size()==0) continue;*/
     Firing * f = (*r)->GetAddFiring(sub);
     VLOG(1) << "Added firing " << sub.ToString() << endl;
     CHECK(f);
+    
+    set<TrueTuple *> dependents_explained = f->GetTrueTuples();
+    
     forall(run, dependents_explained) {
       TrueTuple * tp = *run;
-      forall (run_f, tp->causes_) {
+      forall (run_f, tp->GetCauses()) {
 	Firing * other_firing = *run_f;
-	if (other_firing == NULL) continue;
+	CHECK(other_firing);
 	if (f==other_firing) continue;
-	to_remove[StablePtr<Rule>(other_firing->GetRule())]
-	  .insert(StablePtr<Firing>(other_firing));
+	to_remove[other_firing->GetRule()].insert(other_firing);
       }
     }
   }
-  (*r)->OptimizeStrength();
-  to_remove.erase(r);
+  m->OptimizeStrength(r);
   forall (run_r, to_remove) {
-    StablePtr<Rule> alt_r = run_r->first;
-    const set<StablePtr<Firing> > & firings = run_r->second;
-    bool is_creative = (*alt_r)->type_ == CREATIVE_RULE;
-    if (!alt_r.IsValid()) continue;
-    bool may_want_negative_rule = false;
-    bool may_want_duplicate_explanations = false;
+    Rule * alt_r = run_r->first;
+    const set<Firing *> & firings = run_r->second;
+    bool is_creative = alt_r->type_ == CREATIVE_RULE;
+    CHECK(alt_r.Exixts());
+    bool may_want_to_add_negative_rule = false;
     // let's see how many of the first firings for this rule can be cut
-    int num_satisfactions = (*alt_r)->precondition_->num_satisfactions_;
-    int num_first_firings = (*alt_r)->NumFirstFirings();
+    int num_satisfactions = alt_r->GetPrecondition->GetNumSatisfactions();
+    int num_first_firings = alt_r->NumFirstFirings();
     int new_num_first_firings = num_first_firings;
-    map<StablePtr<RuleSat>, vector<StablePtr<Firing> > > by_rule_sat;
+    map<RuleSat *, vector<Firing *> > by_rule_sat;
     forall(run, firings) {
-	by_rule_sat[StablePtr<RuleSat>((**run)->rule_sat_)].push_back(*run);
+      by_rule_sat[(*run)->GetRuleSat()].push_back(*run);
     }
     forall(run, by_rule_sat) {
-      if ((*run->first)->firings_.size() == run->second.size())
+      if (run->first->GetFirings().size() == run->second.size())
 	new_num_first_firings--;
     }
     CHECK(new_num_first_firings >= 0);
-    if (is_creative) {
-      if (new_num_first_firings < num_first_firings &&
-	  new_num_first_firings > 0) {
-	  may_want_negative_rule = true;
-      }	
-    } else {
-      if (new_num_first_firings > 0) {
-	may_want_negative_rule = true;
-      }
-      if (new_num_first_firings > num_satisfactions - num_first_firings) {
-	may_want_duplicate_explanations = true;
-      }
+    if (new_num_first_firings < num_first_firings &&
+	new_num_first_firings > 0) {
+      may_want_to_add_negative_rule = true;
     }
     VLOG(1) << "alt_r_id=" << (*alt_r)->id_
 	    << " is_creative=" << (is_creative?"t":"f")
@@ -354,62 +310,63 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs){
 	    << " num_nff=" << num_first_firings
 	    << " new_nff=" << new_num_first_firings
 	    << endl;
-    // this cp automatically gives the option of duplciate explanations
-    OptimizationCheckpoint rule_cp(this, REQUIRE_BETTER, false);
-    
 
-    forall(run, firings){
-      if (run->IsValid()) {
-	KillComponent(**run);
-	//bool firing_removed = TryRemoveFiring(**run, REQUIRE_VALID, false);
-	  //VLOG(1) << "remove firing " << (firing_removed?"success":"fail") 
-	  //	  << endl;
-      }	
+    // this cp automatically gives the option of leaving in all of the 
+    // firings for this alternate rule (duplciate explanations)
+    OptimizationCheckpoint rule_cp(m, false);
+
+    forall(run, firings) run->Erase();
+    
+    if (!alt_r->HasFiring()) {
+      alt_r->Erase();
+      continue;
     }
-    if (!alt_r.IsValid()) continue;
-    if (!(*alt_r)->HasFiring()) {
-	TryRemoveRule(*alt_r, REQUIRE_BETTER, false);
-	continue;
-    }
-    (*alt_r)->OptimizeStrength();
-    if (may_want_negative_rule) {
-      OptimizationCheckpoint cp_negative_rule(this, REQUIRE_BETTER, true);
-      // make sure r has a smaller deay than alt_r
-      if (!((*alt_r)->delay_ < (*r)->delay_)) {
-	EncodedNumber new_delay = (*r)->delay_;
+    m->OptimizeStrength(alt_r);
+    if (may_want_to_add_negative_rule) {
+      OptimizationCheckpoint cp_negative_rule(m, true);
+      // make sure r has a smaller delay than alt_r
+      if ((alt_r->GetDelay() <= r->GetDelay())) {
+	EncodedNumber new_delay = alt_r->GetDelay();
 	new_delay.bits_.push_back(false);
-	(*r)->ChangeDelay(new_delay);
+	r->ChangeDelay(new_delay);
       }
-      Rule * negative_rule = 
-	new Rule(new Precondition(this,
-				  Concat((*alt_r)->precondition_->clauses_, 
-					   (*alt_r)->result_)),
-		 EncodedNumber(),
-		 NEGATIVE_RULE, *alt_r,
-		 vector<Tuple>(),
-		 EncodedNumber(),
-		 EncodedNumber(),
-		 false,
-		 true);
-      negative_rule->ExplainEncoding();
-      FixTimes();
-      cerr << "added negative " << " lnlikelihood=" << ln_likelihood_ << endl;
-      for (int rep=0; rep<2; rep++) { // TODO: optimize it all together
-	negative_rule->OptimizeStrength();
-	cerr << "opt_neg " << " lnlikelihood=" << ln_likelihood_ 
-	     << "  val=" << negative_rule->strength_d_ << endl;
-	(*alt_r)->OptimizeStrength();
-	cerr << "opt_alt " << " lnlikelihood=" << ln_likelihood_ 
-	     << "  val=" << (*alt_r)->strength_d_ << endl;
-      }
-      if (GetVerbosity() >= 1) ToHTML("html");
+      TryMakeFunctionalNegativeRule(alt_r);
     }
   }
   VLOG(1) << "removed alternate explanations " 
     //<< sub.ToString() 
 	  << " new ln_likelihood_="
-	  << ln_likelihood_ << endl;
-  return cp.KeepChanges();
+	  << m->GetLnLikelihood() << endl;
+}
+
+void TryMakeFunctionalNegativeRule(Rule *r){
+  // TODO: maybe play with the delay.
+  Model *m = r->GetModel();
+  Pattern precondition 
+    = Concat(r->GetPrecondition()->GetPattern(), r->GetResult());
+  if (m->FindNegativeRule(precondition, r)) return;
+  Rule * negative_rule = 
+    m->MakeNewRule(precondition, 
+		   EncodedNumber(),
+		   NEGATIVE_RULE, alt_r,
+		   vector<Tuple>(),
+		   EncodedNumber(),
+		   EncodedNumber());
+  // negative_rule->ExplainEncoding();
+  FixTimes();
+  VLOG(1) 
+    << "added negative " << " lnlikelihood=" << m->GetLnLikelihood() << endl;
+  // go back and forth and optimize the rule weights.   
+  // TODO: optimize it all together?
+  for (int rep=0; rep<2; rep++) { 
+    m->OptimizeStrength(negative_rule);
+    VLOG(1) << "opt_neg " << " lnlikelihood=" << m->GetLnLikelihood() 
+	    << "  val=" << negative_rule->strength_d_ << endl;
+    m->OptimizeStrength(r);
+    VLOG(1) << "opt_alt " << " lnlikelihood=" << m->GetLnLikelihood() 
+	    << "  val=" << (*alt_r)->strength_d_ << endl;
+  }
+  if (GetVerbosity() >= 1) ToHTML("html");
 }
 
 bool Model::TryAddImplicationRule(const vector<Tuple> & preconditions,
@@ -434,23 +391,23 @@ bool Model::TryAddImplicationRule(const vector<Tuple> & preconditions,
     VLOG(2) << "rule already exists" << endl;
     return false;    
   }
-  VLOG(2) << "old ln_likelihood_=" << ln_likelihood_ << endl;
+  VLOG(2) << "old ln_likelihood_=" << m->GetLnLikelihood() << endl;
   StablePtr<Rule> r(new Rule(GetAddPrecondition(preconditions), EncodedNumber(),
 			     type, 0, result, EncodedNumber(), EncodedNumber(), 
 			     false, false));
   (*r)->ExplainEncoding();
-  VLOG(2) << "new ln_likelihood_=" << ln_likelihood_ << endl;
+  VLOG(2) << "new ln_likelihood_=" << m->GetLnLikelihood() << endl;
 
   TryAddFirings(*r, subs, criterion, fix_times);
   if (!r.IsValid()) return cp.KeepChanges();
-  VLOG(2) << "with firings: " << ln_likelihood_ << endl;
+  VLOG(2) << "with firings: " << m->GetLnLikelihood() << endl;
   (*r)->OptimizeStrength();
-  VLOG(2) << "optimized strength: " << ln_likelihood_ << endl;
+  VLOG(2) << "optimized strength: " << m->GetLnLikelihood() << endl;
   if (cp.KeepChanges()) {
     VLOG(0) << " Created rule "
 	    << TupleVectorToString(preconditions)
 	    << " ->" << TupleVectorToString(result)
-	    << " model likelihood: " << ln_likelihood_
+	    << " model likelihood: " << m->GetLnLikelihood()
 	    << " gain=" << cp.Gain() << endl;
   }
   // ToHTML("html");
@@ -568,15 +525,15 @@ OptimizationCheckpoint::OptimizationCheckpoint(Model *model,
   model_  = model;
   fix_times_ = fix_times;
   cp_ = model->changelist_->GetCheckpoint();
-  old_ln_likelihood_ = model_->ln_likelihood_;
+  old_ln_likelihood_ = model_->GetLnLikelihood();
 }
 OptimizationCheckpoint::~OptimizationCheckpoint() {
   if (!KeepChanges()) model_->changelist_.Rollback(cp_);
 }
 bool OptimizationCheckpoint::Better() {
   return (model_->MayBeTimeFixable()
-	  && (model_->ln_likelihood_ > old_ln_likelihood_ + 
-	      (1+fabs(model_->ln_likelihood_)) * 1e-14));
+	  && (model_->GetLnLikelihood() > old_ln_likelihood_ + 
+	      (1+fabs(model_->GetLnLikelihood())) * 1e-14));
 }
 bool OptimizationCheckpoint::KeepChanges() {
   if (!Better()) return false;
@@ -584,7 +541,7 @@ bool OptimizationCheckpoint::KeepChanges() {
   return Better();
 }
 double OptimizationCheckpoint::Gain() {
-  return model_->ln_likelihood_ - old_ln_likelihood_;
+  return model_->GetLnLikelihood() - old_ln_likelihood_;
 }
 
 void OptimizeStrength(Rule *r){
@@ -605,7 +562,7 @@ void OptimizeStrength(Rule *r){
 	EncodedNumber old_val = *to_alter;
 	VLOG(2) << "trial=" << trial 
 		<< " to_alter=" << to_alter->ToSortableString()
-		<< " ln_likelihood_=" << model_->ln_likelihood_ << endl;
+		<< " ln_likelihood_=" << model_->m->GetLnLikelihood() << endl;
 	if (trial==0) { // drop last bit
 	  if (to_alter->bits_.size()==0) continue;
 	  to_alter->bits_.pop_back();	  
@@ -615,7 +572,7 @@ void OptimizeStrength(Rule *r){
 	OptimizationCheckpoint cp(r->model_, REQUIRE_BETTER, false);
 	r->ChangeStrength(strength, strength2);
 	VLOG(2) << "   new_val=" << to_alter->ToSortableString()
-		<< " new_ln_likelihood=" << model_->ln_likelihood_ << endl;
+		<< " new_ln_likelihood=" << model_->m->GetLnLikelihood() << endl;
 	if (cp.KeepChanges()) {
 	  any_improvement = true;
 	  if (trial==0) avoid_trying = old_val.bits_.back()?2:1;
@@ -650,9 +607,9 @@ void Explain(Model *m, TrueTuple *p,
   for (uint i=0; i<explanations.size(); i++){
     Checkpoint cp = m->MakeCheckpoint();
     explanations[i].first->GetAddFiring(explanations[i].second);
-    if (i==0 || ln_likelihood_ > best) {
+    if (i==0 || m->GetLnLikelihood() > best) {
       which=i;
-      best = ln_likelihood_;
+      best = m->GetLnLikelihood();
     }
     m->Rollback(cp);
   }

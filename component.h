@@ -291,6 +291,7 @@ class Precondition : public Component {
   virtual void VerifyLayer2Subclass() const;
   Rule * FindPositiveRule(const vector<tuple> & result) const;
   Rule * FindNegativeRule(Rule * target_rule) const;
+  int GetNumSatisfactions() const { return num_satisfactions_;}
 
   // TUPLE ENCODING STUFF
   // figures out what tuples cause the precondition under the tuple encoding.
@@ -333,7 +334,7 @@ class Precondition : public Component {
   void A1_SetLnLikelihoodPerSat(double val);
   // Changes the total number of satisfactions (including ones not represented)
   void A1_AddToNumSatisfactions(int delta);
-
+ 
 
   // ----- DATA -----
 
@@ -484,6 +485,10 @@ class Rule : public Component{
   //  Convenience
   RuleSat * FindRuleSat(const Substitution & sub) const;
   virtual void VerifyLayer2Subclass() const;
+  Precondition * GetPrecondition() const { return precondition_;}
+  EncodedNumber GetDelay() const { return delay_;}
+  EncodedNumber GetStrength const { return strength_;}
+  EncodedNumber GetStrength2 const { return strength2_;}
 
  private:
   // ----- CONSTRUCTOR(S) -----
@@ -601,7 +606,8 @@ class RuleSat : public Component{ // an instance of a rule coming true
   inline EncodedNumber GetTimeDelay() const { return rule_->delay_;}
   double LnLikelihood() const;
   bool HasPurpose() const;
-
+  const map<Substitution, Firing *> & GetFirings() const { return firings_;}
+  
  private:
 
 
@@ -656,6 +662,7 @@ class Firing : public Component{
   vector<vector<Component *> > TemporalCodependents() const;
   vector<Component *> Copurposes() const;
   Substitution GetFullSubstitution() const;
+  const set<TrueTuple *> & GetTrueTuples() { return true_tuples_;}
 
  private:
 
@@ -704,6 +711,8 @@ class TrueTuple : public Component{
   set<TrueTuple *> GetCauseTrueTuples() const;
   vector<Component *> TemporalDependents() const;
   vector<vector<Component *> > TemporalCodependents() const;
+
+  const set<Firing *> & GetCauses const { return causes_;}
 
  private:
 
