@@ -908,7 +908,8 @@ bool RuleSat::NeedsPurpose() const {
 }
 
 void Component::ComputeSetTime(){
-  L1_SetTimeMaintainConsistency(ComputeTime(NULL), true);
+  L1_SetTimeMaintainIndices(ComputeTime(NULL), true);
+  MakeTimeClean();
 }
 Time Component::ComputeTime(set<Component *> *excluded){
   Time ret;
@@ -928,9 +929,9 @@ Time Component::ComputeTime(set<Component *> *excluded){
   if (HasTimeDelay()) ret.Increment(GetTimeDelay(), 1);
   return ret;
 }
-void Component::L1_SetTimeMaintainConsistency(Time new_time, 
-					      bool adjust_dirty_bits){
-  if (new_time == time_) { L1_MakeTimeDirty(false); return; }
+void Component::L1_SetTimeMaintainIndices(Time new_time,
+					  bool make_dependents_dirty){
+  if (new_time == time_) return; 
   if (time_.IsNever()) {
     model_->A1_EraseFromNeverHappen(this);
     if (Type()==TRUETUPLE && ((TrueTuple*)this)->required_)
@@ -938,13 +939,12 @@ void Component::L1_SetTimeMaintainConsistency(Time new_time,
   }
   A1_SetTime(new_time);
   AdjustLnLikelihoodForNewTime();
-  if (adjust_dirty_bits) {
+  if (make_dependents_dirty) {
     vector<Component *> dep = Dependents();
     for(uint i=0; i<dep.size(); i++) {
       if (dep[i]->ComputeTime(NULL) != dep[i]->time_)
 	dep[i]->L1_MakeTimeDirty();
     }
-    L1_MakeTimeClean();
   }
   if (time_.IsNever()){
     model_->A1_InsertIntoNeverHappen(this);

@@ -132,6 +132,13 @@ void Model::IsLayer3() const{
   if (violated_prohibitions_.size()) return false;
   return true;
 }
+// FixTime may be able to make the model Layer 3
+void Model::MayBeTimeFixable() const{
+  // TODO: think about this.
+  if (violated_prohibitions_.size()) return false;
+  if (required_never_happen_.size()) return false;
+  return true;
+}
 
 
 void Model::L1_InsertIntoClauseToPreconditionMap(Precodition *p){
@@ -276,40 +283,66 @@ void Model::L1_SubtractArbitraryTerm(int w){
 
 // postcondition: no times dirty.
 void Model::FixTimes() {
-  multimap<Time, Component *> to_insert;
-  //ToHTML("html");
-  VLOG(1) << "Fix times " << times_dirty_.size() << " dirty " << endl;
+  // TODO: Figure out how and why the heck this works.  
+
+  // Within this function, we call ComputeTime using times_dirty_ as the 
+  // excluded set.  This means that we pretend that the components which are
+  // dirty happen NEVER.   It seems kind of scary that we aren't keeping track
+  // of which definition was used to set the time and the dirty flag for each
+  // component.  It's OK though, since it is always one of the two definitions,
+  // and the two definitions are identical by the end of the function when
+  // all of the times are clean.  
+
+  // We have a queue containing all of the dirty components.  Each dirty
+  // component is indexed by the min of its current time and its correct time.
+
+  // We don't bother deleting obselete entries from the queue.  It might be 
+  // more understandable if we did.  We would also have to keep a 
+  // map<Component *, Time> so as to find and delete any old entries for a
+  // component when inserting a new entry for that component. 
+  multimap<Time, Component *> queue;
+
+  // We initially build the queue.
   forall(run, times_dirty_){
     Component * c = *run;
     VLOG(1) << "   Inserting " << c->id_  
 	    << " time=" << c->time_.ToSortableString() << endl;
     Time t = min(c->time_, c->ComputeTime(&times_dirty_));
-    to_insert.insert(make_pair(t, c));
+    queue.insert(make_pair(t, c));
   }
-  while (to_insert.size()){
-    Component * c = to_insert.begin()->second;
-    Time t = to_insert.begin()->first;
+
+  // We repeatedly deal with the first element of the queue, that is, the 
+  // one that is indexed by the earliest time.
+  while (queue.size()){
+    Component * c = queue.begin()->second;
+    Time t = queue.begin()->first;
+    // If the time is NEVER, then for all things remaining in the queue, both
+    // the current time and the correct time must be NEVER, and we are done.
     if (t.IsNever()) break;
-    Time new_time = c->ComputeTime(&times_dirty_);
-    /*if (GetVerbosity() >= 3) {
-      cerr << "id=" << c->id_ << " time=" << t.ToSortableString();
-      vector<vector<Component *> > codep = c->TemporalCodependents();
-      for (uint i=0; i<codep.size(); i++) {
-	cerr << " ; ";
-	for (uint j=0; j<codep[i].size(); j++) 
-	  cerr << codep[i][j]->id_ << ",";
-      }
-      cerr << endl;
-      cerr << "DIRTY: "; 
-      forall (run, times_dirty_) 
-	cerr << (*run)->id_ << " ";
-      cerr << endl;
-      }*/
-    to_insert.erase(to_insert.begin());
+    queue.erase(queue.begin());
+    // This queue entry may be no longer valid, so the time might be clean.
+    // I think it would make this function much more understandable if we 
+    // ignored the entry in all cases when it is obselete.  That way, the 
+    // only two cases we would need to deal with  would be moving the time 
+    // backwards to the entry time, and moving it forwards from the entry time. 
+    // Let's wait until we have everything running before f@#$ing with it.  
     if (!c->time_dirty_) continue;
-    if (c->time_ != new_time) c->L1_SetTimeMaintainConsistency(new_time, false);
-    vector<Component *> dep = c->Dependents();
+
+    Time new_time = c->ComputeTime(&times_dirty_);
+    // Set the time for this component.  
+    if (c->time_ != new_time) c->L1_SetTimeMaintainIndices(new_time, false);
+
+    // Now we may want to make this component clean and we may not.  Why on
+    // earth not, you ask?  Because if there is a circular dependency, making 
+    // the time clean when pushing it forward may result in an infinite loop
+    // in this function.   A better policy would be to make the time clean when
+    // moving the time backwards to the entry time and leaving it dirty when 
+    // moving it forwards from the entry time.   I think this can be proven 
+    // to terminate.   I tried to do something more clever here, but I can't 
+    // remember the reasoning, so it may not be correct.  
+
     bool solid = true;
+    vector<Component *> dep = c->Dependents();
     forall(run, dep) {
       Component * d = *run;
       if ( (d->time_ < new_time) && 
@@ -318,27 +351,28 @@ void Model::FixTimes() {
     if (solid) {
       c->L1_MakeTimeClean();
     } else {
-      to_insert.insert(make_pair(new_time, c));
+      queue.insert(make_pair(new_time, c));
     }
+
+    // Now we need to figure out which of the dependents are now dirty, and 
+    // make sure they are in the queue.  
     forall(run, dep) {
       Component * d = *run;
       Time dep_time = d->ComputeTime(&times_dirty_);
-      if (dep_time != d->time_) {
-	d->L1_MakeTimeDirty();
-	VLOG(3) << "making dirty id=" << d->id_ 
-		<< " time=" << d->time_.ToSortableString() << endl;
-      }
+      if (dep_time != d->time_) d->L1_MakeTimeDirty();
       if (d->time_dirty_) {
-	to_insert.insert(make_pair(min(dep_time, d->time_), d));
+	queue.insert(make_pair(min(dep_time, d->time_), d));
       }
     }
   }
+  // Now that all of the dirty stuff happens NEVER, we can make it clean.  
+  // TODO, is this really necessary, or could we have just let the previous 
+  // loop run until the queue was empty?
   while(times_dirty_.size()){
     Component *c = *times_dirty_.begin();
     c->L1_SetTimeMaintainConsistency(NEVER, false);
     c->L1_MakeTimeClean();
   }
-  VLOG(1) << "fixed times " << times_dirty_.size() << " dirty" << endl;
   CHECK(times_dirty_.size()==0);
 }
 
