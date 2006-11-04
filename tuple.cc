@@ -54,20 +54,24 @@ bool Tuple::HasDuplicateVariables() const {
   return false;
 }
 bool Tuple::IsConstantTuple() const{
-  for (int i=0; i<size(); i++) if (!IsConstant(terms_[i])) return false;
+  for (uint i=0; i<size(); i++) 
+    if (!IsConstant(terms_[i])) return false;
   return true;
 }
 bool Tuple::IsVariableTuple() const{
-  for (int i=0; i<size(); i++) if (IsWildcard(terms_[i])) return false;
+  for (uint i=0; i<size(); i++) 
+    if (IsWildcard(terms_[i])) return false;
   return true;
 }
 bool Tuple::IsWildcardTuple() const{
-  for (int i=0; i<size(); i++) if (IsVariable(terms_[i])) return false;
+  for (uint i=0; i<size(); i++) 
+    if (IsVariable(terms_[i])) return false;
   return true;
 }
 bool operator==(const Tuple & s1, const Tuple & s2){
   if (s1.size() != s2.size()) return false;
-  for (uint i=0; i<s1.size(); i++) if (s1[i]!=s2[i]) return false;
+  for (uint i=0; i<s1.size(); i++) 
+    if (s1[i]!=s2[i]) return false;
   return true;
 }
 Tuple AllWildcards(int num_terms){
@@ -81,7 +85,7 @@ bool MatchesWildcardTuple(const Tuple & wildcard_tuple,
   CHECK(wildcard_tuple.size() == constant_tuple.size());
   CHECK(wildcard_tuple.IsWildcardTuple());
   CHECK(constant_tuple.IsConstantTuple());
-  for (int i=0; i<wildcard_tuple.size(); i++){
+  for (uint i=0; i<wildcard_tuple.size(); i++){
     if (IsConstant(wildcard_tuple[i]) && wildcard_tuple[i] != constant_tuple[i])
       return false;
   }
@@ -162,7 +166,8 @@ set<int> GetVariables(const Pattern & v) {
 Pattern RemoveVariableFreeTuples(const Pattern &v) {
   Pattern ret;
   for (uint i=0; i<v.size(); i++) {
-    if (v[i].HasVariables()) ret.push_back(v[i]);    
+    if (!v[i].IsConstantTuple()) 
+      ret.push_back(v[i]);
   }
   return ret;
 }
@@ -225,17 +230,18 @@ double PatternLnLikelihood(const Pattern &context,
   CHECK(arbitrary_terms);
   arbitrary_terms->clear();
   set<int> terms_seen;
-  double ret = 0;
+  double ret = 0.0;
   bool encoding = false;
+
   // encode the number of tuples in the pattern
   ret += uintQuadraticLnProb(to_encode.size()); 
   for (uint i=0; i<context.size()+to_encode.size(); i++) {
     if (i == context.size()) encoding = true;
-    const Tuple & s;
+    const Tuple &s = (encoding ? to_encode[i-context.size()] : context[i]);
     CHECK(s.size() > 0);
-    // encode the length of the tuple.
+ 
+   // encode the length of the tuple.
     if (encoding) ret += uintQuadraticLnProb(s.size()-1);
-      = (i<context.size())?context[i]:to_encode[i-context.size()];
     for (uint j=0; j<s.size(); j++) {
       int t = s[j];
       // specify whether it's a back-reference or not.
@@ -274,7 +280,7 @@ Pattern Canonicalize(const Pattern & v, Substitution *sub){
   Pattern ret;
   map<uint64, int> sorted;
   for (uint i=0; i<v.size(); i++) {
-    fprints.push_back(v[i].MakeVariableInsensitive().Fingerprint());
+    fprints.push_back(v[i].VariablesToWildcards().Fingerprint());
     sorted[fprints[i]] = i;
   }
   if (sorted.size() == v.size()) {
