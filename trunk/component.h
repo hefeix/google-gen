@@ -131,6 +131,8 @@ class Component{
 
   // ----- CONST FUNCTIONS -----
 
+  Model * GetModel() const { return model_;}
+
   virtual ComponentType Type() const = 0;
   string TypeName() const;
 
@@ -211,14 +213,12 @@ class Component{
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
   // Set the time to new_time.
-  // If the adjust_dirty_bits parameter is true, as it should usually be, 
-  // the dirty bit on this component is updated to false, and those on its 
-  // dependents are updated to true if necessary.  
+  // If the make_dependents_dirty parameter is true, as it should usually be, 
+  // the temporal dependents are checked and their dirty bits are set to true
+  // if necessary.
   //
-  // All Layer 2 requirements are maintained except that the time being
-  // set may not be correct, and if adjust_dirty_bits is set to false,
-  // times and dirty bits may be incorrect all over the model.  
-  void L1_SetTimeMaintainConsistency(Time new_time, bool adjust_dirty_bits);
+  // The indices are maintained.
+  void L1_SetTimeMaintainIndices(Time new_time, bool make_dependents_dirty);
 
   // Erase any object, and recursively erase its structural dependents, and
   // anything that becomes purposeless. 
@@ -250,7 +250,7 @@ class Component{
   // avoid invalidating pointers and storing the data elswhere.  Thus we just 
   // set the exists_ variable to false and pretend that it doesn't exist.
   bool exists_;
-  int id_;  
+  int id_;
   Model * model_;
   // contribution of this component to the ln_likelihood_ of the model
   double ln_likelihood_;
@@ -650,6 +650,7 @@ class Firing : public Component{
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   string ImplicationString() const;
+  RuleSat * GetRuleSat() const{ return rule_sat_;}
   inline Rule * GetRule() const{ return rule_sat_->rule_; }
   vector<Component *> TemporalDependents() const;
   vector<vector<Component *> > TemporalCodependents() const;

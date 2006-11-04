@@ -23,17 +23,14 @@
 #include "model.h"
 
 // OPTIMIZATION functions. 
-// All functions starting with "Try" have built-in roll-back mechaisms
-// and return true if the changes are kept. 
-// You can specify what the rollback criterion is, and whether the function
-// should bother to fix the times.
-bool TryRemoveFiring(Model *m,
-		     Firing * f, RollbackCriterion criterion, bool fix_times);
-bool TryRemoveRule(Model *m, 
-		   Rule * r, RollbackCriterion criterion, bool fix_times);
-bool TryAddFirings(Model *m,
-		   Rule * r, const vector<Substitution> & sub, 
-		   RollbackCriterion criterion, bool fix_times);
+// There are no built-in rollback mechanisms.  Wrap them in an automated 
+// roll-back if you want to.
+
+// Removes a firing and might remove the rule.  
+bool TryRemoveFiring(Firing *f);
+
+// Adds a bunch of firings at once and removes alternate explanations.
+bool TryAddFirings(Rule * r, const vector<Substitution> & sub);
 // Given a creative rule, tries creating rules where the unbound RHS variables
 // in the original rule are replaced by constants.
 bool TrySpecifyCreativeRule(Model *m,
@@ -83,12 +80,6 @@ ComputationResult RequiresCodependent(Component * dependent,
 				      Component * codependent);
   
 
-// Sometimes we want to roll back if the model has gotten less likely, and
-// sometimes we only want to roll back if the model is invalid. 
-enum RollbackCriterion {
-  REQUIRE_BETTER,
-  REQUIRE_VALID,
-};
 // This is an object that can be created, which will set a checkpoint upon
 // creation, and automatically roll back the model if it doesn't like the
 // model when it goes out of scope.  
@@ -96,12 +87,10 @@ struct OptimizationCheckpoint {
   Model * model_;
   Checkpoint cp_;
   double old_ln_likelihood_;
-  RollbackCriterion criterion_;
   // should we make sure all of the times are correct in the model
   // before deciding whether to roll back 
   bool fix_times_;  
-  OptimizationCheckpoint(Model *model, RollbackCriterion criterion,
-			 bool fix_times);
+  OptimizationCheckpoint(Model *model, bool fix_times);
   ~OptimizationCheckpoint();
   // Should we keep the changes
   bool KeepChanges();

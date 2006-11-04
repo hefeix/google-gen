@@ -244,33 +244,30 @@ ComputationResult DependsOn(Model *m, Component * dependent,
   }
   return RESULT_FALSE;
 }
-bool Model::TryRemoveRule(Rule *r, RollbackCriterion criterion, 
-			  bool fix_times){
-  OptimizationCheckpoint cp(this, criterion, fix_times);
-  KillComponent(r);
-  return cp.KeepChanges();
-}
-bool Model::TryRemoveFiring(Firing *f, RollbackCriterion criterion,
-			    bool fix_times){
+bool Model::TryRemoveFiring(Firing *f){
   // if (f->IsEssential(10, 0) == RESULT_TRUE) return false;
-  OptimizationCheckpoint cp(this, criterion, fix_times);
-  Rule * r = f->rule_sat_->rule_;
-  KillComponent(f);
+  Model *m = f->GetModel();
+  Rule * r = f->GetRule();
+  f->Erase();
   r->OptimizeStrength();
-  if (!r->HasFiring()) TryRemoveRule(r, criterion, fix_times);
+  if (!r->HasFiring()) {
+    OptimizationCheckpoint cp(m, false);
+    r->Erase();
+  }
   return cp.KeepChanges();
 }
-bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
-			  RollbackCriterion criterion, bool fix_times){
-  StablePtr<Rule> r(rule);
-  OptimizationCheckpoint cp(this, criterion, fix_times);
-  map<StablePtr<Rule>, set<StablePtr<Firing> > > to_remove;
+
+bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs){
+  Model *m = rule->GetModel();
+  map<Rule *, set<Firing *> > to_remove;
   for (uint snum=0; snum<subs.size(); snum++) {
-    if (!r.IsValid()) break;
+    CHECK(r.Exixts());
     const Substitution & sub = subs[snum];
-    // we're going to try to check whether any of the preconditions of this
-    // firing depend on its results.  If so, skip it. 
-    set<Component *> codependents; 
+    set<TrueTuple *> dependents_explained = dependents;
+
+   // Let's find the TrueTuples which are the preconditions and results
+    // of this firing that we are going to add.
+    set<TrueTuple *> codependents; 
     set<TrueTuple *> dependents;
     vector<Tuple> preconditions = (*r)->precondition_->clauses_;
     sub.Substitute(&preconditions);
@@ -283,7 +280,7 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
       }
       codependents.insert(tp);
     }
-    if (!preconditions_found) break;
+    if (!preconditions_found) break; // continue? 
     codependents.insert(*r);
     vector<Tuple> results = (*r)->result_;
     sub.Substitute(&results);
@@ -291,7 +288,8 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
       TrueTuple * tp = FindTrueTuple(results[i]);
       if (tp) dependents.insert(tp);
     }
-    set<TrueTuple *> dependents_explained = dependents;
+    // we're going to try to check whether any of the preconditions of this
+    // firing depend on its results.  If so, skip it. 
     /*forall(run_d, dependents) {
       Component * d = *run_d;
       bool depended_on = false;
@@ -566,31 +564,24 @@ ComputationResult IsEssential(Component *c, int max_work,
 
 
 OptimizationCheckpoint::OptimizationCheckpoint(Model *model,
-					       RollbackCriterion c,
 					       bool fix_times) {
   model_  = model;
-  criterion_ = c;
   fix_times_ = fix_times;
-  cp_ = model->MakeCheckpoint();
+  cp_ = model->changelist_->GetCheckpoint();
   old_ln_likelihood_ = model_->ln_likelihood_;
 }
 OptimizationCheckpoint::~OptimizationCheckpoint() {
-  if (!KeepChanges()) model_->Rollback(cp_);
+  if (!KeepChanges()) model_->changelist_.Rollback(cp_);
 }
 bool OptimizationCheckpoint::Better() {
-  return (model_->Legal() 
+  return (model_->MayBeTimeFixable()
 	  && (model_->ln_likelihood_ > old_ln_likelihood_ + 
 	      (1+fabs(model_->ln_likelihood_)) * 1e-14));
 }
 bool OptimizationCheckpoint::KeepChanges() {
-  if (criterion_ == REQUIRE_BETTER && !Better()) return false;
-  if (!model_->Legal()) return false;
-  if (fix_times_) {
-    model_->FixTimesFixCircularDependencies();
-    model_->DeleteNeverHappeningComponents();
-  }
-  if (criterion_ == REQUIRE_BETTER) return Better();
-  else return model_->Legal();
+  if (!Better()) return false;
+  if (fix_times_) model_->FixTimesFixCircularDependencies();  
+  return Better();
 }
 double OptimizationCheckpoint::Gain() {
   return model_->ln_likelihood_ - old_ln_likelihood_;
