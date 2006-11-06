@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
+// Author: Noam Shazeer and Georges Harik
 
 
 #include "tupleindex.h"
@@ -31,7 +31,7 @@ const Tuple * TupleIndex::RandomTuple(){
     if (n < run->second) {
       FullySpecifiedNode ** results;
       uint64 num_results;
-      LookupInternal(AllVar0(run->first), &results, &num_results);
+      LookupInternal(AllWildcards(run->first), &results, &num_results);
       CHECK(num_results==run->second);
       return &results[n]->tuple_;
     } else {
@@ -134,39 +134,84 @@ const Tuple * TupleIndex::RandomTupleContaining(int w){
   return 0;
 }
 */
+
+/*
 const Tuple * TupleIndex::GetAdd(const Tuple &s) {
   const Tuple * t = FindTuple(s);
   if (!t) return add(s);
 }
+*/
+
+// Add a constant tuple to the index. The index consists of fully specified 
+// nodes which contain constant tuples and underspecified nodes which contain 
+// generalized (wildcard) tuples. Both of these are indexed by fingerprint.
+//
+// The fully specified nodes maintain a number that is the index of where they
+// can be found in the various underspecified nodes. This number is in the
+// pos_in_lists_ vector, which is aligned with the generalizations as they
+// range from 0 .. 2^size() of the tuple, each of which should correspond to
+// one underspecified node. 
+//
+// An underspecified node whose first term is wildcard
+// maintains a histogram of constant first term counts in first_term_counts.
+
 const Tuple * TupleIndex::Add(const Tuple & s) {  
+
+  // Make sure it's a constant tuple, and it's not already in there
   CHECK(s.Pattern()==0);
   CHECK(!FindTuple(s));
-  uint64 fp = s.Fingerprint();
-  lengths_[s.size()]++; total_tuples_++;
+
+  // Track the number of tuples, and their size histograms
+  lengths_[s.size()]++; 
+  total_tuples_++;
+
+  // Make a new fully specified node for it, and insert into fully_specified_
   FullySpecifiedNode * n = new FullySpecifiedNode;
+  uint64 fp = s.Fingerprint();
   fully_specified_[fp] = n;
   n->tuple_ = s;
+
+  // pos_in_lists_ lets a node find itself in its generalizations
   n->pos_in_lists_ = new int[1 << s.size()];
+
+  // Run through generalizations and modify underspecified nodes
   for (GeneralizationIterator iter(s); !iter.done(); ++iter) {
+
+    // Pick up the pattern, and ignore the original tuple
     int pattern = iter.pattern();
     if (pattern==0) continue;
+
+    // Get the generalized tuple, and its underspecified node
     const Tuple & g = iter.generalized();
     uint64 gfp = g.Fingerprint();
     UnderspecifiedNode * un = underspecified_[gfp];
+    // Create if necessary
     if (un==0) {
       un = underspecified_[gfp] = new UnderspecifiedNode;
       un->first_term_counts_ = 0;
       if (g[0]==WILDCARD) un->first_term_counts_ = new map<int, int>;
     }
+
+    // Mark your position in your generalization
     n->pos_in_lists_[pattern] = un->specifications_.size();
     un->specifications_.push_back(n);
+
+    // If the first term of your generalization is a wildcard
+    // Mark your first term in its first term counts
     if (un->first_term_counts_) (*un->first_term_counts_)[s[0]]++;
   }
+
+  // Return the added internal tuple
   return &(n->tuple_);
 }
 
+// Remove a constant tuple from the index
 void TupleIndex::Remove(const Tuple & s) {
+
+  // Check that it's a constant tuple
   CHECK(s.Pattern()==0);
+
+  // Look for its fully specified node
   uint64 fp = s.Fingerprint();
   hash_map<uint64, FullySpecifiedNode*>::iterator 
     look = fully_specified_.find(fp);
@@ -174,19 +219,33 @@ void TupleIndex::Remove(const Tuple & s) {
     cerr << "Tuple does not exist" << endl;
     return;
   }
+
+  // Decrement the size histogram and total tuples
   lengths_[s.size()]--; total_tuples_--;
   if (lengths_[s.size()]==0) lengths_.erase(s.size());
+
+  // Erase the fully specified node from the fully_specified_ hash_map
   FullySpecifiedNode * n = look->second;
   fully_specified_.erase(look);
 
+  // Now fix its generalized underspecified nodes
   for (GeneralizationIterator iter(s); !iter.done(); ++iter) {
+
+    // Get the pattern and ignore the original constant tuple
     int pattern = iter.pattern();
     if (pattern==0) continue;
+
+    // Find the underspecified node, make sure it exists
     const Tuple & g = iter.generalized();
     uint64 gfp = g.Fingerprint();
     UnderspecifiedNode * un = underspecified_[gfp];
     CHECK(un!=NULL);
+
+    // Find the position of this tuple in the specifications_ vector
     int pos_in_list = n->pos_in_lists_[pattern];
+
+    // If deleting from the middle of specifications_ replace with last element
+    // and fix the backreference from pos_in_lists_
     if (pos_in_list+1 < (int)un->specifications_.size()) {
       un->specifications_[pos_in_list] 
 	= un->specifications_[un->specifications_.size()-1];
@@ -195,6 +254,10 @@ void TupleIndex::Remove(const Tuple & s) {
     if (un->first_term_counts_) {
       SparseAdd(un->first_term_counts_, s[0], -1);
     }
+
+    // Size of specifications_ has decreased by 1.
+    // If UnderspecifiedNode has no more specifications ...
+    //   remove it from hash_map, delete its first term counts, and it
     un->specifications_.pop_back();
     if (un->specifications_.size()==0) {
       underspecified_.erase(gfp);
@@ -202,12 +265,14 @@ void TupleIndex::Remove(const Tuple & s) {
       delete un;
     }
   }
+
+  // Delete the FullySpecifiedNode
   delete n;  
 }
 void TupleIndex::LookupInternal(const Tuple & s, 
 				   FullySpecifiedNode *** results, 
 				   uint64 * num_results) {
-  uint64 fp = s.MakeVariableInsensitive().Fingerprint();
+  uint64 fp = s.VariablesToWildcards().Fingerprint();
   if (s.Pattern()==0) {
     FullySpecifiedNode ** look = fully_specified_ % fp; 
     if (results) *results = look;

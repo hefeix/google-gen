@@ -72,7 +72,7 @@ bool MatchesWildcardTuple(const Tuple & wildcard_tuple,
 // Iterates over generalizations of a tuple.  The tuple must be entirely
 // literals, and the generalized tuple iterates over all tuples for which
 // a possibly empty or full subset of the terms of s have been changed to 
-// Variable(0).
+// a wildcard
 struct GeneralizationIterator {
   GeneralizationIterator(const Tuple & s) ;
   void operator++();
@@ -163,6 +163,7 @@ void RenameVariablesInOrder(Pattern * v, Substitution *s);
 
 // try to put the pattern in a canonical form
 // I believe that this may be NP-hard, but let's at least make an attempt. 
+// TODO: comment what is canonical
 Pattern Canonicalize(const Pattern & v, Substitution *sub);
 
 // Put a rule (an ordered pair of tuple vectors) in canonical form.

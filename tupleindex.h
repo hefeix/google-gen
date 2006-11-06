@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
+// Author: Noam Shazeer and Georges Harik
 
 
 #ifndef _TUPLEINDEX_H_
@@ -23,35 +23,43 @@
 #include "util.h"
 #include "tuple.h"
 
+// TODO: Try to make this a class static constant to not pollute global namespace
 #define UNLIMITED_WORK (-1)
 
-// A TupleIndex is, as it suggests, an index over tuples of literals, 
+// A TupleIndex is, as it suggests, an index over tuples of constants, 
 // that allows the tuples to be searched by a pattern, which is a vector 
-// of tuples of literals and variables.
+// of tuples of constants and variables.
 //
 // When a tuple is added to the index, it is stored internally.  The pointer
 // to that tuple returned by Add(), and all pointers to that tuple 
-// returned until that tuple is removed will be the same.  
+// returned until that tuple is removed will be the same.
+
 class TupleIndex{
  public:
   TupleIndex();
   ~TupleIndex();
-  // Adds a tuple to the index.  Returns a pointer to the static internal 
-  // copy of the tuple.
+
+  // Adds a constant tuple to the index.  
+  // Returns a pointer to the static internal copy of the tuple.
   const Tuple * Add(const Tuple & t);
+
   // Removes a tuple from the index.
   void Remove (const Tuple & t);
-  // The following two wrappers are to work with the changelist class.
+
+  // Wrappers return void in order to work with the changelist class.
   void AddWrapper(Tuple t) { Add(t);}
   void RemoveWrapper(Tuple t) { Remove(t);}
-  // s is composed of literals.
+
+  // s is composed of constants.
   // Returns a pointer to the static internal copy of s, or NULL if absent.
   const Tuple * FindTuple(const Tuple & s);
-  // s is a tuple with literals and wildcards.  The results do not 
-  // require all instances of wildcard have the same substitution.
+
+  // s is a wildcard tuple. Not all wildcards must match
   void Lookup(const Tuple & s, vector<const Tuple*> * results);
+
   // A histogram of the lengths of the tuples in the index.
   inline const map<uint64, uint64> & Lengths() const {return lengths_; }
+
   // Searches over the index to match a pattern.
   // Pattern can contain literals and variables.  Multiple instances of the
   // same variable only match the same literal.  You can limit the work done
@@ -67,6 +75,7 @@ class TupleIndex{
 			 uint64 * num_satisfactions,  // can be null
 			 int64 max_work, // -1 for no limit
 			 uint64 * actual_work); // can be null
+
   // Get a random tuple containing all of the given terms.  
   // If funky_distribution is set, we first choose uniformly over the positions
   // in the tuple of the given terms.  This over-represents tuples where
@@ -81,6 +90,7 @@ class TupleIndex{
 
   // for testing.
   void Shell();  
+
  private:
   struct FullySpecifiedNode{
     Tuple tuple_;
@@ -95,7 +105,7 @@ class TupleIndex{
   hash_map<uint64, UnderspecifiedNode*> underspecified_;
 
   uint64 total_tuples_;
-  map<uint64, uint64> lengths_; // number of stored sencences whith these lengths
+  map<uint64, uint64> lengths_; // number of stored tuples with these lengths
 
   void LookupInternal(const Tuple & s, 
 		      FullySpecifiedNode *** results, 
