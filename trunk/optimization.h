@@ -31,11 +31,11 @@ bool TryRemoveFiring(Firing *f);
 
 // Adds a bunch of firings at once and removes alternate explanations.
 bool TryAddFirings(Rule * r, const vector<Substitution> & sub);
+
 // Given a creative rule, tries creating rules where the unbound RHS variables
 // in the original rule are replaced by constants.
-bool TrySpecifyCreativeRule(Model *m,
-			    Rule * r, RollbackCriterion criterion, 
-			    bool fix_times);
+bool TrySpecifyCreativeRule(Model *m, Rule * r);
+
 // TODO, document this
 bool TryAddImplicationRule(Model *m,
 			   const vector<Tuple> & preconditions, 
@@ -113,24 +113,17 @@ void Explain(Model *m,
 	     set<Component *> * excluded,
 	     bool fix_times); // satisfies in the best way it can
 // Explain all of the required propositions.
-void FulfillRequirements(Model *m); // call on an empty model
-// Fixes the times and deletes all components whose time is NEVER
-void FixTimesFixCircularDependencies(Model *m);
 
-// Finds possible pairs of rules and substitutions such that the 
-// preconditios are satisfied, and one of the results is the given tuple.
-// You can exclude some TrueTuples as dependents, for example to 
-// aviod circular causation.  In the results, if the value of a variable 
-// does not matter, TODO: complete this sentence
-// returns work, or GAVE_UP if we ran out of time.
-int64 FindExplanationsForResult (Model *m, const Tuple & s, 
-				 vector<pair<Rule *, Substitution> > *results,
-				 set<Component *> * excluded_dependents,
-				 int64 max_work); 
+// I don't think we need this now that we have FixTimesFixCircularDependencies.
+//void FulfillRequirements(Model *m); // call on an empty model
+
+// Fixes the times.  Adds explanations for required things that never happen,
+// and deletes all remaining components whose time is NEVER
+void FixTimesFixCircularDependencies(Model *m);
 
 // Makes sure all of the propositions in the encoding of this rule
 // are explained in the model.
-void ExplainEncoding(Rule *r);
+// void ExplainEncoding(Rule *r);
 
 
 #endif

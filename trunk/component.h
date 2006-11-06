@@ -489,7 +489,8 @@ class Rule : public Component{
   EncodedNumber GetDelay() const { return delay_;}
   EncodedNumber GetStrength const { return strength_;}
   EncodedNumber GetStrength2 const { return strength2_;}
-
+  const map<Satisfaction *, RuleSat *> & GetRuleSats() const 
+    { return rule_sats_;}
  private:
   // ----- CONSTRUCTOR(S) -----
 
@@ -662,7 +663,12 @@ class Firing : public Component{
   vector<vector<Component *> > TemporalCodependents() const;
   vector<Component *> Copurposes() const;
   Substitution GetFullSubstitution() const;
-  const set<TrueTuple *> & GetTrueTuples() { return true_tuples_;}
+  const set<TrueTuple *> & GetTrueTuples() const { return true_tuples_;}
+  const Substitution & GetRightSubstitution() const 
+    { return right_substitution_;}
+  const Substitution & GetFullSubstitution() const {
+    return Union(right_substitution_, rule_sat_->satisfaction_->substitution_);
+  }
 
  private:
 
@@ -713,6 +719,7 @@ class TrueTuple : public Component{
   vector<vector<Component *> > TemporalCodependents() const;
 
   const set<Firing *> & GetCauses const { return causes_;}
+  int IsRequired() const { return required_count_; }
 
  private:
 

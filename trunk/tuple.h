@@ -130,6 +130,7 @@ struct Substitution {
 inline uint64 Fingerprint(const Substitution & s, uint64 level = 0){
   return s.Fingerprint(level);
 }
+Substitution Union(const Substitution & s1, const Substitution & s2);
 
 set<int> GetVariables(const Pattern & v);
 

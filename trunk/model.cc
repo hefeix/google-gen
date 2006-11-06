@@ -567,6 +567,63 @@ int64 Model::FindSatisfactionsForTuple
   return total_work;
 }
 
+int64 Model::FindExplanationsForResult
+(const Tuple & s, vector<pair<Rule *, Substitution> > *results, 
+ set<Component *> *excluded_dependents, int64 max_work){
+  CHECK(results);
+  int64 total_work = 0;
+  for (GeneralizationIterator run_g(s); !run_g.done(); ++run_g) {
+    const set<pair<Rule *, int> > * rules
+      = clause_to_result_ % run_g.generalized().Fingerprint();
+    if (rules) forall(run, (*rules)) {
+      Rule * rule = run->first;
+      if (excluded_dependents && 
+	  ((*excluded_dependents) % ((Component*)rule))) continue;
+      int clause_num = run->second;
+      Substitution partial_sub;
+      vector<Tuple> simplified_precondition = rule->precondition_->clauses_;
+      
+      if (!ComputeSubstitution(rule->result_[clause_num], s, &partial_sub))
+	continue;
+      partial_sub.Substitute(&simplified_precondition);
+      uint64 num_complete_subs;
+      uint64 work = 0;
+      vector<Substitution> complete_subs;
+      if (!tuple_index_.FindSatisfactions
+	  (simplified_precondition, 
+	   &complete_subs,
+	   &num_complete_subs,
+	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
+	   &work)) return GAVE_UP;
+      if (num_complete_subs == 0) continue;
+      set<int> result_vars = GetVariables(rule->result_);
+      for (uint i=0; i<complete_subs.size(); i++) {
+	complete_subs[i].Add(partial_sub);
+	forall(run_v, result_vars) {
+	  if (complete_subs[i].Lookup(*run_v)==*run_v) {
+	    complete_subs[i].Add(*run_v, LEXICON.GetAddID("whatever"));
+	  }
+	}
+	vector<Tuple> substituted_precondition = rule->precondition_->clauses_;
+	complete_subs[i].Substitute(&substituted_precondition);
+	if (excluded_dependents) {
+	  bool bad = false;
+	  forall(run, substituted_precondition) {
+	    TrueTuple *prop = FindTrueTuple(*run);
+	    CHECK(prop);
+	    if ((*excluded_dependents) % ((Component*)prop)) bad = true;
+	  }
+	  if (bad) continue;
+	}
+	results->push_back(make_pair(rule, complete_subs[i]));
+      }
+      total_work += work;
+    }
+  }
+  return total_work;
+}
+
+
 
 Precondition * Model::FindPrecondition(const vector<Tuple> & tuples) const{
   Precondition ** p = precondition_index_ % tuples;
@@ -763,20 +820,12 @@ void Model::Shell(istream  * input) {
       (*input) >> s;
       cout << LEXICON.GetAddID(s) << endl;
     }
-    else if (command == "Add") {
-      Record r;
-      (*input) >> r;
-      CHECK(AddComponentFromRecord(r));
-    }
     else if (command == "RemoveID") {
       int id;
       (*input) >> id;
-      KillComponent(GetComponent(id));
+      GetComponent(id).Erase();
     }
-    else if (command == "subset") {
-      GetLine((*input), &subset);      
-    }
-    else if (command=="store") {
+    /*else if (command=="store") {
       string filename;
       (*input) >> filename;
       StoreToFile(filename);
@@ -786,10 +835,9 @@ void Model::Shell(istream  * input) {
       (*input) >> filename;
       ifstream finput(filename.c_str());
       Load(&finput);
-    }
-    else if (command == "check") {
-      CheckConnections();
-      CheckLikelihood();
+      }*/
+    else if (command == "verify2") {
+      VerifyLayer2();
     }
     else if (command == "checkpoint") {
       string cname;
@@ -807,7 +855,7 @@ void Model::Shell(istream  * input) {
       ifstream finput(fname.c_str());
       ReadSpec(&finput);
       finput.close();
-      FulfillRequirements();
+      FixTimesFixCircularDependencies(this);
     }
     else if (command == "strength") {
       int id;
@@ -826,7 +874,15 @@ void Model::Shell(istream  * input) {
       while (time(0) < end_time) {
 	pair<vector<Tuple>, vector<Tuple> > p 
 	  = FindRandomCandidateRule(Tactic(tactic));
-	TryAddImplicationRule(p.first, p.second, REQUIRE_BETTER, true);
+	OptimizationCheckpoint cp(this, true);
+	TryAddImplicationRule(this, p.first, p.second);
+	if (cp.KeepChanges()) {
+	  VLOG(0) << " Created rule "
+		  << TupleVectorToString(p.first)
+		  << " ->" << TupleVectorToString(p.second)
+		  << " model likelihood: " << GetLnLikelihood()
+		  << " gain=" << cp.Gain() << endl;
+	}
       }
     }
     else if (command == "ispecific"){
@@ -835,7 +891,15 @@ void Model::Shell(istream  * input) {
       vector<Tuple> preconditions = StringToTupleVector(pat);
       GetLine((*input), &pat);
       vector<Tuple> result = StringToTupleVector(pat);
+      OptimizationCheckpoint cp(this, true);      
       TryAddImplicationRule(preconditions, result, REQUIRE_BETTER, true);
+      if (cp.KeepChanges()) {
+	VLOG(0) << " Created rule "
+		<< TupleVectorToString(preconditions)
+		<< " ->" << TupleVectorToString(result)
+		<< " model likelihood: " << GetLnLikelihood()
+		<< " gain=" << cp.Gain() << endl;
+      }      
     } 
     else if (command=="rs"){ // random tuple
       string l;
