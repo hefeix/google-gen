@@ -18,10 +18,11 @@
 
 #include "changelist.h"
 
-void DestructibleCheckpoint::DestructibleCheckpoint(Changelist *cl){
+DestructibleCheckpoint::DestructibleCheckpoint(Changelist *cl){
   cl_ = cl;
   cp_ = cl_->GetCheckpoint();
 }
+
 DestructibleCheckpoint::~DestructibleCheckpoint(){
   cl_->Rollback(cp_);
 }
@@ -33,15 +34,15 @@ Checkpoint Changelist::GetCheckpoint(){
   return history_.size();
 }
 void Changelist::Rollback(Checkpoint cp){
-  CHECK(history_.size() >= cp);
-  while (history_.size() > cp){
+  CHECK(history_.size() >= (uint)cp);
+  while (history_.size() > (uint)cp){
     history_.back()->Undo();
     delete history_.back();
     history_.pop_back();
   }
 }
 void Changelist::MakeChangesPermanent(){
-  for (int i=0; i<history_.size(); i++) {
+  for (uint i=0; i<history_.size(); i++) {
     history_[i]->MakePermanent();
     delete history_[i];
   }

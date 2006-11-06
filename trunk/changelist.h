@@ -70,7 +70,7 @@ class Change {
  public:
   virtual void Undo() = 0;
   virtual void MakePermanent() {};
-  ~Change();
+  virtual ~Change() {};
 };
 
 // Changes the value of a variable.  
@@ -175,13 +175,13 @@ template <class MK, class SV> class MapOfSetsInsertChange : public Change {
     (*location_)[key_].insert(value_);
   }
   void Undo(){
-    (*location_)[key].erase(value_);
+    (*location_)[key_].erase(value_);
     if ((*location_)[key_].size()==0) location_->erase(key_);
   }
  private:
   map<MK,set<SV> > * location_;
-  K key_;
-  SV value_
+  MK key_;
+  SV value_;
 };
 
 // Removes a key/value pair into a map of sets.
@@ -189,7 +189,8 @@ template <class MK, class SV> class MapOfSetsInsertChange : public Change {
 // MK is map key, SV is the set value type
 template <class MK, class SV> class MapOfSetsRemoveChange : public Change {
  public:
-  MapOfSetsInsertChange(map<MK, set<SV> > * location, const MK & key, 
+  MapOfSetsRemoveChange(map<MK, set<SV> > * location, 
+			const MK & key, 
 			const SV & value) {
     location_ = location;
     key_ = key;
@@ -199,12 +200,12 @@ template <class MK, class SV> class MapOfSetsRemoveChange : public Change {
     if ((*location_)[key_].size()==0) location_->erase(key_);
   }
   void Undo(){
-    (*location_)[key].insert(value_);
+    (*location_)[key_].insert(value_);
   }
  private:
   map<MK,set<SV> > * location_;
-  K key_;
-  SV value_
+  MK key_;
+  SV value_;
 };
 
 // Adds to the value associated with a particular key.  Keys are removed
@@ -220,13 +221,13 @@ template <class K, class V> class MapOfCountsAddChange : public Change {
     else (*location_)[key] = new_value;
   }
   void Undo(){
-    if (old_value_==0) location_->erase(key);
-    else (*location_)[key] = old_value_;
+    if (old_value_==0) location_->erase(key_);
+    else (*location_)[key_] = old_value_;
   }
  private:
   map<K,V> * location_;
   K key_;
-  V old_value_
+  V old_value_;
 };
 
 
@@ -277,11 +278,11 @@ template <class C> class MemberCallChange : public Change {
 
 // same as above with one parameter functions
 // Sample Usage:
-// cl.Make(new MemberCallChange<Company, Employee>
+// cl.Make(new MemberCall1Change<Company, Employee>
 // 	  (&webvan, fred, &Company::Hire, &Company::Fire));
-template <class C, class P> class MemberCallChange : public Change {
+template <class C, class P> class MemberCall1Change : public Change {
  public:
-  MemberCallChange(C * object, P parameter, 
+  MemberCall1Change(C * object, P parameter, 
 		   void (C::*change_function)(P),
 		   void (C::*revert_function)(P),
 		   void (C::*make_permanent_function)(P) = 0) {
