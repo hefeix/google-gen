@@ -126,6 +126,19 @@ class Model {
       bool return_subs_for_negative_rules,
       bool return_subs_for_all_rules) const;
 
+  // Finds possible pairs of rules and substitutions such that the 
+  // preconditios are satisfied, and one of the results is the given tuple.
+  // You can exclude some TrueTuples as dependents, for example to 
+  // aviod circular causation.  In the results, if the value of a variable 
+  // does not matter, sets it to the word "whatever".   TODO: wtf?
+  // returns work, or GAVE_UP if we ran out of time.
+  int64 FindExplanationsForResult (const Tuple & t, 
+				   vector<pair<Rule *, Substitution> > *results,
+				   set<Component *> * excluded_dependents,
+				   int64 max_work); 
+  
+  
+  
   // Finds a TrueTuple
   TrueTuple * FindTrueTuple(const Tuple & s) const;
 

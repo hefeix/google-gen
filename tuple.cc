@@ -156,6 +156,11 @@ Substitution Substitution::Restrict(const set<int> & terms) const{
   }
   return ret;
 }
+Substitution Union(const Substitution & s1, const Substitution & s2){
+  Substitution u = s1;
+  u.Add(s2);
+  return u;
+}
 set<int> GetVariables(const Pattern & v) {
   set<int> ret;
   for (uint i=0; i<v.size(); i++) 

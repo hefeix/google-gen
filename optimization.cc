@@ -369,97 +369,78 @@ void TryMakeFunctionalNegativeRule(Rule *r){
   if (GetVerbosity() >= 1) ToHTML("html");
 }
 
-bool Model::TryAddImplicationRule(const vector<Tuple> & preconditions,
-				  const vector<Tuple> & result,
-				  RollbackCriterion criterion, 
-				  bool fix_times) {
-  OptimizationCheckpoint cp(this, criterion, fix_times);
-  cerr << "TryAddImplicationRule cp=" << cp.cp_ << endl;
+void TryAddImplicationRule(Model *m, 
+			   const vector<Tuple> & preconditions,
+			   const vector<Tuple> & result){
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
-  tuple_index_.FindSatisfactions(combined, &subs, 0, UNLIMITED_WORK, 0);
-  set<int>precondition_vars = GetVariables(preconditions);
+  m->tuple_index_.FindSatisfactions(combined, &subs, 0, UNLIMITED_WORK, 0);
+  set<int> precondition_vars = GetVariables(preconditions);
   set<int> result_vars = GetVariables(result);
   result_vars = result_vars-precondition_vars;
   RuleType type = result_vars.size()?CREATIVE_RULE:SIMPLE_RULE;
   VLOG(0) << "Contemplating creating rule " 
 	  << TupleVectorToString(preconditions)
 	  << " ->" << TupleVectorToString(result) << endl;
-  if (rule_index_ % RuleFingerprint(type, preconditions, 
-				    result, vector<Tuple>())) {
+  if (FindPositiveRule(preconditions, result)) {
     VLOG(2) << "rule already exists" << endl;
-    return false;    
+    return false;
   }
   VLOG(2) << "old ln_likelihood_=" << m->GetLnLikelihood() << endl;
-  StablePtr<Rule> r(new Rule(GetAddPrecondition(preconditions), EncodedNumber(),
-			     type, 0, result, EncodedNumber(), EncodedNumber(), 
-			     false, false));
-  (*r)->ExplainEncoding();
+  Rule * r = m->MakeNewRule(preconditions, EncodedNumber(), 
+			    type, 0, result, EncodedNumber(), EncodedNumber());
+  // r->ExplainEncoding();
   VLOG(2) << "new ln_likelihood_=" << m->GetLnLikelihood() << endl;
-
-  TryAddFirings(*r, subs, criterion, fix_times);
-  if (!r.IsValid()) return cp.KeepChanges();
+  
+  TryAddFirings(r, subs);
+  if (!r.IsValid()) return;
   VLOG(2) << "with firings: " << m->GetLnLikelihood() << endl;
   (*r)->OptimizeStrength();
   VLOG(2) << "optimized strength: " << m->GetLnLikelihood() << endl;
-  if (cp.KeepChanges()) {
-    VLOG(0) << " Created rule "
-	    << TupleVectorToString(preconditions)
-	    << " ->" << TupleVectorToString(result)
-	    << " model likelihood: " << m->GetLnLikelihood()
-	    << " gain=" << cp.Gain() << endl;
-  }
   // ToHTML("html");
-  return cp.KeepChanges();
 }
-bool Model::TrySpecifyCreativeRule(Rule *r, RollbackCriterion criterion, 
-				   bool fix_times){
-  OptimizationCheckpoint cp(this, criterion, fix_times);
+void Model::TrySpecifyCreativeRule(Rule *r){
   CHECK(r->type_ == CREATIVE_RULE);
-  map<pair<int, int>, 
-    vector<StablePtr<Firing> > >m; // maps variable,value->firing
-  forall(rs_iter, r->rule_sats_) {
-    forall(f_iter, rs_iter->second->firings_) {
+  map<pair<int, int>, vector<Firing *> >m; // maps variable,value->firing
+  forall(rs_iter, r->GetRuleSats()) {
+    forall(f_iter, rs_iter->second->GetFirings()) {
       Firing * f = f_iter->second;
       forall(s_iter, f->right_substitution_.sub_){
-	m[*s_iter].push_back(StablePtr<Firing>(f));
+	m[*s_iter].push_back(f);
       }
     }
   }
   forall(run, m){
     int var = run->first.first;
     int value = run->first.second;
-    const vector<StablePtr<Firing> > & firings = run->second;
+    const vector<Firing *> & firings = run->second;
     if (firings.size() >= 3) {
-      OptimizationCheckpoint cp2(this, REQUIRE_BETTER, false);
-      vector<Tuple> new_result = r->result_;
+      OptimizationCheckpoint cp2(this, false);
+      vector<Tuple> new_result = r->GetResult();
       Substitution additional_sub;
       additional_sub.Add(var, value);
       additional_sub.Substitute(&new_result);
-      Rule * nr = new Rule(r->precondition_, r->delay_, CREATIVE_RULE, 
-			   0, new_result, r->strength_, r->strength2_,
-			   false, false);
-      nr->ExplainEncoding();
+      Rule * nr = MakeNewRule(r->GetPrecondition()->GetPattern(),
+			      r->GetDelay(), CREATIVE_RULE, 0, 
+			      new_result, r->GetStrength(), r->GetStrength2());
+      //nr->ExplainEncoding();
       forall(run_f, firings){
-	StablePtr<Firing> f = *run_f;
-	if (!f.IsValid()) continue;
-	Substitution right_sub = (*f)->right_substitution_;
-	right_sub.sub_.erase(var);
-	new Firing
-	  (nr->GetAddRuleSat((*f)->rule_sat_->satisfaction_->substitution_),
-	   right_sub, false);
-	KillComponent(*f);
+	Firing * f = *run_f;
+	if (!f->Exists()) continue;
+	Substitution sub = f->GetFullSubstitution();
+	sub.sub_.erase(var);
+	nr->AddFiring(sub);
+	f->erase();
       }
       nr->OptimizeStrength();
       r->OptimizeStrength();
-      if (r->rule_sats_.size()==0) {
-	KillComponent(r);
+      if (!r->HasFiring()) {
+	r->Erase();
 	break;
       }
     }
   }  
-  return cp.KeepChanges();
 }
 
 ComputationResult RequiresCodependent(Component *dependent, 
@@ -473,7 +454,8 @@ ComputationResult RequiresCodependent(Component *dependent,
       else {
 	forall(run_third, (*run_first)) if (run_third != run_second) {
 	  if ((*run_third)->time_ < (*run_second)->time_ ||
-	      ((*run_third)->time_ == (*run_second)->time_ && run_third<run_second)) 
+	      ((*run_third)->time_ == (*run_second)->time_ 
+	       && run_third<run_second)) 
 	    continue;
 	  if (ret==RESULT_FALSE) ret=RESULT_MAYBE;
 	}
@@ -545,8 +527,10 @@ double OptimizationCheckpoint::Gain() {
 }
 
 void OptimizeStrength(Rule *r){
-  EncodedNumber strength = r->strength_;
-  EncodedNumber strength2 = r->strength2_;
+  // TODO, make this better and more principled
+  Model * m =  r->GetModel();
+  EncodedNumber strength = r->GetStrength();
+  EncodedNumber strength2 = r->GetStrength2();
   for (int which=0; which<2; which++) {
     EncodedNumber * to_alter = &strength;
     if (which==1) {
@@ -562,17 +546,17 @@ void OptimizeStrength(Rule *r){
 	EncodedNumber old_val = *to_alter;
 	VLOG(2) << "trial=" << trial 
 		<< " to_alter=" << to_alter->ToSortableString()
-		<< " ln_likelihood_=" << model_->m->GetLnLikelihood() << endl;
+		<< " ln_likelihood_=" << m->GetLnLikelihood() << endl;
 	if (trial==0) { // drop last bit
 	  if (to_alter->bits_.size()==0) continue;
 	  to_alter->bits_.pop_back();	  
 	} else {
 	  to_alter->bits_.push_back(trial==2);
 	}
-	OptimizationCheckpoint cp(r->model_, REQUIRE_BETTER, false);
+	OptimizationCheckpoint cp(m, false);
 	r->ChangeStrength(strength, strength2);
 	VLOG(2) << "   new_val=" << to_alter->ToSortableString()
-		<< " new_ln_likelihood=" << model_->m->GetLnLikelihood() << endl;
+		<< " new_ln_likelihood=" << m->GetLnLikelihood() << endl;
 	if (cp.KeepChanges()) {
 	  any_improvement = true;
 	  if (trial==0) avoid_trying = old_val.bits_.back()?2:1;
@@ -615,83 +599,26 @@ void Explain(Model *m, TrueTuple *p,
   }
   explanations[which].first->GetAddFiring(explanations[which].second);
 }
-void Model::FixTimesFixCircularDependencies() {
+void FixTimesFixCircularDependencies(Model *m) {
   // TODO: make this smarter.  much smarter
   VLOG(1) << "Entered FixTimesFixCircularDependencies" << endl;
-  while (times_dirty_.size() || required_never_happen_.size()) {
-    FixTimes();
-    if (required_never_happen_.size()) {
+  while (m->GetTimedDirty().size() || m->GetRequiredNeverHappen().size()) {
+    m->FixTimes();
+    if (m->GetRequiredNeverHappen().size()) {
       VLOG(1) << "  explaining a required proposition" << endl;
       TrueTuple * p 
-	= (TrueTuple *)(*required_never_happen_.begin());
-      Explain(p, &never_happen_, false);
-      VLOG(1) << "   explained " << p->id_ << endl;
-      if (GetVerbosity() >= 1) ToHTML("html");
+	= (TrueTuple *)(*(m->GetRequiredNeverHappen().begin()));
+      Explain(p, &m->GetNeverHappen(), false);
+      VLOG(1) << "   explained " << p->GetID() << endl;
+      if (GetVerbosity() >= 1) m->ToHTML("html");
     }
   }
-  DeleteNeverHappeningComponents();
-  CHECK(required_never_happen_.size() == 0);
+  m->DeleteNeverHappeningComponents();
+  CHECK(m->GetRequiredNeverHappen().size() == 0);
   //if (absent_required_.size()){
   //  ToHTML("html");
   //  CHECK(absent_required_.size()==0);
   // }
-}
-
-int64 FindExplanationsForResult(Model *m, const Tuple & s, 
-				vector<pair<Rule *, Substitution> > *results, 
-				set<Component *> *excluded_dependents,
-				int64 max_work){
-  CHECK(results);
-  int64 total_work = 0;
-  for (GeneralizationIterator run_g(s); !run_g.done(); ++run_g) {
-    const set<pair<Rule *, int> > * rules
-      = clause_to_result_ % run_g.generalized().Fingerprint();
-    if (rules) forall(run, (*rules)) {
-      Rule * rule = run->first;
-      if (excluded_dependents && 
-	  ((*excluded_dependents) % ((Component*)rule))) continue;
-      int clause_num = run->second;
-      Substitution partial_sub;
-      vector<Tuple> simplified_precondition = rule->precondition_->clauses_;
-      
-      if (!ComputeSubstitution(rule->result_[clause_num], s, &partial_sub))
-	continue;
-      partial_sub.Substitute(&simplified_precondition);
-      uint64 num_complete_subs;
-      uint64 work = 0;
-      vector<Substitution> complete_subs;
-      if (!tuple_index_.FindSatisfactions
-	  (simplified_precondition, 
-	   &complete_subs,
-	   &num_complete_subs,
-	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
-	   &work)) return GAVE_UP;
-      if (num_complete_subs == 0) continue;
-      set<int> result_vars = GetVariables(rule->result_);
-      for (uint i=0; i<complete_subs.size(); i++) {
-	complete_subs[i].Add(partial_sub);
-	forall(run_v, result_vars) {
-	  if (complete_subs[i].Lookup(*run_v)==*run_v) {
-	    complete_subs[i].Add(*run_v, LEXICON.GetAddID("whatever"));
-	  }
-	}
-	vector<Tuple> substituted_precondition = rule->precondition_->clauses_;
-	complete_subs[i].Substitute(&substituted_precondition);
-	if (excluded_dependents) {
-	  bool bad = false;
-	  forall(run, substituted_precondition) {
-	    TrueTuple *prop = FindTrueTuple(*run);
-	    CHECK(prop);
-	    if ((*excluded_dependents) % ((Component*)prop)) bad = true;
-	  }
-	  if (bad) continue;
-	}
-	results->push_back(make_pair(rule, complete_subs[i]));
-      }
-      total_work += work;
-    }
-  }
-  return total_work;
 }
 
 void FulfillRequirements(Model *m) {
@@ -702,10 +629,10 @@ void FulfillRequirements(Model *m) {
   m->FixTimes();
 }
 
-void ExplainEncoding(Rule *r){
+/*void ExplainEncoding(Rule *r){
   forall(run, r->encoding_) 
     Explain(r->model_, *run, &r->model_->never_happen_, false);
-}
+    }*/
 
 
 

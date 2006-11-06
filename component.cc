@@ -630,7 +630,7 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
   required_count_ = 0;
   // Insert the tuple into the tuple index
   model_->changelist_->Make
-    (new MemberCallChange<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
+    (new MemberCall1Change<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
 					     &TupleIndex::AddWrapper,
 					     &TupleIndex::RemoveWrapper));
   // Add it to the map from tuple to TrueTuple
@@ -690,7 +690,7 @@ void TrueTuple::EraseSubclass(){
   model_->A1_RemoveFromRequiredNeverHappen(this);
   model_->A1_RemoveFromTupleToTrueTuple(tuple_);
   model_->changelist_->Make
-    (new MemberCallChange<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
+    (new MemberCall1Change<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
 					     &TupleIndex::RemoveWrapper,
 					     &TupleIndex::AddWrapper));
 }
