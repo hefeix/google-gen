@@ -21,14 +21,16 @@
 #include "model.h"
 #include "probutil.h"
 #include <sstream>
-#include <fstream.h>
+#include <fstream>
 #include <math.h>
+#include "changelist.h"
+#include "component.h"
 
 bool FLAGS_firing_tuple = false;
 
 // COMPONENT
 Component::Component(Model * model){
-  model_->changelist_.Make(new NewChange<Component>(this));
+  model_->changelist_.Make(new DeleteOnRollbackChange<Component>(this));
   model_ = model;
   exists_ = false;
   time_ = CREATION;
@@ -46,15 +48,15 @@ void Component::A1_SetExists(bool val){
 }
 void Component::A1_SetTime(const Time & new_time){
   if (time_ == new_time) return;
-  model_->changelist_.Make(MakeValueChange(&time_, new_time));
+  model_->changelist_.Make(new ValueChange<Time>(&time_, new_time));
 }
 void Component::A1_SetTimeDirty(bool new_val){
-  CHECK(time_dirty_ != val);
-  model_->changelist_.Make(new ValueChange<bool>(&time_dirty_, val));
+  CHECK(time_dirty_ != new_val);
+  model_->changelist_.Make(new ValueChange<bool>(&time_dirty_, new_val));
 }
 void Component::A1_SetLnLikelihood(double new_ln_likelihood){
   if (new_ln_likelihood == ln_likelihood_) return;
-  model_->changelist_.Make(new ValueChange<double>(&model_ln_, val));
+  model_->changelist_.Make(new ValueChange<double>(&ln_likelihood_, new_ln_likelihood));
 }
 void Component::Erase(){
   CHECK(Type() != RULESAT && Type() != SATISFACTION);
@@ -76,15 +78,15 @@ void Component::L1_Erase(){
   model_->A1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
 
   for (int i=0; i<copurposes.size(); i++) {
-    if (copurposes[i].Exists() && copurposes[i].IsSuperfluous()) 
+    if (copurposes[i]->Exists() && copurposes[i]->IsSuperfluous()) 
       copurposes[i]->L1_Erase();
   }
 }
 
 
 Precondition::Precondition(Model * model, 
-			   const vector<Tuple> & tuples, int id)
-  : Component(model, id){
+			   const vector<Tuple> & tuples)
+  : Component(model){
   pattern_ = tuples;
   ln_likelihood_per_sat_ = 0.0;
   num_satisfactions_ = 0;
@@ -819,9 +821,43 @@ vector<Component *> Firing::TemporalDependents() const{
 vector<Component *> TrueTuple::TemporalDependents() const{
   vector<Component *> ret;
   ret.insert(ret.end(), satisfactions_.begin(), satisfactions_.end());
-  if (rule_encoded_) ret.push_back(rule_encoded_);
+  //if (rule_encoded_) ret.push_back(rule_encoded_);
   return ret;
 }
+
+// WORKING
+vector<Component *> Component::StructuralDependents() const{
+  return vector<Component *>();
+}
+vector<Component *> Precondition::StructuralDependents() const{
+  vector<Satisfaction*> v = VectorOfValues(satisfactions_);
+  vector<Component *> ret(v.begin(), v.end());
+  ret.insert(ret.end(), rules_.begin(), rules_.end());
+  return ret;
+}
+vector<Component *> Satisfaction::StructuralDependents() const {
+  return vector<Component *>(rule_sats_.begin(), rule_sats_.end());
+}
+vector<Component *> Rule::StructuralDependents() const{
+  vector<RuleSat*> v = VectorOfValues(rule_sats_);
+  vector<Component *> ret(v.begin(), v.end());
+  ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
+  return ret;
+}
+vector<Component *> RuleSat::StructuralDependents() const{
+  vector<Firing*> v = VectorOfValues(firings_);
+  vector<Component*> ret(v.begin(), v.end());
+  if (target_rule_sat_ != NULL) {
+    ret.push_back(target_rule_sat_);
+  }
+}
+vector<Component *> TrueTuple::StructuralDependents() const{
+  vector<Component *> ret;
+  ret.insert(ret.end(), satisfactions_.begin(), satisfactions_.end());
+  //  if (rule_encoded_) ret.push_back(rule_encoded_);
+  return ret;
+}
+
 
 vector<vector<Component *> > Component::TemporalCodependents() const{
   return vector<vector<Component *> >();

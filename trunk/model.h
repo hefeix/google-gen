@@ -28,14 +28,22 @@
 #include "lexicon.h"
 #include "record.h"
 #include "component.h"
+#include "changelist.h"
 #include <set>
 #include <map>
 
-typedef GAVE_UP (-1)
-typedef uint Checkpoint;
+#define GAVE_UP (-1)
 
 class Model {
  public:
+  friend class Precondition;
+  friend class Satisfaction; 
+  friend class RuleSat;
+  friend class Firing; 
+  friend class TrueTuple;
+  friend class Rule;
+  friend class Component;
+
   // ----- LAYER 3 FUNCTIONS -----
 
   Model();
@@ -69,7 +77,7 @@ class Model {
 		     EncodedNumber strength, EncodedNumber strength2){
     return
       new Rule(L1_GetAddPrecondition(precondition),
-	       delay, target_rule, result, strength, strength2);
+	       delay, type, target_rule, result, strength, strength2);
   }
   
   // Inserts or retrieces a creative rule with no preconditions and one 
@@ -194,8 +202,10 @@ class Model {
   // human interaction
   void Shell(istream * input);
 
+ private:    
 
   // Simple L1 modifiers
+  void A1_SetLnLikelihood(double new_val);
   void A1_InsertIndoIDToComponent(int id, Component *c);
   void A1_RemoveFromIDToComponent(int id);
   void A1_InsertIntoTupleToTrueTuple(Tuple t, TrueTuple *tt);
@@ -226,7 +236,7 @@ class Model {
   void A1_AddToLnLikelihood(double delta);
   void A1_InsertIntoViolatedProhibitions(Prohibition *p);
   void A1_RemoveFromViolatedProhibitions(Prohibition *p);
-    
+
   // data
   // When components are added to the model, they get sequential ids.
   int next_id_;
@@ -260,8 +270,7 @@ class Model {
   double arbitrary_term_ln_likelihood_; // superfluous
   double ln_likelihood_;
 
-  set<uint64> absent_required_;  
-
+  Changelist changelist_;
 };
 
 #endif

@@ -68,10 +68,6 @@ class TrueTuple;
 // Something else entirely
 class Prohibition;
 
-#define ADD_FRIEND_COMPONENT_CLASSES friend class Precondition; \
-  friend class Rule; friend class Satisfaction; friend class RuleSat;	\
-  friend class Firing; friend class TrueTuple;
-
 enum ComponentType {
   PRECONDITION,
   RULE,
@@ -83,9 +79,9 @@ enum ComponentType {
 };
 
 // Converting back and forthe between component types and their names.
-static char * ComponentTypeName []; // indexed by the enum above. 
-static ComponentType StringToComponentType(const string & s); 
-static string ComponentTypeToString(ComponentType t);
+char ** ComponentTypeName; // indexed by the enum above. 
+ComponentType StringToComponentType(const string & s); 
+string ComponentTypeToString(ComponentType t);
 
 // These are the types of rules.
 enum RuleType {
@@ -95,14 +91,12 @@ enum RuleType {
   CREATIVE_RULE, // New variables on RHS.  Can have multiple firings.
   NUM_RULE_TYPES,
 };
-static char * RuleTypeName [];
-static RuleType StringToRuleType(const string & s);
-static string RuleTypeToString(RuleType t);
+char ** RuleTypeName;
+RuleType StringToRuleType(const string & s);
+string RuleTypeToString(RuleType t);
 
 class Component{
  public:
-  ADD_FRIEND_COMPONENT_CLASSES;
-
 
   // ----- LAYER 2 FUNCTIONS -----
 
@@ -133,7 +127,7 @@ class Component{
 
   Model * GetModel() const { return model_;}
 
-  virtual ComponentType Type() const = 0;
+  virtual ComponentType Type() const { return NUM_COMPONENT_TYPES; }
   string TypeName() const;
 
   void VerifyLayer2() const;
@@ -146,8 +140,12 @@ class Component{
   Record RecordForDisplay() const;
   
   // Type-specific key-value pairs.  Called by RecordForDisplay()
-  virtual Record RecordForDisplayInternal() const = 0;
+  virtual Record RecordForDisplayInternal() const {CHECK(0); return Record(); }
   
+  // Returns pointers to the components that structurally depend on this one
+  // I.e. without this component, the others may not exist in a layer 2 model.
+  virtual vector<Component *> StructuralDependents() const;
+
   // Returns pointers to the components that depend in some way on this 
   // component.  They may have other options for existing, so they don't 
   // necessarily disappear when this component does.
@@ -180,6 +178,7 @@ class Component{
   virtual bool NeedsPurpose() const; // defaults to false unless overriden.
   virtual bool HasPurpose() const;  // Does it have a purpose.
   inline bool IsSuperfluous() const {return NeedsPurpose() && !HasPurpose();}  
+  inline bool Exists() const { return exists_; }
   
   // Computes the time_ of the component.  This is in general equal to the 
   // maximinimum time of its TemporalCodependents() (or NEVER if it is missing the
@@ -226,7 +225,7 @@ class Component{
   // objects.
   void L1_Erase();
   // the subclass-specific parts of the erase function.
-  virtual void L1_EraseSubclass() = 0;
+  virtual void L1_EraseSubclass() {CHECK(0); }
 
   // flips the dirty bit on, and inserts into global set of dirty components.
   void L1_MakeTimeDirty();
@@ -268,7 +267,12 @@ class Component{
 // firing.
 class Precondition : public Component {
  public:
-  ADD_FRIEND_COMPONENT_CLASSES;
+  friend class Rule; 
+  friend class Satisfaction; 
+  friend class RuleSat;
+  friend class Firing; 
+  friend class TrueTuple;
+  friend class Model;
 
   // ----- LAYER 2 FUNCTIONS -----
   
@@ -284,12 +288,13 @@ class Precondition : public Component {
   bool HasPurpose() const;
   vector<Component *> Purposes() const; // Rules
   vector<Component *> TemporalDependents() const; // Rules, Satisfactions
+  vector<Component *> StructuralDependents() const;
   bool NeedsPurpose() const; // yes
   double LnLikelihood() const;
   // returns pointer to a satisfaction object if one exists.
   Satisfaction * FindSatisfaction(const Substitution &sub) const;
   virtual void VerifyLayer2Subclass() const;
-  Rule * FindPositiveRule(const vector<tuple> & result) const;
+  Rule * FindPositiveRule(const vector<Tuple> & result) const;
   Rule * FindNegativeRule(Rule * target_rule) const;
   int GetNumSatisfactions() const { return num_satisfactions_;}
 
@@ -380,7 +385,12 @@ class Precondition : public Component {
 // instance of a precondition being satisfied
 class Satisfaction : public Component { 
  public:
-  ADD_FRIEND_COMPONENT_CLASSES;
+  friend class Precondition;
+  friend class Rule; 
+  friend class RuleSat;
+  friend class Firing; 
+  friend class TrueTuple;
+  friend class Model;
 
   // ----- LAYER 2 FUNCTIONS -----
 
@@ -391,6 +401,7 @@ class Satisfaction : public Component {
   Record RecordForDisplayInternal() const;
   inline bool NeedsPurpose() const; // yes
   vector<Component *> TemporalDependents() const; // the rule_sats
+  vector<Component *> StructuralDependents() const;
   vector<vector<Component *> > TemporalCodependents() const; // Preconditions, tuples
   vector<Component *> Purposes() const; // the rule_sats
   bool HasPurpose() const;
@@ -435,7 +446,12 @@ class Satisfaction : public Component {
 
 class Rule : public Component{
  public:
-  ADD_FRIEND_COMPONENT_CLASSES;
+  friend class Precondition;
+  friend class Satisfaction; 
+  friend class RuleSat;
+  friend class Firing; 
+  friend class TrueTuple;
+  friend class Model;
 
   // -----LAYER 2 FUNCTIONS -----
   
@@ -463,6 +479,7 @@ class Rule : public Component{
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
   vector<Component *> TemporalDependents() const;
+  vector<Component *> StructuralDependents() const;
   vector<vector<Component *> > TemporalCodependents() const;
   vector<Component *> Copurposes() const;
   double LnLikelihood() const;
@@ -487,8 +504,8 @@ class Rule : public Component{
   virtual void VerifyLayer2Subclass() const;
   Precondition * GetPrecondition() const { return precondition_;}
   EncodedNumber GetDelay() const { return delay_;}
-  EncodedNumber GetStrength const { return strength_;}
-  EncodedNumber GetStrength2 const { return strength2_;}
+  EncodedNumber GetStrength() const { return strength_;}
+  EncodedNumber GetStrength2() const { return strength2_;}
   const map<Satisfaction *, RuleSat *> & GetRuleSats() const 
     { return rule_sats_;}
  private:
@@ -584,7 +601,12 @@ class Rule : public Component{
 
 class RuleSat : public Component{ // an instance of a rule coming true
  public:
-  ADD_FRIEND_COMPONENT_CLASSES;
+  friend class Precondition;
+  friend class Rule; 
+  friend class Satisfaction; 
+  friend class Firing; 
+  friend class TrueTuple;
+  friend class Model;
 
 
   // ----- LAYER 2 FUNCTIONS -----
@@ -600,6 +622,7 @@ class RuleSat : public Component{ // an instance of a rule coming true
   bool NeedsPurpose() const;
   string ImplicationString(const Firing *firing) const;
   vector<Component *> TemporalDependents() const;
+  vector<Component *> StructuralDependents() const;
   vector<vector<Component *> > TemporalCodependents() const;
   vector<Component *> Purposes() const;
   vector<Component *> Copurposes() const;
@@ -626,7 +649,7 @@ class RuleSat : public Component{ // an instance of a rule coming true
   void A1_AddFiring(Substitution sub, Firing *f);
   void A1_RemoveFiring(Substitution sub);
   void A1_AddInhibitor(RuleSat *rs);
-  void A1_RemoveInhibitor(Rulesat *rs);
+  void A1_RemoveInhibitor(RuleSat *rs);
 
   // ----- DATA -----
   // fundamental
@@ -646,7 +669,12 @@ class RuleSat : public Component{ // an instance of a rule coming true
 // An instane of a rule firing
 class Firing : public Component{
  public:
-  ADD_FRIEND_COMPONENT_CLASSES;
+  friend class Precondition;
+  friend class Rule; 
+  friend class Satisfaction; 
+  friend class RuleSat;
+  friend class TrueTuple;
+  friend class Model;
 
 
   // ----- LAYER 2 FUNCTIONS -----
@@ -666,10 +694,7 @@ class Firing : public Component{
   const set<TrueTuple *> & GetTrueTuples() const { return true_tuples_;}
   const Substitution & GetRightSubstitution() const 
     { return right_substitution_;}
-  const Substitution & GetFullSubstitution() const {
-    return Union(right_substitution_, rule_sat_->satisfaction_->substitution_);
-  }
-
+  
  private:
 
 
@@ -700,7 +725,12 @@ class Firing : public Component{
 // A tuple which is true in our model
 class TrueTuple : public Component{
  public:
-  ADD_FRIEND_COMPONENT_CLASSES;
+  friend class Precondition;
+  friend class Rule; 
+  friend class Satisfaction; 
+  friend class RuleSat;
+  friend class Firing; 
+  friend class Model;
 
 
   // ----- LAYER 2 FUNCTIONS -----
@@ -716,9 +746,10 @@ class TrueTuple : public Component{
   set<TrueTuple *> GetResultTrueTuples() const;
   set<TrueTuple *> GetCauseTrueTuples() const;
   vector<Component *> TemporalDependents() const;
+  vector<Component *> StructuralDependents() const;
   vector<vector<Component *> > TemporalCodependents() const;
 
-  const set<Firing *> & GetCauses const { return causes_;}
+  const set<Firing *> & GetCauses() const { return causes_;}
   int IsRequired() const { return required_count_; }
 
  private:
