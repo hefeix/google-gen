@@ -684,7 +684,10 @@ Rule * Model::GetAddNaiveRule(int length) {
 }
 
 // Simple L1 modifiers
-void Model::A1_InsertIndoIDToComponent(int id, Component *c) {
+void Model::A1_SetLnLikelihood(double new_val) {
+  changelist_.Make(new ValueChange<double>(&ln_likelihood_, new_val));
+}
+void Model::A1_InsertIntoIDToComponent(int id, Component *c) {
   changelist_.Make
     (new MapInsertChange<int, Component *>(&id_to_component_,id, c));
 }

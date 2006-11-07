@@ -23,7 +23,7 @@
 #include <map>
 #include "util.h"
 
-typedef int Checkpoint;
+typedef uint Checkpoint;
 
 class Change;
 

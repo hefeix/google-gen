@@ -26,8 +26,8 @@
 #include "hash.h"
 #include <vector>
 #include <string>  
-#include <hash_map.h>
-#include <hash_set.h>
+#include <ext/hash_map>
+#include <ext/hash_set>
 #include <cstdio>
 #include <iostream>
 #include <cwctype>
@@ -72,6 +72,7 @@ namespace __gnu_cxx{
     }
   };
 };
+using namespace __gnu_cxx;
 
 // converting from numbers to their ascii representations.
 inline string itoa(int n) {
