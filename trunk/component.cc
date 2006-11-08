@@ -29,6 +29,40 @@
 
 bool FLAGS_firing_tuple = false;
 
+char * ComponentTypeName [] = {
+    "PRECONDITION",
+    "RULE",
+    "SATISFACTION",
+    "RULESAT",
+    "FIRING",
+    "TRUETUPLE",
+};
+ComponentType StringToComponentType(const string & s) {
+  for (int i=0; i<NUM_COMPONENT_TYPES; i++) {
+    if (s==ComponentTypeName[i]) return (ComponentType)i;
+  }
+  CHECK(false);
+  return NUM_COMPONENT_TYPES;
+}
+string ComponentTypeToString(ComponentType t) { 
+  return ComponentTypeName[t]; 
+}
+char * RuleTypeName [] = {
+  "INVALID_RULE",
+  "SIMPLE_RULE",
+  "NEGATIVE_RULE",
+  "CREATIVE_RULE",
+};
+RuleType StringToRuleType(const string & s) {
+  for (int i=0; i<NUM_RULE_TYPES; i++) {
+    if (s==RuleTypeName[i]) return (RuleType)i;
+  }
+  CHECK(false);
+  return INVALID_RULE;
+}
+string RuleTypeToString(RuleType t) { return RuleTypeName[t]; }
+
+
 // COMPONENT
 Component::Component(Model * model){
   model_->changelist_.Make(new DeleteOnRollbackChange<Component>(this));
@@ -777,10 +811,10 @@ ComponentType Firing::Type() const { return FIRING; }
 ComponentType TrueTuple::Type() const 
 { return TRUETUPLE; }
 
-string Component::TypeName() const { return ComponentTypeName[Type()]; }
+string Component::TypeName() const { return ComponentTypeToString(Type());}
 
 string Component::HTMLLink(string text) const{
-  return string() + "<a href=" + ComponentTypeName[Type()] 
+  return string() + "<a href=" + TypeName()
     + ".html#" + itoa(id_) + ">" + text + "</a>";
 }
 Record Component::RecordForDisplay() const{

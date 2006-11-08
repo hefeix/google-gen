@@ -36,7 +36,7 @@ class Prohibition {
 
   // ----- CONST FUNCTIONS -----
 
-  void TupleIsProhibited(const Tuple & t) const;
+  bool TupleIsProhibited(const Tuple & t) const;
 
 
   // ----- COMPLICATED L1 FUNCTIONS -----

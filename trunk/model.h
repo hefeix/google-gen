@@ -56,12 +56,12 @@ class Model {
   TrueTuple * GetAddTrueTuple(const Tuple & s);
 
   // Add a requirement to the problem specification.
-  TrueTuple * AddRequirementToSpec(Tuple *t);
+  TrueTuple * AddRequirementToSpec(Tuple t);
 
   // Add a prohibition to the problem specification.  The first parameter
   // is a wildcard tuple to be forbidden, and the second is a list of
   // constant tuple exceptions.
-  Prohibition * AddProhibitionToSpec(Tuple *prohibited,
+  Prohibition * AddProhibitionToSpec(Tuple prohibited,
                                      vector<Tuple> exceptions);
 
   // The specification can be read from a file.  A line in the file like
@@ -132,7 +132,7 @@ class Model {
       *results,
       int64 max_work,
       bool return_subs_for_negative_rules,
-      bool return_subs_for_all_rules) const;
+      bool return_subs_for_all_rules);
 
   // Finds possible pairs of rules and substitutions such that the 
   // preconditios are satisfied, and one of the results is the given tuple.
@@ -162,7 +162,12 @@ class Model {
   // Does the model comply with layer 3 requirements
   bool IsLayer3() const;
 
+  // FixTime may be able to make the model Layer 3
+  bool MayBeTimeFixable() const;
+
   double GetLnLikelihood() const { return ln_likelihood_;}
+
+  Precondition * FindPrecondition(const vector<Tuple> & tuples) const;
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
@@ -231,6 +236,7 @@ class Model {
   void A1_AddToLnLikelihood(double delta);
   void A1_InsertIntoViolatedProhibitions(Prohibition *p);
   void A1_RemoveFromViolatedProhibitions(Prohibition *p);
+  void A1_IncrementNextID();
 
   // data
   // When components are added to the model, they get sequential ids.
