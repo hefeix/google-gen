@@ -97,6 +97,7 @@ string RuleTypeToString(RuleType t);
 
 class Component{
  public:
+  friend class Model;
 
   // ----- LAYER 2 FUNCTIONS -----
 
@@ -197,9 +198,7 @@ class Component{
   // Some simple sanity checks on the connection structure.
   void CheckConnections() const; // checks that Co<X>() is the iverse of <X>()
 
- private:
-
-
+ protected:
   // ----- CONSTRUCTOR(S) -----
 
   // The constructor should leave the exists_ bit false, and the destructor
@@ -207,7 +206,6 @@ class Component{
   // not touch the rest of the model.
   Component(Model * model);
   virtual ~Component();
-
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
@@ -274,14 +272,14 @@ class Precondition : public Component {
   friend class TrueTuple;
   friend class Model;
 
-  // ----- LAYER 2 FUNCTIONS -----
+  // ----- LAYER 2 FUNCTIONS ----- Precondition
   
   // TUPLE ENCODING STUFF
   // change encoding schemes.
   //void SwitchToTupleEncoding();
   //void SwitchToDirectEncoding();
   
-  // ----- CONST FUNCTIONS -----
+  // ----- CONST FUNCTIONS ----- Precondition
 
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
@@ -302,14 +300,12 @@ class Precondition : public Component {
   // figures out what tuples cause the precondition under the tuple encoding.
   // set<Tuple> ComputeTupleCauses() const;
 
-
  private:
-  // ----- CONSTRUCTOR(S) -----
+  // ----- CONSTRUCTOR(S) ----- Precondition
 
-  Precondition(Model * model, const vector<Tuple> & tuples, int id);
+  Precondition(Model * model, const vector<Tuple> & tuples);
 
-
-  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+  // ----- COMPLICATED LAYER 1 FUNCTIONS ----- Precondition
 
   // Given a precondition and a substitution that satisfies the precondition, 
   // creates a satisfaction object and links it to the precondition. 
@@ -327,21 +323,23 @@ class Precondition : public Component {
   //void L1_MakeTupleEncoded();
   //void L1_MakeNotTupleEncoded();
 
-  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+  // ----- LAYER 1 ACCESSOR FUNCTIONS ----- Precondition
 
   void A1_AddRule(Rule *r);
   void A1_RemoveRule(Rule *r);
   void A1_AddNegativeRule(Rule *r);
-  void A1_RemoveNegatieveRule(Rule *r);
+  void A1_RemoveNegativeRule(Rule *r);
+  void A1_AddToNegativeRuleIndex(Rule * target_rule, Rule * negative_rule);
+  void A1_RemoveFromNegativeRuleIndex(Rule * target_rule, Rule * negative_rule);
+  void A1_AddToPositiveRuleIndex(const Pattern& result, Rule * rule);
+  void A1_RemoveFromPositiveRuleIndex(const Pattern& result, Rule * rule);
   void A1_AddSatisfaction(Satisfaction * sat);
   void A1_RemoveSatisfaction(Satisfaction *sat);
-  void A1_SetPreconditionLnLikelihood(double val);
   void A1_SetLnLikelihoodPerSat(double val);
   // Changes the total number of satisfactions (including ones not represented)
   void A1_AddToNumSatisfactions(int delta);
- 
 
-  // ----- DATA -----
+  // ----- DATA ----- Precondition
 
   // fundamental data
   vector<Tuple> pattern_;
@@ -352,7 +350,11 @@ class Precondition : public Component {
   // The following two indices are for finding rules based on a description:
   // positive rules are indexed by their result
   map<Pattern, set<Rule *> > positive_rule_index_;
-  // negative rules are indexed on the inhibited rule. 
+  // negative rules are indexed on the target rule. 
+  // Given a Precondition of a negative rule, and the rule it inhibits
+  // Find all negative rules applying
+  // This is a bit odd, do we really want multiple rules that inhibit the same
+  // rule, and with the same set of preconditions, maybe with tuple encoding...
   map<Rule *, set<Rule *> > negative_rule_index_;
   // The total number of substitutions that satisfy the precondition.
   int num_satisfactions_;
@@ -392,10 +394,10 @@ class Satisfaction : public Component {
   friend class TrueTuple;
   friend class Model;
 
-  // ----- LAYER 2 FUNCTIONS -----
+  // ----- LAYER 2 FUNCTIONS ----- Satisfaction
 
 
-  // ----- CONST FUNCTIONS -----
+  // ----- CONST FUNCTIONS ----- Satisfaction
 
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;
@@ -408,26 +410,23 @@ class Satisfaction : public Component {
 
 
  private:
-  // ----- CONSTRUCTOR(S) -----
+  // ----- CONSTRUCTOR(S) ----- Satisfaction
 
-  Satisfaction(Precondition * precondition, const Substitution & sub,
-	       int id);
+  Satisfaction(Precondition * precondition, const Substitution & sub);
 
-
-  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+  // ----- COMPLICATED LAYER 1 FUNCTIONS ----- Satisfaction
 
   void L1_EraseSubclass();
 
 
-  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+  // ----- LAYER 1 ACCESSOR FUNCTIONS ----- Satisfaction
 
   void A1_AddTrueTuple(TrueTuple *t);
   void A1_RemoveTrueTueple(TrueTuple *t);
   void A1_AddRuleSat(RuleSat *rs);
   void A1_RemoveRuleSat(RuleSat *rs);  
  
-
-  // ----- DATA -----
+  // ----- DATA ----- Satisfaction
 
   // fundamental data
   Precondition * precondition_;
@@ -440,7 +439,6 @@ class Satisfaction : public Component {
   // The associated RuleSat objects for rules which have this precondition.
   // (only the ones that are represented explicitly)
   set<RuleSat *> rule_sats_;
-
 };
 
 
@@ -453,7 +451,7 @@ class Rule : public Component{
   friend class TrueTuple;
   friend class Model;
 
-  // -----LAYER 2 FUNCTIONS -----
+  // -----LAYER 2 FUNCTIONS ----- Rule
   
   // Adds a firing, possibly also adding a satisfaction, a rulesat, and
   // some truetuples.  If one already exists, just returns it.
@@ -471,9 +469,9 @@ class Rule : public Component{
   // void SwitchToDirectEncoding();
 
 
-  // ----- CONST FUNCTIONS -----
+  // ----- CONST FUNCTIONS ----- Rule
 
-  Firing * GetFiring(const Substitution &sub) const;
+  Firing * FindFiring(const Substitution &sub) const;
   // figures out what tuples cause the rule under the tuple encoding.
   // set<Tuple> ComputeTupleCauses() const;
   ComponentType Type() const;
@@ -509,7 +507,7 @@ class Rule : public Component{
   const map<Satisfaction *, RuleSat *> & GetRuleSats() const 
     { return rule_sats_;}
  private:
-  // ----- CONSTRUCTOR(S) -----
+  // ----- CONSTRUCTOR(S) ----- Rule
 
   // Create a new rule and add it to the model.
   Rule(Precondition * precondition, EncodedNumber delay,
@@ -518,7 +516,7 @@ class Rule : public Component{
        EncodedNumber strength, EncodedNumber strength2);
   
 
-  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+  // ----- COMPLICATED LAYER 1 FUNCTIONS ----- Rule
 
   // gets/adds a RuleSat object for this rule and a particular satisfaction.
   RuleSat * L1_GetAddRuleSat(Satisfaction * sat);
@@ -534,7 +532,7 @@ class Rule : public Component{
   //void L1_MakeTupleEncoded();
   //void L1_MakeNotTupleEncoded();  
 
-  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+  // ----- LAYER 1 ACCESSOR FUNCTIONS ----- Rule
 
   // Simple L1 Accessors
   void A1_SetDelay(EncodedNumber value);
@@ -548,7 +546,7 @@ class Rule : public Component{
   void A1_AddInhibitor(Rule * inhibitor);
   void A1_RemoveInhibitor(Rule * inhibitor);
 
-  // ----- DATA -----
+  // ----- DATA ----- Rule
 
   // fundamental
   Precondition * precondition_;
@@ -584,10 +582,11 @@ class Rule : public Component{
   // for a negative rule.
   map<Satisfaction *, RuleSat *> rule_sats_;
 
-  // TUPLE ENCODING STUFF
   // Under direct encoding, the encoding cost of the tuples, excluding
   // universal naming costs accounted for elsewhere.
-  //double direct_pattern_encoding_ln_likelihood_;
+  double direct_pattern_encoding_ln_likelihood_;
+
+  // TUPLE ENCODING STUFF
   // used if the rule is tuple encoded.
   // The rule only comes into the model once the TrueTuples that describe
   // its causes come true.  These are the TrueTuples that describe the
@@ -608,14 +607,13 @@ class RuleSat : public Component{ // an instance of a rule coming true
   friend class TrueTuple;
   friend class Model;
 
-
   // ----- LAYER 2 FUNCTIONS -----
   
   Firing * AddFiring(const Substitution & sub);
   
   // ----- CONST FUNCTIONS -----
 
-  Firing * GetFiring(const Substitution &sub) const;
+  Firing * FindFiring(const Substitution &sub) const;
   int NumFirings() const { return firings_.size(); }
   ComponentType Type() const;
   Record RecordForDisplayInternal() const;

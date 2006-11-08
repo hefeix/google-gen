@@ -194,19 +194,14 @@ class Model {
   // A record full of statistics about the model as a whole
   Record ModelInfo() const;
   
-
-
-
-
-  
   // human interaction
   void Shell(istream * input);
 
  private:    
 
-  // Simple L1 modifiers
+  // Simple A1 modifiers
   void A1_SetLnLikelihood(double new_val);
-  void A1_InsertIndoIDToComponent(int id, Component *c);
+  void A1_InsertIntoIDToComponent(int id, Component *c);
   void A1_RemoveFromIDToComponent(int id);
   void A1_InsertIntoTupleToTrueTuple(Tuple t, TrueTuple *tt);
   void A1_RemoveFromTupleToTrueTuple(Tuple t);
