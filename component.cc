@@ -90,7 +90,14 @@ Precondition::Precondition(Model * model,
   pattern_ = tuples;
   ln_likelihood_per_sat_ = 0.0;
   num_satisfactions_ = 0;
-  model_->L1_InsertIntoClauseToPreconditionMap(this);
+
+  for (uint i=0; i<tuples.size(); i++) {
+    model_->A1_InsertIntoWildcardTupleToPrecondition
+      (tuples[i].VariablesToWildcards(),
+       this,
+       i);
+  }
+
   vector<int> arbitrary_terms;
   direct_pattern_encoding_ln_likelihood_ = 
     PatternLnLikelihood(Pattern(), pattern_, &arbitrary_terms);  
@@ -106,14 +113,20 @@ Precondition::Precondition(Model * model,
   ComputeSetLnLikelihood();
 }
 
-void Precondition::EraseSubclass(){
-  A1_RemoveFromModel();
-  model_->A1_RemoveFromPreconditionIndex(pattern_, this);
-  model_->A1_RemoveFromModelClauseToPreconditionMap(this);
+void Precondition::L1_EraseSubclass(){
+  model_->A1_RemoveFromPreconditionIndex(pattern_);
+
+  for (uint i=0; i < pattern_.size(); i++) {
+    model_->A1_RemoveFromWildcardTupleToPrecondition
+      (pattern_[i].VariablesToWildcards(),
+       this,
+       i);
+  }
+
   vector<int> arbitrary_terms;
   PatternLnLikelihood(Pattern(), pattern_, &arbitrary_terms);  
   for (uint i=0; i<arbitrary_terms.size(); i++)
-    model_->L1_RemoveArbitraryTerm(arbitrary_terms[i]);
+    model_->L1_SubtractArbitraryTerm(arbitrary_terms[i]);
 }
 
 /*
@@ -151,22 +164,47 @@ void Precondition::A1_RemoveRule(Rule *r){
 void Precondition::A1_AddNegativeRule(Rule *r){
   model_->changelist_.Make(new SetInsertChange<Rule *>(&negative_rules_, r));
 }
-void Precondition::A1_RemoveNegatieveRule(Rule *r){
+void Precondition::A1_RemoveNegativeRule(Rule *r){
   model_->changelist_.Make(new SetRemoveChange<Rule *>(&negative_rules_, r));
 }
+void Precondition::A1_AddToNegativeRuleIndex(Rule * target_rule,
+					     Rule * negative_rule) {
+  model_->changelist_.Make(new MapOfSetsInsertChange<Rule*, Rule*>
+			   (&negative_rule_index_,
+			    target_rule,
+			    negative_rule));
+}
+void Precondition::A1_RemoveFromNegativeRuleIndex(Rule * target_rule,
+						  Rule * negative_rule) {
+  model_->changelist_.Make(new MapOfSetsRemoveChange<Rule*, Rule*>
+			   (&negative_rule_index_,
+			    target_rule,
+			    negative_rule));
+}
+void Precondition::A1_AddToPositiveRuleIndex(const Pattern & result,
+					     Rule * rule) {
+  model_->changelist_.Make(new MapOfSetsInsertChange<Pattern, Rule*>
+			   (&positive_rule_index_,
+			    result,
+			    rule));
+}
+void Precondition::A1_RemoveFromPositiveRuleIndex(const Pattern & result,
+						  Rule * rule) {
+  model_->changelist_.Make(new MapOfSetsRemoveChange<Pattern, Rule*>
+			   (&positive_rule_index_,
+			    result,
+			    rule));
+}
+
 void Precondition::A1_AddSatisfaction(Satisfaction * sat){
   model_->changelist_.
-    Make(new MapInsertChange<Uint64, Satisfaction *>
-	 (&satisfactions_, sat->substitution_.Fingerprint(), sat));
+    Make(new MapInsertChange<Substitution, Satisfaction *>
+	 (&satisfactions_, sat->substitution_, sat));
 }
 void Precondition::A1_RemoveSatisfaction(Satisfaction *sat){
   model_->changelist_.
-    Make(new MapRemoveChange<uint64, Satisfaction *>
-	 (&satisfactions_, sat->substitution_.Fingerprint()));
-}
-void Precondition::A1_SetPreconditionLnLikelihood(double val){
-  model_->changelist_.
-    Make(new ValueChange<double>(&precondition_ln_likelihood_, val));
+    Make(new MapRemoveChange<Substitution, Satisfaction *>
+	 (&satisfactions_, sat->substitution_));
 }
 void Precondition::A1_SetLnLikelihoodPerSat(double val){
   model_->changelist_.
@@ -177,19 +215,19 @@ void Precondition::A1_AddToNumSatisfactions(int delta){
   model_->changelist_.
     Make(new ValueChange<int>(&num_satisfactions_, num_satisfactions_+delta));
 }
-Satisfaction * Precondition::FindSatisfaction(const Substitution &sub){
-  Satisfaction ** sp = satisfactions_ % sub;
+Satisfaction * Precondition::FindSatisfaction(const Substitution &sub) const{
+  Satisfaction * const * sp = satisfactions_ % sub;
   if (sp) return *sp;
   else return NULL;
 }
-Rule * Precondition::FindPositiveRule(const vector<Tuple> & result){
-  set<Rule *> * s = positive_rule_index_ % result;
+Rule * Precondition::FindPositiveRule(const vector<Tuple> & result) const {
+  const set<Rule *> * s = positive_rule_index_ % result;
   if (!s) return NULL;
   CHECK(s->size() > 0);
   return *(s->begin());
 }
-Rule * Precondition::FindNegativeRule(const Rule * target_rule){
-  set<Rule *> * s = negative_rule_index_ % target_rule;
+Rule * Precondition::FindNegativeRule(Rule * target_rule) const{
+  const set<Rule *> * s = negative_rule_index_ % target_rule;
   if (!s) return NULL;
   CHECK(s->size() > 0);
   return *(s->begin());
@@ -203,8 +241,8 @@ Satisfaction * Precondition::L1_GetAddSatisfaction(const Substitution & sub){
 
 
 Satisfaction::Satisfaction(Precondition * precondition, 
-			   const Substitution & sub, int id)
-  :Component(precondition->model_, id) {
+			   const Substitution & sub)
+  :Component(precondition->model_) {
   precondition_ = precondition;
   substitution_ = sub;
   
@@ -213,7 +251,7 @@ Satisfaction::Satisfaction(Precondition * precondition,
   vector<Tuple> substituted_precondition = precondition->pattern_;
   sub.Substitute(&substituted_precondition);
   for (uint i=0; i<substituted_precondition.size(); i++) {
-    CHECK(!substituted_precondition[i].HasVariables());
+    CHECK(substituted_precondition[i].IsConstantTuple());
     TrueTuple * t = model_->FindTrueTuple(substituted_precondition[i]);
     CHECK(t);
     CHECK(t->Exists());
@@ -228,7 +266,7 @@ Satisfaction::Satisfaction(Precondition * precondition,
   ComputeSetTime();
 }
 
-void Satisfaction::EraseSubclass()
+void Satisfaction::L1_EraseSubclass() {
   precondition_->A1_RemoveSatisfaction(this);
   forall(run, true_tuples_) {    
     (*run)->A1_RemoveSatisfaction(this);
@@ -237,11 +275,11 @@ void Satisfaction::EraseSubclass()
 
 void Satisfaction::A1_AddTrueTuple(TrueTuple *t){
   model_->changelist_.
-    Make(new SetInsertChange<TruleTuple *>(&true_tuples, t));
+    Make(new SetInsertChange<TrueTuple *>(&true_tuples_, t));
 }
 void Satisfaction::A1_RemoveTrueTueple(TrueTuple *t){
   model_->changelist_.
-    Make(new SetRemoveChange<TruleTuple *>(&true_tuples, t));
+    Make(new SetRemoveChange<TrueTuple *>(&true_tuples_, t));
 }
 void Satisfaction::A1_AddRuleSat(RuleSat *rs){
   model_->changelist_.
@@ -252,11 +290,11 @@ void Satisfaction::A1_RemoveRuleSat(RuleSat *rs){
     Make(new SetRemoveChange<RuleSat *>(&rule_sats_, rs));
 }
 
-Firing * Rule::GetFiring(const Substitution & sub) {
+Firing * Rule::FindFiring(const Substitution & sub) const {
   Substitution left_sub = sub.Restrict(LeftVariables());
-  RuleSat ** rs = rule_sats_ % left_sub;
+  RuleSat * rs = FindRuleSat(left_sub);
   if (!rs) return NULL;
-  return (*rs)->GetFiring(sub.Restrict(RightVariables()));
+  return rs->FindFiring(sub.Restrict(RightVariables()));
 }
 Firing * Rule::AddFiring(const Substitution & sub) {
   RuleSat * rs = L1_GetAddRuleSat(sub.Restrict(LeftVariables()));
@@ -267,24 +305,24 @@ Firing * Rule::AddFiring(const Substitution & sub) {
   return ret;
 }
 RuleSat * Rule::FindRuleSat(Satisfaction *sat) const{
-  RuleSat ** rsp = rule_sats_ % sat;
+  RuleSat * const * rsp = rule_sats_ % sat;
   if (rsp) return *rsp;  
   else return NULL;
 }
 RuleSat * Rule::L1_GetAddRuleSat(Satisfaction * sat) {
-  RuleSat *rs = GetRuleSat(sat);
+  RuleSat *rs = FindRuleSat(sat);
   if (rs) return rs;
   return new RuleSat(this, sat->substitution_);
 }
 RuleSat * Rule::FindRuleSat(const Substitution & sub) const {
   Satisfaction *sat = precondition_->FindSatisfaction(sub);
   if (!sat) return NULL;
-  return GetRuleSat(sat);
+  return FindRuleSat(sat);
 }
 RuleSat * Rule::L1_GetAddRuleSat(const Substitution & sub) {
   Satisfaction * sat = precondition_->L1_GetAddSatisfaction(sub);
   CHECK(sat);
-  return GetAddRuleSat(sat);
+  return L1_GetAddRuleSat(sat);
 }
 
 
@@ -303,11 +341,11 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   strength2_ = strength2;
   strength2_d_ = strength2.ToOpenInterval();
   precondition_->A1_AddRule(this);
-  CHECK ((type == NEGATIVE_RULE) ^^ (target_rule_==NULL));
+  CHECK(!((type == NEGATIVE_RULE) == (target_rule_==NULL)));
   if (type == NEGATIVE_RULE) {
     precondition_->A1_AddNegativeRule(this);
     precondition_->A1_AddToNegativeRuleIndex(target_rule_, this);
-    target_rule_->A1_AddInhiinhibitor(this);
+    target_rule_->A1_AddInhibitor(this);
   } else {
     precondition_->A1_AddToPositiveRuleIndex(result_, this);
     precondition_->A1_SetLnLikelihoodPerSat
@@ -315,8 +353,8 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
     precondition_->ComputeSetLnLikelihood();
   }
   for (uint i=0; i<result_.size(); i++){
-    model_->A1_InsertIntoWildcardTupleToResultMap
-      (VariableToWildcard(result_[i]), this, i);
+    model_->A1_InsertIntoWildcardTupleToResult
+      (result_[i].VariablesToWildcards(), this, i);
   }
   vector<int> arbitrary_terms;
   direct_pattern_encoding_ln_likelihood_ = 
@@ -346,9 +384,10 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   }
   ComputeSetLnLikelihood();
 }
-Rule::EraseSubclass(){  
+
+void Rule::L1_EraseSubclass(){  
   precondition_->A1_RemoveRule(this);
-  if (type == NEGATIVE_RULE) {
+  if (type_ == NEGATIVE_RULE) {
     precondition_->A1_RemoveNegativeRule(this);
     precondition_->A1_RemoveFromNegativeRuleIndex(target_rule_, this);
   } else {
@@ -357,14 +396,14 @@ Rule::EraseSubclass(){
       (precondition_->ln_likelihood_per_sat_ - log(1-strength_d_));
     precondition_->ComputeSetLnLikelihood();
     for (uint i=0; i<result_.size(); i++){
-      model_->A1_RemoveFromWildcardTupleToResultMap
-	(VariableToWildcard(result_[i]), this, i);
+      model_->A1_RemoveFromWildcardTupleToResult
+	(result_[i].VariablesToWildcards(), this, i);
     }
   }
   vector<int> arbitrary_terms;
   PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);  
   for (uint i=0; i<arbitrary_terms.size(); i++)
-    model_->L1_RemoveArbitraryTerm(arbitrary_terms[i]);
+    model_->L1_SubtractArbitraryTerm(arbitrary_terms[i]);
   //forall(run, causing_tuples_) (*run)->A1_RemoveFromRulesCaused(this);
 }
 
@@ -438,7 +477,6 @@ bool Rule::HasFiring() const{
 
 void Rule::ChangeStrength(EncodedNumber new_strength,
 			  EncodedNumber new_strength2) {
-  model_->RecordChangeStrength(this, strength_, strength2_);
   double old_strength_d_ = strength_d_;
   A1_SetStrength(new_strength);
   A1_SetStrength2(new_strength2);
@@ -498,7 +536,7 @@ string Rule::ImplicationString() const {
 RuleSat::RuleSat(Rule * rule, const Substitution & sub)
   :Component(rule->model_) {
   rule_ = rule;
-  satisfaction_ = rule_->precondition_->GetAddSatisfaction(sub);
+  satisfaction_ = rule_->precondition_->L1_GetAddSatisfaction(sub);
   satisfaction_->A1_AddRuleSat(this);
   target_rule_sat_ = NULL;
   rule_->A1_AddRuleSat(satisfaction_, this);
@@ -507,7 +545,7 @@ RuleSat::RuleSat(Rule * rule, const Substitution & sub)
     Precondition * target_precondition = target_rule->precondition_;
     Substitution restricted_sub
       = sub.Restrict(GetVariables(target_precondition->pattern_));
-    target_rule_sat_ = target_rule_->GetAddRuleSat(restricted_sub);
+    target_rule_sat_ = rule_->target_rule_->L1_GetAddRuleSat(restricted_sub);
     target_rule_sat_->A1_AddInhibitor(this);
     target_rule_sat_->ComputeSetLnLikelihood();
   }
@@ -523,7 +561,7 @@ void RuleSat::L1_EraseSubclass(){
   }
 }
 
-Firing * RuleSat::GetFiring(const Substitution & right_sub) const{
+Firing * RuleSat::FindFiring(const Substitution & right_sub) const{
   Firing ** f = firings_ % right_sub;
   if (f) return *f;
   return NULL;
@@ -583,7 +621,7 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
   :Component(rule_sat->model_){
   rule_sat_ = rule_sat;
   right_substitution_ = right_substitution;
-  CHECK(!(rule_sat_->GetFiring(right_substitution_)));
+  CHECK(!(rule_sat_->FindFiring(right_substitution_)));
   rule_sat_->A1_AddFiring(right_substitution_, this);
   rule_sat_->ComputeSetLnLikelihood();
   // perform the substitution to find the TrueTuples.
@@ -604,7 +642,7 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
   ComputeSetTime();
   ComputeSetLnLikelihood();
 }
-void Firing::EraseSubclass() {
+void Firing::L1_EraseSubclass() {
   forall(run, true_tuples_) {
     (*run)->A1_RemoveCause(this);
     (*run)->ComputeSetTime();
@@ -669,7 +707,7 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
   ComputeSetLnLikelihood();
 }
 
-void TrueTuple::EraseSubclass(){
+void TrueTuple::L1_EraseSubclass(){
   // We don't have to deal with firings, since they are structural dependents.
   CHECK(required_count_ == 0);
   // Caveat: we can't directly iterate over violated_prohibitions_, since
@@ -1086,7 +1124,7 @@ void Rule::VerifyLayer2Subclass() {
 					   &substitutions,
 					   NULL, UNLIMITED_WORK, NULL);
     for (uint i=0; i<substitutions.size(); i++) {
-      CHECK(GetRuleSat(substitutions[i]));
+      CHECK(FindRuleSat(substitutions[i]));
     }
   }  
 }

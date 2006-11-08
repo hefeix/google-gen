@@ -755,7 +755,7 @@ void Model::A1_InsertIntoPreconditionIndex(const Pattern &pat, Precondition *p){
 void Model::A1_RemoveFromPreconditionIndex(const Pattern &pat) {
   changelist_.Make
     (new MapRemoveChange<Pattern, Precondition *>
-     (&tuple_to_true_tuple_, pat));  
+     (&tuple_to_true_tuple_, pat));
 }
 void Model::A1_InsertIntoProhibitionIndex(Tuple t, Prohibition *p) {
   changelist_.Make
