@@ -171,7 +171,7 @@ template <class MK, class SV> class MapOfSetsInsertChange : public Change {
     location_ = location;
     key_ = key;
     value_ = value;
-    CHECK(!(*location_[key_] % value_));
+    CHECK(!((*location_)[key_] % value_));
     (*location_)[key_].insert(value_);
   }
   void Undo(){
@@ -195,7 +195,7 @@ template <class MK, class SV> class MapOfSetsRemoveChange : public Change {
     location_ = location;
     key_ = key;
     value_ = value;
-    CHECK((*location_[key_] % value_));
+    CHECK(((*location_)[key_] % value_));
     (*location_)[key_].erase(value_);
     if ((*location_)[key_].size()==0) location_->erase(key_);
   }
@@ -243,7 +243,7 @@ template <class C> class DeleteOnRollbackChange : public Change {
     delete object_;
   }
  private:
-  C object_;
+  C * object_;
 };
 
 // Takes a class instance and two void member functions with no arguments,

@@ -53,7 +53,10 @@ class Prohibition {
   // prohibited pattern.  We check whether it is an exception, and if it
   // isn't, add it as a violation.
   void L1_CheckAddViolation(TrueTuple *t);
-
+  // Call this when a violating TrueTuple is being deleted.  
+  void L1_RemoveViolationOnTrueTupleDelete(TrueTuple *t){
+    L1_RemoveViolation(t);
+  }
 
  private:
   // ----- CONSTRUCTORS -----
