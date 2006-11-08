@@ -21,43 +21,12 @@
 // and optimize.cc
 #include "model.h"
 #include "probutil.h"
+#include "prohibition.h"
 #include <sstream>
 #include <deque>
-#include <fstream.h>
-#include <math.h>
+#include <fstream>
+#include <cmath>
 
-char * ComponentTypeName [] = {
-    "PRECONDITION",
-    "RULE",
-    "SATISFACTION",
-    "RULESAT",
-    "FIRING",
-    "TRUETUPLE",
-};
-ComponentType StringToComponentType(const string & s) {
-  for (int i=0; i<NUM_COMPONENT_TYPES; i++) {
-    if (s==ComponentTypeName[i]) return (ComponentType)i;
-  }
-  CHECK(false);
-  return NUM_COMPONENT_TYPES;
-}
-string ComponentTypeToString(ComponentType t) { 
-  return ComponentTypeName[t]; 
-}
-char * RuleTypeName [] = {
-  "INVALID_RULE",
-  "SIMPLE_RULE",
-  "NEGATIVE_RULE",
-  "CREATIVE_RULE",
-};
-RuleType StringToRuleType(const string & s) {
-  for (int i=0; i<NUM_RULE_TYPES; i++) {
-    if (s==RuleTypeName[i]) return (RuleType)i;
-  }
-  CHECK(false);
-  return INVALID_RULE;
-}
-string RuleTypeToString(RuleType t) { return RuleTypeName[t]; }
 
 // ----- LAYER 3 FUNCTIONS -----
 
@@ -65,18 +34,18 @@ string RuleTypeToString(RuleType t) { return RuleTypeName[t]; }
 
 // ----- LAYER 2 FUNCTIONS -----
 
-TrueTuple * AddRequirementToSpec(Tuple t){
+TrueTuple * Model::AddRequirementToSpec(Tuple t){
   TrueTuple *tt = GetAddTrueTuple(t);
   CHECK(!(spec_requirements_ % tt));
   A1_InsertIntoSpecRequirements(tt);
   tt->A1_MakeRequired();
-  if (t->time_ == NEVER && !(required_never_happen_ % tt)) {
+  if (tt->time_ == NEVER && !(required_never_happen_ % tt)) {
     A1_InsertIntoRequiredNeverHappen(tt);
   }
   return tt;
 }
-Prohibition * AddProhibitionToSpec(Tuple t, vector<Tuple> exceptions){
-  Prohibition *p = L1_MakeProhibition(this, t);
+Prohibition * Model::AddProhibitionToSpec(Tuple t, vector<Tuple> exceptions){
+  Prohibition *p = Prohibition::L1_MakeProhibition(this, t);
   A1_InsertIntoSpecProhibitions(p);
   for (int i=0; i<exceptions.size(); i++) {
     p->L1_AddException(exceptions[i]);
@@ -116,9 +85,9 @@ void Model::ReadSpec(istream * input){
   }
 }
 
-bool IsForbidden(const Tuple & t) const{
-  for (GerneralizationIterator run_g(t); !run_g.done(); ++run_g) {
-    set<Prohibition *> * prohibitions 
+bool Model::IsForbidden(const Tuple & t) const{
+  for (GeneralizationIterator run_g(t); !run_g.done(); ++run_g) {
+    set<Prohibition *> const * prohibitions 
       = prohibition_index_ % run_g.generalized();
     if (prohibitions) forall(run_p, *prohibitions) {
       if ((*run_p)->TupleIsProhibited(t)) return true;
@@ -126,39 +95,20 @@ bool IsForbidden(const Tuple & t) const{
   }
   return false;
 }
-void Model::IsLayer3() const{
+bool Model::IsLayer3() const{
   if (times_dirty_.size()) return false;
   if (never_happen_.size()) return false;
   if (violated_prohibitions_.size()) return false;
   return true;
 }
 // FixTime may be able to make the model Layer 3
-void Model::MayBeTimeFixable() const{
+bool Model::MayBeTimeFixable() const{
   // TODO: think about this.
   if (violated_prohibitions_.size()) return false;
   if (required_never_happen_.size()) return false;
   return true;
 }
 
-
-void Model::L1_InsertIntoClauseToPreconditionMap(Precodition *p){
-  for (uint i=0; i<p->clauses_.size(); i++){
-    model_->changelist_.
-      Make(new HashMapOfSetsInsertChange<uint64, pair<Precondition *, int>
-	   (&model->clause_to_precondition_, 
-	    p->clauses_[i].MakeVariableInsensitive().Fingerprint(), 
-	    make_pair(p, i)));
-  }
-}
-void Model::L1_RemoveFromClauseToPreconditionMap(Precondition *p){
-  for (uint i=0; i<p->clauses_.size(); i++){
-    model_->changelist_.
-      Make(new HashMapOfSetsRemoveChange<uint64, pair<Precondition *, int>
-	   (&model->clause_to_precondition_, 
-	    p->clauses_[i].MakeVariableInsensitive().Fingerprint(), 
-	    make_pair(p, i)));
-  }
-}
 string TermEscape(string s){
   if (s[0]=='*' || s[0]=='_') return '_'+s;
   return s;
@@ -167,6 +117,7 @@ string TermUnescape(string s){
   if (s[0]=='_' && s.size() > 1) return s.substr(1);
   return s;
 }
+/*
 vector<Tuple> Model::ComputeTupleEncoding(const Tuple & s, int name){
   vector<Tuple> ret;
   for (uint i=0; i<s.size(); i++) {
@@ -179,7 +130,7 @@ vector<Tuple> Model::ComputeTupleEncoding(const Tuple & s, int name){
   }
   return ret; 
 }
-
+*/
 
 
 set<Firing *> TrueTuple::GetResultFirings() const {
@@ -206,7 +157,7 @@ set<TrueTuple *>
 TrueTuple::GetCauseTrueTuples() const{
   set<TrueTuple *> ret;
   forall(run_f, causes_)
-    forall(run_tp, (*run_f)->rule_sat_->satisfaction_->tuples_)
+    forall(run_tp, (*run_f)->rule_sat_->satisfaction_->true_tuples_)
     ret.insert(*run_tp);
   return ret; 
 }
@@ -232,8 +183,8 @@ Component * Model::GetComponent(int id) const{
 
 void Model::L1_AssignNewID(Component * component) {
   CHECK(!(id_to_component_ % next_id_));
-  Component->A1_SetID(next_id);
-  A1_InsertIntoIDToComponent(next_id, component);
+  component->id_ = next_id_;
+  A1_InsertIntoIDToComponent(next_id_, component);
   A1_IncrementNextID();
 }
 void Model::L1_ReleaseID(int id) {
@@ -342,7 +293,7 @@ void Model::FixTimes() {
     // remember the reasoning, so it may not be correct.  
 
     bool solid = true;
-    vector<Component *> dep = c->Dependents();
+    vector<Component *> dep = c->TemporalDependents();
     forall(run, dep) {
       Component * d = *run;
       if ( (d->time_ < new_time) && 
@@ -370,7 +321,7 @@ void Model::FixTimes() {
   // loop run until the queue was empty?
   while(times_dirty_.size()){
     Component *c = *times_dirty_.begin();
-    c->L1_SetTimeMaintainConsistency(NEVER, false);
+    c->L1_SetTimeMaintainIndices(NEVER, false);
     c->L1_MakeTimeClean();
   }
   CHECK(times_dirty_.size()==0);
@@ -384,45 +335,29 @@ void Model::DeleteNeverHappeningComponents() {
   }
 }
 
-void Model::KillComponent(Component * to_kill, bool just_this){
-  to_kill->being_destroyed_ = true;
-  vector<StablePtr<Component> > dep 
-    = ToStablePtrVector(to_kill->HardDependents());
-  for (uint i=0; i<dep.size(); i++) 
-    if (dep[i].IsValid()) KillComponent(*dep[i]);
-  vector<StablePtr<Component> > copurposes 
-    = ToStablePtrVector(to_kill->Copurposes());
-  delete to_kill;
-  if (!just_this) {
-    forall(run, copurposes) {
-      if (run->IsValid() && (**run)->IsSuperfluous() && !(**run)->being_destroyed_)
-	KillComponent(**run);
-    }
-  }
-
-}
-Record Model::ModelInfo() {
+Record Model::ModelInfo() const {
   Record r;
   r["Ln Likelihood"] = dtoa(ln_likelihood_);
   r["Ln likelihood(arbitrary terms)"] = dtoa(arbitrary_term_ln_likelihood_);
-  r["absent required"] = itoa(absent_required_.size());
-  r["present forbidden"] = itoa(present_forbidden_.size());
+  r["required never happen"] = itoa(required_never_happen_.size());
+  r["violated prohibitions"] = itoa(violated_prohibitions_.size());
   string awc;
   forall(run, arbitrary_term_counts_) 
     awc += itoa(run->second) + " : " + LEXICON.GetString(run->first) + "<br>\n";
   r["Term Counts (arbitrary terms)"] = awc;
   return r;  
 }
-string Model::LinkBar(){
+string Model::LinkBar() const{
   string ret;
   for (int i=0; i<NUM_COMPONENT_TYPES; i++) {
-    ret += string() + "<a href=" +ComponentTypeName[i] + ".html>"
-      + ComponentTypeName[i] + "</a> ";
+    ComponentType ct = ComponentType(i);
+    ret += string() + "<a href=" + ComponentTypeToString(ct) + ".html>"
+      + ComponentTypeToString(ct) + "</a> ";
   }
   ret += "<br>";
   return ret;
 }
-void Model::ToHTML(string dirname){
+void Model::ToHTML(string dirname) const {
   system(("mkdir " + dirname).c_str());
   ofstream output;
   output.open((dirname+"/model.html").c_str());
@@ -445,28 +380,6 @@ void Model::ToHTML(string dirname){
   }
 }
 
-void Model::StoreToFile(string filename){
-  ofstream output(filename.c_str());
-  Store(&output);
-}
-void Model::Store(ostream * output){
-  FixTimes();
-  (*output) << next_id_ << endl;
-  set<Component *> to_insert;
-  forall(run, id_to_component_) to_insert.insert(run->second);
-  vector<Component *> store_order = SortIntoLegalInsertionOrder(to_insert);
-  for (uint i=0; i<store_order.size(); i++) {
-    Component * c = store_order[i];
-    Record r = c->ToRecord();
-    string s = RecordToString(r);
-    (*output) << s << endl;
-  }
-}
-
-void Model::CheckConnections(){
-  forall(run, id_to_component_) run->second->CheckConnections();  
-}
-
 void Model::VerifyLikelihood() const{
   double total = arbitrary_term_ln_likelihood_;
   forall(run, id_to_component_){
@@ -477,7 +390,7 @@ void Model::VerifyLikelihood() const{
     CHECK(false);
   }
 }
-void Model::VerifyLinkBidirectionality(){
+void Model::VerifyLinkBidirectionality() const {
   set<pair<Component *, Component *> > td1, td2, p1, p2;
   forall(run, id_to_component_){
     Component *c = run->second;
@@ -489,11 +402,11 @@ void Model::VerifyLinkBidirectionality(){
     for (int i=0; i<cp.size(); i++) {
       p2.insert(make_pair(cp[i], c));
     }
-    vector<Component *> td = TemporalDependents();
+    vector<Component *> td = c->TemporalDependents();
     for (int i=0; i<td.size(); i++) {
       td1.insert(make_pair(c, td[i]));
     }
-    vector<vector<Component *> > tcd = TemporalCodependents();
+    vector<vector<Component *> > tcd = c->TemporalCodependents();
     for (int i=0; i<tcd.size(); i++) for (int j=0; j<tcd[i].size(); j++) {
       td2.insert(make_pair(tcd[i][j], c));
     }
@@ -518,18 +431,18 @@ int64 Model::FindSatisfactionsForTuple
   vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > *results,
   int64 max_work,
   bool return_subs_for_negative_rules = true,
-  bool return_subs_for_all_rules = false){
+  bool return_subs_for_all_rules = false) {
   DestructibleCheckpoint dcp(&changelist_);
   if (!tuple_index_.FindTuple(s))
     changelist_.Make
-      (new MemberCallChange<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
+      (new MemberCall1Change<TupleIndex, Tuple>(&tuple_index_, s,
 					       &TupleIndex::AddWrapper,
 					       &TupleIndex::RemoveWrapper));
   if (results) results->clear();
   int64 total_work = 0;
   for (GeneralizationIterator run_g(s); !run_g.done(); ++run_g) {
     const set<pair<Precondition *, int> > * preconditions
-      = clause_to_precondition_ % run_g.generalized().Fingerprint();
+      = wildcard_tuple_to_precondition_ % run_g.generalized();
     if (preconditions) forall(run, (*preconditions)) {
       Precondition * precondition = run->first;
       int clause_num = run->second;
@@ -537,7 +450,7 @@ int64 Model::FindSatisfactionsForTuple
       vector<Tuple> simplified_precondition = precondition->pattern_;
       // This can fail (gracefully) if the clause contains the same variable 
       // at two positions and the tuple doesn't.
-      if (!ComputeSubstitution(precondition->clauses_[clause_num], s, 
+      if (!ComputeSubstitution(precondition->pattern_[clause_num], s, 
 			       &partial_sub)) continue;
       partial_sub.Substitute(&simplified_precondition);
       uint64 num_complete_subs;
@@ -574,14 +487,14 @@ int64 Model::FindExplanationsForResult
   int64 total_work = 0;
   for (GeneralizationIterator run_g(s); !run_g.done(); ++run_g) {
     const set<pair<Rule *, int> > * rules
-      = clause_to_result_ % run_g.generalized().Fingerprint();
+      = wildcard_tuple_to_result_ % run_g.generalized();
     if (rules) forall(run, (*rules)) {
       Rule * rule = run->first;
       if (excluded_dependents && 
 	  ((*excluded_dependents) % ((Component*)rule))) continue;
       int clause_num = run->second;
       Substitution partial_sub;
-      vector<Tuple> simplified_precondition = rule->precondition_->clauses_;
+      vector<Tuple> simplified_precondition = rule->precondition_->pattern_;
       
       if (!ComputeSubstitution(rule->result_[clause_num], s, &partial_sub))
 	continue;
@@ -604,7 +517,7 @@ int64 Model::FindExplanationsForResult
 	    complete_subs[i].Add(*run_v, LEXICON.GetAddID("whatever"));
 	  }
 	}
-	vector<Tuple> substituted_precondition = rule->precondition_->clauses_;
+	vector<Tuple> substituted_precondition = rule->precondition_->pattern_;
 	complete_subs[i].Substitute(&substituted_precondition);
 	if (excluded_dependents) {
 	  bool bad = false;
@@ -623,21 +536,20 @@ int64 Model::FindExplanationsForResult
   return total_work;
 }
 
-
-
 Precondition * Model::FindPrecondition(const vector<Tuple> & tuples) const{
-  Precondition ** p = precondition_index_ % tuples;
+  Precondition * const * p = precondition_index_ % tuples;
   if (p) return *p; 
   else return NULL;
 }
+
 Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
   Precondition * p = FindPrecondition(tuples);
-  if (p) { return *p; }
+  if (p) { return p; }
   else return new Precondition(this, tuples);
 }
 
 TrueTuple * Model::FindTrueTuple(const Tuple & s) const {
-  const Tuple ** tuple = tuple_to_true_tuple_ % s;
+  TrueTuple * const * tuple = tuple_to_true_tuple_ % s;
   if (tuple) return *tuple;
   return NULL;
 }
@@ -648,13 +560,13 @@ TrueTuple * Model::GetAddTrueTuple(const Tuple & s) {
   return ret;
 }
 
-Rule * FindPositiveRule(vector<Tuple> precondition, vector<Tuple> result)
+Rule * Model::FindPositiveRule(vector<Tuple> precondition, vector<Tuple> result)
   const{
   Precondition *p = FindPrecondition(precondition);
   if (!p) return NULL;
   return p->FindPositiveRule(result);
 }
-Rule * FindNegativeRule(vector<Tuple> precondition, Rule * target_rule) const{
+Rule * Model::FindNegativeRule(vector<Tuple> precondition, Rule * target_rule) const{
   Precondition *p = FindPrecondition(precondition);
   if (!p) return NULL;
   return p->FindNegativeRule(target_rule);
@@ -741,21 +653,21 @@ void Model::A1_RemoveFromWildcardTupleToPrecondition
 }
 void Model::A1_InsertIntoWildcardTupleToResult(Tuple t, Rule *r, int position) {
   changelist_.Make(new MapOfSetsInsertChange<Tuple, pair<Rule *, int> >
-		   (&wildcard_tuple_to_result_, t, make_pair(p, position)));
+		   (&wildcard_tuple_to_result_, t, make_pair(r, position)));
 }
 void Model::A1_RemoveFromWildcardTupleToResult(Tuple t, Rule *r, int position) {
   changelist_.Make(new MapOfSetsRemoveChange<Tuple, pair<Rule *, int> >
-		   (&wildcard_tuple_to_result_, t, make_pair(p, position)));
+		   (&wildcard_tuple_to_result_, t, make_pair(r, position)));
 }
 void Model::A1_InsertIntoPreconditionIndex(const Pattern &pat, Precondition *p){
   changelist_.Make
     (new MapInsertChange<Pattern, Precondition *>
-     (&tuple_to_true_tuple_, pat, p));  
+     (&precondition_index_, pat, p));  
 }
 void Model::A1_RemoveFromPreconditionIndex(const Pattern &pat) {
   changelist_.Make
     (new MapRemoveChange<Pattern, Precondition *>
-     (&tuple_to_true_tuple_, pat));
+     (&precondition_index_, pat));
 }
 void Model::A1_InsertIntoProhibitionIndex(Tuple t, Prohibition *p) {
   changelist_.Make
@@ -810,138 +722,10 @@ void Model::A1_RemoveFromViolatedProhibitions(Prohibition *p) {
   changelist_.Make
     (new SetRemoveChange<Prohibition *>(&violated_prohibitions_, p));
 }
-
-void Model::Shell(istream  * input) {
-  string line;
-  string command;
-  map<string, Checkpoint> checkpoints;
-  cout << "?";
-  while ((*input) >> command) {
-    if (command == "q") break;
-    else if (command=="id") {
-      string s;
-      (*input) >> s;
-      cout << LEXICON.GetAddID(s) << endl;
-    }
-    else if (command == "RemoveID") {
-      int id;
-      (*input) >> id;
-      GetComponent(id).Erase();
-    }
-    /*else if (command=="store") {
-      string filename;
-      (*input) >> filename;
-      StoreToFile(filename);
-    }
-    else if (command=="load") {
-      string filename;
-      (*input) >> filename;
-      ifstream finput(filename.c_str());
-      Load(&finput);
-      }*/
-    else if (command == "verify2") {
-      VerifyLayer2();
-    }
-    else if (command == "checkpoint") {
-      string cname;
-      (*input) >> cname;
-      checkpoints[cname] = changelist_.GetCheckpoint();
-    }
-    else if (command == "rollback") {
-      string cname;
-      (*input) >> cname;
-      changelist_.Rollback(checkpoints[cname]);
-    }
-    else if (command == "spec") {
-      string fname;
-      (*input) >> fname;
-      ifstream finput(fname.c_str());
-      ReadSpec(&finput);
-      finput.close();
-      FixTimesFixCircularDependencies(this);
-    }
-    else if (command == "strength") {
-      int id;
-      (*input) >> id;
-      GetComponent<Rule>(id)->OptimizeStrength();
-    }
-    else if (command == "o") {
-      OptimizeRound();
-    }
-    else if (command == "i") {
-      int tactic;
-      (*input) >> tactic;
-      int duration;
-      (*input) >> duration;
-      time_t end_time = time(0) + duration;
-      while (time(0) < end_time) {
-	pair<vector<Tuple>, vector<Tuple> > p 
-	  = FindRandomCandidateRule(Tactic(tactic));
-	OptimizationCheckpoint cp(this, true);
-	TryAddImplicationRule(this, p.first, p.second);
-	if (cp.KeepChanges()) {
-	  VLOG(0) << " Created rule "
-		  << TupleVectorToString(p.first)
-		  << " ->" << TupleVectorToString(p.second)
-		  << " model likelihood: " << GetLnLikelihood()
-		  << " gain=" << cp.Gain() << endl;
-	}
-      }
-    }
-    else if (command == "ispecific"){
-      string pat;
-      GetLine((*input), &pat);
-      vector<Tuple> preconditions = StringToTupleVector(pat);
-      GetLine((*input), &pat);
-      vector<Tuple> result = StringToTupleVector(pat);
-      OptimizationCheckpoint cp(this, true);      
-      TryAddImplicationRule(preconditions, result, REQUIRE_BETTER, true);
-      if (cp.KeepChanges()) {
-	VLOG(0) << " Created rule "
-		<< TupleVectorToString(preconditions)
-		<< " ->" << TupleVectorToString(result)
-		<< " model likelihood: " << GetLnLikelihood()
-		<< " gain=" << cp.Gain() << endl;
-      }      
-    } 
-    else if (command=="rs"){ // random tuple
-      string l;
-      GetLine((*input), &l);
-      istringstream istr(l);
-      vector<int> terms;      
-      string w;
-      while (istr >> w){
-	int wid;
-	CHECK(LEXICON.GetID(w, &wid));
-	terms.push_back(wid);
-      }
-      for (int i=0; i<10; i++) {
-	const Tuple * s 
-	  = tuple_index_.GetRandomTupleContaining(terms, true);
-	if(s) {
-	  cout << s->ToString() << endl;
-	}
-      }
-    }
-    else if (command=="v") {
-      int v;
-      (*input) >> v;
-      SetVerbosity(v);
-    }
-    else if (command=="pat"){
-      /*pair<vector<Tuple>, vector<Tuple> > p = FindRandomCandidateRule();
-      cout << TupleVectorToString(p.first) << " -> " 
-      << TupleVectorToString(p.second) << endl;*/
-    }
-    else if (command=="h"){
-      ToHTML("html");
-    }
-    else cerr << "UNKNOWN COMMAND " << command << endl;
-    FixTimes();
-    //ToHTML("/Users/guest/tmp/model.html");
-    cout << "?";
-  }
+void Model::A1_IncrementNextID(){
+  changelist_.Make(new ValueChange<int>(&next_id_, next_id_+1));
 }
+
 
 
  

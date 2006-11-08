@@ -79,7 +79,6 @@ enum ComponentType {
 };
 
 // Converting back and forthe between component types and their names.
-char ** ComponentTypeName; // indexed by the enum above. 
 ComponentType StringToComponentType(const string & s); 
 string ComponentTypeToString(ComponentType t);
 
@@ -91,7 +90,6 @@ enum RuleType {
   CREATIVE_RULE, // New variables on RHS.  Can have multiple firings.
   NUM_RULE_TYPES,
 };
-char ** RuleTypeName;
 RuleType StringToRuleType(const string & s);
 string RuleTypeToString(RuleType t);
 
