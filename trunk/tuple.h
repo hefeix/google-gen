@@ -127,6 +127,11 @@ struct Substitution {
   // Provide a restricted substitution to a set of terms
   Substitution Restrict(const set<int> & terms) const;
 };
+
+bool operator <(const Substitution & a, const Substitution & b){
+  return (a.sub_ < b.sub_);
+}
+
 inline uint64 Fingerprint(const Substitution & s, uint64 level = 0){
   return s.Fingerprint(level);
 }

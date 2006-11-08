@@ -25,6 +25,7 @@
 #include <math.h>
 #include "changelist.h"
 #include "component.h"
+#include "prohibition.h"
 
 bool FLAGS_firing_tuple = false;
 
@@ -530,6 +531,38 @@ string Rule::ImplicationString() const {
     + TupleVectorToString(result_);
 }
 
+void Rule::A1_SetDelay(EncodedNumber value){
+  model_->changelist_.Make(new ValueChange<EncodedNumber>(&delay_, value));
+}
+void Rule::A1_SetStrength(EncodedNumber value){
+  model_->changelist_.Make(new ValueChange<EncodedNumber>(&strength_, value));
+}
+void Rule::A1_SetStrength2(EncodedNumber value){
+  model_->changelist_.Make(new ValueChange<EncodedNumber>(&strength2_, value));
+}
+void Rule::A1_SetStrengthD(double value){
+  model_->changelist_.Make(new ValueChange<double>(&strength_d_, value));
+}
+void Rule::A1_SetStrength2D(double value){
+  model_->changelist_.Make(new ValueChange<double>(&strength2_d_, value));
+}
+void Rule::A1_AddRuleSat(Satisfaction * s, RuleSat * rs){
+  model_->changelist_.Make(new MapInsertChange<Satisfaction *, RuleSat *>
+			   (&rule_sats_, s, rs));
+}
+void Rule::A1_RemoveRuleSat(Satisfaction * s){
+  model_->changelist_.Make(new MapRemoveChange<Satisfaction *, RuleSat *>
+			   (&rule_sats_, s));
+}
+void Rule::A1_AddInhibitor(Rule * inhibitor){
+  model_->changelist_.Make
+    (new SetInsertChange<Rule *>(&inhibitors_, inhibitor));
+}
+void Rule::A1_RemoveInhibitor(Rule * inhibitor){
+  model_->changelist_.Make
+    (new SetRemoveChange<Rule *>(&inhibitors_, inhibitor));
+}
+
 
 // ----- RULESAT -----
 
@@ -555,14 +588,14 @@ RuleSat::RuleSat(Rule * rule, const Substitution & sub)
 void RuleSat::L1_EraseSubclass(){
   satisfaction_->A1_RemoveRuleSat(this);
   rule_->A1_RemoveRuleSat(satisfaction_);
-  if (rule->type_ == NEGATIVE_RULE) {
+  if (rule_->type_ == NEGATIVE_RULE) {
     target_rule_sat_->A1_RemoveInhibitor(this);
     target_rule_sat_->ComputeSetLnLikelihood();
   }
 }
 
 Firing * RuleSat::FindFiring(const Substitution & right_sub) const{
-  Firing ** f = firings_ % right_sub;
+  Firing * const * f = firings_ % right_sub;
   if (f) return *f;
   return NULL;
 }
@@ -575,7 +608,7 @@ Firing * RuleSat::AddFiring(const Substitution & right_sub){
 }
 
 string RuleSat::ImplicationString(const Firing * firing) const {
-  vector<Tuple> preconditions = rule_->precondition_->clauses_;
+  vector<Tuple> preconditions = rule_->precondition_->pattern_;
   vector<Tuple> results = rule_->result_;
   vector<Tuple> substituted_preconditions = preconditions;
   vector<Tuple> substituted_results = results;
@@ -598,7 +631,7 @@ string RuleSat::ImplicationString(const Firing * firing) const {
   }
   ret += "-> ";
   for (uint i=0; i<results.size(); i++) {
-    if (!substituted_results[i].HasVariables()) {
+    if (substituted_results[i].IsConstantTuple()) {
       TrueTuple * tp
 	= model_->FindTrueTuple(substituted_results[i]);
       if (tp){
@@ -669,7 +702,7 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
   tuple_ = tuple;
   required_count_ = 0;
   // Insert the tuple into the tuple index
-  model_->changelist_->Make
+  model_->changelist_.Make
     (new MemberCall1Change<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
 					     &TupleIndex::AddWrapper,
 					     &TupleIndex::RemoveWrapper));
@@ -697,7 +730,7 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
     }
   }
   // Figure out whether any prohibitions are violated.  
-  for (GerneralizationIterator run_g(tuple_); !run_g.done(); ++run_g) {
+  for (GeneralizationIterator run_g(tuple_); !run_g.done(); ++run_g) {
     set<Prohibition *> * prohibitions 
       = model_->prohibition_index_ % run_g.generalized();
     if (prohibitions) forall(run_p, *prohibitions) {
@@ -713,7 +746,8 @@ void TrueTuple::L1_EraseSubclass(){
   // Caveat: we can't directly iterate over violated_prohibitions_, since
   // we are implicitly erasing its elements. 
   while (violated_prohibitions_.size()) {
-    (*violated_prohibitions_.begin())->L1_RemoveViolation(this);
+    (*violated_prohibitions_.begin())->
+      L1_RemoveViolationOnTrueTupleDelete(this);
   }
   // The satisfactions that are explicitly represented have been destroyed, 
   // as they are structural dependents, but we still need to decrease the
@@ -729,7 +763,7 @@ void TrueTuple::L1_EraseSubclass(){
   
   model_->A1_RemoveFromRequiredNeverHappen(this);
   model_->A1_RemoveFromTupleToTrueTuple(tuple_);
-  model_->changelist_->Make
+  model_->changelist_.Make
     (new MemberCall1Change<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
 					     &TupleIndex::RemoveWrapper,
 					     &TupleIndex::AddWrapper));
@@ -823,7 +857,7 @@ Record TrueTuple::RecordForDisplayInternal() const {
   }
   set<Firing *> f = GetResultFirings();
   forall(run, f) r["firings"] += (*run)->ImplicationString() + "<br>\n";
-  r["required"] = required_?"REQUIRED":"";
+  r["required"] = required_count_?"REQUIRED":"";
   return r;
 }
  
@@ -903,7 +937,7 @@ vector<vector<Component *> > Component::TemporalCodependents() const{
 vector<vector<Component *> > Satisfaction::TemporalCodependents() const {
   vector<vector<Component *> > ret;
   ret.push_back(vector<Component *>(1, precondition_));
-  forall(run, tuples_) {
+  forall(run, true_tuples_) {
     ret.push_back(vector<Component *>(1, *run));
   }
   return ret;
@@ -912,8 +946,8 @@ vector<vector<Component *> > Rule::TemporalCodependents() const{
   vector<vector<Component *> > ret;
   ret.push_back(vector<Component *>(1, precondition_));
   if (type_==NEGATIVE_RULE) ret.push_back(vector<Component *>(1, target_rule_));
-  for (uint i=0; i<encoding_.size(); i++) 
-    ret.push_back(vector<Component *>(1, encoding_[i]));
+  //for (uint i=0; i<encoding_.size(); i++) 
+  //  ret.push_back(vector<Component *>(1, encoding_[i]));
   return ret;
 }
 vector<vector<Component *> > RuleSat::TemporalCodependents() const{
@@ -929,30 +963,29 @@ vector<vector<Component *> > Firing::TemporalCodependents() const{
 }
 vector<vector<Component *> > TrueTuple::TemporalCodependents() const{
   vector<vector<Component *> > ret;
-  if (!given_) 
-    ret.push_back(vector<Component *>(causes_.begin(), causes_.end()));
+  ret.push_back(vector<Component *>(causes_.begin(), causes_.end()));
   return ret;
 }
 
 vector<Component *> Component::Purposes() const{
   return vector<Component *>();
 }
-bool Component::HasPurpose() { return true; }
+bool Component::HasPurpose() const { return true; }
 vector<Component *> Precondition::Purposes() const{
   return vector<Component *>(rules_.begin(), rules_.end());
 }
-bool Precondition::HasPurpose(){ return rules_.size(); }
+bool Precondition::HasPurpose() const { return rules_.size(); }
 vector<Component *> Satisfaction::Purposes() const{
   return vector<Component *>(rule_sats_.begin(), rule_sats_.end());
 }
-bool Satisfaction::HasPurpose(){ return rule_sats_.size(); }
+bool Satisfaction::HasPurpose() const { return rule_sats_.size(); }
 vector<Component *> RuleSat::Purposes() const{
   vector<Firing*> v = VectorOfValues(firings_);
   vector<Component*> ret(v.begin(), v.end());
   ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
   return ret;
 }
-bool RuleSat::HasPurpose(){return firings_.size()||inhibitors_.size();}
+bool RuleSat::HasPurpose() const {return firings_.size()||inhibitors_.size();}
 
 vector<Component *> Component::Copurposes() const{
   return vector<Component *>();
@@ -984,9 +1017,9 @@ bool RuleSat::NeedsPurpose() const {
 
 void Component::ComputeSetTime(){
   L1_SetTimeMaintainIndices(ComputeTime(NULL), true);
-  MakeTimeClean();
+  L1_MakeTimeClean();
 }
-Time Component::ComputeTime(set<Component *> *excluded){
+Time Component::ComputeTime(set<Component *> *excluded) const{
   Time ret;
   vector<vector<Component *> > codep = TemporalCodependents();
   for (uint i=0; i<codep.size(); i++) {
@@ -1008,14 +1041,14 @@ void Component::L1_SetTimeMaintainIndices(Time new_time,
 					  bool make_dependents_dirty){
   if (new_time == time_) return; 
   if (time_.IsNever()) {
-    model_->A1_EraseFromNeverHappen(this);
-    if (Type()==TRUETUPLE && ((TrueTuple*)this)->required_)
-      model_->A1_EraseFromRequiredNeverHappen(this);
+    model_->A1_RemoveFromNeverHappen(this);
+    if (Type()==TRUETUPLE && ((TrueTuple*)this)->required_count_)
+      model_->A1_RemoveFromRequiredNeverHappen((TrueTuple*)this);
   }
   A1_SetTime(new_time);
-  AdjustLnLikelihoodForNewTime();
+  F2_AdjustLnLikelihoodForNewTime();
   if (make_dependents_dirty) {
-    vector<Component *> dep = Dependents();
+    vector<Component *> dep = TemporalDependents();
     for(uint i=0; i<dep.size(); i++) {
       if (dep[i]->ComputeTime(NULL) != dep[i]->time_)
 	dep[i]->L1_MakeTimeDirty();
@@ -1023,15 +1056,15 @@ void Component::L1_SetTimeMaintainIndices(Time new_time,
   }
   if (time_.IsNever()){
     model_->A1_InsertIntoNeverHappen(this);
-    if (Type()==TRUETUPLE && ((TrueTuple*)this)->required_)
-      model_->A1_InsertIntoRequiredNeverHappen(this);
+    if (Type()==TRUETUPLE && ((TrueTuple*)this)->required_count_)
+      model_->A1_InsertIntoRequiredNeverHappen((TrueTuple*)this);
   }
 }
 
 void Component::L1_MakeTimeClean(){
   if (time_dirty_  == false) return;
   A1_SetTimeDirty(false);
-  model_->A1_ReomveFromTimesDirty(this);
+  model_->A1_RemoveFromTimesDirty(this);
 }
 void Component::L1_MakeTimeDirty(){
   if (time_dirty_ == true) return;
@@ -1105,20 +1138,20 @@ void Component::VerifyLayer2() const {
     CHECK(false);
   }
   // Check that the time is up to date or that time_dirty_ is set
-  CHECK(time_dirty_ || ComputeTime() == time_);
+  CHECK(time_dirty_ || ComputeTime(NULL) == time_);
   // Check that the component has a purpose if it needs one.
   CHECK(!NeedsPurpose() || Purposes().size());
   VerifyLayer2Subclass();
 }
 void Component::VerifyLayer2Subclass() const{}
-void Satisfaction::VerifyLayer2Subclass() const{
+void Precondition::VerifyLayer2Subclass() const{
   uint64 num_sat;
-  model_->tuple_index.
-    FindSatisfactionsForTuple(pattern_, NULL, &num_sat, UNLIMITED_WORK, NULL);
+  model_->tuple_index_.
+    FindSatisfactions(pattern_, NULL, &num_sat, UNLIMITED_WORK, NULL);
   CHECK(num_sat == num_satisfactions_);
 }
-void Rule::VerifyLayer2Subclass() {
-  if (type == NEGATIVE_RULE) {  // Make all the RuleSats exist.
+void Rule::VerifyLayer2Subclass() const{
+  if (type_ == NEGATIVE_RULE) {  // Make all the RuleSats exist.
     vector<Substitution> substitutions;
     model_->tuple_index_.FindSatisfactions(precondition_->pattern_, 
 					   &substitutions,
@@ -1127,19 +1160,4 @@ void Rule::VerifyLayer2Subclass() {
       CHECK(FindRuleSat(substitutions[i]));
     }
   }  
-}
-
-void Component::CheckConnections(){
-  vector<vector<Component *> > vv = TemporalCodependents();
-  forall(run, vv) forall(run2, *run) {
-    if (*run2 ==0) continue;
-    CHECK((*run2)->Dependents() % this);
-  }
-  vector<Component *> v;
-  v = Purposes();
-  for (uint i=0; i<v.size(); i++) 
-    CHECK(v[i]->Copurposes() % this);
-  v = Copurposes();
-  for (uint i=0; i<v.size(); i++) 
-    CHECK(v[i]->Purposes() % this);  
 }

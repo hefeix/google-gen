@@ -121,7 +121,7 @@ class Component{
   void ComputeSetLnLikelihood();
   // If the time of a component changes, we call this function, which 
   // adjusts the ln_likelihood_ of this and other components if necessary.
-  virtual void AdjustLnLikelihoodForNewTime();
+  virtual void F2_AdjustLnLikelihoodForNewTime();
 
 
   // ----- CONST FUNCTIONS -----
@@ -198,15 +198,18 @@ class Component{
   // Some simple sanity checks on the connection structure.
   void CheckConnections() const; // checks that Co<X>() is the iverse of <X>()
 
- protected:
+
   // ----- CONSTRUCTOR(S) -----
 
   // The constructor should leave the exists_ bit false, and the destructor
   // should CHECK that it is false.  The constructor and destructor should 
   // not touch the rest of the model.
+ protected:
   Component(Model * model);
+ public:
   virtual ~Component();
 
+ protected:
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
   // Set the time to new_time.
@@ -270,6 +273,7 @@ class Precondition : public Component {
   friend class RuleSat;
   friend class Firing; 
   friend class TrueTuple;
+  friend class Component;
   friend class Model;
 
   // ----- LAYER 2 FUNCTIONS ----- Precondition
@@ -291,7 +295,7 @@ class Precondition : public Component {
   double LnLikelihood() const;
   // returns pointer to a satisfaction object if one exists.
   Satisfaction * FindSatisfaction(const Substitution &sub) const;
-  virtual void VerifyLayer2Subclass() const;
+  void VerifyLayer2Subclass() const;
   Rule * FindPositiveRule(const vector<Tuple> & result) const;
   Rule * FindNegativeRule(Rule * target_rule) const;
   int GetNumSatisfactions() const { return num_satisfactions_;}
@@ -392,6 +396,7 @@ class Satisfaction : public Component {
   friend class RuleSat;
   friend class Firing; 
   friend class TrueTuple;
+  friend class Component;
   friend class Model;
 
   // ----- LAYER 2 FUNCTIONS ----- Satisfaction
@@ -449,6 +454,7 @@ class Rule : public Component{
   friend class RuleSat;
   friend class Firing; 
   friend class TrueTuple;
+  friend class Component;
   friend class Model;
 
   // -----LAYER 2 FUNCTIONS ----- Rule
@@ -499,7 +505,7 @@ class Rule : public Component{
   RuleSat * FindRuleSat(Satisfaction * sat) const;
   //  Convenience
   RuleSat * FindRuleSat(const Substitution & sub) const;
-  virtual void VerifyLayer2Subclass() const;
+  void VerifyLayer2Subclass() const;
   Precondition * GetPrecondition() const { return precondition_;}
   EncodedNumber GetDelay() const { return delay_;}
   EncodedNumber GetStrength() const { return strength_;}
@@ -541,12 +547,11 @@ class Rule : public Component{
   void A1_SetStrengthD(double value);
   void A1_SetStrength2D(double value);
   void A1_AddRuleSat(Satisfaction * s, RuleSat * rs);
-  void A1_RemoveRuleSat(Satisfaction * s, RuleSat * rs);
-  void A1_SetRuleLnLikelihood(double val);
+  void A1_RemoveRuleSat(Satisfaction * s);
   void A1_AddInhibitor(Rule * inhibitor);
   void A1_RemoveInhibitor(Rule * inhibitor);
 
-  // ----- DATA ----- Rule
+  // ----- Data ----- Rule
 
   // fundamental
   Precondition * precondition_;
@@ -605,6 +610,7 @@ class RuleSat : public Component{ // an instance of a rule coming true
   friend class Satisfaction; 
   friend class Firing; 
   friend class TrueTuple;
+  friend class Component;
   friend class Model;
 
   // ----- LAYER 2 FUNCTIONS -----
@@ -672,6 +678,7 @@ class Firing : public Component{
   friend class Satisfaction; 
   friend class RuleSat;
   friend class TrueTuple;
+  friend class Component;
   friend class Model;
 
 
@@ -728,6 +735,7 @@ class TrueTuple : public Component{
   friend class Satisfaction; 
   friend class RuleSat;
   friend class Firing; 
+  friend class Component;
   friend class Model;
 
 
