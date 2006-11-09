@@ -83,7 +83,7 @@ class TupleIndex{
   const Tuple * GetRandomTupleContaining(const vector<int> & terms, 
 					       bool funky_distribution);
 					       
-  const Tuple * RandomTuple();
+  const Tuple * RandomTuple() const;
 
   // returns all tuples containing a term.
   void FindTerm(int w, vector<const Tuple* >* results); 

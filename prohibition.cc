@@ -17,14 +17,14 @@
 // Author: Noam Shazeer and Georges Harik
 
 #include "prohibition.h"
+#include "model.h"c
 
 bool Prohibition::TupleIsProhibited(const Tuple & t) const {
-  CHECK(MatchesWithWildcards(prohibited_, t->tuple_));
+  CHECK(MatchesWildcardTuple(prohibited_, t));
   return (!(exceptions_ % t));
 }
 
-static Prohibition * 
-Prohibition::L1_MakeProhibition(Model *m, Tuple prohibited){
+Prohibition * Prohibition::L1_MakeProhibition(Model *m, Tuple prohibited){
   return new Prohibition(m, prohibited);
 }
 
@@ -32,15 +32,15 @@ Prohibition::Prohibition(Model *m, Tuple prohibited){
   model_ = m;
   prohibited_ = prohibited;
   exists_ = true;
-  model_->changelist_->Add(new DeleteOnRollbackChange<Prohibition>(this));
+  model_->changelist_.Make(new DeleteOnRollbackChange<Prohibition>(this));
   vector<const Tuple*> matches;
   model_->tuple_index_.Lookup(prohibited_, &matches);
-  for (uint i=0; i<results.size(); i++) {
-    TrueTuple *t = model_->FindTrueTuple(matches[i]);
+  for (uint i=0; i<matches.size(); i++) {
+    TrueTuple *t = model_->FindTrueTuple(*(matches[i]));
     CHECK(t);
     L1_AddViolation(t);
   }
-  model_->A1_AddToProhibitionIndex(prohibited_, this);
+  model_->A1_InsertIntoProhibitionIndex(prohibited_, this);
 }
 
 void Prohibition::L1_Erase(){
@@ -53,7 +53,7 @@ void Prohibition::L1_Erase(){
 
 // ----- Complicated L1 functions
 void Prohibition::L1_AddException(Tuple exception){
-  CHECK(MatchesWithWildcards(prohibited_, exception); 
+  CHECK(MatchesWildcardTuple(prohibited_, exception)); 
   CHECK(!(exceptions_ % exception));
   A1_AddException(exception);
   TrueTuple * tt = model_->FindTrueTuple(exception);

@@ -43,6 +43,7 @@ class Model {
   friend class TrueTuple;
   friend class Rule;
   friend class Component;
+  friend class Prohibition;
 
   // ----- LAYER 3 FUNCTIONS -----
 
@@ -142,7 +143,7 @@ class Model {
   // returns work, or GAVE_UP if we ran out of time.
   int64 FindExplanationsForResult (const Tuple & t, 
 				   vector<pair<Rule *, Substitution> > *results,
-				   set<Component *> * excluded_dependents,
+				   const set<Component *> * excluded_dependents,
 				   int64 max_work); 
   
   
@@ -168,6 +169,19 @@ class Model {
   double GetLnLikelihood() const { return ln_likelihood_;}
 
   Precondition * FindPrecondition(const vector<Tuple> & tuples) const;
+
+  set<Rule *> GetAllRules() const;
+
+  TupleIndex * GetTupleIndex() { return &tuple_index_;}
+  const TupleIndex * GetTupleIndex() const { return &tuple_index_;}
+
+  Changelist * GetChangelist() { return &changelist_;}
+
+  const set<TrueTuple *> & GetRequiredNeverHappen() 
+    { return required_never_happen_;}
+  const set<Component *> & GetNeverHappen() 
+    { return never_happen_;}
+  const set<Component *> & GetTimesDirty() const { return times_dirty_;}
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 

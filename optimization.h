@@ -27,22 +27,21 @@
 // roll-back if you want to.
 
 // Removes a firing and might remove the rule.  
-bool TryRemoveFiring(Firing *f);
+void TryRemoveFiring(Firing *f);
 
 // Adds a bunch of firings at once and removes alternate explanations.
-bool TryAddFirings(Rule * r, const vector<Substitution> & sub);
+void TryAddFirings(Rule * r, const vector<Substitution> & sub);
 
 // Given a creative rule, tries creating rules where the unbound RHS variables
 // in the original rule are replaced by constants.
-bool TrySpecifyCreativeRule(Model *m, Rule * r);
+void TrySpecifyCreativeRule(Model *m, Rule * r);
 
 // TODO, document this
-bool TryAddImplicationRule(Model *m,
+void TryAddImplicationRule(Model *m,
 			   const vector<Tuple> & preconditions, 
-			   const vector<Tuple> & result, 
-			   RollbackCriterion criterion, bool fix_times);
+			   const vector<Tuple> & result);
 
-bool TryMakeFunctionalNegativeRule(Rule *r);
+void TryMakeFunctionalNegativeRule(Rule *r);
   
 enum Tactic {
   NEW_RULE,
@@ -70,8 +69,8 @@ ComputationResult DependsOn(Component * dependent, Component * dependee,
 
 // determines whether deleting this component will (recursively) remove
 // any of the required true propositions.  
-virtual ComputationResult IsEssential(Component *c, int max_work, 
-				      int * actual_work);
+ComputationResult IsEssential(Component *c, int max_work, 
+			      int * actual_work);
 
 // Would component c go away, directly or indirectly, if we removed 
 // Component d?  The function doesn't recursively inspect, so sometimes
@@ -108,9 +107,8 @@ void OptimizeStrength(Rule *r);
   // to add to the model that will explain that TrueTuple.  
   // If an "excluded" set is given, we avoid adding firings which depend on
   // the excluded TrueTuples.
-void Explain(Model *m,
-	     TrueTuple * p,
-	     set<Component *> * excluded,
+void Explain(TrueTuple * tt,
+	     const set<Component *> * excluded,
 	     bool fix_times); // satisfies in the best way it can
 // Explain all of the required propositions.
 

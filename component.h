@@ -54,6 +54,11 @@
 //  TODO: make the constructors private and write factory methods which
 // specify layers.
 
+#include "util.h"
+#include "record.h"
+#include "tuple.h"
+#include "numbers.h"
+
 class Model;
 class Component; //  a basic part of the model.  There are several subtypes.
 
@@ -195,7 +200,9 @@ class Component{
   virtual double LnLikelihood() const;
   // Some simple sanity checks on the connection structure.
   void CheckConnections() const; // checks that Co<X>() is the iverse of <X>()
+  int GetID() const { return id_;}
 
+  const Time & GetTime() const { return time_;}
 
   // ----- CONSTRUCTOR(S) -----
 
@@ -297,6 +304,7 @@ class Precondition : public Component {
   Rule * FindPositiveRule(const vector<Tuple> & result) const;
   Rule * FindNegativeRule(Rule * target_rule) const;
   int GetNumSatisfactions() const { return num_satisfactions_;}
+  const Pattern & GetPattern() const { return pattern_;}
 
   // TUPLE ENCODING STUFF
   // figures out what tuples cause the precondition under the tuple encoding.
@@ -508,8 +516,13 @@ class Rule : public Component{
   EncodedNumber GetDelay() const { return delay_;}
   EncodedNumber GetStrength() const { return strength_;}
   EncodedNumber GetStrength2() const { return strength2_;}
+  double GetStrengthD() const { return strength_d_;}
+  double GetStrength2D() const { return strength2_d_;}
   const map<Satisfaction *, RuleSat *> & GetRuleSats() const 
     { return rule_sats_;}
+  RuleType GetRuleType() const { return type_;}
+  const Pattern & GetResult() const { return result_;}
+
  private:
   // ----- CONSTRUCTOR(S) ----- Rule
 
@@ -735,6 +748,7 @@ class TrueTuple : public Component{
   friend class Firing; 
   friend class Component;
   friend class Model;
+  friend class Prohibition;
 
 
   // ----- LAYER 2 FUNCTIONS -----
@@ -755,6 +769,7 @@ class TrueTuple : public Component{
 
   const set<Firing *> & GetCauses() const { return causes_;}
   int IsRequired() const { return required_count_; }
+  const Tuple & GetTuple() const { return tuple_;}
 
  private:
 
