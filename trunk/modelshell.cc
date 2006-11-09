@@ -161,7 +161,15 @@ void ModelShell(istream  * input) {
   }
 }
 
-int main() {
-  ModelShell(&cin);
-  return 0;
+int main(int argc, char ** argv) {
+  string command;
+  if (argc>1) command = argv[1];
+  if (command=="tupleindex") {
+    TupleIndex index;
+    index.Shell();
+  } else if (command=="numbers") {
+    TestNumbersShell();
+  } else {
+    ModelShell(&cin);
+  }
 }
