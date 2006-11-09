@@ -33,8 +33,13 @@ bool Lexicon::GetID(const string & s, int * id) const {
 }
 bool LexiconWithVariables::GetID(const string & s, int * id) const{
   if (s.size() && s[0]=='*') {
-    if (s.size()==1) return WILDCARD;
-    return Variable(atoi(s.c_str()+1));
+    if (s.size()==1) {
+      *id = WILDCARD;
+      return true;
+    } else {
+      *id = Variable(atoi(s.c_str()+1));
+      return true;
+    }
   }
   return Lexicon::GetID(s, id);
 }

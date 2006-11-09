@@ -542,8 +542,7 @@ void OptimizeStrength(Rule *r){
   for (int which=0; which<2; which++) {
     EncodedNumber * to_alter = &strength;
     if (which==1) {
-      if (r->GetRuleType()
- != CREATIVE_RULE) continue;
+      if (r->GetRuleType() != CREATIVE_RULE) continue;
       to_alter = &strength2;
     }
     bool any_improvement = true;

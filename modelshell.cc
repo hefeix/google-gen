@@ -70,7 +70,9 @@ void ModelShell(istream  * input) {
       ifstream finput(fname.c_str());
       m.ReadSpec(&finput);
       finput.close();
+      m.VerifyLayer2();
       FixTimesFixCircularDependencies(&m);
+      m.VerifyLayer2();
     }
     else if (command == "strength") {
       int id;
@@ -90,7 +92,7 @@ void ModelShell(istream  * input) {
 	pair<vector<Tuple>, vector<Tuple> > p 
 	  = FindRandomCandidateRule(&m, Tactic(tactic));
 	OptimizationCheckpoint cp(&m, true);
-	TryAddImplicationRule(&m, p.first, p.second);
+	TryAddImplicationRule(&m, p.first, p.second);	
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "
 		  << TupleVectorToString(p.first)
@@ -98,7 +100,11 @@ void ModelShell(istream  * input) {
 		  << " model likelihood: " << m.GetLnLikelihood()
 		  << " gain=" << cp.Gain() << endl;
 	}
+	m.VerifyLayer2();
       }
+    }
+    else if (command == "verify"){
+      m.VerifyLayer2();
     }
     else if (command == "ispecific"){
       string pat;

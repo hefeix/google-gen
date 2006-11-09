@@ -411,20 +411,35 @@ void Model::VerifyLinkBidirectionality() const {
       td2.insert(make_pair(tcd[i][j], c));
     }
   }  
-  CHECK(td1==td2);
+  if (td1 != td2){
+    ToHTML("html");
+    forall(run, td1) if (!(td2 % *run)) {
+      cerr << "Temp. dependent missing temp. codependent " 
+	   << run->first->TypeName() << " " 
+	   << run->first->id_ << " " << run->second->TypeName() 
+	   << " " << run->second->id_ << endl;
+    }
+    forall(run, td2) if (!(td1 % *run)) {
+      cerr << "Temp. codependent missing temp. dependent " 
+	   << run->first->TypeName() << " " 
+	   << run->first->id_ << " " << run->second->TypeName() 
+	   << " " << run->second->id_ << endl;      
+    }
+    CHECK(false);
+  }
   CHECK(p1==p2);
 }
 void Model::VerifyIndices() const {
   // TODO: implement this
 }
 void Model::VerifyLayer2() const {
-  VerifyLikelihood();
-  VerifyLinkBidirectionality();
-  VerifyIndices();
   forall(run, id_to_component_) {
     Component *c = run->second;
     c->VerifyLayer2();
   }
+  VerifyLikelihood();
+  VerifyLinkBidirectionality();
+  VerifyIndices();
 }
 int64 Model::FindSatisfactionsForTuple
 ( const Tuple & s, 
