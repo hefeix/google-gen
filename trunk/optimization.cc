@@ -20,15 +20,18 @@
 // Contains optimization routines
 #include <cmath>
 #include "model.h"
+#include "optimization.h"
 
 void OptimizeRound(Model *m){
   vector<int> creative_rules;
-  forall(run, rule_index_) if (run->second->type_==CREATIVE_RULE) 
-    creative_rules.push_back(run->second->id_);
-  forall(run, creative_rules){
-    // ToDot("ALL","model.dot");
-    Rule * r = GetComponent<Rule>(*run);
-    if (r) TrySpecifyCreativeRule(m, r, REQUIRE_BETTER, true);
+  set<Rule *> rules = m->GetAllRules();
+  forall(run, rules) {
+    Rule * r = *run;
+    if (r->Exists() && 
+	r->GetRuleType()==CREATIVE_RULE) {
+      OptimizationCheckpoint cp(m, true);
+      TrySpecifyCreativeRule(m, r);
+    }
   }
 }
 
@@ -50,10 +53,12 @@ bool MaybeFindRandomCandidateRule(Model *m, CandidateRule *ret,
   }
 }
 TrueTuple * GetRandomTrueTuple(Model *m){
-  return m->index_to_true_proposition_[tuple_index_.RandomTuple()];  
+  TrueTuple *ret = m->FindTrueTuple(*(m->GetTupleIndex()->RandomTuple()));
+  CHECK(ret);
+  return ret;
 }
 
-
+/*
 bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic){
   int64 max_work = (uint)(100/pow(RandomFraction(), 1.0));
   TrueTuple * tp = GetRandomTrueTuple(m);
@@ -104,6 +109,7 @@ bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic){
   CHECK(false);
   return false;
 }
+*/
 
 bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
   int64 max_work = (uint)(10/pow(RandomFraction(), 1.0));
@@ -113,7 +119,7 @@ bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
   Substitution sub;
   int next_var = 0;
   set<const Tuple *> used_tuples;
-  const Tuple * s1 = m->tuple_index_.RandomTuple();
+  const Tuple * s1 = m->GetTupleIndex()->RandomTuple();
   used_tuples.insert(s1);
   p.push_back(*s1);
   int tries = 100;
@@ -134,7 +140,7 @@ bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
     }
     vector<int> v_anchors(anchors.begin(), anchors.end());
     const Tuple * s 
-      = m->tuple_index_.GetRandomTupleContaining(v_anchors, true);
+      = m->GetTupleIndex()->GetRandomTupleContaining(v_anchors, true);
     if (!s) continue;
     if (used_tuples % s) continue;
     used_tuples.insert(s);
@@ -167,8 +173,8 @@ bool VetteCandidateRule(Model *m, CandidateRule r,
   uint64 num_satisfactions;
   vector<Substitution> subs;
   bool success = 
-    m->tuple_index_.FindSatisfactions(p, &subs, &num_satisfactions,
-					 max_work, 0);
+    m->GetTupleIndex()->FindSatisfactions(p, &subs, &num_satisfactions,
+					  max_work, 0);
   if (max_work >=0 && num_satisfactions > (uint64)max_work) success = false;
   if (!success) return false;
   if (num_satisfactions < 2) return false;
@@ -177,17 +183,17 @@ bool VetteCandidateRule(Model *m, CandidateRule r,
   vector<Tuple> preconditions = r.first;
   uint64 preconditions_num_satisfactions = 0;
   bool preconditions_success = 
-    m->tuple_index_.FindSatisfactions(preconditions, 0, 
-				      &preconditions_num_satisfactions, 
-				      max_work, 0);
-if (max_work>=0 && preconditions_num_satisfactions > (uint64)max_work) 
+    m->GetTupleIndex()->FindSatisfactions(preconditions, 0, 
+					  &preconditions_num_satisfactions, 
+					  max_work, 0);
+  if (max_work>=0 && preconditions_num_satisfactions > (uint64)max_work) 
     preconditions_success = false;
   if (!preconditions_success) return false;
   for (uint i=0; i<preconditions.size(); i++) {
     vector<Tuple> simplified_preconditions 
       = RemoveFromVector(preconditions, i);
     uint64 simplified_num_satisfactions = 0;
-    if (m->tuple_index_.FindSatisfactions(simplified_preconditions, 0, 
+    if (m->GetTupleIndex()->FindSatisfactions(simplified_preconditions, 0, 
 					     &simplified_num_satisfactions, 
 					     max_work, 0)) {
       if (simplified_num_satisfactions == preconditions_num_satisfactions){
@@ -223,7 +229,7 @@ ComputationResult DependsOn(Model *m, Component * dependent,
   int64 total_work = 0;
   CHECK(total_work==0);
   multimap<Time, Component *> to_expand;
-  to_expand.insert(make_pair(dependent->time_, dependent));
+  to_expand.insert(make_pair(dependent->GetTime(), dependent));
   while (to_expand.size()) {
     if (max_work != UNLIMITED_WORK && total_work >= max_work) 
       return RESULT_GAVE_UP;
@@ -231,40 +237,39 @@ ComputationResult DependsOn(Model *m, Component * dependent,
     Component * c = last->second;//to_expand.rbegin()->second;
     to_expand.erase(last);
     // multimap<Time, Component*>::iterator(to_expand.rbegin()));
-    vector<vector<Component *> > codependents = c->Codependents();
+    vector<vector<Component *> > codependents = c->TemporalCodependents();
     total_work += codependents.size();
     for (uint i=0; i<codependents.size(); i++) if (codependents[i].size()==1) {
       total_work += codependents[i]
 .size();
       if (codependents[i][0]==dependee) return RESULT_TRUE;
-      if (!(codependents[i][0]->time_ < dependee->time_)) 
-	to_expand.insert(make_pair(codependents[i][0]->time_, 
+      if (!(codependents[i][0]->GetTime() < dependee->GetTime())) 
+	to_expand.insert(make_pair(codependents[i][0]->GetTime(), 
 				   codependents[i][0])); 
     }
   }
   return RESULT_FALSE;
 }
-bool Model::TryRemoveFiring(Firing *f){
+void TryRemoveFiring(Firing *f){
   // if (f->IsEssential(10, 0) == RESULT_TRUE) return false;
   Model *m = f->GetModel();
   Rule * r = f->GetRule();
   f->Erase();
-  r->OptimizeStrength();
+  OptimizeStrength(r);
   if (!r->HasFiring()) {
     OptimizationCheckpoint cp(m, false);
     r->Erase();
   }
-  return cp.KeepChanges();
 }
 
-bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs){
+void TryAddFirings(Rule * rule, const vector<Substitution> & subs){
   Model *m = rule->GetModel();
   // alternate explanations to remove, grouped by rule
   map<Rule *, set<Firing *> > to_remove;
   for (uint snum=0; snum<subs.size(); snum++) {
-    CHECK(r.Exixts());
+    CHECK(rule->Exists());
     const Substitution & sub = subs[snum];
-    Firing * f = (*r)->GetAddFiring(sub);
+    Firing * f = rule->AddFiring(sub); // was GetAddFiring, problem?
     VLOG(1) << "Added firing " << sub.ToString() << endl;
     CHECK(f);
     
@@ -280,15 +285,15 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs){
       }
     }
   }
-  m->OptimizeStrength(r);
+  OptimizeStrength(rule);
   forall (run_r, to_remove) {
     Rule * alt_r = run_r->first;
     const set<Firing *> & firings = run_r->second;
-    bool is_creative = alt_r->type_ == CREATIVE_RULE;
-    CHECK(alt_r.Exixts());
+    bool is_creative = alt_r->GetRuleType() == CREATIVE_RULE;
+    CHECK(alt_r->Exists());
     bool may_want_to_add_negative_rule = false;
     // let's see how many of the first firings for this rule can be cut
-    int num_satisfactions = alt_r->GetPrecondition->GetNumSatisfactions();
+    int num_satisfactions = alt_r->GetPrecondition()->GetNumSatisfactions();
     int num_first_firings = alt_r->NumFirstFirings();
     int new_num_first_firings = num_first_firings;
     map<RuleSat *, vector<Firing *> > by_rule_sat;
@@ -304,7 +309,7 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs){
 	new_num_first_firings > 0) {
       may_want_to_add_negative_rule = true;
     }
-    VLOG(1) << "alt_r_id=" << (*alt_r)->id_
+    VLOG(1) << "alt_r_id=" << alt_r->GetID()
 	    << " is_creative=" << (is_creative?"t":"f")
 	    << " num_sat=" << num_satisfactions
 	    << " num_nff=" << num_first_firings
@@ -315,20 +320,20 @@ bool Model::TryAddFirings(Rule * rule, const vector<Substitution> & subs){
     // firings for this alternate rule (duplciate explanations)
     OptimizationCheckpoint rule_cp(m, false);
 
-    forall(run, firings) run->Erase();
+    forall(run, firings) (*run)->Erase();
     
     if (!alt_r->HasFiring()) {
       alt_r->Erase();
       continue;
     }
-    m->OptimizeStrength(alt_r);
+    OptimizeStrength(alt_r);
     if (may_want_to_add_negative_rule) {
       OptimizationCheckpoint cp_negative_rule(m, true);
       // make sure r has a smaller delay than alt_r
-      if ((alt_r->GetDelay() <= r->GetDelay())) {
+      if (!(rule->GetDelay() < alt_r->GetDelay())) {
 	EncodedNumber new_delay = alt_r->GetDelay();
 	new_delay.bits_.push_back(false);
-	r->ChangeDelay(new_delay);
+	rule->ChangeDelay(new_delay);
       }
       TryMakeFunctionalNegativeRule(alt_r);
     }
@@ -348,25 +353,25 @@ void TryMakeFunctionalNegativeRule(Rule *r){
   Rule * negative_rule = 
     m->MakeNewRule(precondition, 
 		   EncodedNumber(),
-		   NEGATIVE_RULE, alt_r,
+		   NEGATIVE_RULE, r,
 		   vector<Tuple>(),
 		   EncodedNumber(),
 		   EncodedNumber());
   // negative_rule->ExplainEncoding();
-  FixTimes();
+  m->FixTimes();
   VLOG(1) 
     << "added negative " << " lnlikelihood=" << m->GetLnLikelihood() << endl;
   // go back and forth and optimize the rule weights.   
   // TODO: optimize it all together?
   for (int rep=0; rep<2; rep++) { 
-    m->OptimizeStrength(negative_rule);
+    OptimizeStrength(negative_rule);
     VLOG(1) << "opt_neg " << " lnlikelihood=" << m->GetLnLikelihood() 
-	    << "  val=" << negative_rule->strength_d_ << endl;
-    m->OptimizeStrength(r);
+	    << "  val=" << negative_rule->GetStrengthD() << endl;
+    OptimizeStrength(r);
     VLOG(1) << "opt_alt " << " lnlikelihood=" << m->GetLnLikelihood() 
-	    << "  val=" << (*alt_r)->strength_d_ << endl;
+	    << "  val=" << r->GetStrengthD() << endl;
   }
-  if (GetVerbosity() >= 1) ToHTML("html");
+  if (GetVerbosity() >= 1) m->ToHTML("html");
 }
 
 void TryAddImplicationRule(Model *m, 
@@ -375,7 +380,7 @@ void TryAddImplicationRule(Model *m,
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
-  m->tuple_index_.FindSatisfactions(combined, &subs, 0, UNLIMITED_WORK, 0);
+  m->GetTupleIndex()->FindSatisfactions(combined, &subs, 0, UNLIMITED_WORK, 0);
   set<int> precondition_vars = GetVariables(preconditions);
   set<int> result_vars = GetVariables(result);
   result_vars = result_vars-precondition_vars;
@@ -383,9 +388,9 @@ void TryAddImplicationRule(Model *m,
   VLOG(0) << "Contemplating creating rule " 
 	  << TupleVectorToString(preconditions)
 	  << " ->" << TupleVectorToString(result) << endl;
-  if (FindPositiveRule(preconditions, result)) {
+  if (m->FindPositiveRule(preconditions, result)) {
     VLOG(2) << "rule already exists" << endl;
-    return false;
+    return;
   }
   VLOG(2) << "old ln_likelihood_=" << m->GetLnLikelihood() << endl;
   Rule * r = m->MakeNewRule(preconditions, EncodedNumber(), 
@@ -394,12 +399,13 @@ void TryAddImplicationRule(Model *m,
   VLOG(2) << "new ln_likelihood_=" << m->GetLnLikelihood() << endl;
   
   TryAddFirings(r, subs);
-  if (!r.IsValid()) return;
+  if (!r->Exists()) return;
   VLOG(2) << "with firings: " << m->GetLnLikelihood() << endl;
-  (*r)->OptimizeStrength();
+  OptimizeStrength(r);
   VLOG(2) << "optimized strength: " << m->GetLnLikelihood() << endl;
   // ToHTML("html");
 }
+/*
 void Model::TrySpecifyCreativeRule(Rule *r){
   CHECK(r->type_ == CREATIVE_RULE);
   map<pair<int, int>, vector<Firing *> >m; // maps variable,value->firing
@@ -442,19 +448,19 @@ void Model::TrySpecifyCreativeRule(Rule *r){
     }
   }  
 }
-
+*/
 ComputationResult RequiresCodependent(Component *dependent, 
 				      Component *codependent){
   ComputationResult ret = RESULT_FALSE;
-  vector<vector<Component *> > codep = dependent->Codependents();
+  vector<vector<Component *> > codep = dependent->TemporalCodependents();
   forall(run_first, codep) 
     forall(run_second, *run_first) {
     if (*run_second==codependent) {
       if (run_first->size()==1) return RESULT_TRUE;
       else {
 	forall(run_third, (*run_first)) if (run_third != run_second) {
-	  if ((*run_third)->time_ < (*run_second)->time_ ||
-	      ((*run_third)->time_ == (*run_second)->time_ 
+	  if ((*run_third)->GetTime() < (*run_second)->GetTime() ||
+	      ((*run_third)->GetTime() == (*run_second)->GetTime() 
 	       && run_third<run_second)) 
 	    continue;
 	  if (ret==RESULT_FALSE) ret=RESULT_MAYBE;
@@ -473,15 +479,15 @@ ComputationResult IsEssential(Component *c, int max_work,
   if (actual_work) *actual_work = so_far;
   if (so_far > max_work) return RESULT_GAVE_UP;
 
-  vector<Component *> dependents = c->Dependents();
+  vector<Component *> dependents = c->TemporalDependents();
   bool cant_determine = false;
   forall(run, dependents){
     Component * d = *run;
     int additional_work = 0;
-    ComputationResult required = d->RequiresCodependent(this);
+    ComputationResult required = RequiresCodependent(d, c);
     if (required == RESULT_FALSE) continue;
-    ComputationResult res = (*run)->IsEssential(max_work-so_far, 
-						&additional_work);
+    ComputationResult res = IsEssential(*run, max_work-so_far, 
+					&additional_work);
     so_far += additional_work;
     if (actual_work) *actual_work = so_far;
     if (so_far > max_work) return RESULT_GAVE_UP;
@@ -506,11 +512,11 @@ OptimizationCheckpoint::OptimizationCheckpoint(Model *model,
 					       bool fix_times) {
   model_  = model;
   fix_times_ = fix_times;
-  cp_ = model->changelist_->GetCheckpoint();
+  cp_ = model->GetChangelist()->GetCheckpoint();
   old_ln_likelihood_ = model_->GetLnLikelihood();
 }
 OptimizationCheckpoint::~OptimizationCheckpoint() {
-  if (!KeepChanges()) model_->changelist_.Rollback(cp_);
+  if (!KeepChanges()) model_->GetChangelist()->Rollback(cp_);
 }
 bool OptimizationCheckpoint::Better() {
   return (model_->MayBeTimeFixable()
@@ -519,7 +525,7 @@ bool OptimizationCheckpoint::Better() {
 }
 bool OptimizationCheckpoint::KeepChanges() {
   if (!Better()) return false;
-  if (fix_times_) model_->FixTimesFixCircularDependencies();  
+  if (fix_times_) FixTimesFixCircularDependencies(model_);  
   return Better();
 }
 double OptimizationCheckpoint::Gain() {
@@ -534,7 +540,8 @@ void OptimizeStrength(Rule *r){
   for (int which=0; which<2; which++) {
     EncodedNumber * to_alter = &strength;
     if (which==1) {
-      if (type_ != CREATIVE_RULE) continue;
+      if (r->GetRuleType()
+ != CREATIVE_RULE) continue;
       to_alter = &strength2;
     }
     bool any_improvement = true;
@@ -570,15 +577,15 @@ void OptimizeStrength(Rule *r){
   }
 }
 
-void Explain(Model *m, TrueTuple *p, 
-	     set<Component *> *excluded, bool fix_times) {
-  // CHECK(p->causes_.size()==0);
-  forall(run, p->causes_) {
+void Explain(TrueTuple *p, 
+	     const set<Component *> *excluded, bool fix_times) {
+  Model *m = p->GetModel();
+  forall(run, p->GetCauses()) {
     CHECK(excluded && (*excluded % (Component *)(*run)));
   }
   vector<pair<Rule *, Substitution> > explanations;
-  Tuple s = p->proposition_;
-  FindExplanationsForResult(m, s, &explanations, excluded, UNLIMITED_WORK);
+  Tuple s = p->GetTuple();
+  m->FindExplanationsForResult(s, &explanations, excluded, UNLIMITED_WORK);
   if (explanations.size()==0) {
     Rule * r = m->GetAddNaiveRule(s.size());
     Substitution right_sub;
@@ -589,20 +596,20 @@ void Explain(Model *m, TrueTuple *p,
   }
   int which = 0; double best = 0;
   for (uint i=0; i<explanations.size(); i++){
-    Checkpoint cp = m->MakeCheckpoint();
-    explanations[i].first->GetAddFiring(explanations[i].second);
+    Checkpoint cp = m->GetChangelist()->GetCheckpoint();
+    explanations[i].first->AddFiring(explanations[i].second);
     if (i==0 || m->GetLnLikelihood() > best) {
       which=i;
       best = m->GetLnLikelihood();
     }
-    m->Rollback(cp);
+    m->GetChangelist()->Rollback(cp);
   }
-  explanations[which].first->GetAddFiring(explanations[which].second);
+  explanations[which].first->AddFiring(explanations[which].second);
 }
 void FixTimesFixCircularDependencies(Model *m) {
   // TODO: make this smarter.  much smarter
   VLOG(1) << "Entered FixTimesFixCircularDependencies" << endl;
-  while (m->GetTimedDirty().size() || m->GetRequiredNeverHappen().size()) {
+  while (m->GetTimesDirty().size() || m->GetRequiredNeverHappen().size()) {
     m->FixTimes();
     if (m->GetRequiredNeverHappen().size()) {
       VLOG(1) << "  explaining a required proposition" << endl;
@@ -619,14 +626,6 @@ void FixTimesFixCircularDependencies(Model *m) {
   //  ToHTML("html");
   //  CHECK(absent_required_.size()==0);
   // }
-}
-
-void FulfillRequirements(Model *m) {
-  forall(run, m->required_){
-    Tuple s = run->second;
-    Explain(m, m->GetAddTrueTuple(s), 0, true);
-  }
-  m->FixTimes();
 }
 
 /*void ExplainEncoding(Rule *r){

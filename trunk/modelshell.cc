@@ -85,8 +85,8 @@ void ModelShell(istream  * input) {
       time_t end_time = time(0) + duration;
       while (time(0) < end_time) {
 	pair<vector<Tuple>, vector<Tuple> > p 
-	  = m.FindRandomCandidateRule(Tactic(tactic));
-	OptimizationCheckpoint cp(&m, true);
+	  = FindRandomCandidateRule(Tactic(tactic));
+	OptimizationCheckpoint cp(this, true);
 	TryAddImplicationRule(this, p.first, p.second);
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "

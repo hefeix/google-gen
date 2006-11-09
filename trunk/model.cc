@@ -482,7 +482,7 @@ int64 Model::FindSatisfactionsForTuple
 
 int64 Model::FindExplanationsForResult
 (const Tuple & s, vector<pair<Rule *, Substitution> > *results, 
- set<Component *> *excluded_dependents, int64 max_work){
+ const set<Component *> *excluded_dependents, int64 max_work){
   CHECK(results);
   int64 total_work = 0;
   for (GeneralizationIterator run_g(s); !run_g.done(); ++run_g) {
@@ -540,6 +540,15 @@ Precondition * Model::FindPrecondition(const vector<Tuple> & tuples) const{
   Precondition * const * p = precondition_index_ % tuples;
   if (p) return *p; 
   else return NULL;
+}
+
+set<Rule *> Model::GetAllRules() const {
+  set<Rule *> ret;
+  forall(run, precondition_index_){
+    ret.insert(run->second->rules_.begin(), 
+	       run->second->rules_.end());
+  }
+  return ret;
 }
 
 Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {

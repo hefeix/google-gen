@@ -25,7 +25,7 @@ TupleIndex::TupleIndex() {
 }
 TupleIndex::~TupleIndex(){
 }
-const Tuple * TupleIndex::RandomTuple(){
+const Tuple * TupleIndex::RandomTuple() const{
   uint n = RandomInt() % total_tuples_;
   forall(run, lengths_) {
     if (n < run->second) {
