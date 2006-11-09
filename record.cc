@@ -112,7 +112,8 @@ string RecordToHTMLTable(const Record & r){
   ostringstream output;
   output << "<table border=1>" << endl;
   forall(run, r){
-    output << "<tr> <td>" << run->first << "</td><td>" << run->second 
+    output << "<tr> <td valign=top>" << run->first << "</td><td valign=top>" 
+	   << run->second 
 	   << "</td></tr>\n";
   }
   output << "</table>\n";
@@ -129,13 +130,13 @@ string RecordVectorToHTMLTable(const vector<Record> & v){
     if (i%10==0) {
       output << "<tr>";
       forall(run,fields){
-	output << "<td><b>" << *run << "</b></td>";
+	output << "<td valign=top><b>" << *run << "</b></td>";
       }
       output << "</tr>" << endl;
     }
     output << "<tr>";
     forall(run,fields){
-      output << "<td>";
+      output << "<td valign=top>";
       const string * value = v[i]%(*run);
       if (value) output << *value;
       output << "</td>";

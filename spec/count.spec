@@ -1,4 +1,4 @@
-[ START HasSuccessor *POS0 ]
+[ Successor START *POS0 ]
 [ HasChar POS0 *Char_0 ]
 [ Successor POS0 *POS1 ]
 [ HasChar POS1 *Char_1 ]

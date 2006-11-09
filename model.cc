@@ -386,7 +386,8 @@ void Model::VerifyLikelihood() const{
     total += run->second->ln_likelihood_;
   }
   if (fabs(total-ln_likelihood_) > 1e-6) {
-    cerr << " total likelihood out of date " << endl;
+    cerr << " total likelihood out of date " 
+	 << " store=" << ln_likelihood_ << " computed=" << total << endl;
     CHECK(false);
   }
 }

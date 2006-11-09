@@ -100,7 +100,7 @@ void ModelShell(istream  * input) {
 		  << " model likelihood: " << m.GetLnLikelihood()
 		  << " gain=" << cp.Gain() << endl;
 	}
-	m.VerifyLayer2();
+	//m.VerifyLayer2();
       }
     }
     else if (command == "verify"){
@@ -172,4 +172,5 @@ int main(int argc, char ** argv) {
   } else {
     ModelShell(&cin);
   }
+  return 0;
 }

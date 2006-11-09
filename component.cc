@@ -518,7 +518,7 @@ void Rule::ChangeStrength(EncodedNumber new_strength,
   A1_SetStrength(new_strength);
   A1_SetStrength2(new_strength2);
   A1_SetStrengthD(strength_.ToOpenInterval());
-  A1_SetStrengthD(strength2_.ToOpenInterval());
+  A1_SetStrength2D(strength2_.ToOpenInterval());
   if (type_ != NEGATIVE_RULE) {
     precondition_->A1_SetLnLikelihoodPerSat
       (precondition_->ln_likelihood_per_sat_ + 
@@ -672,7 +672,8 @@ string RuleSat::ImplicationString(const Firing * firing) const {
 
   string ret;
   // ret += rule_sat_->satisfaction_->substitution_.ToString();
-  ret += rule_->HTMLLink("r") + " " + HTMLLink("rs") + " " ;
+  ret += rule_->HTMLLink("r") + " " 
+    + satisfaction_->HTMLLink("s") + " " + HTMLLink("rs") + " " ;
   if (firing) ret += firing->HTMLLink("f") + " ";
   for (uint i=0; i<preconditions.size(); i++) {
     TrueTuple * tp
@@ -876,23 +877,29 @@ Record Component::RecordForDisplay() const{
   if (time_dirty_) r["D"] = "DIRTY";
   r["ID"] = itoa(id_) + "<a name=\"" + itoa(id_) + "\">";
   r["TIME"] = time_.ToSortableString();
-  r["LL"] = dtoa(ln_likelihood_) + " (" + dtoa(LnLikelihood()) + ")";
+  r["LL"] = dtoa(ln_likelihood_);
+  if (ln_likelihood_!= LnLikelihood()) 
+    r["LL"] += " (" + dtoa(LnLikelihood()) + ")";
   return r;
 }
 Record Precondition::RecordForDisplayInternal() const{
   Record r;
   r["precondition"] = TupleVectorToString(pattern_);
+  r["dpe LL"] = dtoa(direct_pattern_encoding_ln_likelihood_);
   forall(run, rules_){
-    r["rules"] += (*run)->HTMLLink(itoa((*run)->id_)) + " " 
-      + TupleVectorToString((*run)->result_) + "<br>";
+    r["rules"] 
+      += (*run)->HTMLLink(TupleVectorToString((*run)->result_)) + "<br>";
   }
+  r["num_sat(explicit)"]
+    = itoa(num_satisfactions_) + " (" + itoa(satisfactions_.size()) + ")";
   return r;
 }
 Record Rule::RecordForDisplayInternal() const{
   Record r;
   r["Rule"] = ImplicationString();
   r["Type"] = RuleTypeToString(type_).substr(0, 1);
-  r["f/s"] = itoa(NumFirings()) + "/" + itoa(precondition_->num_satisfactions_);
+  r["f/ff/s"] = "f " + itoa(NumFirings()) + "<br>ff " + itoa(NumFirstFirings())
+    + "<br>s " + itoa(precondition_->num_satisfactions_);
   r["prec."] = delay_.ToSortableString();
   r["str."] = strength_.ToSortableString();
   r["str2."] = strength2_.ToSortableString();
