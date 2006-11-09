@@ -18,6 +18,9 @@
 
 #include "model.h"
 #include "optimization.h"
+#include <iostream>
+#include <fstream>
+#include <sstream>
 
 void ModelShell(istream  * input) {
   Model m;
@@ -54,12 +57,12 @@ void ModelShell(istream  * input) {
     else if (command == "checkpoint") {
       string cname;
       (*input) >> cname;
-      checkpoints[cname] = m.changelist_.GetCheckpoint();
+      checkpoints[cname] = m.GetChangelist()->GetCheckpoint();
     }
     else if (command == "rollback") {
       string cname;
       (*input) >> cname;
-      m.changelist_.Rollback(checkpoints[cname]);
+      m.GetChangelist()->Rollback(checkpoints[cname]);
     }
     else if (command == "spec") {
       string fname;
@@ -67,16 +70,16 @@ void ModelShell(istream  * input) {
       ifstream finput(fname.c_str());
       m.ReadSpec(&finput);
       finput.close();
-      m.FixTimesFixCircularDependencies(this);
+      FixTimesFixCircularDependencies(&m);
     }
     else if (command == "strength") {
       int id;
       (*input) >> id;
-      m.GetComponent<Rule>(id)->OptimizeStrength();
+      OptimizeStrength(m.GetComponent<Rule>(id));
     }
-    else if (command == "o") {
+    /*else if (command == "o") {
       m.OptimizeRound();
-    }
+      }*/
     else if (command == "i") {
       int tactic;
       (*input) >> tactic;
@@ -85,14 +88,14 @@ void ModelShell(istream  * input) {
       time_t end_time = time(0) + duration;
       while (time(0) < end_time) {
 	pair<vector<Tuple>, vector<Tuple> > p 
-	  = FindRandomCandidateRule(Tactic(tactic));
-	OptimizationCheckpoint cp(this, true);
-	TryAddImplicationRule(this, p.first, p.second);
+	  = FindRandomCandidateRule(&m, Tactic(tactic));
+	OptimizationCheckpoint cp(&m, true);
+	TryAddImplicationRule(&m, p.first, p.second);
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "
 		  << TupleVectorToString(p.first)
 		  << " ->" << TupleVectorToString(p.second)
-		  << " model likelihood: " << GetLnLikelihood()
+		  << " model likelihood: " << m.GetLnLikelihood()
 		  << " gain=" << cp.Gain() << endl;
 	}
       }
@@ -103,13 +106,13 @@ void ModelShell(istream  * input) {
       vector<Tuple> preconditions = StringToTupleVector(pat);
       GetLine((*input), &pat);
       vector<Tuple> result = StringToTupleVector(pat);
-      OptimizationCheckpoint cp(this, true);      
-      TryAddImplicationRule(preconditions, result, REQUIRE_BETTER, true);
+      OptimizationCheckpoint cp(&m, true);      
+      TryAddImplicationRule(&m, preconditions, result);
       if (cp.KeepChanges()) {
 	VLOG(0) << " Created rule "
 		<< TupleVectorToString(preconditions)
 		<< " ->" << TupleVectorToString(result)
-		<< " model likelihood: " << GetLnLikelihood()
+		<< " model likelihood: " << m.GetLnLikelihood()
 		<< " gain=" << cp.Gain() << endl;
       }      
     } 
@@ -126,7 +129,7 @@ void ModelShell(istream  * input) {
       }
       for (int i=0; i<10; i++) {
 	const Tuple * s 
-	  = tuple_index_.GetRandomTupleContaining(terms, true);
+	  = m.GetTupleIndex()->GetRandomTupleContaining(terms, true);
 	if(s) {
 	  cout << s->ToString() << endl;
 	}
@@ -143,11 +146,16 @@ void ModelShell(istream  * input) {
       << TupleVectorToString(p.second) << endl;*/
     }
     else if (command=="h"){
-      ToHTML("html");
+      m.ToHTML("html");
     }
     else cerr << "UNKNOWN COMMAND " << command << endl;
-    FixTimes();
+    m.FixTimes();
     //ToHTML("/Users/guest/tmp/model.html");
     cout << "?";
   }
+}
+
+int main() {
+  ModelShell(&cin);
+  return 0;
 }

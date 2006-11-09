@@ -86,7 +86,8 @@ struct GeneralizationIterator {
 };
 
 typedef vector<Tuple> Pattern;
-bool operator <(const Tuple & a, const Tuple & b){return (a.terms_ < b.terms_);}
+inline bool operator <
+(const Tuple & a, const Tuple & b){return (a.terms_ < b.terms_);}
 
 // TODO? maybe this stuff doesn't belong in this file
 typedef pair<Pattern, Pattern > CandidateRule;
@@ -128,7 +129,7 @@ struct Substitution {
   Substitution Restrict(const set<int> & terms) const;
 };
 
-bool operator <(const Substitution & a, const Substitution & b){
+inline bool operator <(const Substitution & a, const Substitution & b){
   return (a.sub_ < b.sub_);
 }
 

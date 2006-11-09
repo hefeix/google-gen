@@ -38,7 +38,7 @@ char * ComponentTypeName [] = {
     "TRUETUPLE",
 };
 ComponentType StringToComponentType(const string & s) {
-  for (int i=0; i<NUM_COMPONENT_TYPES; i++) {
+  for (uint i=0; i<NUM_COMPONENT_TYPES; i++) {
     if (s==ComponentTypeName[i]) return (ComponentType)i;
   }
   CHECK(false);
@@ -54,7 +54,7 @@ char * RuleTypeName [] = {
   "CREATIVE_RULE",
 };
 RuleType StringToRuleType(const string & s) {
-  for (int i=0; i<NUM_RULE_TYPES; i++) {
+  for (uint i=0; i<NUM_RULE_TYPES; i++) {
     if (s==RuleTypeName[i]) return (RuleType)i;
   }
   CHECK(false);
@@ -102,7 +102,7 @@ void Component::L1_Erase(){
   A1_SetExists(false);
   vector<Component *> dep = StructuralDependents();
   vector<Component *> copurposes = Copurposes();
-  for (int i=0; i<dep.size(); i++) {
+  for (uint i=0; i<dep.size(); i++) {
     if (dep[i]->Exists()) dep[i]->L1_Erase();
   }
 
@@ -112,7 +112,7 @@ void Component::L1_Erase(){
   L1_EraseSubclass();
   model_->A1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
 
-  for (int i=0; i<copurposes.size(); i++) {
+  for (uint i=0; i<copurposes.size(); i++) {
     if (copurposes[i]->Exists() && copurposes[i]->IsSuperfluous()) 
       copurposes[i]->L1_Erase();
   }
@@ -177,13 +177,13 @@ void Precondition::L1_MakeDirectlyEncoded(){
 void Precondition::L1_MakeNotDirectlyEncoded(){
   vector<int> arbitrary_terms;
   TuplesLnLikelihood(Pattern(), pattern_, &arbitrary_terms);
-  for (int i=0; i<arbitrary_terms.size(); i++) {
+  for (uint i=0; i<arbitrary_terms.size(); i++) {
     model_->L1_SubtractArbitraryWord(arbitrary_terms[i]);
   } 
 }
 void Precondition::L1_MakeTupleEncoded(){
   vector<Tuple> causes = ComputeCauses();
-  for(int i=0; i<causes.size(); i++) {
+  for (uint i=0; i<causes.size(); i++) {
     TrueTuple *t = model_->L1_GetAddTrueTuple(causes[i]);
     
   }
@@ -627,6 +627,23 @@ void RuleSat::L1_EraseSubclass(){
     target_rule_sat_->ComputeSetLnLikelihood();
   }
 }
+void RuleSat::A1_AddFiring(const Substitution & sub, Firing *f){
+  model_->changelist_.Make
+    (new MapInsertChange<Substitution, Firing *>(&firings_, sub, f));
+}
+void RuleSat::A1_RemoveFiring(const Substitution & sub){
+  model_->changelist_.Make
+    (new MapRemoveChange<Substitution, Firing *>(&firings_, sub));
+}
+void RuleSat::A1_AddInhibitor(RuleSat *rs){
+  model_->changelist_.Make
+    (new SetInsertChange<RuleSat *>(&inhibitors_, rs));
+}
+void RuleSat::A1_RemoveInhibitor(RuleSat *rs){
+  model_->changelist_.Make
+    (new SetRemoveChange<RuleSat *>(&inhibitors_, rs));
+}
+
 
 Firing * RuleSat::FindFiring(const Substitution & right_sub) const{
   Firing * const * f = firings_ % right_sub;
@@ -701,7 +718,7 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
   }
   // Note: we need two loops because of duplicates.
   forall(run, true_tuples_) { 
-    (*run)->AddCause(this);
+    (*run)->A1_AddCause(this);
   }
   // For creative rules, this counts the names and adjusts the naming costs.
   forall (run, right_substitution_.sub_)  
@@ -802,6 +819,41 @@ void TrueTuple::L1_EraseSubclass(){
 					     &TupleIndex::RemoveWrapper,
 					     &TupleIndex::AddWrapper));
 }
+ 
+void TrueTuple::A1_MakeRequired(){
+  model_->changelist_.Make
+    (new ValueChange<int>(&required_count_, required_count_+1));
+}
+void TrueTuple::A1_MakeNotRequired(){
+  CHECK(required_count_>0);
+  model_->changelist_.Make
+    (new ValueChange<int>(&required_count_, required_count_-1));
+}
+void TrueTuple::A1_AddCause(Firing *f){
+  model_->changelist_.Make
+    (new SetInsertChange<Firing *>(&causes_, f));
+}
+void TrueTuple::A1_RemoveCause(Firing *f){
+  model_->changelist_.Make
+    (new SetRemoveChange<Firing *>(&causes_, f));
+}
+void TrueTuple::A1_AddSatisfaction(Satisfaction *sat){
+  model_->changelist_.Make
+    (new SetInsertChange<Satisfaction *>(&satisfactions_, sat));
+}
+void TrueTuple::A1_RemoveSatisfaction(Satisfaction *sat){
+  model_->changelist_.Make
+    (new SetRemoveChange<Satisfaction *>(&satisfactions_, sat));
+}
+void TrueTuple::A1_AddViolatedProhibition(Prohibition *p){
+  model_->changelist_.Make
+    (new SetInsertChange<Prohibition *>(&violated_prohibitions_, p));
+}
+void TrueTuple::A1_RemoveViolatedProhibition(Prohibition *p){
+  model_->changelist_.Make
+    (new SetRemoveChange<Prohibition *>(&violated_prohibitions_, p));
+}
+
 
 ComponentType Precondition::Type() const { return PRECONDITION; }
 ComponentType Satisfaction::Type() const { return SATISFACTION; }
@@ -956,6 +1008,7 @@ vector<Component *> RuleSat::StructuralDependents() const{
   if (target_rule_sat_ != NULL) {
     ret.push_back(target_rule_sat_);
   }
+  return ret;
 }
 vector<Component *> TrueTuple::StructuralDependents() const{
   vector<Component *> ret;
@@ -1182,7 +1235,7 @@ void Precondition::VerifyLayer2Subclass() const{
   uint64 num_sat;
   model_->tuple_index_.
     FindSatisfactions(pattern_, NULL, &num_sat, UNLIMITED_WORK, NULL);
-  CHECK(num_sat == num_satisfactions_);
+  CHECK(num_sat == (uint64)num_satisfactions_);
 }
 void Rule::VerifyLayer2Subclass() const{
   if (type_ == NEGATIVE_RULE) {  // Make all the RuleSats exist.

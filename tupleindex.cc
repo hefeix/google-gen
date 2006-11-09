@@ -270,15 +270,17 @@ void TupleIndex::Remove(const Tuple & s) {
   delete n;  
 }
 void TupleIndex::LookupInternal(const Tuple & s, 
-				   FullySpecifiedNode *** results, 
-				   uint64 * num_results) {
+				FullySpecifiedNode *** results, 
+				uint64 * num_results) const{
   uint64 fp = s.VariablesToWildcards().Fingerprint();
   if (s.Pattern()==0) {
-    FullySpecifiedNode ** look = fully_specified_ % fp; 
-    if (results) *results = look;
+    FullySpecifiedNode *const* look = fully_specified_ % fp; 
+    if (results) {
+      *results = const_cast<FullySpecifiedNode**>(look);
+    }
     if (num_results) *num_results = look ? 1 : 0;
   } else {
-    UnderspecifiedNode ** look = underspecified_ % fp;
+    UnderspecifiedNode *const* look = underspecified_ % fp;
     if (look) {
       UnderspecifiedNode * n = *look;
       if (results) *results = &(n->specifications_[0]);

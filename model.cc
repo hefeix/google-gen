@@ -47,7 +47,7 @@ TrueTuple * Model::AddRequirementToSpec(Tuple t){
 Prohibition * Model::AddProhibitionToSpec(Tuple t, vector<Tuple> exceptions){
   Prohibition *p = Prohibition::L1_MakeProhibition(this, t);
   A1_InsertIntoSpecProhibitions(p);
-  for (int i=0; i<exceptions.size(); i++) {
+  for (uint i=0; i<exceptions.size(); i++) {
     p->L1_AddException(exceptions[i]);
   }
   return p;
@@ -349,7 +349,7 @@ Record Model::ModelInfo() const {
 }
 string Model::LinkBar() const{
   string ret;
-  for (int i=0; i<NUM_COMPONENT_TYPES; i++) {
+  for (uint i=0; i<NUM_COMPONENT_TYPES; i++) {
     ComponentType ct = ComponentType(i);
     ret += string() + "<a href=" + ComponentTypeToString(ct) + ".html>"
       + ComponentTypeToString(ct) + "</a> ";
@@ -395,19 +395,19 @@ void Model::VerifyLinkBidirectionality() const {
   forall(run, id_to_component_){
     Component *c = run->second;
     vector<Component *> p = c->Purposes();
-    for (int i=0; i<p.size(); i++) {
+    for (uint i=0; i<p.size(); i++) {
       p1.insert(make_pair(c, p[i]));
     }
     vector<Component *> cp = c->Copurposes();
-    for (int i=0; i<cp.size(); i++) {
+    for (uint i=0; i<cp.size(); i++) {
       p2.insert(make_pair(cp[i], c));
     }
     vector<Component *> td = c->TemporalDependents();
-    for (int i=0; i<td.size(); i++) {
+    for (uint i=0; i<td.size(); i++) {
       td1.insert(make_pair(c, td[i]));
     }
     vector<vector<Component *> > tcd = c->TemporalCodependents();
-    for (int i=0; i<tcd.size(); i++) for (int j=0; j<tcd[i].size(); j++) {
+    for (uint i=0; i<tcd.size(); i++) for (uint j=0; j<tcd[i].size(); j++) {
       td2.insert(make_pair(tcd[i][j], c));
     }
   }  
@@ -593,11 +593,11 @@ vector<Tuple> GetTupleVector(istream * input) {
   return result;
 }
 
-Rule * Model::GetAddNaiveRule(int length) {
+Rule * Model::GetAddNaiveRule(uint length) {
   vector<Tuple> precondition;
   vector<Tuple> result(1);
   vector<Tuple> target_precondition;
-  for (int i=0; i<length; i++) result[0].terms_.push_back(Variable(i));
+  for (uint i=0; i<length; i++) result[0].terms_.push_back(Variable(i));
   Rule * r = FindPositiveRule(precondition, result);
   if (r) return r;
   return MakeNewRule(precondition, EncodedNumber(), CREATIVE_RULE, NULL,

@@ -34,7 +34,7 @@ void TryAddFirings(Rule * r, const vector<Substitution> & sub);
 
 // Given a creative rule, tries creating rules where the unbound RHS variables
 // in the original rule are replaced by constants.
-void TrySpecifyCreativeRule(Model *m, Rule * r);
+//void TrySpecifyCreativeRule(Model *m, Rule * r);
 
 // TODO, document this
 void TryAddImplicationRule(Model *m,
@@ -57,10 +57,10 @@ bool VetteCandidateRule(Model *m, CandidateRule r,
 			int64 max_work);
 
 bool MaybeFindRandomNewRule(Model *m, CandidateRule * ret);
-bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic);
+//bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic);
 
 // OPTIMIZATION STEPS
-void OptimizeRound(Model *m);
+//void OptimizeRound(Model *m);
 
 TrueTuple * GetRandomTrueTuple(Model *m);
 
