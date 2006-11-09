@@ -26,7 +26,7 @@ using namespace std;
 int main() {
   char c;
   int pos=0;
-  cout << "[ START HasSuccessor *POS0 ]" << endl;
+  cout << "[ Successor START *POS0 ]" << endl;
   while (cin.get(c)){    
     if (pos>0) cout << "[ Successor POS" << pos-1 << " *POS" << pos << " ]"
 		    << endl;    
@@ -37,6 +37,6 @@ int main() {
     cout << " ]" << endl;
     pos++;
   }
-  cout << "[ POS" << pos-1 << " HasSuccessor *END ]" << endl;
+  cout << "[ Successor POS" << pos-1 << " *END ]" << endl;
   return 0;
 }
