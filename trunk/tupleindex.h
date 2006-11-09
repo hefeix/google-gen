@@ -109,7 +109,7 @@ class TupleIndex{
 
   void LookupInternal(const Tuple & s, 
 		      FullySpecifiedNode *** results, 
-		      uint64 * num_results);
+		      uint64 * num_results) const;
 };
 
 #endif

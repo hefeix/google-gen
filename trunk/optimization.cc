@@ -22,7 +22,7 @@
 #include "model.h"
 #include "optimization.h"
 
-void OptimizeRound(Model *m){
+/*void OptimizeRound(Model *m){
   vector<int> creative_rules;
   set<Rule *> rules = m->GetAllRules();
   forall(run, rules) {
@@ -33,7 +33,7 @@ void OptimizeRound(Model *m){
       TrySpecifyCreativeRule(m, r);
     }
   }
-}
+  }*/
 
 pair<vector<Tuple>, vector<Tuple> >
 FindRandomCandidateRule(Model *m, Tactic tactic){
@@ -48,9 +48,11 @@ bool MaybeFindRandomCandidateRule(Model *m, CandidateRule *ret,
     return MaybeFindRandomNewRule(m, ret);
     break;
   default:
-    return MaybeFindRandomVariantRule(m, ret, tactic);
+    CHECK(false);
+    //return MaybeFindRandomVariantRule(m, ret, tactic);
     break;
   }
+  return false;
 }
 TrueTuple * GetRandomTrueTuple(Model *m){
   TrueTuple *ret = m->FindTrueTuple(*(m->GetTupleIndex()->RandomTuple()));

@@ -155,11 +155,6 @@ class Component{
   // necessarily disappear when this component does.
   virtual vector<Component *> TemporalDependents() const;
   
-  // TODO: maybe get rid of this
-  // Components that absolutely need to disappear before this one does.
-  // The code breaks if you remove this component while some of these exist.
-  virtual vector<Component *> HardTemporalDependents() const;
-
   // Components that this component depens on. 
   // The vector of vectors is to be interpreted as an AND of ORs.
   // This component needs at least one element of each vector to exist.
@@ -659,10 +654,10 @@ class RuleSat : public Component{ // an instance of a rule coming true
   void L1_EraseSubclass();
   void F2_AdjustLnLikelihoodForNewTime();
 
-  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+  // ----- LAYER 1 ACCESSOR FUNCTIONS ----- RuleSat
 
-  void A1_AddFiring(Substitution sub, Firing *f);
-  void A1_RemoveFiring(Substitution sub);
+  void A1_AddFiring(const Substitution & sub, Firing *f);
+  void A1_RemoveFiring(const Substitution & sub);
   void A1_AddInhibitor(RuleSat *rs);
   void A1_RemoveInhibitor(RuleSat *rs);
 
@@ -752,9 +747,6 @@ class TrueTuple : public Component{
 
 
   // ----- LAYER 2 FUNCTIONS -----
-
-  void AddCause(Firing * cause);
-  void RemoveCause(Firing * cause);
 
   // ----- CONST FUNCTIONS -----
 
