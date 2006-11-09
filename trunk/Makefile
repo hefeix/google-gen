@@ -51,17 +51,25 @@ depend:
 
 clean:
 	rm -f $(OBJ)
-# DO NOT DELETE
 
-util.o: util.h
-probutil.o: probutil.h
-record.o: record.h util.h
-numbers.o: numbers.h util.h
-lexicon.o: lexicon.h util.h
-tuple.o: tuple.h util.h lexicon.h
-tupleindex.o: tupleindex.h util.h tuple.h lexicon.h
-component.o: model.h util.h tuple.h numbers.h tupleindex.h
-optimization.o: model.h util.h tuple.h numbers.h tupleindex.h
-model.o: model.h util.h tuple.h numbers.h tupleindex.h
-modelshell.o: model.h util.h tuple.h numbers.h tupleindex.h
-changelist.o: changelist.h 
+# DO NOT DELETE
+optimization.o: optimization.cc model.h util.h hash.h tuple.h numbers.h \
+  tupleindex.h lexicon.h record.h component.h changelist.h optimization.h
+hash.o: hash.cc
+util.o: util.cc util.h hash.h
+probutil.o: probutil.cc probutil.h util.h hash.h numbers.h
+record.o: record.cc record.h util.h hash.h
+numbers.o: numbers.cc numbers.h util.h hash.h
+lexicon.o: lexicon.cc lexicon.h util.h hash.h tuple.h
+tuple.o: tuple.cc tuple.h util.h hash.h lexicon.h probutil.h numbers.h
+tupleindex.o: tupleindex.cc tupleindex.h util.h hash.h tuple.h lexicon.h
+model.o: model.cc model.h util.h hash.h tuple.h numbers.h tupleindex.h \
+  lexicon.h record.h component.h changelist.h probutil.h prohibition.h
+component.o: component.cc model.h util.h hash.h tuple.h numbers.h \
+  tupleindex.h lexicon.h record.h component.h changelist.h probutil.h \
+  prohibition.h
+changelist.o: changelist.cc changelist.h util.h hash.h
+prohibition.o: prohibition.cc prohibition.h component.h util.h hash.h \
+  record.h tuple.h numbers.h model.h tupleindex.h lexicon.h changelist.h
+modelshell.o: modelshell.cc model.h util.h hash.h tuple.h numbers.h \
+  tupleindex.h lexicon.h record.h component.h changelist.h optimization.h

@@ -65,11 +65,12 @@ string RuleTypeToString(RuleType t) { return RuleTypeName[t]; }
 
 // COMPONENT
 Component::Component(Model * model){
-  model_->changelist_.Make(new DeleteOnRollbackChange<Component>(this));
   model_ = model;
+  model_->changelist_.Make(new DeleteOnRollbackChange<Component>(this));
   exists_ = false;
   time_ = CREATION;
   time_dirty_ = true;
+  model_->A1_InsertIntoTimesDirty(this);
   model_->L1_AssignNewID(this);
   ln_likelihood_ = 0.0;
   A1_SetExists(true);
@@ -106,8 +107,9 @@ void Component::L1_Erase(){
     if (dep[i]->Exists()) dep[i]->L1_Erase();
   }
 
-  model_->A1_RemoveFromNeverHappen(this);
-  model_->A1_RemoveFromTimesDirty(this);
+  model_->L1_ReleaseID(id_);
+  if (time_ == NEVER) model_->A1_RemoveFromNeverHappen(this);
+  if (time_dirty_) model_->A1_RemoveFromTimesDirty(this);
 
   L1_EraseSubclass();
   model_->A1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
@@ -1207,7 +1209,7 @@ double RuleSat::LnLikelihood() const {
 }
 void Component::ComputeSetLnLikelihood(){
   double old_val = ln_likelihood_;
-  double new_val = ln_likelihood_;
+  double new_val = LnLikelihood();
   CHECK(finite(old_val));
   CHECK(finite(new_val));
   A1_SetLnLikelihood(new_val);
@@ -1219,9 +1221,10 @@ void Component::VerifyLayer2() const {
   // Check that the likelihood is up to date.
   if (fabs(LnLikelihood() - ln_likelihood_) > 1e-6){
     cerr << "likelihood for component " << id_ << " out of date"
-	 << " stored=" << LnLikelihood()
-	 << " computed=" << ln_likelihood_
+	 << " stored=" << ln_likelihood_
+	 << " computed=" << LnLikelihood()
 	 << endl;
+    model_->ToHTML("html");
     CHECK(false);
   }
   // Check that the time is up to date or that time_dirty_ is set

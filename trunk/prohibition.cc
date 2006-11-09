@@ -53,7 +53,11 @@ void Prohibition::L1_Erase(){
 
 // ----- Complicated L1 functions
 void Prohibition::L1_AddException(Tuple exception){
-  CHECK(MatchesWildcardTuple(prohibited_, exception)); 
+  if (!MatchesWildcardTuple(prohibited_, exception)){
+    cerr << "prohibited=" << 
+      prohibited_.ToString() << " exception=" << exception.ToString() << endl;
+    CHECK(false);
+  }
   CHECK(!(exceptions_ % exception));
   A1_AddException(exception);
   TrueTuple * tt = model_->FindTrueTuple(exception);
