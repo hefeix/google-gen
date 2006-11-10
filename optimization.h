@@ -90,6 +90,7 @@ struct OptimizationCheckpoint {
   // should we make sure all of the times are correct in the model
   // before deciding whether to roll back 
   bool fix_times_;  
+  bool logging_;
   OptimizationCheckpoint(Model *model, bool fix_times);
   ~OptimizationCheckpoint();
   // Should we keep the changes
