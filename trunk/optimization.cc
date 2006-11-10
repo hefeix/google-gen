@@ -272,7 +272,7 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs){
     CHECK(rule->Exists());
     const Substitution & sub = subs[snum];
     Firing * f = rule->AddFiring(sub); // was GetAddFiring, problem?
-    VLOG(1) << "Added firing " << sub.ToString() << endl;
+    //VLOG(1) << "Added firing " << sub.ToString() << endl;
     CHECK(f);
     
     set<TrueTuple *> dependents_explained = f->GetTrueTuples();
@@ -288,6 +288,9 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs){
     }
   }
   OptimizeStrength(rule);
+  VLOG(1) << "::TryAddFirings Added " << subs.size() << " firings " 
+	  << " ln_likelihood_=" << m->GetLnLikelihood() << endl;
+  
   forall (run_r, to_remove) {
     Rule * alt_r = run_r->first;
     const set<Firing *> & firings = run_r->second;
@@ -311,7 +314,7 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs){
 	new_num_first_firings > 0) {
       may_want_to_add_negative_rule = true;
     }
-    VLOG(1) << "alt_r_id=" << alt_r->GetID()
+    VLOG(1) << "::TryAddFirings alt_r_id=" << alt_r->GetID()
 	    << " is_creative=" << (is_creative?"t":"f")
 	    << " num_sat=" << num_satisfactions
 	    << " num_nff=" << num_first_firings
@@ -321,16 +324,41 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs){
     // this cp automatically gives the option of leaving in all of the 
     // firings for this alternate rule (duplciate explanations)
     OptimizationCheckpoint rule_cp(m, false);
+    rule_cp.logging_ = true;
 
     forall(run, firings) (*run)->Erase();
-    
-    if (!alt_r->HasFiring()) {
-      alt_r->Erase();
-      continue;
-    }
     OptimizeStrength(alt_r);
+    VLOG(1) << "::TryAddFirings Removed " << firings.size() 
+	    << " firings for rule " << alt_r->GetID()
+	    << " ln_likelihood_=" << m->GetLnLikelihood() << endl;
+    
+    
+    // Try to remove the alternate rule if it has few firings.
+    vector<Firing *> remaining_firings = alt_r->Firings();
+    // if the remaining firings are at most half of what we just deleted... 
+    // (pretty arbitrary) try removing the rule.
+    if (remaining_firings.size() < firings.size() * 0.5) {
+      OptimizationCheckpoint delete_rule_cp(m, false);
+      delete_rule_cp.logging_ = true;
+      // figure out which TrueTuples we need to find alternate explanations for 
+      set<TrueTuple*> to_explain;
+      for (uint i=0; i<remaining_firings.size(); i++) {
+	to_explain.insert(remaining_firings[i]->GetTrueTuples().begin(), 
+			  remaining_firings[i]->GetTrueTuples().end());
+      }
+      alt_r->Erase();
+      if (GetVerbosity() >= 1) m->VerifyLayer2();
+      forall(run, to_explain) {
+	if ((*run)->GetCauses().size() == 0) 
+	  Explain(*run, NULL, false);
+      }
+      VLOG(1) << "::TryAddFirings Erased Rule " 
+	      << " ln_likelihood_=" << m->GetLnLikelihood() << endl;
+    }
+    if (!alt_r->Exists()) continue;
     if (may_want_to_add_negative_rule) {
       OptimizationCheckpoint cp_negative_rule(m, true);
+      cp_negative_rule.logging_ = true;
       // make sure r has a smaller delay than alt_r
       if (!(rule->GetDelay() < alt_r->GetDelay())) {
 	EncodedNumber new_delay = alt_r->GetDelay();
@@ -338,12 +366,12 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs){
 	rule->ChangeDelay(new_delay);
       }
       TryMakeFunctionalNegativeRule(alt_r);
+      VLOG(1) << "::TryAddFirings Made a negative rule. "
+	      << " ln_likelihood_=" << m->GetLnLikelihood() << endl;      
     }
   }
-  VLOG(1) << "removed alternate explanations " 
-    //<< sub.ToString() 
-	  << " new ln_likelihood_="
-	  << m->GetLnLikelihood() << endl;
+  VLOG(1) << "::TryAddFirings removed all alternate explanations " 
+	  << " ln_likelihood_=" << m->GetLnLikelihood() << endl;
 }
 
 void TryMakeFunctionalNegativeRule(Rule *r){
@@ -391,20 +419,19 @@ void TryAddImplicationRule(Model *m,
 	  << TupleVectorToString(preconditions)
 	  << " ->" << TupleVectorToString(result) << endl;
   if (m->FindPositiveRule(preconditions, result)) {
-    VLOG(2) << "rule already exists" << endl;
+    VLOG(1) << "rule already exists" << endl;
     return;
   }
-  VLOG(2) << "old ln_likelihood_=" << m->GetLnLikelihood() << endl;
+  VLOG(1) << "old ln_likelihood_=" << m->GetLnLikelihood() << endl;
   Rule * r = m->MakeNewRule(preconditions, EncodedNumber(), 
 			    type, 0, result, EncodedNumber(), EncodedNumber());
   // r->ExplainEncoding();
-  VLOG(2) << "new ln_likelihood_=" << m->GetLnLikelihood() << endl;
-  
+  VLOG(1) << "new ln_likelihood_=" << m->GetLnLikelihood() << endl;
   TryAddFirings(r, subs);
   if (!r->Exists()) return;
-  VLOG(2) << "with firings: " << m->GetLnLikelihood() << endl;
+  VLOG(1) << "with firings: " << m->GetLnLikelihood() << endl;
   OptimizeStrength(r);
-  VLOG(2) << "optimized strength: " << m->GetLnLikelihood() << endl;
+  VLOG(1) << "optimized strength: " << m->GetLnLikelihood() << endl;
   // ToHTML("html");
 }
 /*
@@ -514,11 +541,17 @@ OptimizationCheckpoint::OptimizationCheckpoint(Model *model,
 					       bool fix_times) {
   model_  = model;
   fix_times_ = fix_times;
+  logging_ = false;
   cp_ = model->GetChangelist()->GetCheckpoint();
   old_ln_likelihood_ = model_->GetLnLikelihood();
 }
 OptimizationCheckpoint::~OptimizationCheckpoint() {
-  if (!KeepChanges()) model_->GetChangelist()->Rollback(cp_);
+  if (!KeepChanges()) {    
+    model_->GetChangelist()->Rollback(cp_);
+    if (logging_)
+      cerr << "::~OptimizationCheckpoint reverting ln_likelihood_="
+	   << model_->GetLnLikelihood() << endl;
+  }
 }
 bool OptimizationCheckpoint::Better() {
   return (model_->MayBeTimeFixable()
@@ -581,7 +614,8 @@ void OptimizeStrength(Rule *r){
 void Explain(TrueTuple *p, 
 	     const set<Component *> *excluded, bool fix_times) {
   Model *m = p->GetModel();
-  forall(run, p->GetCauses()) {
+  // make sure that the TrueTuple has no causes that are not excluded.
+  forall(run, p->GetCauses()) { 
     CHECK(excluded && (*excluded % (Component *)(*run)));
   }
   vector<pair<Rule *, Substitution> > explanations;
@@ -599,6 +633,7 @@ void Explain(TrueTuple *p,
   for (uint i=0; i<explanations.size(); i++){
     Checkpoint cp = m->GetChangelist()->GetCheckpoint();
     explanations[i].first->AddFiring(explanations[i].second);
+    OptimizeStrength(explanations[i].first);
     if (i==0 || m->GetLnLikelihood() > best) {
       which=i;
       best = m->GetLnLikelihood();
@@ -606,6 +641,7 @@ void Explain(TrueTuple *p,
     m->GetChangelist()->Rollback(cp);
   }
   explanations[which].first->AddFiring(explanations[which].second);
+  OptimizeStrength(explanations[which].first);
 }
 void FixTimesFixCircularDependencies(Model *m) {
   // TODO: make this smarter.  much smarter

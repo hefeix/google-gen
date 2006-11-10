@@ -256,7 +256,7 @@ void Model::FixTimes() {
   // We initially build the queue.
   forall(run, times_dirty_){
     Component * c = *run;
-    VLOG(1) << "   Inserting " << c->id_  
+    VLOG(2) << "   Inserting " << c->id_  
 	    << " time=" << c->time_.ToSortableString() << endl;
     Time t = min(c->time_, c->ComputeTime(&times_dirty_));
     queue.insert(make_pair(t, c));
