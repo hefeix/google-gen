@@ -304,6 +304,7 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     Rule * alt_r = run_r->first;
     const set<Firing *> & firings = run_r->second;
     bool is_creative = alt_r->GetRuleType() == CREATIVE_RULE;
+    if (!alt_r->Exists()) continue;
     CHECK(alt_r->Exists());
     bool may_want_to_add_negative_rule = false;
     // let's see how many of the first firings for this rule can be cut
@@ -335,7 +336,10 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     OptimizationCheckpoint rule_cp(m, false);
     rule_cp.logging_ = true;
 
-    forall(run, firings) (*run)->Erase();
+    forall(run, firings) {
+      if ((*run)->Exists())
+	(*run)->Erase();
+    }
     OptimizeStrength(alt_r);
     VLOG(1) << "::TryAddFirings Removed " << firings.size() 
 	    << " firings for rule " << alt_r->GetID()
