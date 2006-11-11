@@ -19,7 +19,7 @@
 
 #include "probutil.h"
 
-const double LN2 = log(2);
+const double LN2 = log(2.0);
 
 double LnCombinations(uint n, uint k){
   CHECK(k<=n);
@@ -32,7 +32,7 @@ double LnFactorial(uint n){
   if (!init) {
     init = true;
     cache[0] = 0;
-    for (int i=0; i<1001; i++) cache[i] = cache[i-1] + log(i);    
+    for (int i=0; i<1001; i++) cache[i] = cache[i-1] + log((double)i);    
   }
   if (n<=1000) return cache[n];
   double lower = 1000.5;
@@ -46,14 +46,14 @@ double uintQuadraticLnProb(uint n){
 
 double EncodedNumberLnLikelihood(const EncodedNumber & n){
   return uintQuadraticLnProb(n.bits_.size())
-    - n.bits_.size() * log(2);
+    - n.bits_.size() * log(2.0);
 }
 
 EncodedNumber PickOptimalRuleStrength(uint total_instances, 
 				      uint positive_instances){
   double negative_instances = total_instances - positive_instances;
   if (total_instances == 0) return EncodedNumber();
-  int max_bits = 1 >? (int)(2 * log (total_instances)); // TODO: Check this
+  int max_bits = 1 >? (int)(2 * log ((double)total_instances)); // TODO: Check this
   double p_ideal = (double(positive_instances)) / total_instances;
   EncodedNumber current;
   EncodedNumber best;

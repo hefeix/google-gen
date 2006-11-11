@@ -264,7 +264,8 @@ void TryRemoveFiring(Firing *f){
   }
 }
 
-void TryAddFirings(Rule * rule, const vector<Substitution> & subs){
+void TryAddFirings(Rule * rule, const vector<Substitution> & subs,
+		   int max_recursion){
   Model *m = rule->GetModel();
   // alternate explanations to remove, grouped by rule
   map<Rule *, set<Firing *> > to_remove;
@@ -333,6 +334,7 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs){
 	    << " ln_likelihood_=" << m->GetLnLikelihood() << endl;
     
     
+    
     // Try to remove the alternate rule if it has few firings.
     vector<Firing *> remaining_firings = alt_r->Firings();
     // if the remaining firings are at most half of what we just deleted... 
@@ -346,6 +348,8 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs){
 	to_explain.insert(remaining_firings[i]->GetTrueTuples().begin(), 
 			  remaining_firings[i]->GetTrueTuples().end());
       }
+      Pattern lhs = alt_r->GetPrecondition()->GetPattern();
+      Pattern rhs = alt_r->GetResult();
       alt_r->Erase();
       if (GetVerbosity() >= 1) m->VerifyLayer2();
       forall(run, to_explain) {
@@ -354,6 +358,13 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs){
       }
       VLOG(1) << "::TryAddFirings Erased Rule " 
 	      << " ln_likelihood_=" << m->GetLnLikelihood() << endl;
+
+      // Try to make a variation on the alternate rule that switches
+      // the result with one of the preconditions.  
+      if (max_recursion >0) {
+	OptimizationCheckpoint cp_variations(m, false);
+	TryRuleVariations(m, lhs, rhs, max_recursion-1);
+      }
     }
     if (!alt_r->Exists()) continue;
     if (may_want_to_add_negative_rule) {
@@ -404,9 +415,26 @@ void TryMakeFunctionalNegativeRule(Rule *r){
   if (GetVerbosity() >= 1) m->ToHTML("html");
 }
 
+void TryRuleVariations(Model *m, const Pattern & preconditions, 
+		       const Pattern & result, 
+		       int max_recursion){
+  if (result.size() > 1) return;
+  for (uint i=0; i<preconditions.size(); i++) {
+    Pattern lhs = preconditions;
+    Pattern rhs = result;
+    lhs[i] = result[0];
+    rhs[0] = preconditions[i];
+    CandidateRule cr = CanonicalizeRule(make_pair(lhs, rhs));
+    OptimizationCheckpoint cp(m, false);
+    TryAddImplicationRule(m, cr.first, cr.second, max_recursion-1);
+    if (cp.KeepChanges()) break;
+  }
+}
+
 void TryAddImplicationRule(Model *m, 
-			   const vector<Tuple> & preconditions,
-			   const vector<Tuple> & result){
+			   const Pattern & preconditions,
+			   const Pattern & result,
+			   int max_recursion){
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
@@ -427,7 +455,7 @@ void TryAddImplicationRule(Model *m,
 			    type, 0, result, EncodedNumber(), EncodedNumber());
   // r->ExplainEncoding();
   VLOG(1) << "new ln_likelihood_=" << m->GetLnLikelihood() << endl;
-  TryAddFirings(r, subs);
+  TryAddFirings(r, subs, max_recursion-1);
   if (!r->Exists()) return;
   VLOG(1) << "with firings: " << m->GetLnLikelihood() << endl;
   OptimizeStrength(r);

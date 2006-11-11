@@ -30,7 +30,8 @@
 void TryRemoveFiring(Firing *f);
 
 // Adds a bunch of firings at once and removes alternate explanations.
-void TryAddFirings(Rule * r, const vector<Substitution> & sub);
+void TryAddFirings(Rule * r, const vector<Substitution> & sub, 
+		   int max_recursion);
 
 // Given a creative rule, tries creating rules where the unbound RHS variables
 // in the original rule are replaced by constants.
@@ -39,7 +40,12 @@ void TryAddFirings(Rule * r, const vector<Substitution> & sub);
 // TODO, document this
 void TryAddImplicationRule(Model *m,
 			   const vector<Tuple> & preconditions, 
-			   const vector<Tuple> & result);
+			   const vector<Tuple> & result,
+			   int max_recursion);
+
+void TryRuleVariations(Model *m, const Pattern & preconditions, 
+		       const Pattern & result, 
+		       int max_recursion);
 
 void TryMakeFunctionalNegativeRule(Rule *r);
   

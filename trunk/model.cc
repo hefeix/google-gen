@@ -201,11 +201,11 @@ double DProb(int f_i, // before 1 is added
 	     int k, // including term i
 	     int n) { // before 1 is added
   double d_prob = 0;
-  d_prob += log(f_i+1) - log(n+1);
+  d_prob += log(f_i+1.0) - log(n+1.0);
   d_prob += uintQuadraticLnProb(f_i+1-1);
   if (f_i > 0) d_prob -= uintQuadraticLnProb(f_i-1);
   if (f_i == 0) {
-    d_prob += log(k);
+    d_prob += log((double)k);
     d_prob += uintQuadraticLnProb(k)-uintQuadraticLnProb(k-1);
   }
   CHECK(finite(d_prob));
