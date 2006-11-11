@@ -114,7 +114,7 @@ bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic){
 */
 
 bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
-  int64 max_work = (uint)(10/pow(RandomFraction(), 1.0));
+  int64 max_work = min ((uint)(10/pow(RandomFraction(), 1.0)), 5  * (uint)m->GetNumTrueTuples());
   uint num_clauses = 1;
   while (RandomFraction() < 0.7) num_clauses++;  
   vector<Tuple> p;
@@ -223,6 +223,14 @@ bool VetteCandidateRule(Model *m, CandidateRule r,
   r.first = RemoveVariableFreeTuples(r.first);
   r.second = RemoveVariableFreeTuples(r.second);
   *simplified_rule = CanonicalizeRule(r);
+  VLOG(1) << "max_work=" << max_work << " satisfactions(combined)="
+	  << num_satisfactions << " satisfactions(preconditions)="
+	  << preconditions_num_satisfactions
+	  << " rule=" << TupleVectorToString(r.first)
+	  << "->" << TupleVectorToString(r.second)
+	  << " simplified rule=" << TupleVectorToString(simplified_rule->first)
+	  << "->" << TupleVectorToString(simplified_rule->second) << endl;
+    
   return true;
 } 
 
