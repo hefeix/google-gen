@@ -146,10 +146,15 @@ void ModelShell(istream  * input) {
       (*input) >> v;
       SetVerbosity(v);
     }
-    else if (command=="pat"){
-      /*pair<vector<Tuple>, vector<Tuple> > p = FindRandomCandidateRule();
+    else if (command=="candidates"){
+      uint num;
+      int tactic;
+      (*input) >> tactic >> num;
+      for (uint i=0; i<num; i++) {
+	CandidateRule p = FindRandomCandidateRule(&m, (Tactic)tactic);
       cout << TupleVectorToString(p.first) << " -> " 
-      << TupleVectorToString(p.second) << endl;*/
+	   << TupleVectorToString(p.second) << endl;
+      }
     }
     else if (command=="h"){
       m.ToHTML("html");

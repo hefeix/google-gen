@@ -103,6 +103,16 @@ class Model {
     return dynamic_cast<C *>(GetComponent(id));
   }
 
+  // Get the number of true tuples
+  
+  inline uint GetNumTrueTuples() {
+    return tuple_to_true_tuple_.size();
+  }
+  inline const map<Tuple, TrueTuple*>& GetTupleToTrueTuple() {
+    return tuple_to_true_tuple_;
+  }
+
+
   // Checks that the ln_likelihood of the model is correctly the sum
   // of the ln_likelihood of all of the components plus the arbitrary term
   // naming costs.
