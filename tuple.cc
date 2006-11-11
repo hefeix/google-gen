@@ -252,7 +252,7 @@ double PatternLnLikelihood(const Pattern &context,
       // specify whether it's a back-reference or not.
       if (encoding) ret += log(0.5);
       if (terms_seen % t) {
-	if (encoding) ret -= log(terms_seen.size());
+	if (encoding) ret -= log((double)terms_seen.size());
       } else {
 	// if it's a new variable, we don't care its identity, so we 
 	// encode a wildcard meaning new variable.

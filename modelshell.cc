@@ -92,7 +92,7 @@ void ModelShell(istream  * input) {
 	pair<vector<Tuple>, vector<Tuple> > p 
 	  = FindRandomCandidateRule(&m, Tactic(tactic));
 	OptimizationCheckpoint cp(&m, true);
-	TryAddImplicationRule(&m, p.first, p.second);	
+	TryAddImplicationRule(&m, p.first, p.second, 10);	
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "
 		  << TupleVectorToString(p.first)
@@ -113,7 +113,7 @@ void ModelShell(istream  * input) {
       GetLine((*input), &pat);
       vector<Tuple> result = StringToTupleVector(pat);
       OptimizationCheckpoint cp(&m, true);      
-      TryAddImplicationRule(&m, preconditions, result);
+      TryAddImplicationRule(&m, preconditions, result, 10);
       if (cp.KeepChanges()) {
 	VLOG(0) << " Created rule "
 		<< TupleVectorToString(preconditions)
