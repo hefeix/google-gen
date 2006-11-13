@@ -7,19 +7,15 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
 class MyHandler(BaseHTTPRequestHandler):
    def do_GET(self):
-       try:
-           if self.path.endswith(".html"):
-               f = open (curdir + sep + self.path)
-               self.send_response(200)
-               self.send_header('Content-type', 'text/html')
-               self.end_headers()
-               self.wfile.write(f.read())
-               f.close()
-               return
-           # here do the gen stuff
-           return
-       except IOError:
-           self.send_error(404, 'File Not Found')
+      params = {}
+      params['path'] = self.path
+      # results = gen.ModelShellHandleExternal(params)
+      self.send_response(200)
+      self.send_header('Content-type', 'text/html')
+      self.end_headers()
+      self.wfile.write(self.path)
+      self.wfile.write(" received")
+      return
            
 def main():
     try:

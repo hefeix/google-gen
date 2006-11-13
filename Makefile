@@ -14,6 +14,14 @@ OBJ = $(addsuffix .o, $(basename $(SRC)))
 PYTHONINCLUDES = -I"/System/Library/Frameworks/Python.framework/Versions/2.3/Headers"
 PYTHONLINK = -framework Python
 LOADABLE = -bundle
+ifeq ($(shell uname),Linux)
+   $(warning Linux)
+   PYTHONINCLUDES = -I"/usr/include/python2.4"
+   PYTHONLINK = 
+   LOADABLE = -shared
+endif
+
+
 
 # These are the SWIG interface files and wrappers
 SWIGSRC = gen.i
