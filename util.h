@@ -33,6 +33,7 @@
 #include <cwctype>
 #include <map>
 #include <set>
+#include <sstream>
 
 #define OPERATORLESS operator <
 #define OPERATORLE operator <=

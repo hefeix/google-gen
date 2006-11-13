@@ -15,7 +15,7 @@
 // limitations under the License.
 //
 // Author: Noam Shazeer and Georges Harik
-
+  
 #ifndef _CHANGELIST_H_
 #define _CHANGELIST_H_
 
@@ -24,7 +24,7 @@
 #include "util.h"
 
 typedef uint Checkpoint;
-
+  
 class Change;
 
 // A changelist is a stack of changes which allows you to set checkpoints and
