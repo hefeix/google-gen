@@ -93,7 +93,10 @@ class Model {
   // Deletes all of the components whose times are NEVER
   // Precondition: times are all clean.
   void DeleteNeverHappeningComponents();
-
+  
+  // used when loading models.  If another component already is using the new
+  // id, it swaps the two ids.  
+  void ChangeID(Component *c, int new_id);
 
   // ----- CONST FUNCTIONS -----
 
@@ -192,6 +195,9 @@ class Model {
   const set<Component *> & GetNeverHappen() 
     { return never_happen_;}
   const set<Component *> & GetTimesDirty() const { return times_dirty_;}
+  const set<Component *> & GetComponentsOfType(ComponentType t) const{
+    return components_by_type_[t];
+  }
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
@@ -216,6 +222,11 @@ class Model {
   // misc.
 
   // I/O
+  // writes the model to a file (including the spec)
+  void Store(string filename) const;
+  // reads the model from a file (including ths spec)
+  void Load(string filename);
+
   // A bar of links to the files in the HTML display.
   string LinkBar() const;
   // Writes the model to html in the given relative directory.
@@ -232,6 +243,8 @@ class Model {
   void A1_SetLnLikelihood(double new_val);
   void A1_InsertIntoIDToComponent(int id, Component *c);
   void A1_RemoveFromIDToComponent(int id);
+  void A1_InsertIntoComponentsByType(Component *c);
+  void A1_RemoveFromComponentsByType(Component *c);
   void A1_InsertIntoTupleToTrueTuple(Tuple t, TrueTuple *tt);
   void A1_RemoveFromTupleToTrueTuple(Tuple t);
   void A1_InsertIntoTimesDirty(Component *c);
@@ -267,6 +280,7 @@ class Model {
   int next_id_;
   // Maps id to the component with that ID (only com
   map<int, Component *> id_to_component_;
+  set<Component *> components_by_type_[NUM_COMPONENT_TYPES];
   TupleIndex tuple_index_; // stores pointers to Firings
   map<Tuple, TrueTuple *> tuple_to_true_tuple_;
   set<Component *> times_dirty_; //components whose times need fixing

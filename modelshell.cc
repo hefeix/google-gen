@@ -67,6 +67,7 @@ void ModelShell(istream  * input) {
     else if (command == "spec") {
       string fname;
       (*input) >> fname;
+      fname = "spec/" + fname + ".spec";
       ifstream finput(fname.c_str());
       m.ReadSpec(&finput);
       finput.close();
@@ -158,6 +159,21 @@ void ModelShell(istream  * input) {
     }
     else if (command=="h"){
       m.ToHTML("html");
+    }
+    else if (command=="store") {
+      m.VerifyLayer2();
+      system("mkdir -p stored");
+      string fn;
+      (*input) >> fn;
+      fn = "stored/"+fn+".model";
+      m.Store(fn);
+    }
+    else if (command=="load") {      
+      string fn;
+      (*input) >> fn;
+      fn = "stored/"+fn+".model";
+      m.Load(fn);
+      m.VerifyLayer2();
     }
     else cerr << "UNKNOWN COMMAND " << command << endl;
     m.FixTimes();

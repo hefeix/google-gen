@@ -37,6 +37,8 @@ class Prohibition {
   // ----- CONST FUNCTIONS -----
 
   bool TupleIsProhibited(const Tuple & t) const;
+  Tuple GetProhibited() const { return prohibited_;}
+  const set<Tuple> & GetExceptions() const { return exceptions_;}
 
 
   // ----- COMPLICATED L1 FUNCTIONS -----

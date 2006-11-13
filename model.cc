@@ -335,7 +335,116 @@ void Model::DeleteNeverHappeningComponents() {
   }
 }
 
-Record Model::ModelInfo() const {
+void Model::ChangeID(Component *c, int new_id) {
+  if (new_id == c->id_) return;
+  int old_id = c->id_;
+  Component * displaced = GetComponent(new_id);
+  changelist_.Make (new ValueChange<int>(&c->id_, new_id));
+  if (displaced) {
+    changelist_.Make(new ValueChange<int>(&displaced->id_, old_id));
+  }
+  A1_RemoveFromIDToComponent(old_id);
+  if (displaced) A1_RemoveFromIDToComponent(new_id);
+  A1_InsertIntoIDToComponent(new_id, c);
+  if (displaced) A1_InsertIntoIDToComponent(old_id, displaced);
+  if (!(new_id < next_id_)) {
+    changelist_.Make(new ValueChange<int>(&next_id_, new_id+1));
+  }  
+}
+
+void Model::Store(string filename) const {
+  ofstream output(filename.c_str());
+  forall(run, spec_requirements_){
+    Record r;
+    r["CT"] = "spec_requirement";
+    r["tuple"] = (*run)->tuple_.ToString();
+    output << RecordToString(r) << endl;
+  }
+  forall(run, spec_prohibitions_){
+    Record r;
+    r["CT"] = "spec_prohibition";
+    r["prohibited"] = (*run)->GetProhibited().ToString();
+    vector<Tuple> exceptions((*run)->GetExceptions().begin(), 
+			     (*run)->GetExceptions().end());
+    r["exceptions"] = TupleVectorToString(exceptions);
+    output << RecordToString(r) << endl;
+  }
+
+  forall(run, GetComponentsOfType(TRUETUPLE))
+    output << RecordToString((*run)->RecordForStorge()) << endl;
+  
+  for (int pass=0; pass<2; pass++) 
+    forall(run, GetComponentsOfType(RULE)) {
+      Rule * rule = dynamic_cast<Rule *>(*run);
+      if ((rule->GetRuleType()==NEGATIVE_RULE) == (pass==1))
+	output << RecordToString(rule->RecordForStorge())<< endl;
+    }
+
+  forall(run, GetComponentsOfType(FIRING)) 
+    output << RecordToString((*run)->RecordForStorge()) << endl;
+
+  forall(run, GetComponentsOfType(SATISFACTION)) 
+    output << RecordToString((*run)->RecordForStorge()) << endl;
+
+  forall(run, GetComponentsOfType(RULESAT)) 
+    output << RecordToString((*run)->RecordForStorge()) << endl;
+
+  output.close();
+}
+void Model::Load(string filename) {
+  ifstream input(filename.c_str());
+  Record r;
+  while (input >> r){
+    if (r["CT"]=="spec_requirement"){
+      AddRequirementToSpec(StringToTuple(r["tuple"]));
+    } else if (r["CT"]=="spec_prohibition"){
+      AddProhibitionToSpec(StringToTuple(r["prohibited"]),
+			   StringToTupleVector(r["exceptions"]));
+    } else {
+      ComponentType ct = StringToComponentType(r["CT"]);
+      if (ct==TRUETUPLE) {
+	TrueTuple * tt = GetAddTrueTuple(StringToTuple(r["tuple"]));
+	ChangeID(tt, atoi(r["id"]));
+      } else if (ct==RULE){
+	RuleType type = StringToRuleType(r["rule_type"]);
+	Rule * rule = 
+	  MakeNewRule(StringToTupleVector(r["precondition"]),
+		      EncodedNumber(r["delay"]),
+		      type,
+		      (type==NEGATIVE_RULE)?
+		      GetComponent<Rule>(atoi(r["target_id"])):NULL,
+		      StringToTupleVector(r["result"]),
+		      EncodedNumber(r["strength"]),
+		      EncodedNumber(r["strength2"]) );
+	ChangeID(rule, atoi(r["id"]));
+	ChangeID(rule->precondition_, atoi(r["precondition_id"]));
+      } else if (ct==FIRING){
+	Rule * rule = GetComponent<Rule>(atoi(r["rule"]));
+	Firing * f 
+	  = rule->AddFiring(Substitution(r["full_substitution"]));
+	ChangeID(f, atoi(r["id"]));
+      } else if (ct==SATISFACTION){
+	Precondition * p = GetComponent<Precondition>(atoi(r["precondition"]));
+	Satisfaction * sat = 
+	  p->FindSatisfaction(Substitution(r["substitution"]));
+	CHECK(sat);
+	ChangeID(sat, atoi(r["id"]));
+      } else if (ct==RULESAT){
+	Rule * rule = GetComponent<Rule>(atoi(r["rule"]));
+	Satisfaction *sat = GetComponent<Satisfaction>(atoi(r["satisfaction"]));
+	RuleSat * rs = rule->FindRuleSat(sat);
+	CHECK(rs);
+	ChangeID(rs, atoi(r["id"]));
+      } else {
+	CHECK(false);
+      }
+    }
+  }
+  FixTimes();
+}
+
+
+Record Model::ModelInfo() const{ 
   Record r;
   r["Ln Likelihood"] = dtoa(ln_likelihood_);
   r["Ln likelihood(arbitrary terms)"] = dtoa(arbitrary_term_ln_likelihood_);
@@ -349,6 +458,7 @@ Record Model::ModelInfo() const {
 }
 string Model::LinkBar() const{
   string ret;
+  ret += "<a href=model.html>MODEL</a> ";
   for (uint i=0; i<NUM_COMPONENT_TYPES; i++) {
     ComponentType ct = ComponentType(i);
     ret += string() + "<a href=" + ComponentTypeToString(ct) + ".html>"
@@ -358,7 +468,7 @@ string Model::LinkBar() const{
   return ret;
 }
 void Model::ToHTML(string dirname) const {
-  system(("mkdir " + dirname).c_str());
+  system(("mkdir -p " + dirname).c_str());
   ofstream output;
   output.open((dirname+"/model.html").c_str());
   output << LinkBar();
@@ -631,6 +741,14 @@ void Model::A1_InsertIntoIDToComponent(int id, Component *c) {
 void Model::A1_RemoveFromIDToComponent(int id) {
   changelist_.Make
     (new MapRemoveChange<int, Component *>(&id_to_component_,id));
+}
+void Model::A1_InsertIntoComponentsByType(Component *c){
+  changelist_.Make
+    (new SetInsertChange<Component *>(&(components_by_type_[c->Type()]), c));
+}
+void Model::A1_RemoveFromComponentsByType(Component *c){
+  changelist_.Make
+    (new SetRemoveChange<Component *>(&(components_by_type_[c->Type()]), c));
 }
 void Model::A1_InsertIntoTupleToTrueTuple(Tuple t, TrueTuple *tt) {
   changelist_.Make
