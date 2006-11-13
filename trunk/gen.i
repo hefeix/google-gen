@@ -1,10 +1,12 @@
 %module gen
 %include "std_string.i"
+%include "std_map.i"
 
 %{
 
-extern std::string ModelShellHandleExternal(std::string command);
+extern std::map<std::string, std::string> ModelShellHandleExternal(std::map<std::string, std::string> parameters);
 
 %}
 
-extern std::string ModelShellHandleExternal(std::string command);
+%template(attributeList) std::map<std::string, std::string>;
+extern std::map<std::string, std::string> ModelShellHandleExternal(std::map<std::string, std::string> parameters);

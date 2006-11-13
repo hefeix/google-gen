@@ -41,7 +41,6 @@ class ModelShell {
   Model * m_;
 };
 
-string ModelShellHandleExternal(string command); 
-// map<string, string> ModelHandle(map<string, string> parameters);
+map<string, string> ModelShellHandleExternal(map<string, string> parameters);
 
 #endif
