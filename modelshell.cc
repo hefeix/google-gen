@@ -38,9 +38,12 @@ void ModelShell::Handle(istream * input) {
   }
 }
 
-string ModelShellHandleExternal(string command) {
+map<string,string> ModelShellHandleExternal(map<string, string> parameters) {
   static ModelShell * ms = NULL;
   if (!ms) ms = new ModelShell;
+
+  // Pull out the command string
+  string command = parameters["command"];
 
   // This is pretty ugly, encapsulate streambuf for cout
   stringstream cerr_string_stream;
@@ -54,7 +57,9 @@ string ModelShellHandleExternal(string command) {
   cerr.rdbuf(errbuf);
 
   // Now append the return code to cout
-  return cerr_string_stream.str(); // forget about ret for now
+  map<string, string> retmap;
+  retmap["cerr"] = cerr_string_stream.str();
+  return retmap;
 }
 
 string ModelShell::Handle(string command) {
@@ -222,8 +227,10 @@ int main(int argc, char ** argv) {
     cout << "External Handling\n";
     string line;
     while (getline(cin, line)) {
-      string ret = ModelShellHandleExternal(line);
-      cout << "WOULD OUTPUT " << ret << endl;
+      map<string, string> params;
+      params["command"] = line;
+      map<string, string> retmap = ModelShellHandleExternal(params);
+      cout << "WOULD OUTPUT " << retmap["cerr"] << endl;
     }
   } else {
     ModelShell ms;
