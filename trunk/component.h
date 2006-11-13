@@ -144,7 +144,11 @@ class Component{
   Record RecordForDisplay() const;
   
   // Type-specific key-value pairs.  Called by RecordForDisplay()
-  virtual Record RecordForDisplayInternal() const {CHECK(0); return Record(); }
+  virtual Record RecordForDisplaySubclass() const {CHECK(0); return Record(); }
+
+  // Used when storing the model
+  Record RecordForStorge() const;
+  virtual Record RecordForStorageSubclass() const {CHECK(0); return Record(); }
   
   // Returns pointers to the components that structurally depend on this one
   // I.e. without this component, the others may not exist in a layer 2 model.
@@ -286,7 +290,8 @@ class Precondition : public Component {
   // ----- CONST FUNCTIONS ----- Precondition
 
   ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
+  Record RecordForDisplaySubclass() const;
+  Record RecordForStorageSubclass() const;
   bool HasPurpose() const;
   vector<Component *> Purposes() const; // Rules
   vector<Component *> TemporalDependents() const; // Rules, Satisfactions
@@ -406,7 +411,8 @@ class Satisfaction : public Component {
   // ----- CONST FUNCTIONS ----- Satisfaction
 
   ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
+  Record RecordForDisplaySubclass() const;
+  Record RecordForStorageSubclass() const;
   inline bool NeedsPurpose() const; // yes
   vector<Component *> TemporalDependents() const; // the rule_sats
   vector<Component *> StructuralDependents() const;
@@ -482,7 +488,8 @@ class Rule : public Component{
   // figures out what tuples cause the rule under the tuple encoding.
   // set<Tuple> ComputeTupleCauses() const;
   ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
+  Record RecordForDisplaySubclass() const;
+  Record RecordForStorageSubclass() const;
   vector<Component *> TemporalDependents() const;
   vector<Component *> StructuralDependents() const;
   vector<vector<Component *> > TemporalCodependents() const;
@@ -619,16 +626,17 @@ class RuleSat : public Component{ // an instance of a rule coming true
   friend class Component;
   friend class Model;
 
-  // ----- LAYER 2 FUNCTIONS -----
+  // ----- LAYER 2 FUNCTIONS ----- RuleSat
   
   Firing * AddFiring(const Substitution & sub);
   
-  // ----- CONST FUNCTIONS -----
+  // ----- CONST FUNCTIONS ----- RuleSat
 
   Firing * FindFiring(const Substitution &sub) const;
   int NumFirings() const { return firings_.size(); }
   ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
+  Record RecordForDisplaySubclass() const;
+  Record RecordForStorageSubclass() const;
   bool NeedsPurpose() const;
   string ImplicationString(const Firing *firing) const;
   vector<Component *> TemporalDependents() const;
@@ -645,11 +653,11 @@ class RuleSat : public Component{ // an instance of a rule coming true
  private:
 
 
-  // ----- CONSTRUCTOR(S) -----
+  // ----- CONSTRUCTOR(S) ----- RuleSat
 
   RuleSat(Rule * rule, const Substitution & sub);
 
-  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+  // ----- COMPLICATED LAYER 1 FUNCTIONS ----- RuleSat
 
   void L1_EraseSubclass();
   void F2_AdjustLnLikelihoodForNewTime();
@@ -661,7 +669,7 @@ class RuleSat : public Component{ // an instance of a rule coming true
   void A1_AddInhibitor(RuleSat *rs);
   void A1_RemoveInhibitor(RuleSat *rs);
 
-  // ----- DATA -----
+  // ----- DATA ----- RuleSat
   // fundamental
 
   // The rule that is applied
@@ -688,13 +696,14 @@ class Firing : public Component{
   friend class Model;
 
 
-  // ----- LAYER 2 FUNCTIONS -----
+  // ----- LAYER 2 FUNCTIONS ----- Firing
 
 
-  // ----- CONST FUNCTIONS -----
+  // ----- CONST FUNCTIONS ----- Firing
 
   ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
+  Record RecordForDisplaySubclass() const;
+  Record RecordForStorageSubclass() const;
   string ImplicationString() const;
   RuleSat * GetRuleSat() const{ return rule_sat_;}
   inline Rule * GetRule() const{ return rule_sat_->rule_; }
@@ -709,20 +718,20 @@ class Firing : public Component{
  private:
 
 
-  // ----- CONSTRUCTOR(S) -----
+  // ----- CONSTRUCTOR(S) ----- Firing
 
   Firing(RuleSat * rule_sat, Substitution right_substitution);
   
-  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+  // ----- COMPLICATED LAYER 1 FUNCTIONS ----- Firing
 
   void L1_EraseSubclass();
 
-  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+  // ----- LAYER 1 ACCESSOR FUNCTIONS ----- Firing
 
   void A1_AddTrueTuple(TrueTuple *t);
   void A1_RemoveTrueTuple(TrueTuple *t);
 
-  // ----- DATA -----
+  // ----- DATA ----- Firing
 
   // fundamental
   Substitution right_substitution_; // substitution for new rhs variables
@@ -746,12 +755,13 @@ class TrueTuple : public Component{
   friend class Prohibition;
 
 
-  // ----- LAYER 2 FUNCTIONS -----
+  // ----- LAYER 2 FUNCTIONS ----- TrueTuple
 
-  // ----- CONST FUNCTIONS -----
+  // ----- CONST FUNCTIONS ----- TrueTuple
 
   ComponentType Type() const;
-  Record RecordForDisplayInternal() const;
+  Record RecordForDisplaySubclass() const;
+  Record RecordForStorageSubclass() const;
   set<Firing *> GetResultFirings() const;
   set<TrueTuple *> GetResultTrueTuples() const;
   set<TrueTuple *> GetCauseTrueTuples() const;
@@ -766,17 +776,17 @@ class TrueTuple : public Component{
  private:
 
 
-  // ----- CONSTRUCTOR(S) -----
+  // ----- CONSTRUCTOR(S) ----- TrueTuple
 
   TrueTuple(Model * model, Tuple tuple);
 
 
-  // ----- COMPLICATED LAYER 1 FUNCTIONS -----
+  // ----- COMPLICATED LAYER 1 FUNCTIONS ----- TrueTuple
 
   void L1_EraseSubclass();
 
 
-  // ----- LAYER 1 ACCESSOR FUNCTIONS -----
+  // ----- LAYER 1 ACCESSOR FUNCTIONS ----- TrueTuple
 
   void A1_AddViolatedProhibition(Prohibition *p);
   void A1_RemoveViolatedProhibition(Prohibition *p);
@@ -787,7 +797,7 @@ class TrueTuple : public Component{
   void A1_AddSatisfaction(Satisfaction *sat);
   void A1_RemoveSatisfaction(Satisfaction *sat);
   
-  // ----- DATA -----
+  // ----- DATA ----- TrueTuple
   // fundamental
   Tuple tuple_;  
 

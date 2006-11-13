@@ -110,6 +110,7 @@ void Component::L1_Erase(){
   model_->L1_ReleaseID(id_);
   if (time_ == NEVER) model_->A1_RemoveFromNeverHappen(this);
   if (time_dirty_) model_->A1_RemoveFromTimesDirty(this);
+  model_->A1_RemoveFromComponentsByType(this);
 
   L1_EraseSubclass();
   model_->A1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
@@ -148,6 +149,7 @@ Precondition::Precondition(Model * model,
 					 UNLIMITED_WORK, &work);
   num_satisfactions_ = num_sat;
   ComputeSetLnLikelihood();
+  model_->A1_InsertIntoComponentsByType(this);
 }
 
 void Precondition::L1_EraseSubclass(){
@@ -301,6 +303,7 @@ Satisfaction::Satisfaction(Precondition * precondition,
   }
   precondition_->A1_AddSatisfaction(this);
   ComputeSetTime();
+  model_->A1_InsertIntoComponentsByType(this);
 }
 
 void Satisfaction::L1_EraseSubclass() {
@@ -420,6 +423,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
     }
   }
   ComputeSetLnLikelihood();
+  model_->A1_InsertIntoComponentsByType(this);
 }
 
 void Rule::L1_EraseSubclass(){  
@@ -620,6 +624,7 @@ RuleSat::RuleSat(Rule * rule, const Substitution & sub)
   }
   ComputeSetTime();
   ComputeSetLnLikelihood();
+  model_->A1_InsertIntoComponentsByType(this);
 }
 void RuleSat::L1_EraseSubclass(){
   satisfaction_->A1_RemoveRuleSat(this);
@@ -728,6 +733,7 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
     model_->L1_AddArbitraryTerm(run->second);
   ComputeSetTime();
   ComputeSetLnLikelihood();
+  model_->A1_InsertIntoComponentsByType(this);
 }
 void Firing::L1_EraseSubclass() {
   forall(run, true_tuples_) {
@@ -792,6 +798,7 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
     }
   }
   ComputeSetLnLikelihood();
+  model_->A1_InsertIntoComponentsByType(this);
 }
 
 void TrueTuple::L1_EraseSubclass(){
@@ -863,8 +870,7 @@ ComponentType Satisfaction::Type() const { return SATISFACTION; }
 ComponentType Rule::Type() const { return RULE; }
 ComponentType RuleSat::Type() const { return RULESAT; }
 ComponentType Firing::Type() const { return FIRING; }
-ComponentType TrueTuple::Type() const 
-{ return TRUETUPLE; }
+ComponentType TrueTuple::Type() const { return TRUETUPLE; }
 
 string Component::TypeName() const { return ComponentTypeToString(Type());}
 
@@ -872,8 +878,60 @@ string Component::HTMLLink(string text) const{
   return string() + "<a href=" + TypeName()
     + ".html#" + itoa(id_) + ">" + text + "</a>";
 }
+Record Component::RecordForStorge() const{
+  Record r = RecordForStorageSubclass();  
+  r["id"] = itoa(id_);  
+  r["CT"] = TypeName();
+  return r;
+}
+Record Precondition::RecordForStorageSubclass() const{
+  // no need to store the precondition.  The rule creates us. 
+  Record r;
+  return r;
+}
+Record Satisfaction::RecordForStorageSubclass() const{
+  // We just store the satisfaction so as to get the ID right on load.
+  Record r;
+  r["precondition"] = itoa(precondition_->id_);
+  r["substitution"] = substitution_.ToString();
+  return r;
+}
+Record Rule::RecordForStorageSubclass() const{
+  Record r;
+  r["precondition"] = TupleVectorToString(precondition_->pattern_);
+  r["precondition_id"] = itoa(precondition_->id_);
+  r["delay"] = delay_.ToSortableString();
+  r["rule_type"] = RuleTypeToString(type_);
+  r["result"] = TupleVectorToString(result_);
+  r["strength"] = strength_.ToSortableString();
+  r["strength2"] = strength2_.ToSortableString();
+  if (type_==NEGATIVE_RULE) {
+    r["target_id"] = itoa(target_rule_->id_);
+  }
+  return r;
+}
+Record RuleSat::RecordForStorageSubclass() const{  
+  Record r;
+  r["rule"] = itoa(rule_->id_);
+  r["satisfaction"] = itoa(satisfaction_->id_);
+  return r;
+}
+Record Firing::RecordForStorageSubclass() const{
+  Record r;
+  r["rule"] = itoa(rule_sat_->rule_->id_);
+  r["full_substitution"] = GetFullSubstitution().ToString();
+  return r;
+}
+Record TrueTuple::RecordForStorageSubclass() const{
+  Record r;
+  r["tuple"] = tuple_.ToString();
+  return r;
+}
+
+
+
 Record Component::RecordForDisplay() const{
-  Record r = RecordForDisplayInternal();
+  Record r = RecordForDisplaySubclass();
   if (time_dirty_) r["D"] = "DIRTY";
   r["ID"] = itoa(id_) + "<a name=\"" + itoa(id_) + "\">";
   r["TIME"] = time_.ToSortableString();
@@ -882,7 +940,7 @@ Record Component::RecordForDisplay() const{
     r["LL"] += " (" + dtoa(LnLikelihood()) + ")";
   return r;
 }
-Record Precondition::RecordForDisplayInternal() const{
+Record Precondition::RecordForDisplaySubclass() const{
   Record r;
   r["precondition"] = TupleVectorToString(pattern_);
   r["dpe LL"] = dtoa(direct_pattern_encoding_ln_likelihood_);
@@ -894,7 +952,7 @@ Record Precondition::RecordForDisplayInternal() const{
     = itoa(num_satisfactions_) + " (" + itoa(satisfactions_.size()) + ")";
   return r;
 }
-Record Rule::RecordForDisplayInternal() const{
+Record Rule::RecordForDisplaySubclass() const{
   Record r;
   r["Rule"] = ImplicationString();
   r["Type"] = RuleTypeToString(type_).substr(0, 1);
@@ -912,13 +970,13 @@ Record Rule::RecordForDisplayInternal() const{
   }
   return r;
 }
-Record Satisfaction::RecordForDisplayInternal() const{
+Record Satisfaction::RecordForDisplaySubclass() const{
   Record r;
   r["precondition"] = precondition_->HTMLLink(TupleVectorToString(precondition_->pattern_));
   r["substitution"] = substitution_.ToString();
   return r;
 }
-Record RuleSat::RecordForDisplayInternal() const{
+Record RuleSat::RecordForDisplaySubclass() const{
   Record r;
   r["rule"] = ImplicationString(NULL);
   r["sat."] = satisfaction_->HTMLLink(itoa(satisfaction_->id_));
@@ -935,7 +993,7 @@ Record RuleSat::RecordForDisplayInternal() const{
   }
   return r;
 }
-Record Firing::RecordForDisplayInternal() const{
+Record Firing::RecordForDisplaySubclass() const{
   Record r;
   r["rule_sat"] = rule_sat_->HTMLLink(itoa(rule_sat_->id_));
   r["implication"] = ImplicationString();
@@ -943,7 +1001,7 @@ Record Firing::RecordForDisplayInternal() const{
     r["true_tuples"] += (*run)->HTMLLink((*run)->tuple_.ToString());
   return r;
 }
-Record TrueTuple::RecordForDisplayInternal() const {
+Record TrueTuple::RecordForDisplaySubclass() const {
   Record r;
   r["Tuple"] = tuple_.ToString();
   forall(run, causes_) {
