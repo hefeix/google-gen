@@ -8,12 +8,17 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 class MyHandler(BaseHTTPRequestHandler):
    def do_GET(self):
       params = {}
-      params['path'] = self.path
-      # results = gen.ModelShellHandleExternal(params)
+      params = cgi.parse_qs(self.path[1:])
+      params_flat = {}
+      for p in params:
+         params_flat[p] = (params[p])[0]
+      results = gen.ModelShellHandleExternal(params_flat)
       self.send_response(200)
       self.send_header('Content-type', 'text/html')
       self.end_headers()
-      self.wfile.write(self.path)
+      self.wfile.write("<PRE>\n");
+      self.wfile.write(results['cerr']);
+      self.wfile.write("</PRE>\n");
       self.wfile.write(" received")
       return
            
