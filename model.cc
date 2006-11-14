@@ -105,7 +105,9 @@ bool Model::IsLayer3() const{
 bool Model::MayBeTimeFixable() const{
   // TODO: think about this.
   if (violated_prohibitions_.size()) return false;
-  if (required_never_happen_.size()) return false;
+  forall(run, required_never_happen_) {
+    if ((*run)->causes_.size()==0) return false;
+  }
   return true;
 }
 
