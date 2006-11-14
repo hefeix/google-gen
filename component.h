@@ -524,6 +524,7 @@ class Rule : public Component{
     { return rule_sats_;}
   RuleType GetRuleType() const { return type_;}
   const Pattern & GetResult() const { return result_;}
+  bool IsUniversalRule() const;
 
  private:
   // ----- CONSTRUCTOR(S) ----- Rule

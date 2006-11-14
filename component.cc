@@ -365,6 +365,13 @@ RuleSat * Rule::L1_GetAddRuleSat(const Substitution & sub) {
   return L1_GetAddRuleSat(sat);
 }
 
+bool Rule::IsUniversalRule() const {
+  if (precondition_->pattern_.size()) return false;
+  if (result_.size() != 1) return false;
+  for (uint i=0; i<result_[0].size(); i++) 
+    if (result_[0][i] != Variable(i)) return false;
+  return true;
+}
 
 Rule::Rule(Precondition * precondition, EncodedNumber delay, 
 	   RuleType type, Rule * target_rule,
@@ -398,7 +405,8 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   }
   vector<int> arbitrary_terms;
   direct_pattern_encoding_ln_likelihood_ = 
-    PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);  
+    PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);
+  if (IsUniversalRule()) direct_pattern_encoding_ln_likelihood_ = 0;
   for (uint i=0; i<arbitrary_terms.size(); i++)
     model_->L1_AddArbitraryTerm(arbitrary_terms[i]);
 

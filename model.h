@@ -84,7 +84,7 @@ class Model {
   // Inserts or retrieces a creative rule with no preconditions and one 
   // postcondition full of different variables.  Such rules can explain
   // anything.
-  Rule * GetAddNaiveRule(uint length); // {} -> { [ $0 $1 ... $(length-1)] }
+  Rule * GetAddUniversalRule(uint length); // {} -> { [ $0 $1 ... $(length-1)] }
 
   // Makes all of the times correct and sets the dirty bits to false
   // Some of the times may end up as NEVER
