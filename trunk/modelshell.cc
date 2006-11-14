@@ -141,12 +141,12 @@ string ModelShell::Handle(string command) {
     else if (command == "verify"){
       model_->VerifyLayer2();
     }
-    else if (command == "ispecific"){
+    else if (command == "addrule"){
       string pat;
-      GetLine(command_stream, &pat);
-      vector<Tuple> preconditions = StringToTupleVector(pat);
-      GetLine(command_stream, &pat);
-      vector<Tuple> result = StringToTupleVector(pat);
+      Record r;
+      command_stream >> r;
+      vector<Tuple> preconditions = StringToTupleVector(r["lhs"]);
+      vector<Tuple> result = StringToTupleVector(r["rhs"]);
       OptimizationCheckpoint cp(optimizer_, true);      
       optimizer_->TryAddImplicationRule(preconditions, result, 10);
       if (cp.KeepChanges()) {

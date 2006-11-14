@@ -277,7 +277,7 @@ void Optimizer::TryRemoveFiring(Firing *f){
   Rule * r = f->GetRule();
   f->Erase();
   OptimizeStrength(r);
-  if (!r->HasFiring()) {
+  if (!r->HasFiring() && !r->IsUniversalRule()) {
     OptimizationCheckpoint cp(this, false);
     r->Erase();
   }
@@ -362,7 +362,8 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     vector<Firing *> remaining_firings = alt_r->Firings();
     // if the remaining firings are at most half of what we just deleted... 
     // (pretty arbitrary) try removing the rule.
-    if (remaining_firings.size() < firings.size() * 0.5) {
+    if ((!alt_r->IsUniversalRule()) && 
+	remaining_firings.size() < firings.size() * 0.5) {
       OptimizationCheckpoint delete_rule_cp(this, false);
       delete_rule_cp.logging_ = true;
       // figure out which TrueTuples we need to find alternate explanations for 
@@ -675,7 +676,7 @@ void Optimizer::Explain(TrueTuple *p,
   Tuple s = p->GetTuple();
   model_->FindExplanationsForResult(s, &explanations, excluded, UNLIMITED_WORK);
   if (explanations.size()==0) {
-    Rule * r = model_->GetAddNaiveRule(s.size());
+    Rule * r = model_->GetAddUniversalRule(s.size());
     Substitution right_sub;
     for (int i=0; i<(int)s.size(); i++) {
       right_sub.Add(Variable(i), s[i]);

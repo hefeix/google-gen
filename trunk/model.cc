@@ -719,7 +719,7 @@ vector<Tuple> GetTupleVector(istream * input) {
   return result;
 }
 
-Rule * Model::GetAddNaiveRule(uint length) {
+Rule * Model::GetAddUniversalRule(uint length) {
   vector<Tuple> precondition;
   vector<Tuple> result(1);
   vector<Tuple> target_precondition;
