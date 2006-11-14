@@ -21,6 +21,7 @@
 
 #include "util.h"
 #include "model.h"
+#include "optimization.h"
 
 // This is used to give external commands to a model and receive information
 // about a model
@@ -38,7 +39,8 @@ class ModelShell {
  private:
 
   // This is the model we're working on
-  Model * m_;
+  Model * model_;
+  Optimizer * optimizer_;
 };
 
 map<string, string> ModelShellHandleExternal(map<string, string> parameters);
