@@ -22,40 +22,45 @@
 #include "model.h"
 #include "optimization.h"
 
-/*void OptimizeRound(Model *m){
+Optimizer::Optimizer(Model *model){
+  model_ = model;
+}
+
+/*void Optimizer::OptimizeRound(){
   vector<int> creative_rules;
-  set<Rule *> rules = m->GetAllRules();
+  set<Rule *> rules = model_->GetAllRules();
   forall(run, rules) {
     Rule * r = *run;
     if (r->Exists() && 
 	r->GetRuleType()==CREATIVE_RULE) {
-      OptimizationCheckpoint cp(m, true);
-      TrySpecifyCreativeRule(m, r);
+      OptimizationCheckpoint cp(this, true);
+      TrySpecifyCreativeRule(r);
     }
   }
   }*/
 
 pair<vector<Tuple>, vector<Tuple> >
-FindRandomCandidateRule(Model *m, Tactic tactic){
+Optimizer::FindRandomCandidateRule(Tactic tactic){
   pair<vector<Tuple>, vector<Tuple> > ret;
-  while (!MaybeFindRandomCandidateRule(m, &ret, tactic));
+  while (!MaybeFindRandomCandidateRule(&ret, tactic));
+  recently_checked_[ret] = model_->GetLnLikelihood();
   return ret;
 }
-bool MaybeFindRandomCandidateRule(Model *m, CandidateRule *ret, 
-				  Tactic tactic){
+bool Optimizer::MaybeFindRandomCandidateRule(CandidateRule *ret, 
+					     Tactic tactic){
   switch (tactic) {
   case NEW_RULE:
-    return MaybeFindRandomNewRule(m, ret);
+    return MaybeFindRandomNewRule(ret);
     break;
   default:
     CHECK(false);
-    //return MaybeFindRandomVariantRule(m, ret, tactic);
+    //return MaybeFindRandomVariantRule(ret, tactic);
     break;
   }
   return false;
 }
-TrueTuple * GetRandomTrueTuple(Model *m){
-  TrueTuple *ret = m->FindTrueTuple(*(m->GetTupleIndex()->RandomTuple()));
+TrueTuple * Optimizer::GetRandomTrueTuple(){
+  TrueTuple *ret = model_->FindTrueTuple(*(model_->GetTupleIndex()->RandomTuple()));
   CHECK(ret);
   return ret;
 }
@@ -113,15 +118,15 @@ bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic){
 }
 */
 
-bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
-  int64 max_work = min ((uint)(10/pow(RandomFraction(), 1.0)), 5  * (uint)m->GetNumTrueTuples());
+bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret){
+  int64 max_work = min ((uint)(10/pow(RandomFraction(), 1.0)), 5  * (uint)model_->GetNumTrueTuples());
   uint num_clauses = 1;
   while (RandomFraction() < 0.7) num_clauses++;  
   vector<Tuple> p;
   Substitution sub;
   int next_var = 0;
   set<const Tuple *> used_tuples;
-  const Tuple * s1 = m->GetTupleIndex()->RandomTuple();
+  const Tuple * s1 = model_->GetTupleIndex()->RandomTuple();
   used_tuples.insert(s1);
   p.push_back(*s1);
   int tries = 100;
@@ -142,7 +147,7 @@ bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
     }
     vector<int> v_anchors(anchors.begin(), anchors.end());
     const Tuple * s 
-      = m->GetTupleIndex()->GetRandomTupleContaining(v_anchors, true);
+      = model_->GetTupleIndex()->GetRandomTupleContaining(v_anchors, true);
     if (!s) continue;
     if (used_tuples % s) continue;
     used_tuples.insert(s);
@@ -165,17 +170,20 @@ bool MaybeFindRandomNewRule(Model *m, CandidateRule *ret){
       }
   CandidateRule r = SplitOffLast(p);
   CandidateRule simplified_rule;
-  return VetteCandidateRule(m, r, ret, max_work);
+  return VetteCandidateRule(r, ret, max_work);
 }
 
-bool VetteCandidateRule(Model *m, CandidateRule r, 
-			CandidateRule * simplified_rule, 
-			int64 max_work) {
+bool Optimizer::VetteCandidateRule(CandidateRule r, 
+				   CandidateRule * simplified_rule, 
+				   int64 max_work) {
   vector<Tuple> p = Concat(r);
   uint64 num_satisfactions;
   vector<Substitution> subs;
+  r = CanonicalizeRule(r);
+  if ((recently_checked_ % r) 
+      && (recently_checked_[r] <= model_->GetLnLikelihood()+1.0)) return false;
   bool success = 
-    m->GetTupleIndex()->FindSatisfactions(p, &subs, &num_satisfactions,
+    model_->GetTupleIndex()->FindSatisfactions(p, &subs, &num_satisfactions,
 					  max_work, 0);
   if (max_work >=0 && num_satisfactions > (uint64)max_work) success = false;
   if (!success) return false;
@@ -185,7 +193,7 @@ bool VetteCandidateRule(Model *m, CandidateRule r,
   vector<Tuple> preconditions = r.first;
   uint64 preconditions_num_satisfactions = 0;
   bool preconditions_success = 
-    m->GetTupleIndex()->FindSatisfactions(preconditions, 0, 
+    model_->GetTupleIndex()->FindSatisfactions(preconditions, 0, 
 					  &preconditions_num_satisfactions, 
 					  max_work, 0);
   if (max_work>=0 && preconditions_num_satisfactions > (uint64)max_work) 
@@ -195,7 +203,7 @@ bool VetteCandidateRule(Model *m, CandidateRule r,
     vector<Tuple> simplified_preconditions 
       = RemoveFromVector(preconditions, i);
     uint64 simplified_num_satisfactions = 0;
-    if (m->GetTupleIndex()->FindSatisfactions(simplified_preconditions, 0, 
+    if (model_->GetTupleIndex()->FindSatisfactions(simplified_preconditions, 0, 
 					     &simplified_num_satisfactions, 
 					     max_work, 0)) {
       if (simplified_num_satisfactions == preconditions_num_satisfactions){
@@ -222,7 +230,11 @@ bool VetteCandidateRule(Model *m, CandidateRule r,
   if (GetVariables(r.second).size()==0) return false;
   r.first = RemoveVariableFreeTuples(r.first);
   r.second = RemoveVariableFreeTuples(r.second);
-  *simplified_rule = CanonicalizeRule(r);
+  r = CanonicalizeRule(r);
+  *simplified_rule = r;
+  if ((recently_checked_ % r) 
+      && (recently_checked_[r] <= model_->GetLnLikelihood()+1.0)) return false;
+  
   VLOG(1) << "max_work=" << max_work << " satisfactions(combined)="
 	  << num_satisfactions << " satisfactions(preconditions)="
 	  << preconditions_num_satisfactions
@@ -234,8 +246,8 @@ bool VetteCandidateRule(Model *m, CandidateRule r,
   return true;
 } 
 
-ComputationResult DependsOn(Model *m, Component * dependent, 
-			    Component * dependee, int64 max_work){
+ComputationResult Optimizer::DependsOn(Component * dependent, 
+				       Component * dependee, int64 max_work){
   int64 total_work = 0;
   CHECK(total_work==0);
   multimap<Time, Component *> to_expand;
@@ -260,21 +272,19 @@ ComputationResult DependsOn(Model *m, Component * dependent,
   }
   return RESULT_FALSE;
 }
-void TryRemoveFiring(Firing *f){
+void Optimizer::TryRemoveFiring(Firing *f){
   // if (f->IsEssential(10, 0) == RESULT_TRUE) return false;
-  Model *m = f->GetModel();
   Rule * r = f->GetRule();
   f->Erase();
   OptimizeStrength(r);
   if (!r->HasFiring()) {
-    OptimizationCheckpoint cp(m, false);
+    OptimizationCheckpoint cp(this, false);
     r->Erase();
   }
 }
 
-void TryAddFirings(Rule * rule, const vector<Substitution> & subs,
+void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 		   int max_recursion){
-  Model *m = rule->GetModel();
   // alternate explanations to remove, grouped by rule
   map<Rule *, set<Firing *> > to_remove;
   for (uint snum=0; snum<subs.size(); snum++) {
@@ -298,10 +308,11 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs,
   }
   OptimizeStrength(rule);
   VLOG(1) << "::TryAddFirings Added " << subs.size() << " firings " 
-	  << " ln_likelihood_=" << m->GetLnLikelihood() << endl;
+	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
   
   forall (run_r, to_remove) {
     Rule * alt_r = run_r->first;
+    if (alt_r == rule) continue;
     const set<Firing *> & firings = run_r->second;
     bool is_creative = alt_r->GetRuleType() == CREATIVE_RULE;
     if (!alt_r->Exists()) continue;
@@ -333,7 +344,7 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 
     // this cp automatically gives the option of leaving in all of the 
     // firings for this alternate rule (duplciate explanations)
-    OptimizationCheckpoint rule_cp(m, false);
+    OptimizationCheckpoint rule_cp(this, false);
     rule_cp.logging_ = true;
 
     forall(run, firings) {
@@ -343,7 +354,7 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     OptimizeStrength(alt_r);
     VLOG(1) << "::TryAddFirings Removed " << firings.size() 
 	    << " firings for rule " << alt_r->GetID()
-	    << " ln_likelihood_=" << m->GetLnLikelihood() << endl;
+	    << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
     
     
     
@@ -352,7 +363,7 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     // if the remaining firings are at most half of what we just deleted... 
     // (pretty arbitrary) try removing the rule.
     if (remaining_firings.size() < firings.size() * 0.5) {
-      OptimizationCheckpoint delete_rule_cp(m, false);
+      OptimizationCheckpoint delete_rule_cp(this, false);
       delete_rule_cp.logging_ = true;
       // figure out which TrueTuples we need to find alternate explanations for 
       set<TrueTuple*> to_explain;
@@ -363,24 +374,24 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs,
       Pattern lhs = alt_r->GetPrecondition()->GetPattern();
       Pattern rhs = alt_r->GetResult();
       alt_r->Erase();
-      if (GetVerbosity() >= 1) m->VerifyLayer2();
+      if (GetVerbosity() >= 1) model_->VerifyLayer2();
       forall(run, to_explain) {
 	if ((*run)->GetCauses().size() == 0) 
 	  Explain(*run, NULL, false);
       }
       VLOG(1) << "::TryAddFirings Erased Rule " 
-	      << " ln_likelihood_=" << m->GetLnLikelihood() << endl;
+	      << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
 
       // Try to make a variation on the alternate rule that switches
       // the result with one of the preconditions.  
       if (max_recursion >0) {
-	OptimizationCheckpoint cp_variations(m, false);
-	TryRuleVariations(m, lhs, rhs, max_recursion-1);
+	OptimizationCheckpoint cp_variations(this, false);
+	TryRuleVariations(lhs, rhs, max_recursion-1);
       }
     }
     if (!alt_r->Exists()) continue;
     if (may_want_to_add_negative_rule) {
-      OptimizationCheckpoint cp_negative_rule(m, true);
+      OptimizationCheckpoint cp_negative_rule(this, true);
       cp_negative_rule.logging_ = true;
       // make sure r has a smaller delay than alt_r
       if (!(rule->GetDelay() < alt_r->GetDelay())) {
@@ -388,46 +399,45 @@ void TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 	new_delay.bits_.push_back(false);
 	rule->ChangeDelay(new_delay);
       }
-      TryMakeFunctionalNegativeRule(alt_r);
+      //TryMakeFunctionalNegativeRule(alt_r);
       VLOG(1) << "::TryAddFirings Made a negative rule. "
-	      << " ln_likelihood_=" << m->GetLnLikelihood() << endl;      
+	      << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;      
     }
   }
   VLOG(1) << "::TryAddFirings removed all alternate explanations " 
-	  << " ln_likelihood_=" << m->GetLnLikelihood() << endl;
+	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
 }
 
-void TryMakeFunctionalNegativeRule(Rule *r){
+void Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
   // TODO: maybe play with the delay.
-  Model *m = r->GetModel();
   Pattern precondition 
     = Concat(r->GetPrecondition()->GetPattern(), r->GetResult());
-  if (m->FindNegativeRule(precondition, r)) return;
+  if (model_->FindNegativeRule(precondition, r)) return;
   Rule * negative_rule = 
-    m->MakeNewRule(precondition, 
+    model_->MakeNewRule(precondition, 
 		   EncodedNumber(),
 		   NEGATIVE_RULE, r,
 		   vector<Tuple>(),
 		   EncodedNumber(),
 		   EncodedNumber());
   // negative_rule->ExplainEncoding();
-  m->FixTimes();
+  model_->FixTimes();
   VLOG(1) 
-    << "added negative " << " lnlikelihood=" << m->GetLnLikelihood() << endl;
+    << "added negative " << " lnlikelihood=" << model_->GetLnLikelihood() << endl;
   // go back and forth and optimize the rule weights.   
   // TODO: optimize it all together?
   for (int rep=0; rep<2; rep++) { 
     OptimizeStrength(negative_rule);
-    VLOG(1) << "opt_neg " << " lnlikelihood=" << m->GetLnLikelihood() 
+    VLOG(1) << "opt_neg " << " lnlikelihood=" << model_->GetLnLikelihood() 
 	    << "  val=" << negative_rule->GetStrengthD() << endl;
     OptimizeStrength(r);
-    VLOG(1) << "opt_alt " << " lnlikelihood=" << m->GetLnLikelihood() 
+    VLOG(1) << "opt_alt " << " lnlikelihood=" << model_->GetLnLikelihood() 
 	    << "  val=" << r->GetStrengthD() << endl;
   }
-  if (GetVerbosity() >= 1) m->ToHTML("html");
+  if (GetVerbosity() >= 1) model_->ToHTML("html");
 }
 
-void TryRuleVariations(Model *m, const Pattern & preconditions, 
+void Optimizer::TryRuleVariations(const Pattern & preconditions, 
 		       const Pattern & result, 
 		       int max_recursion){
   if (result.size() > 1) return;
@@ -437,41 +447,43 @@ void TryRuleVariations(Model *m, const Pattern & preconditions,
     lhs[i] = result[0];
     rhs[0] = preconditions[i];
     CandidateRule cr = CanonicalizeRule(make_pair(lhs, rhs));
-    OptimizationCheckpoint cp(m, false);
-    TryAddImplicationRule(m, cr.first, cr.second, max_recursion-1);
+    OptimizationCheckpoint cp(this, false);
+    TryAddImplicationRule(cr.first, cr.second, max_recursion-1);
     if (cp.KeepChanges()) break;
   }
 }
 
-void TryAddImplicationRule(Model *m, 
+void Optimizer::TryAddImplicationRule(
 			   const Pattern & preconditions,
 			   const Pattern & result,
 			   int max_recursion){
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
-  m->GetTupleIndex()->FindSatisfactions(combined, &subs, 0, UNLIMITED_WORK, 0);
+  model_->GetTupleIndex()->FindSatisfactions(combined, &subs, 0, UNLIMITED_WORK, 0);
   set<int> precondition_vars = GetVariables(preconditions);
   set<int> result_vars = GetVariables(result);
   result_vars = result_vars-precondition_vars;
   RuleType type = result_vars.size()?CREATIVE_RULE:SIMPLE_RULE;
-  VLOG(0) << "Contemplating creating rule " 
-	  << TupleVectorToString(preconditions)
-	  << " ->" << TupleVectorToString(result) << endl;
-  if (m->FindPositiveRule(preconditions, result)) {
+  VLOG(0) 
+    << string(10-max_recursion, ' ')
+    << "Contemplating creating rule " 
+    << TupleVectorToString(preconditions)
+    << " ->" << TupleVectorToString(result) << endl;
+  if (model_->FindPositiveRule(preconditions, result)) {
     VLOG(1) << "rule already exists" << endl;
     return;
   }
-  VLOG(1) << "old ln_likelihood_=" << m->GetLnLikelihood() << endl;
-  Rule * r = m->MakeNewRule(preconditions, EncodedNumber(), 
+  VLOG(1) << "old ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+  Rule * r = model_->MakeNewRule(preconditions, EncodedNumber(), 
 			    type, 0, result, EncodedNumber(), EncodedNumber());
   // r->ExplainEncoding();
-  VLOG(1) << "new ln_likelihood_=" << m->GetLnLikelihood() << endl;
+  VLOG(1) << "new ln_likelihood_=" << model_->GetLnLikelihood() << endl;
   TryAddFirings(r, subs, max_recursion-1);
   if (!r->Exists()) return;
-  VLOG(1) << "with firings: " << m->GetLnLikelihood() << endl;
+  VLOG(1) << "with firings: " << model_->GetLnLikelihood() << endl;
   OptimizeStrength(r);
-  VLOG(1) << "optimized strength: " << m->GetLnLikelihood() << endl;
+  VLOG(1) << "optimized strength: " << model_->GetLnLikelihood() << endl;
   // ToHTML("html");
 }
 /*
@@ -577,19 +589,20 @@ ComputationResult IsEssential(Component *c, int max_work,
 }
 
 
-OptimizationCheckpoint::OptimizationCheckpoint(Model *model,
+OptimizationCheckpoint::OptimizationCheckpoint(Optimizer * optimizer,
 					       bool fix_times) {
-  model_  = model;
+  optimizer_ = optimizer;
+  model_  = optimizer_->model_;
   fix_times_ = fix_times;
   logging_ = false;
-  cp_ = model->GetChangelist()->GetCheckpoint();
+  cp_ = model_->GetChangelist()->GetCheckpoint();
   old_ln_likelihood_ = model_->GetLnLikelihood();
 }
 OptimizationCheckpoint::~OptimizationCheckpoint() {
   if (!KeepChanges()) {    
     model_->GetChangelist()->Rollback(cp_);
     if (logging_)
-      cerr << "::~OptimizationCheckpoint reverting ln_likelihood_="
+      VLOG(1) << "::~OptimizationCheckpoint reverting ln_likelihood_="
 	   << model_->GetLnLikelihood() << endl;
   }
 }
@@ -600,16 +613,16 @@ bool OptimizationCheckpoint::Better() {
 }
 bool OptimizationCheckpoint::KeepChanges() {
   if (!Better()) return false;
-  if (fix_times_) FixTimesFixCircularDependencies(model_);  
+  if (fix_times_) optimizer_->FixTimesFixCircularDependencies();
   return Better();
 }
+
 double OptimizationCheckpoint::Gain() {
   return model_->GetLnLikelihood() - old_ln_likelihood_;
 }
 
-void OptimizeStrength(Rule *r){
+void Optimizer::OptimizeStrength(Rule *r){
   // TODO, make this better and more principled
-  Model * m =  r->GetModel();
   EncodedNumber strength = r->GetStrength();
   EncodedNumber strength2 = r->GetStrength2();
   for (int which=0; which<2; which++) {
@@ -627,17 +640,17 @@ void OptimizeStrength(Rule *r){
 	EncodedNumber old_val = *to_alter;
 	VLOG(2) << "trial=" << trial 
 		<< " to_alter=" << to_alter->ToSortableString()
-		<< " ln_likelihood_=" << m->GetLnLikelihood() << endl;
+		<< " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
 	if (trial==0) { // drop last bit
 	  if (to_alter->bits_.size()==0) continue;
 	  to_alter->bits_.pop_back();	  
 	} else {
 	  to_alter->bits_.push_back(trial==2);
 	}
-	OptimizationCheckpoint cp(m, false);
+	OptimizationCheckpoint cp(this, false);
 	r->ChangeStrength(strength, strength2);
 	VLOG(2) << "   new_val=" << to_alter->ToSortableString()
-		<< " new_ln_likelihood=" << m->GetLnLikelihood() << endl;
+		<< " new_ln_likelihood=" << model_->GetLnLikelihood() << endl;
 	if (cp.KeepChanges()) {
 	  any_improvement = true;
 	  if (trial==0) avoid_trying = old_val.bits_.back()?2:1;
@@ -651,18 +664,18 @@ void OptimizeStrength(Rule *r){
   }
 }
 
-void Explain(TrueTuple *p, 
+void Optimizer::Explain(TrueTuple *p, 
 	     const set<Component *> *excluded, bool fix_times) {
-  Model *m = p->GetModel();
+
   // make sure that the TrueTuple has no causes that are not excluded.
   forall(run, p->GetCauses()) { 
     CHECK(excluded && (*excluded % (Component *)(*run)));
   }
   vector<pair<Rule *, Substitution> > explanations;
   Tuple s = p->GetTuple();
-  m->FindExplanationsForResult(s, &explanations, excluded, UNLIMITED_WORK);
+  model_->FindExplanationsForResult(s, &explanations, excluded, UNLIMITED_WORK);
   if (explanations.size()==0) {
-    Rule * r = m->GetAddNaiveRule(s.size());
+    Rule * r = model_->GetAddNaiveRule(s.size());
     Substitution right_sub;
     for (int i=0; i<(int)s.size(); i++) {
       right_sub.Add(Variable(i), s[i]);
@@ -671,34 +684,34 @@ void Explain(TrueTuple *p,
   }
   int which = 0; double best = 0;
   for (uint i=0; i<explanations.size(); i++){
-    Checkpoint cp = m->GetChangelist()->GetCheckpoint();
+    Checkpoint cp = model_->GetChangelist()->GetCheckpoint();
     explanations[i].first->AddFiring(explanations[i].second);
     OptimizeStrength(explanations[i].first);
-    if (i==0 || m->GetLnLikelihood() > best) {
+    if (i==0 || model_->GetLnLikelihood() > best) {
       which=i;
-      best = m->GetLnLikelihood();
+      best = model_->GetLnLikelihood();
     }
-    m->GetChangelist()->Rollback(cp);
+    model_->GetChangelist()->Rollback(cp);
   }
   explanations[which].first->AddFiring(explanations[which].second);
   OptimizeStrength(explanations[which].first);
 }
-void FixTimesFixCircularDependencies(Model *m) {
+void Optimizer::FixTimesFixCircularDependencies() {
   // TODO: make this smarter.  much smarter
   VLOG(1) << "Entered FixTimesFixCircularDependencies" << endl;
-  while (m->GetTimesDirty().size() || m->GetRequiredNeverHappen().size()) {
-    m->FixTimes();
-    if (m->GetRequiredNeverHappen().size()) {
+  while (model_->GetTimesDirty().size() || model_->GetRequiredNeverHappen().size()) {
+    model_->FixTimes();
+    if (model_->GetRequiredNeverHappen().size()) {
       VLOG(1) << "  explaining a required proposition" << endl;
       TrueTuple * p 
-	= (TrueTuple *)(*(m->GetRequiredNeverHappen().begin()));
-      Explain(p, &m->GetNeverHappen(), false);
+	= (TrueTuple *)(*(model_->GetRequiredNeverHappen().begin()));
+      Explain(p, &model_->GetNeverHappen(), false);
       VLOG(1) << "   explained " << p->GetID() << endl;
-      if (GetVerbosity() >= 1) m->ToHTML("html");
+      if (GetVerbosity() >= 1) model_->ToHTML("html");
     }
   }
-  m->DeleteNeverHappeningComponents();
-  CHECK(m->GetRequiredNeverHappen().size() == 0);
+  model_->DeleteNeverHappeningComponents();
+  CHECK(model_->GetRequiredNeverHappen().size() == 0);
   //if (absent_required_.size()){
   //  ToHTML("html");
   //  CHECK(absent_required_.size()==0);

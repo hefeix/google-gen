@@ -23,12 +23,14 @@
 
 // Just create the model
 ModelShell::ModelShell() {
-  m_ = new Model();
+  model_ = new Model();
+  optimizer_ = new Optimizer(model_);
 }
 
 // Whatever it does, destroy
 ModelShell::~ModelShell() {
-  delete m_;
+  delete optimizer_;
+  delete model_;
 }
 
 void ModelShell::Handle(istream * input) {
@@ -79,21 +81,21 @@ string ModelShell::Handle(string command) {
     else if (command == "RemoveID") {
       int id;
       command_stream >> id;
-      m_->GetComponent(id)->Erase();
+      model_->GetComponent(id)->Erase();
     }
     else if (command == "verify2") {
-      m_->VerifyLayer2();
+      model_->VerifyLayer2();
     }
     /*
     else if (command == "checkpoint") {
       string cname;
       command_stream >> cname;
-      checkpoints[cname] = m_->GetChangelist()->GetCheckpoint();
+      checkpoints[cname] = model_->GetChangelist()->GetCheckpoint();
     }
     else if (command == "rollback") {
       string cname;
       command_stream >> cname;
-      m_->GetChangelist()->Rollback(checkpoints[cname]);
+      model_->GetChangelist()->Rollback(checkpoints[cname]);
     }
     */
     else if (command == "spec") {
@@ -101,16 +103,16 @@ string ModelShell::Handle(string command) {
       command_stream >> fname;
       fname = "spec/" + fname + ".spec";
       ifstream finput(fname.c_str());
-      m_->ReadSpec(&finput);
+      model_->ReadSpec(&finput);
       finput.close();
-      m_->VerifyLayer2();
-      FixTimesFixCircularDependencies(m_);
-      m_->VerifyLayer2();
+      model_->VerifyLayer2();
+      optimizer_->FixTimesFixCircularDependencies();
+      model_->VerifyLayer2();
     }
     else if (command == "strength") {
       int id;
       command_stream >> id;
-      OptimizeStrength(m_->GetComponent<Rule>(id));
+      optimizer_->OptimizeStrength(model_->GetComponent<Rule>(id));
     }
     /*else if (command == "o") {
       m.OptimizeRound();
@@ -123,21 +125,21 @@ string ModelShell::Handle(string command) {
       time_t end_time = time(0) + duration;
       while (time(0) < end_time) {
 	pair<vector<Tuple>, vector<Tuple> > p 
-	  = FindRandomCandidateRule(m_, Tactic(tactic));
-	OptimizationCheckpoint cp(m_, true);
-	TryAddImplicationRule(m_, p.first, p.second, 10);	
+	  = optimizer_->FindRandomCandidateRule(Tactic(tactic));
+	OptimizationCheckpoint cp(optimizer_, true);
+	optimizer_->TryAddImplicationRule(p.first, p.second, 10);	
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "
 		  << TupleVectorToString(p.first)
 		  << " ->" << TupleVectorToString(p.second)
-		  << " model likelihood: " << m_->GetLnLikelihood()
+		  << " model likelihood: " << model_->GetLnLikelihood()
 		  << " gain=" << cp.Gain() << endl;
 	}
-	//m_->VerifyLayer2();
+	//model_->VerifyLayer2();
       }
     }
     else if (command == "verify"){
-      m_->VerifyLayer2();
+      model_->VerifyLayer2();
     }
     else if (command == "ispecific"){
       string pat;
@@ -145,13 +147,13 @@ string ModelShell::Handle(string command) {
       vector<Tuple> preconditions = StringToTupleVector(pat);
       GetLine(command_stream, &pat);
       vector<Tuple> result = StringToTupleVector(pat);
-      OptimizationCheckpoint cp(m_, true);      
-      TryAddImplicationRule(m_, preconditions, result, 10);
+      OptimizationCheckpoint cp(optimizer_, true);      
+      optimizer_->TryAddImplicationRule(preconditions, result, 10);
       if (cp.KeepChanges()) {
 	VLOG(0) << " Created rule "
 		<< TupleVectorToString(preconditions)
 		<< " ->" << TupleVectorToString(result)
-		<< " model likelihood: " << m_->GetLnLikelihood()
+		<< " model likelihood: " << model_->GetLnLikelihood()
 		<< " gain=" << cp.Gain() << endl;
       }      
     } 
@@ -168,7 +170,7 @@ string ModelShell::Handle(string command) {
       }
       for (int i=0; i<10; i++) {
 	const Tuple * s 
-	  = m_->GetTupleIndex()->GetRandomTupleContaining(terms, true);
+	  = model_->GetTupleIndex()->GetRandomTupleContaining(terms, true);
 	if(s) {
 	  cout << s->ToString() << endl;
 	}
@@ -184,31 +186,31 @@ string ModelShell::Handle(string command) {
       int tactic;
       command_stream >> tactic >> num;
       for (uint i=0; i<num; i++) {
-	CandidateRule p = FindRandomCandidateRule(m_, (Tactic)tactic);
+	CandidateRule p = optimizer_->FindRandomCandidateRule((Tactic)tactic);
       cout << TupleVectorToString(p.first) << " -> " 
 	   << TupleVectorToString(p.second) << endl;
       }
     }
     else if (command=="h"){
-      m_->ToHTML("html");
+      model_->ToHTML("html");
     }
     else if (command=="store") {
-      m_->VerifyLayer2();
+      model_->VerifyLayer2();
       system("mkdir -p stored");
       string fn;
       command_stream >> fn;
       fn = "stored/"+fn+".model";
-      m_->Store(fn);
+      model_->Store(fn);
     }
     else if (command=="load") {      
       string fn;
       command_stream >> fn;
       fn = "stored/"+fn+".model";
-      m_->Load(fn);
-      m_->VerifyLayer2();
+      model_->Load(fn);
+      model_->VerifyLayer2();
     }
     else cerr << "UNKNOWN COMMAND " << command << endl;
-    m_->FixTimes();
+    model_->FixTimes();
     //ToHTML("/Users/guest/tmp/model.html");
     cout << "?";
   }

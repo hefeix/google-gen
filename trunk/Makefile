@@ -1,6 +1,6 @@
 # This defines the compiler and standard ways to use it
 CXX = g++
-CXXFLAGS = -Wall -Wno-deprecated -g
+CXXFLAGS = -Wall -Wno-deprecated -O
 
 # These are the Gen sources, and computed object and header files
 SRC = optimization.cc hash.cc util.cc probutil.cc record.cc numbers.cc lexicon.cc tuple.cc tupleindex.cc model.cc component.cc changelist.cc prohibition.cc modelshell.cc
