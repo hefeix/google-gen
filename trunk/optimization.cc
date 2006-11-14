@@ -309,8 +309,14 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
   OptimizeStrength(rule);
   VLOG(1) << "::TryAddFirings Added " << subs.size() << " firings " 
 	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
-  
+
+  set<CandidateRule> variants;
   forall (run_r, to_remove) {
+    // this cp automatically gives the option of leaving in all of the 
+    // firings for this alternate rule (duplciate explanations)
+    OptimizationCheckpoint rule_cp(this, false);
+    rule_cp.logging_ = true;
+
     Rule * alt_r = run_r->first;
     if (alt_r == rule) continue;
     const set<Firing *> & firings = run_r->second;
@@ -341,11 +347,6 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 	    << " num_nff=" << num_first_firings
 	    << " new_nff=" << new_num_first_firings
 	    << endl;
-
-    // this cp automatically gives the option of leaving in all of the 
-    // firings for this alternate rule (duplciate explanations)
-    OptimizationCheckpoint rule_cp(this, false);
-    rule_cp.logging_ = true;
 
     forall(run, firings) {
       if ((*run)->Exists())
@@ -385,30 +386,38 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 
       // Try to make a variation on the alternate rule that switches
       // the result with one of the preconditions.  
-      if (max_recursion >0) {
-	OptimizationCheckpoint cp_variations(this, false);
-	TryRuleVariations(lhs, rhs, max_recursion-1);
-      }
-    }
-    if (!alt_r->Exists()) continue;
-    if (may_want_to_add_negative_rule) {
-      OptimizationCheckpoint cp_negative_rule(this, true);
-      cp_negative_rule.logging_ = true;
-      // make sure r has a smaller delay than alt_r
-      if (!(rule->GetDelay() < alt_r->GetDelay())) {
+      variants.insert(make_pair(lhs, rhs));
+
+      
+      if (!alt_r->Exists()) continue;
+      /*
+	if (may_want_to_add_negative_rule) {
+	OptimizationCheckpoint cp_negative_rule(this, true???);
+	cp_negative_rule.logging_ = true;
+	// make sure r has a smaller delay than alt_r
+	if (!(rule->GetDelay() < alt_r->GetDelay())) {
 	EncodedNumber new_delay = alt_r->GetDelay();
 	new_delay.bits_.push_back(false);
 	rule->ChangeDelay(new_delay);
-      }
-      //TryMakeFunctionalNegativeRule(alt_r);
-      VLOG(1) << "::TryAddFirings Made a negative rule. "
-	      << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;      
+	}
+	//TryMakeFunctionalNegativeRule(alt_r);
+	VLOG(1) << "::TryAddFirings Made a negative rule. "
+	<< " ln_likelihood_=" << model_->GetLnLikelihood() << endl;      
+	}
+      */
     }
   }
   VLOG(1) << "::TryAddFirings removed all alternate explanations " 
 	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+  if (max_recursion >0) 
+    forall(run, variants) {
+      OptimizationCheckpoint cp_variation(this, false);
+      TryRuleVariations(run->first, run->second, max_recursion-1);
+    }
+  VLOG(1) << "::TryAddFirings Added variant rules " 
+	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
 }
-
+  
 void Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
   // TODO: maybe play with the delay.
   Pattern precondition 
@@ -600,7 +609,7 @@ OptimizationCheckpoint::OptimizationCheckpoint(Optimizer * optimizer,
   old_ln_likelihood_ = model_->GetLnLikelihood();
 }
 OptimizationCheckpoint::~OptimizationCheckpoint() {
-  if (!KeepChanges()) {    
+  if (!KeepChanges()) {
     model_->GetChangelist()->Rollback(cp_);
     if (logging_)
       VLOG(1) << "::~OptimizationCheckpoint reverting ln_likelihood_="
@@ -699,7 +708,8 @@ void Optimizer::Explain(TrueTuple *p,
 }
 void Optimizer::FixTimesFixCircularDependencies() {
   // TODO: make this smarter.  much smarter
-  VLOG(1) << "Entered FixTimesFixCircularDependencies" << endl;
+  VLOG(1) << "::FixTimesFixCircularDependencies" 
+	  << " start ln_likelihood_=" << model_->GetLnLikelihood() << endl;
   while (model_->GetTimesDirty().size() || model_->GetRequiredNeverHappen().size()) {
     model_->FixTimes();
     if (model_->GetRequiredNeverHappen().size()) {
@@ -713,6 +723,8 @@ void Optimizer::FixTimesFixCircularDependencies() {
   }
   model_->DeleteNeverHappeningComponents();
   CHECK(model_->GetRequiredNeverHappen().size() == 0);
+  VLOG(1) << "::FixTimesFixCircularDependencies" 
+	  << " end ln_likelihood_=" << model_->GetLnLikelihood() << endl;
   //if (absent_required_.size()){
   //  ToHTML("html");
   //  CHECK(absent_required_.size()==0);
