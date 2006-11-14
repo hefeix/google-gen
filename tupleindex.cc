@@ -23,28 +23,39 @@
 TupleIndex::TupleIndex() {
   total_tuples_ = 0;
 }
-TupleIndex::~TupleIndex(){
-}
-const Tuple * TupleIndex::RandomTuple() const{
+
+TupleIndex::~TupleIndex(){}
+
+// Return a pointer to a random tuple
+const Tuple * TupleIndex::RandomTuple() const {
+
+  // First pick a number (0 to total_tuples-1)
   uint n = RandomInt() % total_tuples_;
+
+  // Run across the histogram till you find the right cardinality tuple
   forall(run, lengths_) {
     if (n < run->second) {
+      // We're now on the right length tuple, get all of them and...
       FullySpecifiedNode ** results;
       uint64 num_results;
       LookupInternal(AllWildcards(run->first), &results, &num_results);
       CHECK(num_results==run->second);
+      // return the nth one
       return &results[n]->tuple_;
     } else {
+      // Here we are still going forward in the tuple lengths map
       n-=run->second;
     }
   }
+
+  // This should never run
   cerr << "Total Tuples: " << total_tuples_;
   forall(run, lengths_) {
     cerr << run->first << " " << run->second << endl;
   }
-  CHECK(false); 
-  return 0;
+  CHECK(false); return 0;
 }
+
 const Tuple * 
 TupleIndex::GetRandomTupleContaining(const vector<int> & terms, 
 					   bool funky_distribution){
@@ -269,28 +280,42 @@ void TupleIndex::Remove(const Tuple & s) {
   // Delete the FullySpecifiedNode
   delete n;  
 }
+
+// *results is set to the FullySpecifiedNode** in question
+// so that we can return multiple results.
+// if num_results exists *num_results is set to their size
 void TupleIndex::LookupInternal(const Tuple & s, 
 				FullySpecifiedNode *** results, 
 				uint64 * num_results) const{
   uint64 fp = s.VariablesToWildcards().Fingerprint();
   if (s.Pattern()==0) {
+    // This is the constant tuple case, just look for it in fully_specified_
     FullySpecifiedNode *const* look = fully_specified_ % fp; 
     if (results) {
+      // Convert the iterator into a pointer to the pointer
       *results = const_cast<FullySpecifiedNode**>(look);
     }
+    // Either it's found or not
     if (num_results) *num_results = look ? 1 : 0;
   } else {
+    // This is the wildcard tuple case, find the appropriate underspecified node
     UnderspecifiedNode *const* look = underspecified_ % fp;
     if (look) {
+      // Found the node, return basically it's specifications and specification size
       UnderspecifiedNode * n = *look;
       if (results) *results = &(n->specifications_[0]);
       if (num_results) *num_results = n->specifications_.size();
     } else {
+      // Didn't find the node, no matches
       if (results) *results = 0;
       if (num_results) *num_results = 0;
     }
   }
 }
+
+// This is a much more reasonable form of lookup avoiding triple pointers!
+// Same as above, variables need not match each other so (T,$1, $1) matches
+// against (T,A,B)
 void TupleIndex::Lookup(const Tuple & s, 
 			   vector<const Tuple*> * results) {
   results->clear();
@@ -300,30 +325,42 @@ void TupleIndex::Lookup(const Tuple & s,
   for (uint i=0; i<num_results; i++) 
     results->push_back(&internal_results[i]->tuple_);
 }
+
+// This is just looking for the tuple pointer that inside the tupleindex
+// represents the found tuple. Returns 0 (NULL) if not found.
 const Tuple * TupleIndex::FindTuple(const Tuple & s) {
+  // Use the internal Lookup
   vector<const Tuple *> results;
   Lookup(s, &results);
+  // If you find more than one result, oops! was supposed to be constant tuple!
   if(results.size() > 1) {
     cerr << "More than one result for " << s.ToString() << endl;
-    CHECK(results.size() <= 1);
+    CHECK(results.size() <= 1); // crash
   }
   if (results.size()) return results[0];
   return 0;
 }
 
-
+// Eliminate the simplest tuple first, recursively call this function
+// to find matches to the pattern in the tupleindex.
 bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern, 
 				     vector<Substitution> * substitutions,
 				     uint64 * num_satisfactions, 
 				     int64 max_work,
 				     uint64 * actual_work) {
+  // Make sure the result is clean
   if (substitutions) substitutions->clear();
+
+  // If the pattern has no tuples, there is one (trivial) match
   if (pattern.size()==0) {
     if (substitutions) substitutions->push_back(Substitution());
     if (num_satisfactions) *num_satisfactions = 1;
     if (actual_work) *actual_work = 1;
     return true;
   }
+
+  // If the pattern is one tuple, with no duplicate variables,
+  // and we don't need the results, we can just look up the answer quickly
   if (pattern.size()==1 && !substitutions) {
     if (!pattern[0].HasDuplicateVariables()) {
       LookupInternal(pattern[0], 0, num_satisfactions);
@@ -331,6 +368,8 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
       return true;
     }
   }
+
+  // Begin with the clause with the least Lookup matches
   int best_clause = -1;
   int64 least_work = 0;
   uint64 num_matches;
@@ -344,26 +383,38 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
   }
   CHECK(best_clause != -1);
   LookupInternal(pattern[best_clause], &matches, &num_matches);
-  // cerr << pattern[best_clause].ToString() 
-  //     << " LookupInternal returned " << num_matches << " results\n"; 
+
+  // break out if we've done too much work reading matches
+  if (max_work != UNLIMITED_WORK && least_work > max_work) return false;
+
+  // Create a simpler pattern without the best_clause
   vector<Tuple> simplified_pattern = pattern;
   simplified_pattern.erase(simplified_pattern.begin()+best_clause);
-  if (max_work != UNLIMITED_WORK && least_work > max_work) return false;
+
   int total_work = least_work;
   uint64 total_num_satisfactions = 0;
+  // Run over the 'matches' of the best clause
   for (uint64 match=0; match<num_matches; match++){
+
+    // Reduce to a subproblem consisting of finding satisfactions to the
+    // simplified (without the best clause) and substituted 
+    // (for the current match) problem.
     vector<Tuple> substituted_pattern = simplified_pattern;
     Substitution partial_sub;
     const Tuple & pre_sub = pattern[best_clause];
     const Tuple & post_sub = matches[match]->tuple_;
+    // Compute substitution of pattern to match. None -> not a real match
     if (!ComputeSubstitution(pre_sub, post_sub, &partial_sub)) continue;
     VLOG(2) << "pre=" << pre_sub.ToString() 
 	    << " post=" << post_sub.ToString()
 	    << " partial_sub=" << partial_sub.ToString() << endl;
     partial_sub.Substitute(&substituted_pattern);
+
     uint64 additional_num_satisfactions;
     uint64 added_work = 0;
     if (substitutions) {
+      // Look for satisfactions to the simpler problem, but the substitutions
+      // are really unions of that for the best_clause and theirs
       vector<Substitution> additional_substitutions;
       if (!FindSatisfactions
 	  (substituted_pattern, 
@@ -376,22 +427,31 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
 		<< " additional=" << additional_substitutions[i].ToString();
 	additional_substitutions[i].Add(partial_sub);
 	VLOG(2) << " total=" << additional_substitutions[i].ToString() << endl;
+	// This is the merged substitution, add it in
 	substitutions->push_back(additional_substitutions[i]);
       }
     } else {
+      // If you don't require actual substitutions this is simple, 
+      // just keep looking and keeping tallies
       if (!FindSatisfactions
 	  (substituted_pattern, 
 	   0, &additional_num_satisfactions, 
 	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
 	   &added_work)) return false;
     }
+    // Add up the work done, and the number of satisfactions for this match
     total_work += added_work;
     total_num_satisfactions += additional_num_satisfactions;
   }
+
+  // Here return some housekeeping numbers, total number found and work done.
   if (num_satisfactions) *num_satisfactions = total_num_satisfactions;
   if (actual_work) *actual_work = total_work;
   return true;
 }
+
+// Just create all wildcard tuples of all lengths with the term in one position
+// and use the internal Lookup
 void TupleIndex::FindTerm(int w, vector<const Tuple *> *results){
   results->clear();
   set<const Tuple *> found;

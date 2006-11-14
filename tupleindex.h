@@ -50,15 +50,18 @@ class TupleIndex{
   void AddWrapper(Tuple t) { Add(t);}
   void RemoveWrapper(Tuple t) { Remove(t);}
 
+  // A histogram of the lengths of the tuples in the index.
+  inline const map<uint64, uint64> & Lengths() const {return lengths_; }
+
+  // returns all tuples containing a term.
+  void FindTerm(int w, vector<const Tuple* >* results); 
+
   // s is composed of constants.
   // Returns a pointer to the static internal copy of s, or NULL if absent.
   const Tuple * FindTuple(const Tuple & s);
 
   // s is a wildcard tuple. Not all wildcards must match
   void Lookup(const Tuple & s, vector<const Tuple*> * results);
-
-  // A histogram of the lengths of the tuples in the index.
-  inline const map<uint64, uint64> & Lengths() const {return lengths_; }
 
   // Searches over the index to match a pattern.
   // Pattern can contain literals and variables.  Multiple instances of the
@@ -85,9 +88,6 @@ class TupleIndex{
 					       
   const Tuple * RandomTuple() const;
 
-  // returns all tuples containing a term.
-  void FindTerm(int w, vector<const Tuple* >* results); 
-
   // for testing.
   void Shell();  
 
@@ -107,6 +107,8 @@ class TupleIndex{
   uint64 total_tuples_;
   map<uint64, uint64> lengths_; // number of stored tuples with these lengths
 
+  // Return a set of FullySpecifiedNode* that 'match' a tuple's wildcard form
+  // Doesn't require variable matching as tuples are converted to wildcard form
   void LookupInternal(const Tuple & s, 
 		      FullySpecifiedNode *** results, 
 		      uint64 * num_results) const;
