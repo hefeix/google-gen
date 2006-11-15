@@ -128,6 +128,16 @@ string ModelShell::Handle(string command) {
       command_stream >> id;
       model_->GetComponent(id)->Erase();
     }
+    else if (command == "numsat") {
+      Record r;
+      command_stream >> r;
+      Pattern p = StringToTupleVector(r["pattern"]);
+      uint64 num_sat;
+      model_->GetTupleIndex()->FindSatisfactions(p, NULL, &num_sat, 
+						 UNLIMITED_WORK, NULL);
+      cout << "Pattern=" << TupleVectorToString(p)
+	   << " num_sat=" << num_sat << endl;
+    }
     else if (command == "verify2") {
       model_->VerifyLayer2();
     }
@@ -181,7 +191,7 @@ string ModelShell::Handle(string command) {
 		  << " gain=" << cp.Gain() << endl;
 	  model_->ToHTML("html");
 	  improvement_counter_++;	  
-	  model_->Store("auto."+itoa(improvement_counter_));
+	  model_->Store("stored/auto."+itoa(improvement_counter_)+".model");
 	}
 	//model_->VerifyLayer2();
       }

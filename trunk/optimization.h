@@ -64,6 +64,12 @@ struct Optimizer{
   // Removes a firing and might remove the rule.  
   void TryRemoveFiring(Firing *f);
   
+  // Propagates the time change after we change the delay of a rule
+  // through the true tuples it causes and the negative rule sats in which
+  // they participate.
+  // This is to avoid fixing all of the times in the model.
+  void PushTimesAfterChangeDelay(Rule *rule);
+
   // Adds a bunch of firings at once and removes alternate explanations.
   void TryAddFirings(Rule * r, const vector<Substitution> & sub, 
 		     int max_recursion);

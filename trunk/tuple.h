@@ -138,6 +138,7 @@ inline uint64 Fingerprint(const Substitution & s, uint64 level = 0){
 }
 Substitution Union(const Substitution & s1, const Substitution & s2);
 
+set<int> GetVariables(const Tuple & t);
 set<int> GetVariables(const Pattern & v);
 
 // removes the tuples that have no variables

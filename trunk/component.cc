@@ -628,9 +628,9 @@ RuleSat::RuleSat(Rule * rule, const Substitution & sub)
       = sub.Restrict(GetVariables(target_precondition->pattern_));
     target_rule_sat_ = rule_->target_rule_->L1_GetAddRuleSat(restricted_sub);
     target_rule_sat_->A1_AddInhibitor(this);
-    target_rule_sat_->ComputeSetLnLikelihood();
   }
   ComputeSetTime();
+  if (rule->type_ == NEGATIVE_RULE) target_rule_sat_->ComputeSetLnLikelihood();
   ComputeSetLnLikelihood();
   model_->A1_InsertIntoComponentsByType(this);
 }
@@ -1181,9 +1181,12 @@ bool RuleSat::NeedsPurpose() const {
   return true;
 }
 
-void Component::ComputeSetTime(){
-  L1_SetTimeMaintainIndices(ComputeTime(NULL), true);
+bool Component::ComputeSetTime(){
+  Time new_time = ComputeTime(NULL);
+  bool ret = (time_ != new_time); 
+  L1_SetTimeMaintainIndices(new_time, true);
   L1_MakeTimeClean();
+  return ret;
 }
 Time Component::ComputeTime(set<Component *> *excluded) const{
   Time ret;

@@ -165,6 +165,16 @@ template <class A> set<A> Union(const set<A> & s1, const set<A> & s2){
   ret.insert(s2.begin(), s2.end());
   return ret;
 }
+// intersection of two sets
+template <class A> set<A> Intersection(const set<A> & s1, const set<A> & s2){
+  if (s2.size() < s1.size()) return Intersection(s2, s1);
+  set<A> ret;
+  forall(run, s1) {
+    if (s2 % (*run)) ret.insert(*run);
+  }
+  return ret;
+}
+
 // difference of two sets
 template <class A> set<A> operator-(const set<A> & s1, const set<A> & s2){
   set<A> ret = s1;

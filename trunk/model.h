@@ -180,6 +180,8 @@ class Model {
   bool MayBeTimeFixable() const;
 
   double GetLnLikelihood() const { return ln_likelihood_;}
+  double GetArbitraryTermLnLikelihood() const 
+  { return arbitrary_term_ln_likelihood_;}
 
   Precondition * FindPrecondition(const vector<Tuple> & tuples) const;
 
