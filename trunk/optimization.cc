@@ -387,25 +387,22 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
       // Try to make a variation on the alternate rule that switches
       // the result with one of the preconditions.  
       variants.insert(make_pair(lhs, rhs));
-
-      
       if (!alt_r->Exists()) continue;
-      /*
-	if (may_want_to_add_negative_rule) {
-	OptimizationCheckpoint cp_negative_rule(this, true???);
-	cp_negative_rule.logging_ = true;
-	// make sure r has a smaller delay than alt_r
-	if (!(rule->GetDelay() < alt_r->GetDelay())) {
+    }  
+    if (may_want_to_add_negative_rule) {
+      OptimizationCheckpoint cp_negative_rule(this, false);
+      cp_negative_rule.logging_ = true;
+      // make sure r has a smaller delay than alt_r
+      if (!(rule->GetDelay() < alt_r->GetDelay())) {
 	EncodedNumber new_delay = alt_r->GetDelay();
 	new_delay.bits_.push_back(false);
 	rule->ChangeDelay(new_delay);
-	}
-	//TryMakeFunctionalNegativeRule(alt_r);
-	VLOG(1) << "::TryAddFirings Made a negative rule. "
-	<< " ln_likelihood_=" << model_->GetLnLikelihood() << endl;      
-	}
-      */
+      }
+      TryMakeFunctionalNegativeRule(alt_r);
+      VLOG(1) << "::TryAddFirings Made a negative rule. "
+	      << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;      
     }
+
   }
   VLOG(1) << "::TryAddFirings removed all alternate explanations " 
 	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
@@ -422,19 +419,21 @@ void Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
   // TODO: maybe play with the delay.
   Pattern precondition 
     = Concat(r->GetPrecondition()->GetPattern(), r->GetResult());
-  if (model_->FindNegativeRule(precondition, r)) return;
-  Rule * negative_rule = 
-    model_->MakeNewRule(precondition, 
-		   EncodedNumber(),
-		   NEGATIVE_RULE, r,
-		   vector<Tuple>(),
-		   EncodedNumber(),
-		   EncodedNumber());
+  Rule * negative_rule = model_->FindNegativeRule(precondition, r);
+  if (!negative_rule)
+    negative_rule = 
+      model_->MakeNewRule(precondition, 
+			  EncodedNumber(),
+			  NEGATIVE_RULE, r,
+			  vector<Tuple>(),
+			  EncodedNumber(),
+			  EncodedNumber());
   // negative_rule->ExplainEncoding();
-  model_->FixTimes();
+  model_->FixTimes(); // TODO: do we need this?
   VLOG(1) 
     << "added negative " << " lnlikelihood=" << model_->GetLnLikelihood() << endl;
-  // go back and forth and optimize the rule weights.   
+  // go back and forth and optimize the rule weights of the negative rule 
+  // and the inhibited rule.
   // TODO: optimize it all together?
   for (int rep=0; rep<2; rep++) { 
     OptimizeStrength(negative_rule);
