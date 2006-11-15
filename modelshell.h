@@ -46,7 +46,5 @@ class ModelShell {
 };
 
 map<string, string> ModelShellHandleExternal(map<string, string> parameters);
-string ModelShellHandleInternal(ModelShell * ms, 
-				map<string, string> parameters);
 
 #endif

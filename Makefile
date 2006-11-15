@@ -1,6 +1,7 @@
 # This defines the compiler and standard ways to use it
 CXX = g++
 CXXFLAGS = -Wall -Wno-deprecated -O
+CXXMOSTFLAGS = -Wno-deprecated -O
 
 # These are the Gen sources, and computed object and header files
 SRC = optimization.cc hash.cc util.cc probutil.cc record.cc numbers.cc lexicon.cc tuple.cc tupleindex.cc model.cc component.cc changelist.cc prohibition.cc modelshell.cc
@@ -21,8 +22,6 @@ ifeq ($(shell uname),Linux)
    LOADABLE = -shared
 endif
 
-
-
 # These are the SWIG interface files and wrappers
 SWIGSRC = gen.i
 SWIGWRAP = $(SWIGSRC:.i=_wrap.cxx)
@@ -37,7 +36,7 @@ SWIGPYTHON = $(SWIGSRC:.i=.py)
 # This is a pattern rule for compiling python _wrap.cxx files
 # You could include the includes in the rule below at risk of ugliness
 %_wrap.o: %_wrap.cxx
-	$(CXX) $(CXXFLAGS) $(PYTHONINCLUDES) -c $<
+	$(CXX) $(CXXMOSTFLAGS) $(PYTHONINCLUDES) -c $<
 
 # Pattern rule making .o files from .cc
 %.o : %.cc
@@ -51,16 +50,14 @@ t: $(OBJ)
 _gen.so: $(OBJ) $(SWIGOBJ)
 	$(CXX) $(CXXFLAGS) $(PYTHONLINK) $(LOADABLE) $(OBJ) $(SWIGOBJ) -o _gen.so
 
-# This ensures we can be called from python
-gen: _gen.so $(SWIGPYTHON)
-	touch gen
-
 Makefile: depend
 -include depend
 
 depend: $(SRC) $(INC)
 	$(CXX) -MM $(CXXFLAGS) $(SRC) > depend
 
-.PHONY: clean
+.PHONY: clean all
 clean:
 	rm -f $(OBJ) $(SWIGOBJ) $(SWIGPYTHON) $(SWIGWRAP)
+
+all: _gen.so $(SWIGPYTHON) $(SWIGWRAP) t
