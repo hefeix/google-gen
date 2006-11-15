@@ -173,14 +173,15 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret){
   return VetteCandidateRule(r, ret, max_work);
 }
 
-bool Optimizer::VetteCandidateRule(CandidateRule r_non_canonicalized, 
+bool Optimizer::VetteCandidateRule(CandidateRule raw_candidate, 
 				   CandidateRule * simplified_rule, 
 				   int64 max_work) {
+  VLOG(1) << "Raw=" << CandidateRuleToString(raw_candidate) << endl;
   uint64 num_satisfactions;
   vector<Substitution> subs;
-  CandidateRule r = CanonicalizeRule(r_non_canonicalized);
+  CandidateRule r = CanonicalizeRule(raw_candidate);
   if ((recently_checked_ % r) 
-      && (recently_checked_[r] <= model_->GetLnLikelihood()+1.0)) return false;
+      && (recently_checked_[r] >= model_->GetLnLikelihood()-1.0)) return false;
   Pattern p = Concat(r);
   bool success = 
     model_->GetTupleIndex()->FindSatisfactions(p, &subs, &num_satisfactions,
@@ -236,14 +237,12 @@ bool Optimizer::VetteCandidateRule(CandidateRule r_non_canonicalized,
     }
   }
   if (GetVerbosity() >= 2) {
-    VLOG(2) << "::VetteCandidateRule subs=" << endl;
+    VLOG(2) << "subs=" << endl;
     for (uint i=0; i<subs.size(); i++) 
-      VLOG(2) << "::VetteCandidateRule    " << subs[i].ToString() << endl;
+      VLOG(3) << subs[i].ToString() << endl;
   }
-  VLOG(1) << "::VetteCandidateRule candidate= "
-	  << TupleVectorToString(r.first) << " -> "
-	  << TupleVectorToString(r.second) << endl;
-  VLOG(1) << "::VetteCandidateRule boring_variables="
+  VLOG(2) << "candidate= " << CandidateRuleToString(r) << endl;
+  VLOG(2) << "boring_variables="
 	  << boring_variables.ToString() << endl;
   boring_variables.Substitute(&r.first);
   boring_variables.Substitute(&r.second);
@@ -255,14 +254,13 @@ bool Optimizer::VetteCandidateRule(CandidateRule r_non_canonicalized,
   if ((recently_checked_ % r) 
       && (recently_checked_[r] <= model_->GetLnLikelihood()+1.0)) return false;
   
-  VLOG(1) << "::VetteCandidateRule max_work=" << max_work 
+  VLOG(1) << "max_work=" << max_work 
 	  << " satisfactions(combined)="
 	  << num_satisfactions << " satisfactions(preconditions)="
 	  << preconditions_num_satisfactions
-	  << " rule=" << TupleVectorToString(r.first)
-	  << "->" << TupleVectorToString(r.second)
-	  << " simplified rule=" << TupleVectorToString(simplified_rule->first)
-	  << "->" << TupleVectorToString(simplified_rule->second) << endl;
+	  << " raw=" << CandidateRuleToString(raw_candidate)
+	  << " simplified=" << CandidateRuleToString(*simplified_rule)
+	  << endl;
     
   return true;
 } 
@@ -360,7 +358,7 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     }
   }
   OptimizeStrength(rule);
-  VLOG(1) << "::TryAddFirings Added " << subs.size() << " firings " 
+  VLOG(1) << "Added " << subs.size() << " firings " 
 	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
 
   set<CandidateRule> variants;
@@ -394,7 +392,7 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 	new_num_first_firings > 0) {
       may_want_to_add_negative_rule = true;
     }
-    VLOG(1) << "::TryAddFirings alt_r_id=" << alt_r->GetID()
+    VLOG(1) << "alt_r_id=" << alt_r->GetID()
 	    << " is_creative=" << (is_creative?"t":"f")
 	    << " num_sat=" << num_satisfactions
 	    << " num_nff=" << num_first_firings
@@ -406,7 +404,7 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 	(*run)->Erase();
     }
     OptimizeStrength(alt_r);
-    VLOG(1) << "::TryAddFirings Removed " << firings.size() 
+    VLOG(1) << "Removed " << firings.size() 
 	    << " firings for rule " << alt_r->GetID()
 	    << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
     
@@ -434,7 +432,7 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 	if ((*run)->GetCauses().size() == 0) 
 	  Explain(*run, NULL, false);
       }
-      VLOG(1) << "::TryAddFirings Erased Rule " 
+      VLOG(1) << "Erased Rule " 
 	      << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
 
       // Try to make a variation on the alternate rule that switches
@@ -453,19 +451,19 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 	PushTimesAfterChangeDelay(rule);
       }
       TryMakeFunctionalNegativeRule(alt_r);
-      VLOG(1) << "::TryAddFirings Made a negative rule. "
+      VLOG(1) << "Made a negative rule. "
 	      << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;      
     }
 
   }
-  VLOG(1) << "::TryAddFirings removed all alternate explanations " 
+  VLOG(1) << "removed all alternate explanations " 
 	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
   if (max_recursion >0) 
     forall(run, variants) {
       OptimizationCheckpoint cp_variation(this, false);
       TryRuleVariations(run->first, run->second, max_recursion-1);
     }
-  VLOG(1) << "::TryAddFirings Added variant rules " 
+  VLOG(1) << "Added variant rules " 
 	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
 }
   
@@ -537,13 +535,13 @@ void Optimizer::TryAddImplicationRule(
     VLOG(1) << "rule already exists" << endl;
     return;
   }
-  VLOG(1) << "::TryAddImplicationRule before adding rule ll=" 
+  VLOG(1) << "before adding rule ll=" 
 	  << model_->GetLnLikelihood() << endl;
   double added_arbitrary_term_ll = -model_->GetArbitraryTermLnLikelihood();
   Rule * r = model_->MakeNewRule(preconditions, EncodedNumber(), 
 			    type, 0, result, EncodedNumber(), EncodedNumber());
   added_arbitrary_term_ll += model_->GetArbitraryTermLnLikelihood();
-  VLOG(1) << "::TryAddImplicationRule Rule encoding costs: "
+  VLOG(1) << "Rule encoding costs: "
 	  << r->GetPrecondition()->GetDirectPatternEncodingLnLikelihood()
 	  << " + " 
 	  << r->GetDirectPatternEncodingLnLikelihood() 
@@ -551,7 +549,7 @@ void Optimizer::TryAddImplicationRule(
 	  << added_arbitrary_term_ll
 	  << endl;
   // r->ExplainEncoding();
-  VLOG(1) << "::TryAddImplicationRule after adding rule ll=" 
+  VLOG(1) << "after adding rule ll=" 
 	  << model_->GetLnLikelihood() << endl;
   TryAddFirings(r, subs, max_recursion-1);
   if (!r->Exists()) return;
@@ -676,7 +674,7 @@ OptimizationCheckpoint::~OptimizationCheckpoint() {
   if (!KeepChanges()) {
     model_->GetChangelist()->Rollback(cp_);
     if (logging_)
-      VLOG(1) << "::~OptimizationCheckpoint reverting ln_likelihood_="
+      VLOG(1) << "reverting ln_likelihood_="
 	   << model_->GetLnLikelihood() << endl;
   }
 }
@@ -772,8 +770,7 @@ void Optimizer::Explain(TrueTuple *p,
 }
 void Optimizer::FixTimesFixCircularDependencies() {
   // TODO: make this smarter.  much smarter
-  VLOG(1) << "::FixTimesFixCircularDependencies" 
-	  << " start ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+  VLOG(1) << " start ln_likelihood_=" << model_->GetLnLikelihood() << endl;
   while (model_->GetTimesDirty().size() || model_->GetRequiredNeverHappen().size()) {
     model_->FixTimes();
     if (model_->GetRequiredNeverHappen().size()) {
@@ -787,8 +784,7 @@ void Optimizer::FixTimesFixCircularDependencies() {
   }
   model_->DeleteNeverHappeningComponents();
   CHECK(model_->GetRequiredNeverHappen().size() == 0);
-  VLOG(1) << "::FixTimesFixCircularDependencies" 
-	  << " end ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+  VLOG(1) << " end ln_likelihood_=" << model_->GetLnLikelihood() << endl;
   //if (absent_required_.size()){
   //  ToHTML("html");
   //  CHECK(absent_required_.size()==0);
