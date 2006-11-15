@@ -171,6 +171,7 @@ Model::Model(){
   ln_likelihood_ = 0.0;
   arbitrary_term_ln_likelihood_ = 0.0;
   total_arbitrary_terms_ = 0;
+  old_style_display_ = false;
 }
 
 Model::~Model(){
@@ -458,6 +459,20 @@ Record Model::ModelInfo() const{
   r["Term Counts (arbitrary terms)"] = awc;
   return r;  
 }
+
+string Model::DLinkBar() const {
+  string ret;
+  ret += "<a href=\"command=showmodel\"> MODEL </a>";
+  for (uint i=0; i<NUM_COMPONENT_TYPES; i++) {
+    ComponentType ct = ComponentType(i);
+    string cts = ComponentTypeToString(ct);
+    ret += "<a href=command=showcomponentsoftype&type=" + cts 
+      + ">" + cts + "</a> ";
+  }
+  ret += "<br>";
+  return ret;
+}
+
 string Model::LinkBar() const{
   string ret;
   ret += "<a href=model.html>MODEL</a> ";
@@ -469,7 +484,27 @@ string Model::LinkBar() const{
   ret += "<br>";
   return ret;
 }
+
+void Model::ToHTMLByComponentType
+(stringstream& out, const set<ComponentType>& ct) {
+
+  map<ComponentType, vector<Record> > m;
+  forall(run, id_to_component_) {
+    Component * c = run->second;
+    if (ct % c->Type()) 
+      m[c->Type()].push_back(c->RecordForDisplay());
+  }
+  forall(run, m) {
+    string type_name = ComponentTypeToString(run->first);
+    out << "<h1>" << type_name << "</h1>" << endl << RecordVectorToHTMLTable(run->second);
+  }
+}
+
 void Model::ToHTML(string dirname) const {
+
+  Model * cthis = const_cast<Model*>(this);
+  cthis->old_style_display_ = true;
+
   system(("mkdir -p " + dirname).c_str());
   ofstream output;
   output.open((dirname+"/model.html").c_str());
@@ -490,6 +525,7 @@ void Model::ToHTML(string dirname) const {
 	   << endl << RecordVectorToHTMLTable(run->second);
     output.close();
   }
+  cthis->old_style_display_ = false;
 }
 
 void Model::VerifyLikelihood() const{

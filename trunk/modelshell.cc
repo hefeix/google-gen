@@ -41,28 +41,72 @@ void ModelShell::Handle(istream * input) {
   }
 }
 
+// This is mostly to view the model
 map<string,string> ModelShellHandleExternal(map<string, string> parameters) {
+
+  // Create the modelshell if need be
   static ModelShell * ms = NULL;
   if (!ms) ms = new ModelShell;
 
-  // Pull out the command string
-  string command = parameters["command"];
-
-  // This is pretty ugly, encapsulate streambuf for cout
+  // This is pretty ugly, encapsulate streambuf for cerr
+  // then run the command, then rereplace the streambuff
   stringstream cerr_string_stream;
   streambuf *errbuf = cerr.rdbuf(cerr_string_stream.rdbuf());
-
-  // Call the command and get the usual return string
-  string ret;
-  ret = ms->Handle(command);
-
-  // Rereplace cout stuff
+  string ret = ms->HandleHtml(parameters); // run the command
   cerr.rdbuf(errbuf);
 
-  // Now append the return code to cout
+  // Make the return map and return
   map<string, string> retmap;
-  retmap["cerr"] = cerr_string_stream.str();
+  retmap["cerr"] = cerr_string_stream.str(); retmap["html"] = ret;
   return retmap;
+}
+
+// This just returns html based on a map
+string ModelShell::HandleHtml(map<string, string> params) {
+
+  string command = params["command"];
+  stringstream ret;
+
+  // This is the default action, show the model, or if no model, ask for one
+  if (command == "") {
+    if (model_->GetNumTrueTuples() == 0) {
+      ret << "<form method=get>";
+      ret << "Model File:";
+      ret << "<input type=text name=filename>";
+      ret << "<input type=hidden name=command value=loadmodel>";
+      ret << "</form>";
+    }
+    command = "showmodel";
+  }
+
+  if (command == "loadmodel") {
+    string fn;
+    fn = "stored/" + params["filename"] + ".model";
+    model_->Load(fn);
+    model_->VerifyLayer2();
+    command = "showmodel";
+  }
+
+  // Make all the show commands last
+  ret << model_->DLinkBar();
+
+  if (command == "showcomponentsoftype") {
+    set<ComponentType> ct;
+    ct.insert(StringToComponentType(params["type"]));
+    model_->ToHTMLByComponentType(ret, ct);
+  }
+
+  // Show one component
+  if (command == "showcomponent") {
+    uint id = atoi(params["id"]);
+    Component * c = model_->GetComponent(id);
+    if (c) ret << RecordToHTMLTable(c->RecordForDisplay());
+  }
+
+  // This should be last :)
+  if (command == "showmodel") ret << RecordToHTMLTable(model_->ModelInfo());
+
+  return ret.str();
 }
 
 string ModelShell::Handle(string command) {
