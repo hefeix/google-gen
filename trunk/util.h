@@ -47,7 +47,7 @@
 // For logging
 int GetVerbosity();
 void SetVerbosity(int v);
-#define VLOG(N) if (GetVerbosity() >=N) cerr 
+#define VLOG(N) if (GetVerbosity() >=N) cerr << __FUNCTION__ << ":" << __LINE__
 
 typedef unsigned long long uint64;
 typedef unsigned long uint32;
