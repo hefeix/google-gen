@@ -220,6 +220,10 @@ Pattern StringToTupleVector(const string & s){
   for (uint i=0; i<v.size(); i++) ret.push_back(StringToTuple(v[i]));
   return ret;
 }
+string CandidateRuleToString(const CandidateRule & r){
+  return TupleVectorToString(r.first) + "->" + TupleVectorToString(r.second);
+}
+
 string ToString(const Tuple & s, const Substitution & sub){
   string ret;
   ret += "[ ";

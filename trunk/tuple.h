@@ -98,8 +98,6 @@ inline static CandidateRule SplitOffLast(const Pattern & p) {
   return make_pair(RemoveFromVector(p, p.size()-1), 
 		   Pattern(1, p.back())); }
 
-
-
 // a substitution from terms to terms.
 // either may be a variable or a constant term
 struct Substitution {
@@ -152,6 +150,7 @@ set<int> GetAllTerms(const Pattern & v);
 
 Tuple StringToTuple(const string & s);
 string TupleVectorToString(const Pattern &v);
+string CandidateRuleToString(const CandidateRule &c);
 Pattern StringToTupleVector(const string & s);
 // shows both unsubstituted and substituted variables (for display)
 string ToString(const Tuple & s, const Substitution & sub); 
