@@ -25,6 +25,7 @@
 ModelShell::ModelShell() {
   model_ = new Model();
   optimizer_ = new Optimizer(model_);
+  improvement_counter_ = 0;
 }
 
 // Whatever it does, destroy
@@ -134,9 +135,14 @@ string ModelShell::Handle(string command) {
 		  << " ->" << TupleVectorToString(p.second)
 		  << " model likelihood: " << model_->GetLnLikelihood()
 		  << " gain=" << cp.Gain() << endl;
+	  model_->ToHTML("html");
+	  improvement_counter_++;	  
+	  model_->Store("auto."+itoa(improvement_counter_));
 	}
 	//model_->VerifyLayer2();
       }
+      model_->ToHTML("html");
+      
     }
     else if (command == "verify"){
       model_->VerifyLayer2();
@@ -147,15 +153,18 @@ string ModelShell::Handle(string command) {
       command_stream >> r;
       vector<Tuple> preconditions = StringToTupleVector(r["lhs"]);
       vector<Tuple> result = StringToTupleVector(r["rhs"]);
-      OptimizationCheckpoint cp(optimizer_, true);      
-      optimizer_->TryAddImplicationRule(preconditions, result, 10);
-      if (cp.KeepChanges()) {
-	VLOG(0) << " Created rule "
-		<< TupleVectorToString(preconditions)
-		<< " ->" << TupleVectorToString(result)
+      {
+	OptimizationCheckpoint cp(optimizer_, true);
+	optimizer_->TryAddImplicationRule(preconditions, result, 10);
+	if (cp.KeepChanges()) {
+	  VLOG(0) << " Created rule "
+		  << TupleVectorToString(preconditions)
+		  << " ->" << TupleVectorToString(result)
 		<< " model likelihood: " << model_->GetLnLikelihood()
-		<< " gain=" << cp.Gain() << endl;
-      }      
+		  << " gain=" << cp.Gain() << endl;
+	}
+      }
+      model_->ToHTML("html");
     } 
     else if (command=="rs"){ // random tuple
       string l;

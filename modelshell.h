@@ -41,6 +41,7 @@ class ModelShell {
   // This is the model we're working on
   Model * model_;
   Optimizer * optimizer_;
+  int improvement_counter_;
 };
 
 map<string, string> ModelShellHandleExternal(map<string, string> parameters);
