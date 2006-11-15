@@ -161,11 +161,17 @@ Substitution Union(const Substitution & s1, const Substitution & s2){
   u.Add(s2);
   return u;
 }
+set<int> GetVariables(const Tuple &t) {
+  set<int> ret;
+  for (uint i=0; i<t.size(); i++)
+    if (IsVariable(t[i])) ret.insert(t[i]);
+  return ret;
+}
 set<int> GetVariables(const Pattern & v) {
   set<int> ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
-      if (v[i][j]<0) ret.insert(v[i][j]);
+      if (IsVariable(v[i][j])) ret.insert(v[i][j]);
   return ret;
 }
 Pattern RemoveVariableFreeTuples(const Pattern &v) {

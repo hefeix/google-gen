@@ -118,7 +118,8 @@ class Component{
   // This function computes and sets the time for this component, and makes
   // the dirty bit for this component false.  It may make the dirty bits 
   // for other components true.
-  void ComputeSetTime(); 
+  // return true if the time changed.
+  bool ComputeSetTime(); 
   // Computes and sets the ln_likelihood_ for this component, and adjusts
   // the total ln likelihood of the model. 
   void ComputeSetLnLikelihood();
@@ -305,6 +306,9 @@ class Precondition : public Component {
   Rule * FindNegativeRule(Rule * target_rule) const;
   int GetNumSatisfactions() const { return num_satisfactions_;}
   const Pattern & GetPattern() const { return pattern_;}
+  double GetDirectPatternEncodingLnLikelihood() const {
+    return direct_pattern_encoding_ln_likelihood_;
+  }
 
   // TUPLE ENCODING STUFF
   // figures out what tuples cause the precondition under the tuple encoding.
@@ -419,6 +423,7 @@ class Satisfaction : public Component {
   vector<vector<Component *> > TemporalCodependents() const; // Preconditions, tuples
   vector<Component *> Purposes() const; // the rule_sats
   bool HasPurpose() const;
+  const set<RuleSat *> & GetRuleSats() const { return rule_sats_;}
 
 
  private:
@@ -525,7 +530,9 @@ class Rule : public Component{
   RuleType GetRuleType() const { return type_;}
   const Pattern & GetResult() const { return result_;}
   bool IsUniversalRule() const;
-
+  double GetDirectPatternEncodingLnLikelihood() const {
+    return direct_pattern_encoding_ln_likelihood_;
+  }
  private:
   // ----- CONSTRUCTOR(S) ----- Rule
 
@@ -650,7 +657,8 @@ class RuleSat : public Component{ // an instance of a rule coming true
   double LnLikelihood() const;
   bool HasPurpose() const;
   const map<Substitution, Firing *> & GetFirings() const { return firings_;}
-  
+  const Rule * GetRule() const { return rule_;}
+
  private:
 
 
@@ -773,7 +781,8 @@ class TrueTuple : public Component{
   const set<Firing *> & GetCauses() const { return causes_;}
   int IsRequired() const { return required_count_; }
   const Tuple & GetTuple() const { return tuple_;}
-
+  const set<Satisfaction *> & GetSatisfactions() const { return satisfactions_;}
+  
  private:
 
 

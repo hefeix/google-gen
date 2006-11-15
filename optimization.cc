@@ -119,7 +119,8 @@ bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic){
 */
 
 bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret){
-  int64 max_work = min ((uint)(10/pow(RandomFraction(), 1.0)), 5  * (uint)model_->GetNumTrueTuples());
+  int64 max_work = min ((uint)(10/pow(RandomFraction(), 1.0)), 
+			5  * (uint)model_->GetNumTrueTuples());
   uint num_clauses = 1;
   while (RandomFraction() < 0.7) num_clauses++;  
   vector<Tuple> p;
@@ -140,7 +141,7 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret){
       tries2--; if (tries2<0) break;
       int clause = rand() % p.size();
       int term_in_clause 
-	= (RandomFraction()<0.05)?0:(1+(rand() % (p[clause].size()-1)));
+	= (RandomFraction()<0.02)?0:(1+(rand() % (p[clause].size()-1)));
       int w = p[clause][term_in_clause];
       if (w<0) continue;
       anchors.insert(w);
@@ -161,7 +162,7 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret){
   for (uint i=0; i<p.size(); i++) 
     for (uint j=0; j<p[i].size(); j++)
       if (p[i][j]>=0) {
-	double make_var_prob = (j==0)?0.05:0.5;
+	double make_var_prob = (j==0)?0.01:0.5;
 	if (RandomFraction() < make_var_prob) {
 	  sub.Add(p[i][j], Variable(next_var));
 	  next_var++;
@@ -169,19 +170,18 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret){
 	}
       }
   CandidateRule r = SplitOffLast(p);
-  CandidateRule simplified_rule;
   return VetteCandidateRule(r, ret, max_work);
 }
 
-bool Optimizer::VetteCandidateRule(CandidateRule r, 
+bool Optimizer::VetteCandidateRule(CandidateRule r_non_canonicalized, 
 				   CandidateRule * simplified_rule, 
 				   int64 max_work) {
-  vector<Tuple> p = Concat(r);
   uint64 num_satisfactions;
   vector<Substitution> subs;
-  r = CanonicalizeRule(r);
+  CandidateRule r = CanonicalizeRule(r_non_canonicalized);
   if ((recently_checked_ % r) 
       && (recently_checked_[r] <= model_->GetLnLikelihood()+1.0)) return false;
+  Pattern p = Concat(r);
   bool success = 
     model_->GetTupleIndex()->FindSatisfactions(p, &subs, &num_satisfactions,
 					  max_work, 0);
@@ -190,26 +190,36 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   if (num_satisfactions < 2) return false;
   
   // check that the preconditions aren't too much work to searh for.
-  vector<Tuple> preconditions = r.first;
   uint64 preconditions_num_satisfactions = 0;
   bool preconditions_success = 
-    model_->GetTupleIndex()->FindSatisfactions(preconditions, 0, 
-					  &preconditions_num_satisfactions, 
-					  max_work, 0);
+    model_->GetTupleIndex()->FindSatisfactions
+    (r.first, 0, 
+     &preconditions_num_satisfactions, 
+     max_work, 0);
   if (max_work>=0 && preconditions_num_satisfactions > (uint64)max_work) 
     preconditions_success = false;
   if (!preconditions_success) return false;
-  for (uint i=0; i<preconditions.size(); i++) {
-    vector<Tuple> simplified_preconditions 
-      = RemoveFromVector(preconditions, i);
-    uint64 simplified_num_satisfactions = 0;
-    if (model_->GetTupleIndex()->FindSatisfactions(simplified_preconditions, 0, 
-					     &simplified_num_satisfactions, 
-					     max_work, 0)) {
-      if (simplified_num_satisfactions == preconditions_num_satisfactions){
-	preconditions = RemoveFromVector(preconditions, i);
-	p = RemoveFromVector(p, i);
-	i--;
+  // Try to remove preconditions that are not very restrictive.
+  bool any_removed = true;
+  while (any_removed) {
+    any_removed = false;
+    for (uint i=0; i<r.first.size(); i++) {
+      vector<Tuple> simplified_preconditions = RemoveFromVector(r.first, i);
+      // if a variable is in the result and occurs only in this clause
+      // of the precondition, then this clause is necessary.
+      if ((Intersection(GetVariables(r.first[i]), GetVariables(r.second))
+	   - GetVariables(simplified_preconditions)).size()) continue;
+      uint64 simplified_num_satisfactions = 0;
+      if (model_->GetTupleIndex()->FindSatisfactions
+	  (simplified_preconditions, 0, 
+	   &simplified_num_satisfactions, 
+	   max_work, 0)) {
+	if (simplified_num_satisfactions 
+	    <= preconditions_num_satisfactions * 1.1){
+	  r.first = RemoveFromVector(r.first, i);	  
+	  i--;
+	  any_removed = true;
+	}
       }
     }
   }
@@ -225,6 +235,16 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
       boring_variables.Add(run->first, *run->second.begin());
     }
   }
+  if (GetVerbosity() >= 2) {
+    VLOG(2) << "::VetteCandidateRule subs=" << endl;
+    for (uint i=0; i<subs.size(); i++) 
+      VLOG(2) << "::VetteCandidateRule    " << subs[i].ToString() << endl;
+  }
+  VLOG(1) << "::VetteCandidateRule candidate= "
+	  << TupleVectorToString(r.first) << " -> "
+	  << TupleVectorToString(r.second) << endl;
+  VLOG(1) << "::VetteCandidateRule boring_variables="
+	  << boring_variables.ToString() << endl;
   boring_variables.Substitute(&r.first);
   boring_variables.Substitute(&r.second);
   if (GetVariables(r.second).size()==0) return false;
@@ -235,7 +255,8 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   if ((recently_checked_ % r) 
       && (recently_checked_[r] <= model_->GetLnLikelihood()+1.0)) return false;
   
-  VLOG(1) << "max_work=" << max_work << " satisfactions(combined)="
+  VLOG(1) << "::VetteCandidateRule max_work=" << max_work 
+	  << " satisfactions(combined)="
 	  << num_satisfactions << " satisfactions(preconditions)="
 	  << preconditions_num_satisfactions
 	  << " rule=" << TupleVectorToString(r.first)
@@ -281,6 +302,38 @@ void Optimizer::TryRemoveFiring(Firing *f){
     OptimizationCheckpoint cp(this, false);
     r->Erase();
   }
+}
+
+// Propagates the time change after we change the delay of a rule
+// through the true tuples it causes and the negative rule sats in which
+// they participate.
+// This is to avoid fixing all of the times in the model.
+void Optimizer::PushTimesAfterChangeDelay(Rule *rule){
+  // Push the time change up through the consequences of the rule.	
+  // RecomputeTimesThroughTrueTuples(rule);
+  
+  forall(run_rs, rule->GetRuleSats()) {
+    RuleSat * rs = run_rs->second;
+    // the times of the rule sats are already updated.
+    //if (!rs->ComputeSetTime()) continue;
+    forall(run_f, rs->GetFirings()) {
+      Firing * f = run_f->second;
+      if (!f->ComputeSetTime()) continue;
+      forall(run_tt, f->GetTrueTuples()){
+	TrueTuple * tt = *run_tt;
+	if (!tt->ComputeSetTime()) continue;
+	forall(run_sat, tt->GetSatisfactions()) {
+	  Satisfaction *sat = *run_sat;
+	  if (!sat->ComputeSetTime()) continue;
+	  forall(run_neg_rs, sat->GetRuleSats()) {
+	    RuleSat * neg_rs = *run_neg_rs;
+	    if (neg_rs->GetRule()->GetRuleType() == NEGATIVE_RULE) 
+	      neg_rs->ComputeSetTime();
+	  }
+	}
+      }
+    }
+  }  
 }
 
 void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
@@ -397,6 +450,7 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
 	EncodedNumber new_delay = alt_r->GetDelay();
 	new_delay.bits_.push_back(false);
 	rule->ChangeDelay(new_delay);
+	PushTimesAfterChangeDelay(rule);
       }
       TryMakeFunctionalNegativeRule(alt_r);
       VLOG(1) << "::TryAddFirings Made a negative rule. "
@@ -429,7 +483,7 @@ void Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
 			  EncodedNumber(),
 			  EncodedNumber());
   // negative_rule->ExplainEncoding();
-  model_->FixTimes(); // TODO: do we need this?
+  //model_->FixTimes(); // TODO: do we need this?
   VLOG(1) 
     << "added negative " << " lnlikelihood=" << model_->GetLnLikelihood() << endl;
   // go back and forth and optimize the rule weights of the negative rule 
@@ -483,16 +537,27 @@ void Optimizer::TryAddImplicationRule(
     VLOG(1) << "rule already exists" << endl;
     return;
   }
-  VLOG(1) << "old ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+  VLOG(1) << "::TryAddImplicationRule before adding rule ll=" 
+	  << model_->GetLnLikelihood() << endl;
+  double added_arbitrary_term_ll = -model_->GetArbitraryTermLnLikelihood();
   Rule * r = model_->MakeNewRule(preconditions, EncodedNumber(), 
 			    type, 0, result, EncodedNumber(), EncodedNumber());
+  added_arbitrary_term_ll += model_->GetArbitraryTermLnLikelihood();
+  VLOG(1) << "::TryAddImplicationRule Rule encoding costs: "
+	  << r->GetPrecondition()->GetDirectPatternEncodingLnLikelihood()
+	  << " + " 
+	  << r->GetDirectPatternEncodingLnLikelihood() 
+	  << " + " 
+	  << added_arbitrary_term_ll
+	  << endl;
   // r->ExplainEncoding();
-  VLOG(1) << "new ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+  VLOG(1) << "::TryAddImplicationRule after adding rule ll=" 
+	  << model_->GetLnLikelihood() << endl;
   TryAddFirings(r, subs, max_recursion-1);
   if (!r->Exists()) return;
-  VLOG(1) << "with firings: " << model_->GetLnLikelihood() << endl;
+  VLOG(1) << "after TryAddFirings: ll=" << model_->GetLnLikelihood() << endl;
   OptimizeStrength(r);
-  VLOG(1) << "optimized strength: " << model_->GetLnLikelihood() << endl;
+  VLOG(1) << "after OptimizeStrength: ll=" << model_->GetLnLikelihood() << endl;
   // ToHTML("html");
 }
 /*
