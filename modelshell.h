@@ -22,6 +22,7 @@
 #include "util.h"
 #include "model.h"
 #include "optimization.h"
+#include "sys/stat.h"
 
 // This is used to give external commands to a model and receive information
 // about a model
@@ -41,6 +42,8 @@ class ModelShell {
 
   // This is the model we're working on
   Model * model_;
+  string model_filename_;
+  time_t model_last_written_;
   Optimizer * optimizer_;
   int improvement_counter_;
 };

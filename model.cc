@@ -175,6 +175,7 @@ Model::Model(){
 }
 
 Model::~Model(){
+    changelist_.Rollback(0);
 }
 
 Component * Model::GetComponent(int id) const{

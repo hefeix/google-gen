@@ -23,9 +23,11 @@
 
 // Just create the model
 ModelShell::ModelShell() {
-  model_ = new Model();
+  model_ = 0;
   optimizer_ = new Optimizer(model_);
   improvement_counter_ = 0;
+  model_filename_ = "";
+  model_last_written_ = 0;
 }
 
 // Whatever it does, destroy
@@ -61,30 +63,58 @@ map<string,string> ModelShellHandleExternal(map<string, string> parameters) {
   return retmap;
 }
 
+// A helper function
+string FilenameEntry() {
+  stringstream ret;
+  ret << "<form method=get>";
+  ret << "Model File:";
+  ret << "<input type=text name=filename>";
+  ret << "<input type=hidden name=command value=loadmodel>";
+  ret << "</form>";
+  return ret.str();
+}
+
 // This just returns html based on a map
 string ModelShell::HandleHtml(map<string, string> params) {
 
   string command = params["command"];
   stringstream ret;
 
-  // This is the default action, show the model, or if no model, ask for one
+  // This is the default action, ask for a filename, and show the model
   if (command == "") {
-    if (model_->GetNumTrueTuples() == 0) {
-      ret << "<form method=get>";
-      ret << "Model File:";
-      ret << "<input type=text name=filename>";
-      ret << "<input type=hidden name=command value=loadmodel>";
-      ret << "</form>";
-    }
+    ret << FilenameEntry();
     command = "showmodel";
   }
 
+  // Load a model
+  struct stat statbuf; // for getting when a model was written
+
   if (command == "loadmodel") {
-    string fn;
-    fn = "stored/" + params["filename"] + ".model";
-    model_->Load(fn);
+    model_filename_ = "stored/" + params["filename"] + ".model";
+    stat(model_filename_.c_str(), &statbuf);
+    if (model_) delete model_;
+    model_ = new Model();
+    model_->Load(model_filename_);
     model_->VerifyLayer2();
+    model_last_written_ = statbuf.st_mtime;
+    ret << "Loaded Model <br>";
     command = "showmodel";
+  }
+
+  // That's all you can do without a model
+  if (model_ == 0) return ret.str();
+
+  // If the model is out of date, reload the model
+  if (!(model_filename_ == "")) {
+    stat(model_filename_.c_str(), &statbuf);
+    if (statbuf.st_mtime != model_last_written_) {
+      if (model_) delete model_; 
+      model_ = new Model();
+      model_->Load(model_filename_); 
+      model_->VerifyLayer2();
+      model_last_written_ = statbuf.st_mtime;
+      ret << "Reloaded Model <br>";
+    }
   }
 
   // Make all the show commands last
