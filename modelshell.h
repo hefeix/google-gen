@@ -35,6 +35,7 @@ class ModelShell {
   // Various handling commands you can call
   void Handle(istream * input);
   string Handle(string command);
+  string HandleHtml(map<string, string> parameters);
 
  private:
 
@@ -45,5 +46,7 @@ class ModelShell {
 };
 
 map<string, string> ModelShellHandleExternal(map<string, string> parameters);
+string ModelShellHandleInternal(ModelShell * ms, 
+				map<string, string> parameters);
 
 #endif

@@ -41,7 +41,7 @@ ComponentType StringToComponentType(const string & s) {
   for (uint i=0; i<NUM_COMPONENT_TYPES; i++) {
     if (s==ComponentTypeName[i]) return (ComponentType)i;
   }
-  CHECK(false);
+  // CHECK(false); 
   return NUM_COMPONENT_TYPES;
 }
 string ComponentTypeToString(ComponentType t) { 
@@ -883,9 +883,13 @@ ComponentType TrueTuple::Type() const { return TRUETUPLE; }
 string Component::TypeName() const { return ComponentTypeToString(Type());}
 
 string Component::HTMLLink(string text) const{
-  return string() + "<a href=" + TypeName()
-    + ".html#" + itoa(id_) + ">" + text + "</a>";
+  if (model_->old_style_display_)
+    return string() + "<a href=" + TypeName()
+      + ".html#" + itoa(id_) + ">" + text + "</a>";
+  return string() + "<a href=command=showcomponent&id="
+    + itoa(id_) + ">" + text + "</a>";
 }
+
 Record Component::RecordForStorge() const{
   Record r = RecordForStorageSubclass();  
   r["id"] = itoa(id_);  

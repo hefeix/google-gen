@@ -8,7 +8,10 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 class MyHandler(BaseHTTPRequestHandler):
    def do_GET(self):
       params = {}
-      params = cgi.parse_qs(self.path[1:])
+      parsed_path = self.path[1:]
+      if (parsed_path[0:1] == "?"):
+         parsed_path = parsed_path[1:]
+      params = cgi.parse_qs(parsed_path)
       params_flat = {}
       for p in params:
          params_flat[p] = (params[p])[0]
@@ -16,10 +19,12 @@ class MyHandler(BaseHTTPRequestHandler):
       self.send_response(200)
       self.send_header('Content-type', 'text/html')
       self.end_headers()
-      self.wfile.write("<PRE>\n");
-      self.wfile.write(results['cerr']);
+      self.wfile.write(results['html'])
+      self.wfile.write("<HR><PRE>\n")
+      self.wfile.write(params_flat)
+      self.wfile.write("<HR>")
+      self.wfile.write(results['cerr'])
       self.wfile.write("</PRE>\n");
-      self.wfile.write(" received")
       return
            
 def main():

@@ -224,13 +224,21 @@ class Model {
   // I/O
   // writes the model to a file (including the spec)
   void Store(string filename) const;
+
   // reads the model from a file (including ths spec)
   void Load(string filename);
 
   // A bar of links to the files in the HTML display.
   string LinkBar() const;
+  string DLinkBar() const;
+
   // Writes the model to html in the given relative directory.
   void ToHTML(string dirname) const;
+
+  // Writes all components of one type as HTML to a string
+  void ToHTMLByComponentType(stringstream& out, 
+			     const set<ComponentType>& ct);
+
   // A record full of statistics about the model as a whole
   Record ModelInfo() const;
   
@@ -310,6 +318,7 @@ class Model {
   double ln_likelihood_;
 
   Changelist changelist_;
+  bool old_style_display_;
 };
 
 #endif
