@@ -39,22 +39,23 @@ Optimizer::Optimizer(Model *model){
   }
   }*/
 
-pair<vector<Tuple>, vector<Tuple> >
-Optimizer::FindRandomCandidateRule(Tactic tactic){
-  pair<vector<Tuple>, vector<Tuple> > ret;
-  while (!MaybeFindRandomCandidateRule(&ret, tactic));
-  recently_checked_[ret] = model_->GetLnLikelihood();
-  return ret;
+bool Optimizer::FindRandomCandidateRule(CandidateRule *ret, Tactic tactic,
+					int time_limit, string * comments){
+  time_t end_time = time(NULL) + time_limit;
+  while (!MaybeFindRandomCandidateRule(ret, tactic, comments)){
+    if (time(NULL) >= end_time) return false;
+  }
+  recently_checked_[*ret] = model_->GetLnLikelihood();
+  return true;
 }
 bool Optimizer::MaybeFindRandomCandidateRule(CandidateRule *ret, 
-					     Tactic tactic){
+					     Tactic tactic, string *comments){
   switch (tactic) {
   case NEW_RULE:
-    return MaybeFindRandomNewRule(ret);
+    return MaybeFindRandomNewRule(ret, comments);
     break;
   default:
-    CHECK(false);
-    //return MaybeFindRandomVariantRule(ret, tactic);
+    return MaybeFindRandomVariantRule(ret, tactic, comments);
     break;
   }
   return false;
@@ -65,49 +66,58 @@ TrueTuple * Optimizer::GetRandomTrueTuple(){
   return ret;
 }
 
-/*
-bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic){
+
+bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
+					   string *comments){
   int64 max_work = (uint)(100/pow(RandomFraction(), 1.0));
-  TrueTuple * tp = GetRandomTrueTuple(m);
-  CHECK(tp->causes_.size());
-  Firing * f = *(tp->causes_.begin());
-  RuleSat * rs = f->rule_sat_;
-  Rule * r = rs->rule_;
-  CandidateRule cand = make_pair(r->precondition_->clauses_, r->result_);
+  TrueTuple * tp = GetRandomTrueTuple();
+  CHECK(tp->GetCauses().size());
+  Firing * f = *(tp->GetCauses().begin());
+  RuleSat * rs = f->GetRuleSat();
+  const Rule * r = rs->GetRule();
+  CandidateRule cand = make_pair(r->GetPrecondition()->GetPattern(), 
+				 r->GetResult());
   Substitution full_sub = f->GetFullSubstitution();
   switch (tactic) {
   case SPECIFY_ONE: {
     RandomElement(assignment, full_sub.sub_);
     Substitution little_sub;
+    *comments = "Specialization of " + CandidateRuleToString(cand);
     little_sub.Add(assignment->first, assignment->second);
     little_sub.Substitute(&cand);
-    return VetteCandidateRule(cand, ret, max_work);
-    break;
+    return VetteCandidateRule(cand, ret, max_work, comments);
   }
   case GENERALIZE_ONE: {
     int literal = -1;
+    // This loop just tries to find a random literal in the CandidateRule
     for (int try_num=0; try_num<10; try_num++) {
+      // pick either the precondition or the result
       const vector<Tuple> & v = ((rand()%2)?cand.first:cand.second);
+      // but not an empty one.
       if (v.size()==0) continue;
+      // pick a random tuple
       const Tuple & s = v[rand()%v.size()];
+      // pick a random element
       int l = s[rand() % s.size()];
       if (!IsVariable(l)) {
 	literal = l;
 	break;
       }
     }
-    if (literal == -1) return false;
+    if (literal == -1) return false; // we may have failed.
     set<int> variables = 
       Union(GetVariables(cand.first), GetVariables(cand.second));
+    // Figure out what is the first unused variable.
     int variable = Variable(0);
     forall(run, variables) {
       if (Variable(*run) >= Variable(variable))
 	variable = Variable(Variable(*run)+1);
     }
     Substitution little_sub;
+    *comments = "Generalization of " + CandidateRuleToString(cand);
     little_sub.Add(literal, variable);
     little_sub.Substitute(&cand);
-    return VetteCandidateRule(cand, ret, max_work);    
+    return VetteCandidateRule(cand, ret, max_work, comments);    
     break;
   }
   default:
@@ -116,9 +126,9 @@ bool MaybeFindRandomVariantRule(Model *m, CandidateRule *ret, Tactic tactic){
   CHECK(false);
   return false;
 }
-*/
 
-bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret){
+
+bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
   int64 max_work = min ((uint)(10/pow(RandomFraction(), 1.0)), 
 			5  * (uint)model_->GetNumTrueTuples());
   uint num_clauses = 1;
@@ -170,12 +180,15 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret){
 	}
       }
   CandidateRule r = SplitOffLast(p);
-  return VetteCandidateRule(r, ret, max_work);
+  *comments = "NewRule";
+  return VetteCandidateRule(r, ret, max_work, comments);
 }
 
 bool Optimizer::VetteCandidateRule(CandidateRule raw_candidate, 
 				   CandidateRule * simplified_rule, 
-				   int64 max_work) {
+				   int64 max_work, 
+				   string *comments) {
+  *comments+= " Raw=" + CandidateRuleToString(raw_candidate);
   VLOG(1) << "Raw=" << CandidateRuleToString(raw_candidate) << endl;
   uint64 num_satisfactions;
   vector<Substitution> subs;
@@ -440,6 +453,9 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
       variants.insert(make_pair(lhs, rhs));
       if (!alt_r->Exists()) continue;
     }  
+    if (rule->GetDelay() != EncodedNumber()){
+      CHECK(rule->GetInhibitors().size());
+    }
     if (may_want_to_add_negative_rule) {
       OptimizationCheckpoint cp_negative_rule(this, false);
       cp_negative_rule.logging_ = true;
@@ -454,7 +470,6 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
       VLOG(1) << "Made a negative rule. "
 	      << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;      
     }
-
   }
   VLOG(1) << "removed all alternate explanations " 
 	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
@@ -472,7 +487,7 @@ void Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
   Pattern precondition 
     = Concat(r->GetPrecondition()->GetPattern(), r->GetResult());
   Rule * negative_rule = model_->FindNegativeRule(precondition, r);
-  if (!negative_rule)
+  if (!negative_rule) {
     negative_rule = 
       model_->MakeNewRule(precondition, 
 			  EncodedNumber(),
@@ -480,6 +495,12 @@ void Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
 			  vector<Tuple>(),
 			  EncodedNumber(),
 			  EncodedNumber());
+    VLOG(1) << " made new negative rule " << endl;
+  } else {
+    VLOG(1) << " used existing negative rule " << endl;
+  }
+  VLOG(1) << "Negative rule:" << negative_rule->GetID() << endl;
+  VLOG(1) << "Positive rule:" << r->GetID() << endl;
   // negative_rule->ExplainEncoding();
   //model_->FixTimes(); // TODO: do we need this?
   VLOG(1) 
@@ -499,8 +520,8 @@ void Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
 }
 
 void Optimizer::TryRuleVariations(const Pattern & preconditions, 
-		       const Pattern & result, 
-		       int max_recursion){
+				  const Pattern & result, 
+				  int max_recursion){
   if (result.size() > 1) return;
   for (uint i=0; i<preconditions.size(); i++) {
     Pattern lhs = preconditions;
@@ -509,15 +530,19 @@ void Optimizer::TryRuleVariations(const Pattern & preconditions,
     rhs[0] = preconditions[i];
     CandidateRule cr = CanonicalizeRule(make_pair(lhs, rhs));
     OptimizationCheckpoint cp(this, false);
-    TryAddImplicationRule(cr.first, cr.second, max_recursion-1);
+    string comments = "recursively added as a variation of "
+      + CandidateRuleToString(make_pair(preconditions, result));
+    TryAddPositiveRule(cr.first, cr.second, max_recursion-1,
+		       comments);
     if (cp.KeepChanges()) break;
   }
 }
 
-void Optimizer::TryAddImplicationRule(
+void Optimizer::TryAddPositiveRule(
 			   const Pattern & preconditions,
 			   const Pattern & result,
-			   int max_recursion){
+			   int max_recursion,
+			   string comments){
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
@@ -540,6 +565,7 @@ void Optimizer::TryAddImplicationRule(
   double added_arbitrary_term_ll = -model_->GetArbitraryTermLnLikelihood();
   Rule * r = model_->MakeNewRule(preconditions, EncodedNumber(), 
 			    type, 0, result, EncodedNumber(), EncodedNumber());
+  r->AddComments(comments);
   added_arbitrary_term_ll += model_->GetArbitraryTermLnLikelihood();
   VLOG(1) << "Rule encoding costs: "
 	  << r->GetPrecondition()->GetDirectPatternEncodingLnLikelihood()

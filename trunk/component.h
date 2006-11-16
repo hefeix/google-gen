@@ -126,6 +126,7 @@ class Component{
   // If the time of a component changes, we call this function, which 
   // adjusts the ln_likelihood_ of this and other components if necessary.
   virtual void F2_AdjustLnLikelihoodForNewTime();
+  void AddComments(string new_comments);
 
 
   // ----- CONST FUNCTIONS -----
@@ -203,6 +204,8 @@ class Component{
   int GetID() const { return id_;}
 
   const Time & GetTime() const { return time_;}
+  
+  string GetComments() const { return comments_;}
 
   // ----- CONSTRUCTOR(S) -----
 
@@ -246,7 +249,6 @@ class Component{
   void A1_SetTimeDirty(bool val); // Use the L1 functions above instead!
   void A1_SetLnLikelihood(double new_ln_likelihood); 
 
-
   // ----- DATA -----
 
   // All data should only be touched by reversible functions.
@@ -263,6 +265,8 @@ class Component{
   // time_dirty_ is set to true unless the time is set correctly based on the 
   // codependents of this component (though not necessarily globally).
   bool time_dirty_;
+
+  string comments_;
 };
 
 // Here we have the six types of components.
@@ -532,6 +536,9 @@ class Rule : public Component{
   bool IsUniversalRule() const;
   double GetDirectPatternEncodingLnLikelihood() const {
     return direct_pattern_encoding_ln_likelihood_;
+  }
+  const set<Rule *> & GetInhibitors() const {
+    return inhibitors_;
   }
  private:
   // ----- CONSTRUCTOR(S) ----- Rule

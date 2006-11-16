@@ -1,0 +1,46 @@
+
+easy stuff:
+
+N: Discretize all the ln_likelihoods
+
+N: Clear the model by reverting the entire changelist
+
+N: resurrect commented out tactics
+
+N: Make sure everything is kosher with likelihood tracking.
+
+G: Make the webserver convenient
+
+
+
+hard/nebulous stuff:
+
+N: keep track of computational complexity costs.
+
+N: figure out a faster way to detect circular causation
+
+N: track properties of constants (patterns for which they satisfy something).  track sets of terms for which we want to explain something.  Put it all together.
+
+N: Keep an index of relationships between objects/pairs of objects.  Use it to find distant relationships between objects in coming up with rules.
+
+
+
+
+tactics: 
+
+
+N: given a tuple explain it as best possible using an existing rule (to replace the current explanation).
+
+N: given a set of tuples, explain them as best possible, either by adding a new rule or using an old one.  
+
+N: alter causation for a rule ( move tuples between precondition and result)
+
+N: find one tuple taking part in multiple rules.  Combine the rules.
+
+N: generalize a rule by turning two or more literals into variables and adding clauses to indicate their relaitonship.
+
+
+
+
+
+

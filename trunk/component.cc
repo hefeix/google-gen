@@ -94,6 +94,11 @@ void Component::A1_SetLnLikelihood(double new_ln_likelihood){
   if (new_ln_likelihood == ln_likelihood_) return;
   model_->changelist_.Make(new ValueChange<double>(&ln_likelihood_, new_ln_likelihood));
 }
+void Component::AddComments(string new_comments){
+  model_->changelist_.Make(new ValueChange<string>(&comments_, 
+						   comments_+new_comments));
+}
+
 void Component::Erase(){
   CHECK(Type() != RULESAT && Type() != SATISFACTION);
   L1_Erase();
@@ -944,6 +949,7 @@ Record TrueTuple::RecordForStorageSubclass() const{
 
 Record Component::RecordForDisplay() const{
   Record r = RecordForDisplaySubclass();
+  r["Comments"] = GetComments();
   if (time_dirty_) r["D"] = "DIRTY";
   r["ID"] = itoa(id_) + "<a name=\"" + itoa(id_) + "\">";
   r["TIME"] = time_.ToSortableString();
@@ -974,6 +980,10 @@ Record Rule::RecordForDisplaySubclass() const{
   r["str."] = strength_.ToSortableString();
   r["str2."] = strength2_.ToSortableString();
   r["pat."] = precondition_->HTMLLink(itoa(precondition_->id_));
+  forall(run, inhibitors_){
+    r["inhibitors"] += "Inhibitor: " + (*run)->HTMLLink(itoa((*run)->id_))
+      + "<br>";
+  }
   if(type_==NEGATIVE_RULE) 
     r["target"] = target_rule_->HTMLLink(itoa(target_rule_->id_));
   vector<Firing *> f = Firings();
