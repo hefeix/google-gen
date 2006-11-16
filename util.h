@@ -47,7 +47,7 @@
 // For logging
 int GetVerbosity();
 void SetVerbosity(int v);
-#define VLOG(N) if (GetVerbosity() >=N) cerr << __FUNCTION__ << ":" << __LINE__
+#define VLOG(N) if (GetVerbosity() >=N) cerr << __FUNCTION__ << ":" << __LINE__ << " "
 
 typedef unsigned long long uint64;
 typedef unsigned long uint32;
@@ -221,6 +221,7 @@ int RandomInt();
 // between 0 and 1, non-inclusive
 double RandomFraction();
 
+// Declares A and sets it to a random element of B.
 // defines an interator A pointing to a ranodm element of B.  Linear time.
 #define RandomElement(A, B) typeof(B.begin()) A = B.begin(); int howfar = RandomInt() % B.size(); for (int count=0; count<howfar; count++) ++A;
 

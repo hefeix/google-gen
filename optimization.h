@@ -28,7 +28,6 @@ enum Tactic {
   NEW_RULE,
   SPECIFY_ONE,
   GENERALIZE_ONE,
-  GENERALIZE_CONNECT,
 };
 
 // This is an object that can be created, which will set a checkpoint upon
@@ -79,10 +78,10 @@ struct Optimizer{
   //void TrySpecifyCreativeRule(Rule * r);
   
   // TODO, document this
-  void TryAddImplicationRule(
-			     const vector<Tuple> & preconditions, 
-			     const vector<Tuple> & result,
-			     int max_recursion);
+  void TryAddPositiveRule(
+			  const vector<Tuple> & preconditions, 
+			  const vector<Tuple> & result,
+			  int max_recursion, string comments);
   
   void TryRuleVariations(const Pattern & preconditions, 
 		       const Pattern & result, 
@@ -90,14 +89,19 @@ struct Optimizer{
   
   void TryMakeFunctionalNegativeRule(Rule *r);
   
-  CandidateRule FindRandomCandidateRule(Tactic tactic);
-  bool MaybeFindRandomCandidateRule(CandidateRule * ret, Tactic tactic);
+  // finds a candidate rule unless it runs out of time.  
+  // time_limit is in seconds
+  bool FindRandomCandidateRule(CandidateRule *ret, 
+			       Tactic tactic, int time_limit, string *comments);
+  bool MaybeFindRandomCandidateRule(CandidateRule * ret, Tactic tactic, 
+				    string *comments);
   bool VetteCandidateRule(CandidateRule r, 
 			  CandidateRule * simplified_rule, 
-			  int64 max_work);
+			  int64 max_work, string *comments);
   
-  bool MaybeFindRandomNewRule(CandidateRule * ret);
-  //bool MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic);
+  bool MaybeFindRandomNewRule(CandidateRule * ret, string *comments);
+  bool MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic, 
+				  string *comments);
   
   // OPTIMIZATION STEPS
   //void OptimizeRound(Model *m);

@@ -209,16 +209,20 @@ string ModelShell::Handle(string command) {
       command_stream >> duration;
       time_t end_time = time(0) + duration;
       while (time(0) < end_time) {
-	pair<vector<Tuple>, vector<Tuple> > p 
-	  = optimizer_->FindRandomCandidateRule(Tactic(tactic));
+	CandidateRule cand; 
+	string comments;
+	if (!optimizer_->
+	    FindRandomCandidateRule(&cand, Tactic(tactic),
+				    end_time-time(0), &comments)) break;
 	OptimizationCheckpoint cp(optimizer_, true);
-	optimizer_->TryAddImplicationRule(p.first, p.second, 10);	
+	optimizer_->TryAddPositiveRule(cand.first, cand.second, 
+					  10, comments);	
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "
-		  << TupleVectorToString(p.first)
-		  << " ->" << TupleVectorToString(p.second)
+		  << CandidateRuleToString(cand)
 		  << " model likelihood: " << model_->GetLnLikelihood()
-		  << " gain=" << cp.Gain() << endl;
+		  << " gain=" << cp.Gain() << " " << comments 
+		  << endl;
 	  model_->ToHTML("html");
 	  improvement_counter_++;	  
 	  model_->Store("stored/auto."+itoa(improvement_counter_)+".model");
@@ -239,7 +243,8 @@ string ModelShell::Handle(string command) {
       vector<Tuple> result = StringToTupleVector(r["rhs"]);
       {
 	OptimizationCheckpoint cp(optimizer_, true);
-	optimizer_->TryAddImplicationRule(preconditions, result, 10);
+	string comments = "Added by hand";
+	optimizer_->TryAddPositiveRule(preconditions, result, 10, comments);
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "
 		  << TupleVectorToString(preconditions)
@@ -279,9 +284,11 @@ string ModelShell::Handle(string command) {
       int tactic;
       command_stream >> tactic >> num;
       for (uint i=0; i<num; i++) {
-	CandidateRule p = optimizer_->FindRandomCandidateRule((Tactic)tactic);
-      cout << TupleVectorToString(p.first) << " -> " 
-	   << TupleVectorToString(p.second) << endl;
+	CandidateRule cand;
+	string comments;
+	if (!optimizer_->FindRandomCandidateRule(&cand, (Tactic)tactic,
+						 10, &comments)) break;
+	cout << CandidateRuleToString(cand) << endl;
       }
     }
     else if (command=="h"){
