@@ -23,7 +23,7 @@
 
 // Just create the model
 ModelShell::ModelShell() {
-  model_ = 0;
+  model_ = new Model();
   optimizer_ = new Optimizer(model_);
   improvement_counter_ = 0;
   model_filename_ = "";
