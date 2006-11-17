@@ -453,9 +453,6 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
       variants.insert(make_pair(lhs, rhs));
       if (!alt_r->Exists()) continue;
     }  
-    if (rule->GetDelay() != EncodedNumber()){
-      CHECK(rule->GetInhibitors().size());
-    }
     if (may_want_to_add_negative_rule) {
       OptimizationCheckpoint cp_negative_rule(this, false);
       cp_negative_rule.logging_ = true;
