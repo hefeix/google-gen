@@ -534,6 +534,8 @@ void Model::VerifyLikelihood() const{
   forall(run, id_to_component_){
     total += run->second->ln_likelihood_;
   }
+  VLOG(0) << "total=" << total << " ln_likelihood_ = " << ln_likelihood_ 
+	  << endl;
   if (fabs(total-ln_likelihood_) > 1e-6) {
     cerr << " total likelihood out of date " 
 	 << " store=" << ln_likelihood_ << " computed=" << total << endl;
@@ -587,9 +589,9 @@ void Model::VerifyLayer2() const {
     Component *c = run->second;
     c->VerifyLayer2();
   }
-  VerifyLikelihood();
-  VerifyLinkBidirectionality();
   VerifyIndices();
+  VerifyLinkBidirectionality();
+  VerifyLikelihood();
 }
 int64 Model::FindSatisfactionsForTuple
 ( const Tuple & s, 

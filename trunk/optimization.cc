@@ -69,7 +69,7 @@ TrueTuple * Optimizer::GetRandomTrueTuple(){
 
 bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
 					   string *comments){
-  int64 max_work = (uint)(100/pow(RandomFraction(), 1.0));
+  int64 max_work = 5  * (uint)model_->GetNumTrueTuples();
   TrueTuple * tp = GetRandomTrueTuple();
   CHECK(tp->GetCauses().size());
   Firing * f = *(tp->GetCauses().begin());
@@ -129,8 +129,7 @@ bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
 
 
 bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
-  int64 max_work = min ((uint)(10/pow(RandomFraction(), 1.0)), 
-			5  * (uint)model_->GetNumTrueTuples());
+  int64 max_work = 5  * (uint)model_->GetNumTrueTuples();
   uint num_clauses = 1;
   while (RandomFraction() < 0.7) num_clauses++;  
   vector<Tuple> p;
@@ -420,8 +419,7 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
     VLOG(1) << "Removed " << firings.size() 
 	    << " firings for rule " << alt_r->GetID()
 	    << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
-    
-    
+        
     
     // Try to remove the alternate rule if it has few firings.
     vector<Firing *> remaining_firings = alt_r->Firings();
@@ -439,8 +437,12 @@ void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
       }
       Pattern lhs = alt_r->GetPrecondition()->GetPattern();
       Pattern rhs = alt_r->GetResult();
+
       alt_r->Erase();
-      if (GetVerbosity() >= 1) model_->VerifyLayer2();
+      if (GetVerbosity() >= 2) {
+	model_->VerifyLayer2();
+      }
+
       forall(run, to_explain) {
 	if ((*run)->GetCauses().size() == 0) 
 	  Explain(*run, NULL, false);
@@ -540,6 +542,11 @@ void Optimizer::TryAddPositiveRule(
 			   const Pattern & result,
 			   int max_recursion,
 			   string comments){
+
+  if (GetVerbosity() >= 2) {
+    model_->VerifyLayer2();
+  }
+
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
