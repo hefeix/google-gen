@@ -225,9 +225,9 @@ string ModelShell::Handle(string command) {
 		  << endl;
 	  model_->ToHTML("html");
 	  improvement_counter_++;	  
+	  VLOG(0) << "About to store improvement\n";
 	  model_->Store("stored/auto."+itoa(improvement_counter_)+".model");
 	}
-	//model_->VerifyLayer2();
       }
       model_->ToHTML("html");
       
@@ -235,6 +235,8 @@ string ModelShell::Handle(string command) {
     else if (command == "verify"){
       model_->VerifyLayer2();
     }
+    // Here's an example
+    // addrule { lhs="[ Successor *0 *1 ]" , rhs = "[ Successor *1 *2 ]"  }
     else if (command == "addrule"){
       string pat;
       Record r;
@@ -311,7 +313,7 @@ string ModelShell::Handle(string command) {
     }
     else cerr << "UNKNOWN COMMAND " << command << endl;
     model_->FixTimes();
-    //ToHTML("/Users/guest/tmp/model.html");
+    // ToHTML("/Users/guest/tmp/model.html");
     cout << "?";
   }
   return "DUMMYSTRING\n";

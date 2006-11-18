@@ -184,7 +184,8 @@ class Component{
   virtual bool HasPurpose() const;  // Does it have a purpose.
   inline bool IsSuperfluous() const {return NeedsPurpose() && !HasPurpose();}  
   inline bool Exists() const { return exists_; }
-  
+  inline bool ReallyDead() const { return really_dead_; }
+
   // Computes the time_ of the component.  This is in general equal to the 
   // maximinimum time of its TemporalCodependents() (or NEVER if it is missing the
   // required codependents to exist), but some component types have an 
@@ -245,6 +246,7 @@ class Component{
 
   // These things just modify the actual values.
   void A1_SetExists(bool val);
+  void A1_SetReallyDead(bool val);
   void A1_SetTime(const Time & new_time);
   void A1_SetTimeDirty(bool val); // Use the L1 functions above instead!
   void A1_SetLnLikelihood(double new_ln_likelihood); 
@@ -257,6 +259,10 @@ class Component{
   // avoid invalidating pointers and storing the data elswhere.  Thus we just 
   // set the exists_ variable to false and pretend that it doesn't exist.
   bool exists_;
+
+  // Worse than exists
+  bool really_dead_;
+
   int id_;
   Model * model_;
   // contribution of this component to the ln_likelihood_ of the model

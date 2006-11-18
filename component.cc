@@ -68,12 +68,14 @@ Component::Component(Model * model){
   model_ = model;
   model_->changelist_.Make(new DeleteOnRollbackChange<Component>(this));
   exists_ = false;
+  really_dead_ = true;
   time_ = CREATION;
   time_dirty_ = true;
   model_->A1_InsertIntoTimesDirty(this);
   model_->L1_AssignNewID(this);
   ln_likelihood_ = 0.0;
   A1_SetExists(true);
+  A1_SetReallyDead(false);
 }
 Component::~Component(){
   CHECK(exists_ == false);
@@ -82,6 +84,13 @@ void Component::A1_SetExists(bool val){
   CHECK(exists_ != val);
   model_->changelist_.Make(new ValueChange<bool>(&exists_, val));
 }
+
+void Component::A1_SetReallyDead(bool val){
+  CHECK(really_dead_ != val);
+  model_->changelist_.Make(new ValueChange<bool>(&really_dead_, val));
+}
+
+
 void Component::A1_SetTime(const Time & new_time){
   if (time_ == new_time) return;
   model_->changelist_.Make(new ValueChange<Time>(&time_, new_time));
@@ -106,6 +115,8 @@ void Component::Erase(){
 void Component::L1_Erase(){
   CHECK(exists_);
   A1_SetExists(false);
+  model_->A1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
+
   vector<Component *> dep = StructuralDependents();
   vector<Component *> copurposes = Copurposes();
   for (uint i=0; i<dep.size(); i++) {
@@ -118,7 +129,7 @@ void Component::L1_Erase(){
   model_->A1_RemoveFromComponentsByType(this);
 
   L1_EraseSubclass();
-  model_->A1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
+  A1_SetReallyDead(true);
 
   for (uint i=0; i<copurposes.size(); i++) {
     if (copurposes[i]->Exists() && copurposes[i]->IsSuperfluous()) 
@@ -438,12 +449,13 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   ComputeSetLnLikelihood();
   model_->A1_InsertIntoComponentsByType(this);
 }
-
+ 
 void Rule::L1_EraseSubclass(){  
   precondition_->A1_RemoveRule(this);
   if (type_ == NEGATIVE_RULE) {
     precondition_->A1_RemoveNegativeRule(this);
     precondition_->A1_RemoveFromNegativeRuleIndex(target_rule_, this);
+    target_rule_->A1_RemoveInhibitor(this);
   } else {
     precondition_->A1_RemoveFromPositiveRuleIndex(result_, this);
     precondition_->A1_SetLnLikelihoodPerSat
@@ -975,7 +987,8 @@ Record Rule::RecordForDisplaySubclass() const{
   r["Rule"] = ImplicationString();
   r["Type"] = RuleTypeToString(type_).substr(0, 1);
   r["f/ff/s"] = "f " + itoa(NumFirings()) + "<br>ff " + itoa(NumFirstFirings())
-    + "<br>s " + itoa(precondition_->num_satisfactions_);
+    + "<br>s " + itoa(precondition_->num_satisfactions_); 
+  r["dpe LL"] = dtoa(direct_pattern_encoding_ln_likelihood_);
   r["prec."] = delay_.ToSortableString();
   r["str."] = strength_.ToSortableString();
   r["str2."] = strength2_.ToSortableString();
@@ -1091,14 +1104,14 @@ vector<Component *> Rule::StructuralDependents() const{
   ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
   return ret;
 }
+
 vector<Component *> RuleSat::StructuralDependents() const{
   vector<Firing*> v = VectorOfValues(firings_);
   vector<Component*> ret(v.begin(), v.end());
-  if (target_rule_sat_ != NULL) {
-    ret.push_back(target_rule_sat_);
-  }
+  ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
   return ret;
 }
+
 vector<Component *> TrueTuple::StructuralDependents() const{
   vector<Component *> ret;
   ret.insert(ret.end(), satisfactions_.begin(), satisfactions_.end());
@@ -1298,6 +1311,9 @@ double RuleSat::LnLikelihood() const {
   return new_ln_likelihood - cancelled_ln_likelihood;
 }
 void Component::ComputeSetLnLikelihood(){
+  if (!exists_) return;
+
+  CHECK(!really_dead_);
   double old_val = ln_likelihood_;
   double new_val = LnLikelihood();
   CHECK(finite(old_val));
