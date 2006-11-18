@@ -77,7 +77,7 @@ bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
   const Rule * r = rs->GetRule();
   CandidateRule cand = make_pair(r->GetPrecondition()->GetPattern(), 
 				 r->GetResult());
-  Substitution full_sub = f->GetFullSubstitution();
+  Substitution full_sub = f->GetFullSubstitution(); 
   switch (tactic) {
   case SPECIFY_ONE: {
     RandomElement(assignment, full_sub.sub_);
@@ -163,7 +163,7 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
     used_tuples.insert(s);
     p.push_back(*s);
     forall(run, anchors){
-      sub.Add(Variable(next_var++), *run);
+      sub.Add(*run, Variable(next_var++));
     }
     sub.Substitute(&p);
   }
@@ -187,6 +187,8 @@ bool Optimizer::VetteCandidateRule(CandidateRule raw_candidate,
 				   CandidateRule * simplified_rule, 
 				   int64 max_work, 
 				   string *comments) {
+  if (Intersection(GetVariables(raw_candidate.first), 
+		   GetVariables(raw_candidate.second)).size()==0) return false;
   *comments+= " Raw=" + CandidateRuleToString(raw_candidate);
   VLOG(1) << "Raw=" << CandidateRuleToString(raw_candidate) << endl;
   uint64 num_satisfactions;
@@ -259,6 +261,8 @@ bool Optimizer::VetteCandidateRule(CandidateRule raw_candidate,
   boring_variables.Substitute(&r.first);
   boring_variables.Substitute(&r.second);
   if (GetVariables(r.second).size()==0) return false;
+  if (Intersection(GetVariables(r.first), 
+		   GetVariables(r.second)).size()==0) return false;
   r.first = RemoveVariableFreeTuples(r.first);
   r.second = RemoveVariableFreeTuples(r.second);
   r = CanonicalizeRule(r);

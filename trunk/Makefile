@@ -1,6 +1,6 @@
 # This defines the compiler and standard ways to use it
 CXX = g++
-CXXFLAGS = -Wall -Wno-deprecated -g
+CXXFLAGS = -Wall -Wno-deprecated -O
 CXXMOSTFLAGS = -Wall -Wno-deprecated
 
 # These are the Gen sources, and computed object and header files
@@ -19,6 +19,7 @@ ifeq ($(shell uname),Linux)
    $(warning Linux)
    PYTHONINCLUDES = -I"/usr/include/python2.4"
    PYTHONLINK = 
+
    LOADABLE = -shared
 endif
 
