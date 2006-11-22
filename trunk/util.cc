@@ -70,7 +70,7 @@ string Join(const vector<string> v, char delim){
   return ret;
 }
 uint32 RandomUInt32(){
-  CHECK(RAND_MAX == 0x0FFFFFFF);
+  CHECK(RAND_MAX == 0x7FFFFFFF);
   return (rand() << 1) + rand()%2;
 }
 double TwoToTheThirtyTwo = pow(2, 32);

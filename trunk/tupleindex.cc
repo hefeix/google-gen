@@ -31,9 +31,14 @@ SamplingInfo::SamplingInfo(int position, uint32 start_hash, uint32 end_hash){
 
 SamplingInfo SamplingInfo::RandomRange(int position, int denominator){
   int part = rand() % denominator;
-  uint32 start = (0xFFFFFFFFF / denominator) * part;
-  uint32 end = (0xFFFFFFFFF / denominator) * (part+1);
+  uint32 start = (0xFFFFFFFF / denominator) * part;
+  uint32 end = (0xFFFFFFFF / denominator) * (part+1);
   return SamplingInfo(position, start, end);
+}
+
+bool SamplingInfo::Matches(const Tuple& t) const {
+  uint32 fp = t.Fingerprint32();
+  return (start_hash_ <= fp) && (fp <= end_hash_);
 }
 
 TupleIndex::TupleIndex() {
@@ -46,12 +51,12 @@ TupleIndex::~TupleIndex(){}
 Tuple TupleIndex::RandomTuple() const {
 
   // First pick a number (0 to total_tuples-1)
-  uint n = RandomUint32() % total_tuples_;
+  uint n = RandomUInt32() % total_tuples_;
 
   // Run across the histogram till you find the right cardinality tuple
   forall(run, lengths_) {
     if (n < run->second) {
-      Node ** np = nodes_ % AllWildcards(run->first);
+      Node * const * np = nodes_ % AllWildcards(run->first);
       CHECK(np);
       Node *n = *np;
       return n->GetRandomTuple();
@@ -66,7 +71,7 @@ Tuple TupleIndex::RandomTuple() const {
   forall(run, lengths_) {
     cerr << run->first << " " << run->second << endl;
   }
-  CHECK(false); return 0;
+  CHECK(false); return Tuple();
 }
 
 // We select a random tuple which contains all of the terms.
@@ -75,13 +80,17 @@ Tuple TupleIndex::RandomTuple() const {
 // A situation  is determined by the length of the tuple, the positions of the
 // given terms in the tuple, and the first term in the tuple (which is likely
 // to be a retlation name).  
-Tuple
-TupleIndex::GetRandomTupleContaining(const vector<int> & terms, 
+// What if there's no answer???
+bool
+TupleIndex::GetRandomTupleContaining(Tuple * ret,
+				     const vector<int> & terms, 
 				     bool funky_distribution){
+  CHECK(ret != NULL);
+  ret->terms_.clear();
+
   // if (funky_distribution) then this is the number of situations already
   // considered.  Otherwise, it is the number of tuples already considered.
   int already_considered = 0;
-  Tuple ret;
   int n = terms.size();
   forall(run, lengths_) {
     int length = run->first;
@@ -94,7 +103,8 @@ TupleIndex::GetRandomTupleContaining(const vector<int> & terms,
       if (t.IsConstantTuple()){
 	if (tuples_ % t) {
 	  already_considered++;
-	  if (rand() % already_considered == 0) ret = t;
+	  if (rand() % already_considered == 0) 
+	    *ret = t;
 	}
 	continue;
       }
@@ -102,16 +112,17 @@ TupleIndex::GetRandomTupleContaining(const vector<int> & terms,
       Node ** np = nodes_ % t;
       if (!np) continue;
       Node * n = *np;      
-      if (funky_distribution && (s[0] == WILDCARD)) {
+      if (funky_distribution && (t[0] == WILDCARD)) {
 	CHECK(n->first_term_counts_);
 	forall(run, (*n->first_term_counts_)){
 	  t[0] = run->first;
 	  VLOG(2) << "Expecting " << run->second << " tuples matching " 
-		  << s.ToString() << endl;
-	  if (t.ConstantTuple()) {
-	    CHECK(tuples % t);
+		  << t.ToString() << endl;
+	  if (t.IsConstantTuple()) {
+	    CHECK(tuples_ % t);
 	    already_considered++;
-	    if (rand() % already_considered == 0) ret = t;
+	    if (rand() % already_considered == 0) 
+	      *ret = t;
 	    continue;
 	  }
 	  // it's not a constant tuple
@@ -120,7 +131,7 @@ TupleIndex::GetRandomTupleContaining(const vector<int> & terms,
 	  Node * n2 = *n2p;
 	  already_considered++;
 	  if (rand() % already_considered == 0) {
-	    ret = n->GetRandomTuple();
+	    *ret = n2->GetRandomTuple();
 	  }
 	}
       } else {
@@ -129,21 +140,21 @@ TupleIndex::GetRandomTupleContaining(const vector<int> & terms,
 	  already_considered++;
 	  to_select = (rand() % already_considered == 0);
 	} else {
-	  already_considered += n->satisfactions_.size();
-	  to_select = (rand() % already_considered < n->satisfactions_.size());
+	  already_considered += n->specifications_.size();
+	  to_select = (rand() % already_considered < (int) n->specifications_.size());
 	}
       }
     }
   }
-  CHECK(ret.size());
-  return ret;
+  if (ret->size()) return true;
+  return false;
 }
 
-void TupleIndex::Add(const Tuple & t) {  
+void TupleIndex::Add(Tuple t) {  
 
   // Make sure it's a constant tuple, and it's not already in there
-  CHECK(s.Pattern()==0);
-  CHECK(!FindTuple(t));
+  CHECK(t.IsConstantTuple());
+  CHECK(!(tuples_ % t));
 
   // Track the number of tuples, and their size histograms
   lengths_[t.size()]++; 
@@ -166,7 +177,7 @@ void TupleIndex::Add(const Tuple & t) {
       if (g[0]==WILDCARD) n->first_term_counts_ = new map<int, int>;
     }
 
-    n->specifications_.insert(make_pair(t->Fingerprint32(), t));
+    n->specifications_.insert(make_pair(t.Fingerprint32(), t));
 
     // If the first term of your generalization is a wildcard
     // Mark your first term in its first term counts
@@ -175,10 +186,10 @@ void TupleIndex::Add(const Tuple & t) {
 }
 
 // Remove a constant tuple from the index
-void TupleIndex::Remove(const Tuple & t) {
+void TupleIndex::Remove(Tuple t) {
 
   // Check that it's a constant tuple
-  CHECK(s.Pattern()==0);
+  CHECK(t.IsConstantTuple());
 
   tuples_.erase(t);
 
@@ -197,7 +208,7 @@ void TupleIndex::Remove(const Tuple & t) {
     Node * n = nodes_[g];
     CHECK(n!=NULL);
 
-    n->specifications_.erase(make_pair(t->Fingerprint32(), t));
+    n->specifications_.erase(make_pair(t.Fingerprint32(), t));
     if (n->first_term_counts_) 
       SparseAdd(n->first_term_counts_, t[0], -1);
 
@@ -213,35 +224,37 @@ void TupleIndex::Node::GetRange(const SamplingInfo &s,
 				set<pair<uint32, Tuple> >::iterator *start,
 				set<pair<uint32, Tuple> >::iterator *end){
   *start = specifications_.lower_bound(make_pair(s.start_hash_, Tuple()));
-  *end = (s.end_hash_==0xFFFFFFFF)?n->specifications_.end():
-    n->specifications_.lower_bound(make_pair(s.end_hash_+1, Tuple()));
+  *end = (s.end_hash_==0xFFFFFFFF)? specifications_.end():
+    specifications_.lower_bound(make_pair(s.end_hash_+1, Tuple()));
 }
 Tuple TupleIndex::Node::GetRandomTuple(){
   CHECK(specifications_.size());
   set<pair<uint32, Tuple> >::iterator look 
-    = specifications_.lower_bound(make_pair(RandomUint32(), Tuple()));
-  if (look != specifications_.end()) return *look;
-  else return *(specifications_.begin());
+    = specifications_.lower_bound(make_pair(RandomUInt32(), Tuple()));
+  if (look != specifications_.end()) return look->second;
+  else return (specifications_.begin())->second;
 }
+
 int TupleIndex::Lookup(const Tuple &t, vector<Tuple> * results, 
-		       SamplingInfo *sampling){
+		       const SamplingInfo *sampling) {
   // ignore sampling if it doesn't apply.
   if (sampling && !sampling->sampled_) sampling = NULL;
-  CHECK(IsWildcardTuple(t));
+  CHECK(t.IsWildcardTuple());
   if (results) results->clear();
-  if (IsConstantTuple(t)) {
-    Tuple * found = tuples_ % t;
+  if (t.IsConstantTuple()) {
+    bool found = tuples_ % t;
     if (!found) return 0;
-    if (!sampling || sampling->Matches(*found)){
-      results->push_back(*found);
+    if (!sampling || sampling->Matches(t)){
+      if (results) results->push_back(t);
       return 1;
     } else {
       return 0;
     }
   } 
   // not a constant tuple
-  Node *n = nodes_ % t;
-  if (!n) return 0;
+  Node * const * np = nodes_ % t;
+  if (!np) return 0;
+  Node *n = *np; CHECK(n);
   if (!sampling) {
     if (results) {
       forall(run, n->specifications_)
@@ -260,7 +273,7 @@ int TupleIndex::Lookup(const Tuple &t, vector<Tuple> * results,
     }
     return results->size();
   }
-  return CountResults(start, end);
+  return CountRange(start, end);
 }
 
 // Eliminate the simplest tuple first, recursively call this function
@@ -291,7 +304,8 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
     if (sampling) CHECK(sampling->position_ == 0);
     if (!pattern[0].HasDuplicateVariables()) {
       if (num_satisfactions)
-	*num_satisfactions = Lookup(pattern[0], 0, sampling);
+	*num_satisfactions = Lookup(pattern[0].VariablesToWildcards(), 
+				    0, sampling);
       if (actual_work) *actual_work = 1; 
       return true;
     }
@@ -302,8 +316,8 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
   int64 least_work = 0;
   //FullySpecifiedNode ** matches;
   for (uint i=0; i<pattern.size(); i++) {    
-    int num_matches = 
-      Lookup(pattern[i], NULL, 
+    uint32 num_matches = 
+      Lookup(pattern[i].VariablesToWildcards(), NULL, 
 	     (sampling && sampling->position_==i)?sampling:NULL);
     if (i==0 || num_matches < least_work) {
       least_work = num_matches;
@@ -316,8 +330,9 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
   if (max_work != UNLIMITED_WORK && least_work > max_work) return false;
 
   vector<Tuple> matches;
-  Lookup(pattern[best_clause], &matches, 
-	 (sampling && sampling->position_==best_clause)?sampling:NULL);
+  uint32 num_matches = 
+    Lookup(pattern[best_clause].VariablesToWildcards(), &matches, 
+	 (sampling && sampling->position_==(uint32) best_clause)?sampling:NULL);
   
   // Create a simpler pattern without the best_clause
   vector<Tuple> simplified_pattern = pattern;
@@ -328,9 +343,10 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
   if (sampling) {
     simplified_sampling = *sampling;
     sampling = &simplified_sampling;
-    if (simplified_sampling.position_ == best_clause) sampling=NULL;
-    else if (simplified_sampling.position_ > best_clause) {
-      sampling->position_--;
+    if (simplified_sampling.position_ == (uint32)best_clause) sampling=NULL;
+    else if (simplified_sampling.position_ > (uint32)best_clause) {
+      SamplingInfo * temp = const_cast<SamplingInfo *>(sampling);
+      temp->position_--;
     }
   }
 
@@ -345,7 +361,7 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
     vector<Tuple> substituted_pattern = simplified_pattern;
     Substitution partial_sub;
     const Tuple & pre_sub = pattern[best_clause];
-    const Tuple & post_sub = matches[match]->tuple_;
+    const Tuple & post_sub = matches[match];
     // Compute substitution of pattern to match. None -> not a real match
     if (!ComputeSubstitution(pre_sub, post_sub, &partial_sub)) continue;
     VLOG(2) << "pre=" << pre_sub.ToString() 
@@ -397,16 +413,16 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
 
 // Just create all wildcard tuples of all lengths with the term in one position
 // and use the internal Lookup
-void TupleIndex::FindTerm(int w, vector<const Tuple *> *results){
+void TupleIndex::FindTerm(int w, vector<Tuple> *results){
   results->clear();
-  set<const Tuple *> found;
-  vector<const Tuple *> foo;
+  set<Tuple> found;
+  vector<Tuple> foo;
   forall(run, lengths_) {
     int length = run->first;
     for(int i=0; i<length; i++) {
-      Tuple s;
-      for (int j=0; j<length; j++) s.push_back((j==i)?w:WILDCARD);      
-      Lookup(s, &foo);
+      Tuple t;
+      for (int j=0; j<length; j++) t.push_back((j==i)?w:WILDCARD);      
+      Lookup(t, &foo);
       found.insert(foo.begin(), foo.end());
     }
   }
@@ -436,14 +452,16 @@ void TupleIndex::Shell() {
       Tuple s;
       GetLine(cin, &line);
       s.FromString(line);
-      vector<const Tuple *> results;
+      vector<Tuple> results;
       cout << "Looking up " << s.ToString() << endl;
-      Lookup(s, &results);
+      Lookup(s.VariablesToWildcards(), &results);
       for (uint i=0; i<results.size(); i++) {
-	cout << "   Found result " << results[i]->ToString() << endl;
+	cout << "   Found result " << results[i].ToString() << endl;
       }
     }
+
     if (command == "display") {
+      /*
       for (hash_map<uint64, UnderspecifiedNode*>::iterator 
 	     run = underspecified_.begin(); run!=underspecified_.end(); run++) {
 	cout << "underspecified: " << run->first << endl;
@@ -452,9 +470,10 @@ void TupleIndex::Shell() {
 	       << run->second->specifications_[i]->tuple_.ToString()
 	       << endl;
 	}
-      }
-       
+      } 
+      */
     }
+
   }
 }
 

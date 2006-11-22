@@ -163,7 +163,7 @@ string ModelShell::Handle(string command) {
       command_stream >> r;
       Pattern p = StringToTupleVector(r["pattern"]);
       uint64 num_sat;
-      model_->GetTupleIndex()->FindSatisfactions(p, NULL, &num_sat, 
+      model_->GetTupleIndex()->FindSatisfactions(p, NULL, NULL, &num_sat, 
 						 UNLIMITED_WORK, NULL);
       cout << "Pattern=" << TupleVectorToString(p)
 	   << " num_sat=" << num_sat << endl;
@@ -269,10 +269,11 @@ string ModelShell::Handle(string command) {
 	terms.push_back(wid);
       }
       for (int i=0; i<10; i++) {
-	const Tuple * s 
-	  = model_->GetTupleIndex()->GetRandomTupleContaining(terms, true);
-	if(s) {
-	  cout << s->ToString() << endl;
+	Tuple s;
+	bool found_random 
+	  = model_->GetTupleIndex()->GetRandomTupleContaining(&s, terms, true);
+	if (found_random) {
+	  cout << s.ToString() << endl;
 	}
       }
     }

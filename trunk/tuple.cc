@@ -110,7 +110,7 @@ bool GeneralizationIterator::done() const{ return (variable_mask_ >= max_); }
 const Tuple & GeneralizationIterator::generalized() const { 
   return generalized_; 
 }
-int GeneralizationIterator::VaraibleMask() const{ 
+int GeneralizationIterator::VariableMask() const{ 
   return variable_mask_; 
 }
 

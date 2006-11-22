@@ -234,7 +234,7 @@ double RandomFraction();
 
 // Declares A and sets it to a random element of B.
 // defines an interator A pointing to a ranodm element of B.  Linear time.
-#define RandomElement(A, B) typeof(B.begin()) A = B.begin(); int howfar = RandomInt() % B.size(); for (int count=0; count<howfar; count++) ++A;
+#define RandomElement(A, B) typeof(B.begin()) A = B.begin(); int howfar = RandomUInt32() % B.size(); for (int count=0; count<howfar; count++) ++A;
 
 
 #define EMPTY_SLOT (-1)

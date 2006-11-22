@@ -28,11 +28,12 @@
 
 struct SamplingInfo{
   bool sampled_;
-  int position_;
+  uint32 position_;
   uint32 start_hash_; // inclusive
   uint32 end_hash_; // inclusive
   SamplingInfo(); // creates an unsampled SamplingInfo
   SamplingInfo(int position, uint32 start_hash, uint32 end_hash);
+  bool Matches(const Tuple& t) const;
   static SamplingInfo RandomRange(int position, int denominator);
 };
 
@@ -69,7 +70,7 @@ class TupleIndex{
   // returns number of results.
   // sampling ignores its position field.
   int Lookup(const Tuple & s, vector<Tuple> * results, 
-	     SamplingInfo * sampling = NULL);
+	     const SamplingInfo * sampling = NULL);
 
   // Searches over the index to match a pattern.
   // Pattern can contain literals and variables.  Multiple instances of the
@@ -92,9 +93,10 @@ class TupleIndex{
   // If funky_distribution is set, we first choose uniformly over the positions
   // in the tuple of the given terms.  This over-represents tuples where
   // the terms take a rare position.  
-  Tuple GetRandomTupleContaining(const vector<int> & terms, 
-					       bool funky_distribution);
-					       
+  bool GetRandomTupleContaining(Tuple * ret,
+				const vector<int> & terms, 
+				bool funky_distribution);
+  
   Tuple RandomTuple() const;
 
   // for testing.
@@ -117,12 +119,6 @@ class TupleIndex{
 
   uint64 total_tuples_;
   map<uint64, uint64> lengths_; // number of stored tuples with these lengths
-
-  // Return a set of FullySpecifiedNode* that 'match' a tuple's wildcard form
-  // Doesn't require variable matching as tuples are converted to wildcard form
-  void LookupInternal(const Tuple & s, 
-		      FullySpecifiedNode *** results, 
-		      uint64 * num_results) const;
 };
 
 #endif

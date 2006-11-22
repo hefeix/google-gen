@@ -600,11 +600,11 @@ int64 Model::FindSatisfactionsForTuple
   bool return_subs_for_negative_rules = true,
   bool return_subs_for_all_rules = false) {
   DestructibleCheckpoint dcp(&changelist_);
-  if (!tuple_index_.FindTuple(s))
+  if (!tuple_index_.Lookup(s, NULL, NULL))
     changelist_.Make
       (new MemberCall1Change<TupleIndex, Tuple>(&tuple_index_, s,
-					       &TupleIndex::AddWrapper,
-					       &TupleIndex::RemoveWrapper));
+					       &TupleIndex::Add,
+					       &TupleIndex::Remove));
   if (results) results->clear();
   int64 total_work = 0;
   for (GeneralizationIterator run_g(s); !run_g.done(); ++run_g) {
@@ -630,6 +630,7 @@ int64 Model::FindSatisfactionsForTuple
       vector<Substitution> complete_subs;
       if (!tuple_index_.FindSatisfactions
 	  (simplified_precondition, 
+	   NULL,
 	   return_subs?(&complete_subs):NULL,
 	   &num_complete_subs,
 	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
@@ -671,6 +672,7 @@ int64 Model::FindExplanationsForResult
       vector<Substitution> complete_subs;
       if (!tuple_index_.FindSatisfactions
 	  (simplified_precondition, 
+	   NULL,
 	   &complete_subs,
 	   &num_complete_subs,
 	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
