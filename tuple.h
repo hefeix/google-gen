@@ -42,7 +42,7 @@ struct Tuple{
   { return ::Fingerprint(terms_, level); }
   // Creates an int where each bit is on if and only if the corresponding term
   // is either a variable or a wildcard.
-  int Pattern() const {
+  int VariableMask() const {
     CHECK(size()<32);
     int ret = 0;
     int x=1;
@@ -78,9 +78,9 @@ struct GeneralizationIterator {
   void operator++();
   bool done() const;
   const Tuple & generalized() const;
-  int pattern() const;
+  int VaraibleMask() const;
   int max_;
-  int pattern_;
+  int variable_mask_;
   Tuple s_;
   Tuple generalized_;
 };

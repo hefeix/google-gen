@@ -69,12 +69,15 @@ string Join(const vector<string> v, char delim){
   }
   return ret;
 }
-int RandomInt(){
-  return rand();
+uint32 RandomUInt32(){
+  CHECK(RAND_MAX == 0x0FFFFFFF);
+  return (rand() << 1) + rand()%2;
 }
-double twototheminusthirtyone = pow(0.5, 31);
+double TwoToTheThirtyTwo = pow(2, 32);
+double TwoToTheMinusThirtyTwo = pow(0.5, 32);
+double OneOverRandMax = (1.0 / RAND_MAX);
 double RandomFraction(){
-  return (rand()+0.5)*twototheminusthirtyone;
+  return (rand() + 0.5) * OneOverRandMax;
 }
 
 string IntVectorToString(const vector<int> v){

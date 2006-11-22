@@ -94,24 +94,24 @@ bool MatchesWildcardTuple(const Tuple & wildcard_tuple,
 GeneralizationIterator::GeneralizationIterator(const Tuple & s) {
   max_ = 1 << s.size();
   s_ = generalized_ = s;
-  pattern_ = 0;
+  variable_mask_ = 0;
 }
 void GeneralizationIterator::operator++(){
-  int change = pattern_ ^ (pattern_ + 1);
-  pattern_++;
-  if (pattern_ >= max_) return;
+  int change = variable_mask_ ^ (variable_mask_ + 1);
+  variable_mask_++;
+  if (variable_mask_ >= max_) return;
   for (uint i=0; change != 0; i++) {
-    if (pattern_ & (1 << i)) generalized_.terms_[i] = WILDCARD;
+    if (variable_mask_ & (1 << i)) generalized_.terms_[i] = WILDCARD;
     else generalized_.terms_[i] = s_.terms_[i];
     change >>=1;
   }
 }
-bool GeneralizationIterator::done() const{ return (pattern_ >= max_); }
+bool GeneralizationIterator::done() const{ return (variable_mask_ >= max_); }
 const Tuple & GeneralizationIterator::generalized() const { 
   return generalized_; 
 }
-int GeneralizationIterator::pattern() const{ 
-  return pattern_; 
+int GeneralizationIterator::VaraibleMask() const{ 
+  return variable_mask_; 
 }
 
 
