@@ -205,6 +205,17 @@ template<class A, class B> void SparseAdd(map<A,B> * m, const A & a,
   val_ref += b;
   if (val_ref==0) m->erase(a);
 }
+
+template <class C> int CountRange(C start, C end){
+  int ret = 0;
+  for (C run=start; run!=end; run++){
+    ret++;
+  }
+  return ret;
+}
+
+
+
 inline int atoi(const string & s){return atoi(s.c_str());}
 // strips whitespace from the ends of a string
 string StripWhiteEnds(const string & s);
@@ -216,8 +227,8 @@ string IntVectorToString(const vector<int> v);
 // inverse of above, and ignores extra whitespace
 vector<int> StringToIntVector(const string & s);
 
-// random 31-bit integer
-int RandomInt();
+// random 32-bit integer
+uint32 RandomUInt32();
 // between 0 and 1, non-inclusive
 double RandomFraction();
 

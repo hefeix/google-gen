@@ -24,8 +24,19 @@
 #include "tuple.h"
 
 // TODO: Try to make this a class static constant to not pollute global namespace
-#define UNLIMITED_WORK (-1)
+#define UNLIMITED_WORK (-1) 
 
+struct SamplingInfo{
+  bool sampled_;
+  int position_;
+  uint32 start_hash_; // inclusive
+  uint32 end_hash_; // inclusive
+  SamplingInfo(); // creates an unsampled SamplingInfo
+  SamplingInfo(int position, uint32 start_hash, uint32 end_hash);
+  static SamplingInfo RandomRange(int position, int denominator);
+};
+
+  
 // A TupleIndex is, as it suggests, an index over tuples of constants, 
 // that allows the tuples to be searched by a pattern, which is a vector 
 // of tuples of constants and variables.
@@ -40,28 +51,25 @@ class TupleIndex{
   ~TupleIndex();
 
   // Adds a constant tuple to the index.  
-  // Returns a pointer to the static internal copy of the tuple.
-  const Tuple * Add(const Tuple & t);
+  void Add(Tuple t);
 
   // Removes a tuple from the index.
-  void Remove (const Tuple & t);
+  void Remove (Tuple t);
 
-  // Wrappers return void in order to work with the changelist class.
-  void AddWrapper(Tuple t) { Add(t);}
-  void RemoveWrapper(Tuple t) { Remove(t);}
+  // t is composed of constants.
+  bool Contains(const Tuple &t){ return tuples_ % t;}
 
   // A histogram of the lengths of the tuples in the index.
   inline const map<uint64, uint64> & Lengths() const {return lengths_; }
 
   // returns all tuples containing a term.
-  void FindTerm(int w, vector<const Tuple* >* results); 
+  void FindTerm(int w, vector<Tuple>* results); 
 
-  // s is composed of constants.
-  // Returns a pointer to the static internal copy of s, or NULL if absent.
-  const Tuple * FindTuple(const Tuple & s);
-
-  // s is a wildcard tuple. Not all wildcards must match
-  void Lookup(const Tuple & s, vector<const Tuple*> * results);
+  // t is a wildcard tuple.
+  // returns number of results.
+  // sampling ignores its position field.
+  int Lookup(const Tuple & s, vector<Tuple> * results, 
+	     SamplingInfo * sampling = NULL);
 
   // Searches over the index to match a pattern.
   // Pattern can contain literals and variables.  Multiple instances of the
@@ -74,6 +82,7 @@ class TupleIndex{
   // You can tell how much work the function did using the parameter actual_work
   // The function returns true if it doesn't run out of time
   bool FindSatisfactions(const vector<Tuple> & pattern, 
+			 const SamplingInfo * sampling,
 			 vector<Substitution> * substitutions, // can be null
 			 uint64 * num_satisfactions,  // can be null
 			 int64 max_work, // -1 for no limit
@@ -83,26 +92,28 @@ class TupleIndex{
   // If funky_distribution is set, we first choose uniformly over the positions
   // in the tuple of the given terms.  This over-represents tuples where
   // the terms take a rare position.  
-  const Tuple * GetRandomTupleContaining(const vector<int> & terms, 
+  Tuple GetRandomTupleContaining(const vector<int> & terms, 
 					       bool funky_distribution);
 					       
-  const Tuple * RandomTuple() const;
+  Tuple RandomTuple() const;
 
   // for testing.
   void Shell();  
 
  private:
-  struct FullySpecifiedNode{
-    Tuple tuple_;
-    int * pos_in_lists_;
-  };
-  struct UnderspecifiedNode{
-    vector<FullySpecifiedNode *> specifications_;
+  struct Node {
+    set<pair<uint32, Tuple> > specifications_;
     // maps first term to number of tuples starting with that term
-    map<int, int> *first_term_counts_; // present if first term is variable
+    // present if first term is variable
+    map<int, int> *first_term_counts_; 
+    Tuple GetRandomTuple();
+    void GetRange(const SamplingInfo & s, 
+		  set<pair<uint32, Tuple> >::iterator * start,
+		  set<pair<uint32, Tuple> >::iterator * end);
   };
-  hash_map<uint64, FullySpecifiedNode*> fully_specified_;
-  hash_map<uint64, UnderspecifiedNode*> underspecified_;
+  map<Tuple, Node*> nodes_;
+  set<Tuple> tuples_;
+
 
   uint64 total_tuples_;
   map<uint64, uint64> lengths_; // number of stored tuples with these lengths
