@@ -52,6 +52,8 @@ struct Tuple{
     }
     return ret;
   }
+  uint32 Fingerprint32() const { return (uint32) Fingerprint(0); }
+
   // Does this tuple meet the requirements to be these kinds of tuples.
   bool IsConstantTuple() const;
   bool IsVariableTuple() const;
@@ -78,7 +80,7 @@ struct GeneralizationIterator {
   void operator++();
   bool done() const;
   const Tuple & generalized() const;
-  int VaraibleMask() const;
+  int VariableMask() const;
   int max_;
   int variable_mask_;
   Tuple s_;

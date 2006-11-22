@@ -61,7 +61,7 @@ bool Optimizer::MaybeFindRandomCandidateRule(CandidateRule *ret,
   return false;
 }
 TrueTuple * Optimizer::GetRandomTrueTuple(){
-  TrueTuple *ret = model_->FindTrueTuple(*(model_->GetTupleIndex()->RandomTuple()));
+  TrueTuple *ret = model_->FindTrueTuple((model_->GetTupleIndex()->RandomTuple()));
   CHECK(ret);
   return ret;
 }
@@ -135,10 +135,10 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
   vector<Tuple> p;
   Substitution sub;
   int next_var = 0;
-  set<const Tuple *> used_tuples;
-  const Tuple * s1 = model_->GetTupleIndex()->RandomTuple();
+  set<Tuple> used_tuples;
+  Tuple s1 = model_->GetTupleIndex()->RandomTuple();
   used_tuples.insert(s1);
-  p.push_back(*s1);
+  p.push_back(s1);
   int tries = 100;
   while (p.size() < num_clauses) {
     tries--; if (tries<0) break;
@@ -156,12 +156,13 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
       anchors.insert(w);
     }
     vector<int> v_anchors(anchors.begin(), anchors.end());
-    const Tuple * s 
-      = model_->GetTupleIndex()->GetRandomTupleContaining(v_anchors, true);
-    if (!s) continue;
+    Tuple s;
+    bool found_random =  
+      model_->GetTupleIndex()->GetRandomTupleContaining(&s, v_anchors, true);
+    if (!found_random) continue;
     if (used_tuples % s) continue;
     used_tuples.insert(s);
-    p.push_back(*s);
+    p.push_back(s);
     forall(run, anchors){
       sub.Add(*run, Variable(next_var++));
     }
@@ -198,8 +199,9 @@ bool Optimizer::VetteCandidateRule(CandidateRule raw_candidate,
       && (recently_checked_[r] >= model_->GetLnLikelihood()-1.0)) return false;
   Pattern p = Concat(r);
   bool success = 
-    model_->GetTupleIndex()->FindSatisfactions(p, &subs, &num_satisfactions,
-					  max_work, 0);
+    model_->GetTupleIndex()->
+    FindSatisfactions(p, NULL, &subs, 
+		      &num_satisfactions, max_work, 0);
   if (max_work >=0 && num_satisfactions > (uint64)max_work) success = false;
   if (!success) return false;
   if (num_satisfactions < 2) return false;
@@ -208,12 +210,13 @@ bool Optimizer::VetteCandidateRule(CandidateRule raw_candidate,
   uint64 preconditions_num_satisfactions = 0;
   bool preconditions_success = 
     model_->GetTupleIndex()->FindSatisfactions
-    (r.first, 0, 
+    (r.first, NULL, 0, 
      &preconditions_num_satisfactions, 
      max_work, 0);
   if (max_work>=0 && preconditions_num_satisfactions > (uint64)max_work) 
     preconditions_success = false;
   if (!preconditions_success) return false;
+
   // Try to remove preconditions that are not very restrictive.
   bool any_removed = true;
   while (any_removed) {
@@ -226,7 +229,7 @@ bool Optimizer::VetteCandidateRule(CandidateRule raw_candidate,
 	   - GetVariables(simplified_preconditions)).size()) continue;
       uint64 simplified_num_satisfactions = 0;
       if (model_->GetTupleIndex()->FindSatisfactions
-	  (simplified_preconditions, 0, 
+	  (simplified_preconditions, NULL, 0, 
 	   &simplified_num_satisfactions, 
 	   max_work, 0)) {
 	if (simplified_num_satisfactions 
@@ -554,7 +557,7 @@ void Optimizer::TryAddPositiveRule(
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
-  model_->GetTupleIndex()->FindSatisfactions(combined, &subs, 0, UNLIMITED_WORK, 0);
+  model_->GetTupleIndex()->FindSatisfactions(combined, NULL, &subs, 0, UNLIMITED_WORK, 0);
   set<int> precondition_vars = GetVariables(preconditions);
   set<int> result_vars = GetVariables(result);
   result_vars = result_vars-precondition_vars;

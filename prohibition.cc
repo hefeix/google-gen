@@ -33,10 +33,10 @@ Prohibition::Prohibition(Model *m, Tuple prohibited){
   prohibited_ = prohibited;
   exists_ = true;
   model_->changelist_.Make(new DeleteOnRollbackChange<Prohibition>(this));
-  vector<const Tuple*> matches;
+  vector<Tuple> matches;
   model_->tuple_index_.Lookup(prohibited_, &matches);
   for (uint i=0; i<matches.size(); i++) {
-    TrueTuple *t = model_->FindTrueTuple(*(matches[i]));
+    TrueTuple *t = model_->FindTrueTuple(matches[i]);
     CHECK(t);
     L1_AddViolation(t);
   }

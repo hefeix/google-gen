@@ -161,7 +161,7 @@ Precondition::Precondition(Model * model,
   ComputeSetTime();
   uint64 num_sat;
   uint64 work;
-  model_->tuple_index_.FindSatisfactions(pattern_, 0, &num_sat, 
+  model_->tuple_index_.FindSatisfactions(pattern_, NULL, 0, &num_sat, 
 					 UNLIMITED_WORK, &work);
   num_satisfactions_ = num_sat;
   ComputeSetLnLikelihood();
@@ -440,6 +440,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
     uint64 num_sat;
     uint64 work;
     model_->tuple_index_.FindSatisfactions(precondition_->pattern_, 
+					   NULL,
 					   &substitutions,
 					   &num_sat, UNLIMITED_WORK, &work);
     for (uint i=0; i<substitutions.size(); i++) {
@@ -789,8 +790,8 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
   // Insert the tuple into the tuple index
   model_->changelist_.Make
     (new MemberCall1Change<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
-					     &TupleIndex::AddWrapper,
-					     &TupleIndex::RemoveWrapper));
+					     &TupleIndex::Add,
+					     &TupleIndex::Remove));
   // Add it to the map from tuple to TrueTuple
   model_->A1_InsertIntoTupleToTrueTuple(tuple_, this);
   ComputeSetTime();
@@ -851,8 +852,8 @@ void TrueTuple::L1_EraseSubclass(){
   model_->A1_RemoveFromTupleToTrueTuple(tuple_);
   model_->changelist_.Make
     (new MemberCall1Change<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
-					     &TupleIndex::RemoveWrapper,
-					     &TupleIndex::AddWrapper));
+					     &TupleIndex::Remove,
+					     &TupleIndex::Add));
 }
  
 void TrueTuple::A1_MakeRequired(){
@@ -1343,13 +1344,14 @@ void Component::VerifyLayer2Subclass() const{}
 void Precondition::VerifyLayer2Subclass() const{
   uint64 num_sat;
   model_->tuple_index_.
-    FindSatisfactions(pattern_, NULL, &num_sat, UNLIMITED_WORK, NULL);
+    FindSatisfactions(pattern_, NULL, NULL, &num_sat, UNLIMITED_WORK, NULL);
   CHECK(num_sat == (uint64)num_satisfactions_);
 }
 void Rule::VerifyLayer2Subclass() const{
   if (type_ == NEGATIVE_RULE) {  // Make all the RuleSats exist.
     vector<Substitution> substitutions;
     model_->tuple_index_.FindSatisfactions(precondition_->pattern_, 
+					   NULL,
 					   &substitutions,
 					   NULL, UNLIMITED_WORK, NULL);
     for (uint i=0; i<substitutions.size(); i++) {
