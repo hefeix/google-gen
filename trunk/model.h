@@ -16,8 +16,6 @@
 //
 // Author: Noam Shazeer
 
-
-
 #ifndef _MODEL_H_
 #define _MODEL_H_
 
@@ -81,7 +79,7 @@ class Model {
 	       delay, type, target_rule, result, strength, strength2);
   }
   
-  // Inserts or retrieces a creative rule with no preconditions and one 
+  // Inserts or retrieves a creative rule with no preconditions and one 
   // postcondition full of different variables.  Such rules can explain
   // anything.
   Rule * GetAddUniversalRule(uint length); // {} -> { [ $0 $1 ... $(length-1)] }
@@ -107,14 +105,12 @@ class Model {
   }
 
   // Get the number of true tuples
-  
   inline uint GetNumTrueTuples() {
     return tuple_to_true_tuple_.size();
   }
   inline const map<Tuple, TrueTuple*>& GetTupleToTrueTuple() {
     return tuple_to_true_tuple_;
   }
-
 
   // Checks that the ln_likelihood of the model is correctly the sum
   // of the ln_likelihood of all of the components plus the arbitrary term
@@ -158,7 +154,6 @@ class Model {
 				   vector<pair<Rule *, Substitution> > *results,
 				   const set<Component *> * excluded_dependents,
 				   int64 max_work); 
-  
   
   
   // Finds a TrueTuple
