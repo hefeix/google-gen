@@ -16,7 +16,6 @@
 //
 // Author: Noam Shazeer and Georges Harik
 
-
 #include "tupleindex.h"
 #include "lexicon.h"
 
@@ -24,6 +23,7 @@ SamplingInfo::SamplingInfo() {
   sampled_ = false;
 }
 SamplingInfo::SamplingInfo(int position, uint32 start_hash, uint32 end_hash){
+  sampled_ = true;
   position_ = position;
   start_hash_ = start_hash;
   end_hash_ = end_hash;
@@ -37,8 +37,16 @@ SamplingInfo SamplingInfo::RandomRange(int position, int denominator){
 }
 
 bool SamplingInfo::Matches(const Tuple& t) const {
+  if (!sampled_) return true;
   uint32 fp = t.Fingerprint32();
   return (start_hash_ <= fp) && (fp <= end_hash_);
+}
+
+SamplingInfo SamplingInfo::StringToSamplingInfo(const string& s) {
+  istringstream istr(s);
+  int position, denominator;
+  istr >> position >> denominator;
+  return RandomRange(position, denominator);
 }
 
 TupleIndex::TupleIndex() {

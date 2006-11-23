@@ -158,15 +158,35 @@ string ModelShell::Handle(string command) {
       command_stream >> id;
       model_->GetComponent(id)->Erase();
     }
-    else if (command == "numsat") {
+    else if (command == "sat") {
       Record r;
       command_stream >> r;
       Pattern p = StringToTupleVector(r["pattern"]);
+      SamplingInfo sampling;
+      if (r["sample"] != "") {
+	sampling = SamplingInfo::StringToSamplingInfo(r["sample"]);
+      }
       uint64 num_sat;
-      model_->GetTupleIndex()->FindSatisfactions(p, NULL, NULL, &num_sat, 
-						 UNLIMITED_WORK, NULL);
+      uint64 actual_work;
+      vector<Substitution> * subs = NULL;
+      uint num_show = 0;
+      if (r["show"] != "") {
+	num_show = atoi(r["show"]);
+	if (num_show)
+	  subs = new vector<Substitution>();
+      }
+      model_->GetTupleIndex()->
+	FindSatisfactions(p, &sampling, subs, 
+			  &num_sat, UNLIMITED_WORK, &actual_work);
       cout << "Pattern=" << TupleVectorToString(p)
-	   << " num_sat=" << num_sat << endl;
+	   << " num_sat=" << num_sat 
+	   << " actual_work=" << actual_work << endl;
+      if (num_show) {
+	for (uint c=0; c<num_show && c<subs->size(); c++) {
+	  cout << (*subs)[c].ToString() << endl;
+	}
+	delete subs;
+      }
     }
     else if (command == "verify2") {
       model_->VerifyLayer2();

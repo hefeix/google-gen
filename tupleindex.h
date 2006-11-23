@@ -16,7 +16,6 @@
 //
 // Author: Noam Shazeer and Georges Harik
 
-
 #ifndef _TUPLEINDEX_H_
 #define _TUPLEINDEX_H_
 
@@ -35,6 +34,7 @@ struct SamplingInfo{
   SamplingInfo(int position, uint32 start_hash, uint32 end_hash);
   bool Matches(const Tuple& t) const;
   static SamplingInfo RandomRange(int position, int denominator);
+  static SamplingInfo StringToSamplingInfo(const string& s);
 };
 
   
