@@ -3,14 +3,25 @@ easy stuff:
 
 N: Discretize all the ln_likelihoods
 
-N: Clear the model by reverting the entire changelist
-
-N: resurrect commented out tactics
-
 N: Make sure everything is kosher with likelihood tracking.
 
 G: Make the webserver convenient
 
+
+medium stuff:
+
+Incorporate sampling into rule screening.
+
+Factoring rules 
+(with or without substituting variables for constants)
+
+Adding Tuples to the left hand side of a rule for incerased accuracy.
+(by adding a tuple to the RHS of this or another rule)
+(by adding any tuple)
+
+Keep an index between constants and (Rule,variable) pairs.
+(to be used in the accuracy stuff above)
+(maybe even pairs/triples of constants)
 
 
 hard/nebulous stuff:
