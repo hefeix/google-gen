@@ -189,7 +189,6 @@ void Optimizer::RuleInfo::Canonicalize(){
 }
 
 void Optimizer::RuleInfo::FindCandidateFirings(){
-  uint64 num_satisfactions;
   vector<Substitution> subs;
   bool success = 
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
@@ -200,7 +199,7 @@ void Optimizer::RuleInfo::FindCandidateFirings(){
     needs_bigger_sample_ = true;
     return;
   }
-  if (num_satisfactions < 2) {
+  if (sampled_num_firings_ < 2) {
     needs_bigger_sample_ = true;
     return;
   }
