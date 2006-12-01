@@ -193,7 +193,7 @@ void Optimizer::RuleInfo::FindCandidateFirings(){
   bool success = 
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
     (Concat(r_),
-     &sampling_, 
+     &combined_sampling_, 
      &subs_, &sampled_num_firings_, max_work_, NULL);
   if (!success) {
     needs_bigger_sample_ = true;
@@ -247,7 +247,7 @@ void Optimizer::RuleInfo::FindNumSatisfactions(){
   // check that the preconditions aren't too much work to searh for.
   bool success = 
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
-    (r_.first, &sampling_, 0, 
+    (r_.first, &precondition_sampling_, 0, 
      &sampled_num_satisfactions_, 
      max_work_, 0);
   if (!success) {
@@ -269,27 +269,35 @@ void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
     any_removed = false;
     for (uint i=0; i<r_.first.size(); i++) {
       vector<Tuple> simplified_preconditions = RemoveFromVector(r_.first, i);
+      SamplingInfo simplified_sampling = precondition_sampling_;
+      if (sampled_) {
+	if ((int)i < sample_clause_) {
+	  simplified_sampling.position_--;	  
+	} else if ((int)i == sample_clause_){
+	  simplified_sampling = SamplingInfo();
+	}
+      }
       // if a variable is in the result and occurs only in this clause
       // of the precondition, then this clause is necessary.
       if ((Intersection(GetVariables(r_.first[i]), GetVariables(r_.second))
 	   - GetVariables(simplified_preconditions)).size()) continue;
       uint64 simplified_num_satisfactions = 0;
       if (optimizer_->model_->GetTupleIndex()->FindSatisfactions
-	  (simplified_preconditions, &sampling_, 0,
+	  (simplified_preconditions, &simplified_sampling, 0,
 	   &simplified_num_satisfactions,
 	   max_work_, 0)) {
 	if (simplified_num_satisfactions
 	    <= sampled_num_satisfactions_ * 1.1){
 	  // adjust the samplinginfo object
-	  if (!sample_postcondition_){
-	    if (sampled_) {
-	      if ((int)i < sample_clause_) {
-		sample_clause_--;
-		sampling_.position_--;
-	      } else if ((int)i==sample_clause_){
-		sampling_ = SamplingInfo();
-		sampled_ = false;
-	      }
+	  CHECK (!sample_postcondition_);
+	  if (sampled_) {
+	    if ((int)i < sample_clause_) {
+	      sample_clause_--;
+	      precondition_sampling_.position_--;
+	      combined_sampling_.position_--;
+	    } else if ((int)i==sample_clause_){
+	      precondition_sampling_ = SamplingInfo();
+	      sampled_ = false;
 	    }
 	  }
 	  r_.first = RemoveFromVector(r_.first, i);
@@ -358,7 +366,7 @@ bool Optimizer::RuleInfo::Vette(){
     r_ = revert_to_rule;
     // Try sampling each clause in the precondition to see if one works, 
     // or each clause in the postcondition if the precondition is empty.
-    bool sample_postcondition_ = (r_.first.size()!=0);
+    sample_postcondition_ = (r_.first.size()==0);
     const Pattern & sample_pattern 
       = sample_postcondition_?r_.second:r_.first;
     for (uint sample_clause = 0; sample_clause<sample_pattern.size(); 
@@ -369,15 +377,19 @@ bool Optimizer::RuleInfo::Vette(){
       needs_bigger_sample_ = false;
       sampled_ = (denominator_ > 1);
       //  see if sampling this clause by this denominator works.  
-      sampling_= SamplingInfo();
-      if (sampled_) sampling_ = 
-	SamplingInfo::RandomRange(sample_clause_
-				  +(sample_postcondition_?r_.first.size():0), 
-				  denominator_);
+      precondition_sampling_ = combined_sampling_ = SamplingInfo();
+      if (sampled_) {
+	combined_sampling_ = 
+	  SamplingInfo::RandomRange(sample_clause_, denominator_);
+	CHECK(sample_postcondition_ 
+	      == ((uint)sample_clause_ >= r_.first.size()));
+	if (!sample_postcondition_)
+	  precondition_sampling_ = combined_sampling_;
+      }
       // first find satisfactions of the whole thing.
       FindCandidateFirings();
       if (needs_bigger_sample_) continue; if (hopeless_) return false;
-
+      
       // count the number of satisfactions of the preconditions
       FindNumSatisfactions();
       if (needs_bigger_sample_) continue; if (hopeless_) return false;
