@@ -36,6 +36,19 @@ SamplingInfo SamplingInfo::RandomRange(int position, int denominator){
   return SamplingInfo(position, start, end);
 }
 
+bool SamplingInfo::RemovePosition(int position) {
+  if (!sampled_) return false;
+  if (position < position_) {
+    position_--;
+    return true;
+  }
+  if (position == position__) {
+    sampled_ = false;
+    return false;
+  }
+  return true;
+}
+
 bool SamplingInfo::Matches(const Tuple& t) const {
   if (!sampled_) return true;
   uint32 fp = t.Fingerprint32();
