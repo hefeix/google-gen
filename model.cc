@@ -54,6 +54,7 @@ Prohibition * Model::AddProhibitionToSpec(Tuple t, vector<Tuple> exceptions){
 }
 
 void Model::ReadSpec(istream * input){
+  Timer readspec_timer(__FUNCTION__, NULL);
   string w;
   while ((*input) >> w) {
     if (w != "[") continue;
@@ -396,6 +397,7 @@ void Model::Store(string filename) const {
   output.close();
 }
 void Model::Load(string filename) {
+  Timer load_timer(__FUNCTION__, NULL);
   ifstream input(filename.c_str());
   Record r;
   while (input >> r){
