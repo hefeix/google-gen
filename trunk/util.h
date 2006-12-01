@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
+// Author: Noam Shazeer and Georges Harik
 
 
 // Functions of general utility
@@ -23,6 +23,7 @@
 #ifndef _UTIL_H_
 #define _UTIL_H_
 
+#include <sys/time.h>
 #include "hash.h"
 #include <vector>
 #include <string>  
@@ -41,13 +42,41 @@
 #define OPERATORGT operator >
 #define OPERATORGE operator >=
 
-#define CHECK(cond) if(!(cond)) {cerr << "Check Failed" << endl; int *x=0; *x=0; }
-#define forall(A, B) for ( typeof((B).begin()) A = (B).begin(); A!=(B).end(); ++A )
-
 // For logging
 int GetVerbosity();
 void SetVerbosity(int v);
+
 #define VLOG(N) if (GetVerbosity() >=N) cerr << __FUNCTION__ << ":" << __LINE__ << " "
+#define CHECK(cond) if(!(cond)) {cerr << "Check Failed" << endl; int *x=0; *x=0; }
+
+#define forall(A, B) for ( typeof((B).begin()) A = (B).begin(); A!=(B).end(); ++A )
+
+// A simple timing class
+class Timer {
+ public:
+  Timer(string mesg, uint64 * acc) {
+    mesg_ = mesg;
+    acc_ = acc;
+    int ret = gettimeofday(&tv_, NULL);
+    CHECK(ret == 0);
+  }
+
+  ~Timer() {
+    struct timeval now;
+    int ret = gettimeofday(&now, NULL);
+    CHECK(ret == 0);
+    uint64 sdiff = now.tv_sec - tv_.tv_sec;
+    uint64 mdiff = now.tv_usec - tv_.tv_usec;
+    uint64 diff = sdiff * 1000000 + mdiff;
+    if (acc_) *acc_ += diff;
+    cerr << mesg_ << " T:" << diff << endl;
+  }
+  
+ private:
+  struct timeval tv_;
+  string  mesg_;
+  uint64 *acc_;
+};
 
 typedef unsigned long long uint64;
 typedef unsigned long uint32;
