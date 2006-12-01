@@ -184,66 +184,128 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
   return VetteCandidateRule(r, ret, max_work, comments);
 }
 
-bool Optimizer::VetteCandidateRule(CandidateRule raw_candidate, 
-				   CandidateRule * simplified_rule, 
-				   int64 max_work, 
-				   string *comments) {
-  if (Intersection(GetVariables(raw_candidate.first), 
-		   GetVariables(raw_candidate.second)).size()==0) return false;
-  *comments+= " Raw=" + CandidateRuleToString(raw_candidate);
-  VLOG(1) << "Raw=" << CandidateRuleToString(raw_candidate) << endl;
+void Optimizer::RuleInfo::Canonicalize(){
+  r_ = CanonicalizeRule(r_);
+}
+
+void Optimizer::RuleInfo::FindCandidateFirings(){
   uint64 num_satisfactions;
   vector<Substitution> subs;
-  CandidateRule r = CanonicalizeRule(raw_candidate);
-  if ((recently_checked_ % r) 
-      && (recently_checked_[r] >= model_->GetLnLikelihood()-1.0)) return false;
-  Pattern p = Concat(r);
   bool success = 
-    model_->GetTupleIndex()->
-    FindSatisfactions(p, NULL, &subs, 
-		      &num_satisfactions, max_work, 0);
-  if (max_work >=0 && num_satisfactions > (uint64)max_work) success = false;
-  if (!success) return false;
-  if (num_satisfactions < 2) return false;
-  
+    optimizer_->model_->GetTupleIndex()->FindSatisfactions
+    (Concat(r_),
+     &sampling_, 
+     &subs_, &sampled_num_firings_, max_work_, NULL);
+  if (!success) {
+    needs_bigger_sample_ = true;
+    return;
+  }
+  if (num_satisfactions < 2) {
+    needs_bigger_sample_ = true;
+    return;
+  }
+  if (max_work_ >=0 && sampled_num_firings_ > (uint64)max_work_) {
+    hopeless_ = true;
+    return;
+  }
+  estimated_firings_ = sampled_num_firings_ * denominator_;
+}
+const Tuple & Optimizer::RuleInfo::GetSampledTuple(){
+  return 
+    (sample_postcondition_?r_.second[sample_clause_]:r_.first[sample_clause_]);
+}
+void Optimizer::RuleInfo::CheckForMultipleValuesOfSampledTuple(){
+  // Here we will require also that there be at least two values of the
+  // sampled tuple.  
+  if (sampled_) {
+    set<int> sampled_tuple_variables 
+      = GetVariables(GetSampledTuple());
+    bool any_multivalued_variables = false;
+    forall(run, sampled_tuple_variables){
+      int compare_to = subs_[0].Lookup(*run);
+      for (uint i=1; i<subs_.size(); i++) {
+	if (subs_[i].Lookup(*run) != compare_to) {
+	  any_multivalued_variables = true;
+	  break;
+	}
+      }
+      if (any_multivalued_variables) break;
+    }
+    if (!any_multivalued_variables) {
+      needs_bigger_sample_ = true;
+      return;
+    };
+  }
+}
+void Optimizer::RuleInfo::BailIfRecentlyChecked(){
+  if ((optimizer_->recently_checked_ % r_) 
+      && (optimizer_->recently_checked_[r_] 
+	  >= optimizer_->model_->GetLnLikelihood()-1.0)) {
+    hopeless_ = true;
+  }
+}
+void Optimizer::RuleInfo::FindNumSatisfactions(){
   // check that the preconditions aren't too much work to searh for.
-  uint64 preconditions_num_satisfactions = 0;
-  bool preconditions_success = 
-    model_->GetTupleIndex()->FindSatisfactions
-    (r.first, NULL, 0, 
-     &preconditions_num_satisfactions, 
-     max_work, 0);
-  if (max_work>=0 && preconditions_num_satisfactions > (uint64)max_work) 
-    preconditions_success = false;
-  if (!preconditions_success) return false;
+  bool success = 
+    optimizer_->model_->GetTupleIndex()->FindSatisfactions
+    (r_.first, &sampling_, 0, 
+     &sampled_num_satisfactions_, 
+     max_work_, 0);
+  if (!success) {
+    needs_bigger_sample_ = true;
+    return;
+  }
+  if (max_work_>=0 && sampled_num_satisfactions_ > (uint64)max_work_){
+    hopeless_ = true;
+    return;
+  }
+  estimated_satisfactions_ 
+    = sampled_num_satisfactions_ * (sample_postcondition_?1:denominator_);
+}
 
+void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
   // Try to remove preconditions that are not very restrictive.
   bool any_removed = true;
   while (any_removed) {
     any_removed = false;
-    for (uint i=0; i<r.first.size(); i++) {
-      vector<Tuple> simplified_preconditions = RemoveFromVector(r.first, i);
+    for (uint i=0; i<r_.first.size(); i++) {
+      vector<Tuple> simplified_preconditions = RemoveFromVector(r_.first, i);
       // if a variable is in the result and occurs only in this clause
       // of the precondition, then this clause is necessary.
-      if ((Intersection(GetVariables(r.first[i]), GetVariables(r.second))
+      if ((Intersection(GetVariables(r_.first[i]), GetVariables(r_.second))
 	   - GetVariables(simplified_preconditions)).size()) continue;
       uint64 simplified_num_satisfactions = 0;
-      if (model_->GetTupleIndex()->FindSatisfactions
-	  (simplified_preconditions, NULL, 0, 
-	   &simplified_num_satisfactions, 
-	   max_work, 0)) {
-	if (simplified_num_satisfactions 
-	    <= preconditions_num_satisfactions * 1.1){
-	  r.first = RemoveFromVector(r.first, i);	  
+      if (optimizer_->model_->GetTupleIndex()->FindSatisfactions
+	  (simplified_preconditions, &sampling_, 0,
+	   &simplified_num_satisfactions,
+	   max_work_, 0)) {
+	if (simplified_num_satisfactions
+	    <= sampled_num_satisfactions_ * 1.1){
+	  // adjust the samplinginfo object
+	  if (!sample_postcondition_){
+	    if (sampled_) {
+	      if ((int)i < sample_clause_) {
+		sample_clause_--;
+		sampling_.position_--;
+	      } else if ((int)i==sample_clause_){
+		sampling_ = SamplingInfo();
+		sampled_ = false;
+	      }
+	    }
+	  }
+	  r_.first = RemoveFromVector(r_.first, i);
 	  i--;
 	  any_removed = true;
 	}
       }
     }
   }
+}
+
+void Optimizer::RuleInfo::RemoveBoringVariables(){
   map<int, set<int> > replacements;
-  for (uint i=0; i<subs.size(); i++) {
-    forall(run, subs[i].sub_){
+  for (uint i=0; i<subs_.size(); i++) {
+    forall(run, subs_[i].sub_){
       replacements[run->first].insert(run->second);
     }
   }
@@ -252,37 +314,109 @@ bool Optimizer::VetteCandidateRule(CandidateRule raw_candidate,
     if (run->second.size()==1) {
       boring_variables.Add(run->first, *run->second.begin());
     }
-  }
+      }
   if (GetVerbosity() >= 2) {
     VLOG(2) << "subs=" << endl;
-    for (uint i=0; i<subs.size(); i++) 
-      VLOG(3) << subs[i].ToString() << endl;
+    for (uint i=0; i<subs_.size(); i++) 
+      VLOG(3) << subs_[i].ToString() << endl;
   }
-  VLOG(2) << "candidate= " << CandidateRuleToString(r) << endl;
+  VLOG(2) << "candidate= " << CandidateRuleToString(r_) << endl;
   VLOG(2) << "boring_variables="
 	  << boring_variables.ToString() << endl;
-  boring_variables.Substitute(&r.first);
-  boring_variables.Substitute(&r.second);
-  if (GetVariables(r.second).size()==0) return false;
-  if (Intersection(GetVariables(r.first), 
-		   GetVariables(r.second)).size()==0) return false;
-  r.first = RemoveVariableFreeTuples(r.first);
-  r.second = RemoveVariableFreeTuples(r.second);
-  r = CanonicalizeRule(r);
-  *simplified_rule = r;
-  if ((recently_checked_ % r) 
-      && (recently_checked_[r] <= model_->GetLnLikelihood()+1.0)) return false;
-  
-  VLOG(1) << "max_work=" << max_work 
-	  << " satisfactions(combined)="
-	  << num_satisfactions << " satisfactions(preconditions)="
-	  << preconditions_num_satisfactions
-	  << " raw=" << CandidateRuleToString(raw_candidate)
-	  << " simplified=" << CandidateRuleToString(*simplified_rule)
-	  << endl;
-    
-  return true;
+  boring_variables.Substitute(&r_.first);
+  boring_variables.Substitute(&r_.second);
+  if (GetVariables(r_.second).size()==0 ||
+      Intersection(GetVariables(r_.first), 
+		   GetVariables(r_.second)).size()==0) {
+    hopeless_ = true;
+    return;
+  }
+  r_.first = RemoveVariableFreeTuples(r_.first);
+  r_.second = RemoveVariableFreeTuples(r_.second);
+}
+
+bool Optimizer::RuleInfo::Vette(){
+  hopeless_ = false;
+  needs_bigger_sample_ = false;
+  if (Intersection(GetVariables(r_.first), 
+		   GetVariables(r_.second)).size()==0) {
+    hopeless_ = true;
+    return false;
+  }
+  comments_ += " Raw=" + CandidateRuleToString(r_);
+  VLOG(0) << "Raw=" << CandidateRuleToString(r_) << endl;
+  Canonicalize();
+  BailIfRecentlyChecked();
+  if (hopeless_) return false;
+
+  // since things within the loops can change r_, we revert it every time
+  // to make sure nothing weird is going on.  
+  CandidateRule revert_to_rule = r_;
+
+  // Sample more aggressively at first, then less agressively if that doesn't 
+  // work.
+  for (denominator_ = 1024; denominator_>0; denominator_ >>=1 ) {
+    r_ = revert_to_rule;
+    // Try sampling each clause in the precondition to see if one works, 
+    // or each clause in the postcondition if the precondition is empty.
+    bool sample_postcondition_ = (r_.first.size()!=0);
+    const Pattern & sample_pattern 
+      = sample_postcondition_?r_.second:r_.first;
+    for (uint sample_clause = 0; sample_clause<sample_pattern.size(); 
+	 sample_clause++) {
+      // (since sample_clause_ can be changed in the loop)
+      sample_clause_ = sample_clause; 
+      r_ = revert_to_rule;
+      needs_bigger_sample_ = false;
+      sampled_ = (denominator_ > 1);
+      //  see if sampling this clause by this denominator works.  
+      sampling_= SamplingInfo();
+      if (sampled_) sampling_ = 
+	SamplingInfo::RandomRange(sample_clause_
+				  +(sample_postcondition_?r_.first.size():0), 
+				  denominator_);
+      // first find satisfactions of the whole thing.
+      FindCandidateFirings();
+      if (needs_bigger_sample_) continue; if (hopeless_) return false;
+
+      // count the number of satisfactions of the preconditions
+      FindNumSatisfactions();
+      if (needs_bigger_sample_) continue; if (hopeless_) return false;
+
+      // TODO: Make estimates of the complexity savings and possibly fail
+
+      // TODO: Try adding clauses to increase precision.
+
+      // Try to remove preconditions that are not very restrictive.
+      RemoveUnrestrictivePreconditions();
+      if (needs_bigger_sample_) continue; if (hopeless_) return false;
+
+      RemoveBoringVariables();
+      if (needs_bigger_sample_) continue; if (hopeless_) return false;
+
+      Canonicalize();
+      if (needs_bigger_sample_) continue; if (hopeless_) return false;
+
+      BailIfRecentlyChecked();
+      if (needs_bigger_sample_) continue; if (hopeless_) return false;
+
+      return true;
+    }
+  }
+  hopeless_ = true;
+  return false;
 } 
+
+bool Optimizer::VetteCandidateRule(CandidateRule r, 
+				   CandidateRule *simplified_rule,
+				   int64 max_work, 
+				   string *comments){
+  RuleInfo ri(this, r, max_work);
+  bool ret = ri.Vette();
+  if (simplified_rule) *simplified_rule = ri.r_;
+  if (comments) *comments = ri.comments_;
+  return ret;
+}
 
 ComputationResult Optimizer::DependsOn(Component * dependent, 
 				       Component * dependee, int64 max_work){

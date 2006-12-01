@@ -95,6 +95,45 @@ struct Optimizer{
 			       Tactic tactic, int time_limit, string *comments);
   bool MaybeFindRandomCandidateRule(CandidateRule * ret, Tactic tactic, 
 				    string *comments);
+  
+  // used for accumulating information about a candidate rule in deciding
+  // whether to try adding it.
+  struct RuleInfo {
+    CandidateRule r_;
+    Optimizer *optimizer_;
+    vector<Substitution> subs_;
+    int64 max_work_;
+    bool sampled_;
+    bool sample_postcondition_;
+    int denominator_;
+    int sample_clause_;
+    SamplingInfo sampling_;
+    bool hopeless_;
+    bool needs_bigger_sample_;
+    uint64 sampled_num_firings_;
+    uint64 sampled_num_satisfactions_;
+    uint64 estimated_satisfactions_;
+    uint64 estimated_firings_;
+    string comments_;
+
+    RuleInfo(Optimizer *optimizer, CandidateRule r, int64 max_work){
+      optimizer_ = optimizer;
+      r_ = r;
+      max_work_ = max_work;
+      hopeless_ = false;
+    }
+    bool Vette(); // returns true if it is promising
+    void Canonicalize();
+    void FindCandidateFirings();
+    void CheckForMultipleValuesOfSampledTuple();
+    void BailIfRecentlyChecked();
+    void FindNumSatisfactions();
+    void RemoveUnrestrictivePreconditions();
+    void RemoveBoringVariables();
+    const Tuple & GetSampledTuple();
+  };
+  
+  
   bool VetteCandidateRule(CandidateRule r, 
 			  CandidateRule * simplified_rule, 
 			  int64 max_work, string *comments);
