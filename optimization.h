@@ -107,7 +107,8 @@ struct Optimizer{
     bool sample_postcondition_;
     int denominator_;
     int sample_clause_;
-    SamplingInfo sampling_;
+    SamplingInfo precondition_sampling_;
+    SamplingInfo combined_sampling_;
     bool hopeless_;
     bool needs_bigger_sample_;
     uint64 sampled_num_firings_;
