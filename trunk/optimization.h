@@ -134,7 +134,7 @@ struct Optimizer{
     const Tuple & GetSampledTuple();
   };
   
-  
+  int64 StandardMaxWork();
   bool VetteCandidateRule(CandidateRule r, 
 			  CandidateRule * simplified_rule, 
 			  int64 max_work, string *comments);

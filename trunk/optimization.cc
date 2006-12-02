@@ -66,10 +66,13 @@ TrueTuple * Optimizer::GetRandomTrueTuple(){
   return ret;
 }
 
+int64 Optimizer::StandardMaxWork(){
+ return 5  * (int64)model_->GetNumTrueTuples();
+}
 
 bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
 					   string *comments){
-  int64 max_work = 5  * (uint)model_->GetNumTrueTuples();
+  int64 max_work = StandardMaxWork();
   TrueTuple * tp = GetRandomTrueTuple();
   CHECK(tp->GetCauses().size());
   Firing * f = *(tp->GetCauses().begin());
@@ -194,20 +197,22 @@ void Optimizer::RuleInfo::FindCandidateFirings(){
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
     (Concat(r_),
      &combined_sampling_, 
-     &subs_, &sampled_num_firings_, max_work_, NULL);
+     &subs_, &sampled_num_firings_, max_work_/denominator_ + 10, NULL);
   if (!success) {
-    needs_bigger_sample_ = true;
+    hopeless_ = true;
+    //needs_bigger_sample_ = true;
     return;
   }
   if (sampled_num_firings_ < 2) {
     needs_bigger_sample_ = true;
     return;
   }
-  if (max_work_ >=0 && sampled_num_firings_ > (uint64)max_work_) {
+  estimated_firings_ = sampled_num_firings_ * denominator_;
+  if (max_work_ >=0 && estimated_firings_ > (uint64)max_work_) {
     hopeless_ = true;
     return;
   }
-  estimated_firings_ = sampled_num_firings_ * denominator_;
+
 }
 const Tuple & Optimizer::RuleInfo::GetSampledTuple(){
   return 
@@ -249,17 +254,19 @@ void Optimizer::RuleInfo::FindNumSatisfactions(){
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
     (r_.first, &precondition_sampling_, 0, 
      &sampled_num_satisfactions_, 
-     max_work_, 0);
+     max_work_/denominator_+10, 0);
   if (!success) {
-    needs_bigger_sample_ = true;
-    return;
-  }
-  if (max_work_>=0 && sampled_num_satisfactions_ > (uint64)max_work_){
     hopeless_ = true;
+    // needs_bigger_sample_ = true;
     return;
   }
   estimated_satisfactions_ 
     = sampled_num_satisfactions_ * (sample_postcondition_?1:denominator_);
+  
+  if (max_work_>=0 && estimated_satisfactions_ > (uint64)max_work_){
+    hopeless_ = true;
+    return;
+  }
 }
 
 void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
