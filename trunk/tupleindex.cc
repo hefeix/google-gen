@@ -36,13 +36,13 @@ SamplingInfo SamplingInfo::RandomRange(int position, int denominator){
   return SamplingInfo(position, start, end);
 }
 
-bool SamplingInfo::RemovePosition(int position) {
+bool SamplingInfo::RemovePosition(uint32 position) {
   if (!sampled_) return false;
   if (position < position_) {
     position_--;
     return true;
   }
-  if (position == position__) {
+  if (position == position_) {
     sampled_ = false;
     return false;
   }
