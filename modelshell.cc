@@ -261,17 +261,26 @@ string ModelShell::Handle(string command) {
       string pat;
       Record r;
       command_stream >> r;
-      vector<Tuple> preconditions = StringToTupleVector(r["lhs"]);
-      vector<Tuple> result = StringToTupleVector(r["rhs"]);
+      CandidateRule original = make_pair(
+					 StringToTupleVector(r["lhs"]),
+					 StringToTupleVector(r["rhs"]));
       {
 	OptimizationCheckpoint cp(optimizer_, true);
-	string comments = "Added by hand";
-	optimizer_->TryAddPositiveRule(preconditions, result, 10, comments);
+	string comments;
+	CandidateRule simplified;
+	bool success 
+	  = optimizer_->VetteCandidateRule(original, &simplified, 
+					   optimizer_->StandardMaxWork(), 
+					   &comments);
+	comments += " added by hand ";
+	cerr << "Vette " << (success?"succeeded":"failed") << endl;
+	if (success) original = simplified;
+	optimizer_->TryAddPositiveRule(original.first, original.second, 
+				       10, comments);
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "
-		  << TupleVectorToString(preconditions)
-		  << " ->" << TupleVectorToString(result)
-		<< " model likelihood: " << model_->GetLnLikelihood()
+		  << CandidateRuleToString(original)
+		  << " model likelihood: " << model_->GetLnLikelihood()
 		  << " gain=" << cp.Gain() << endl;
 	}
       }
