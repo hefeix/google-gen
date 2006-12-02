@@ -200,6 +200,7 @@ void Optimizer::RuleInfo::FindCandidateFirings(){
      &subs_, &sampled_num_firings_, max_work_/denominator_ + 10, NULL);
   if (!success) {
     hopeless_ = true;
+    hopeless_cause_ = 1;
     //needs_bigger_sample_ = true;
     return;
   }
@@ -210,6 +211,7 @@ void Optimizer::RuleInfo::FindCandidateFirings(){
   estimated_firings_ = sampled_num_firings_ * denominator_;
   if (max_work_ >=0 && estimated_firings_ > (uint64)max_work_) {
     hopeless_ = true;
+    hopeless_cause_ = 2;
     return;
   }
 
@@ -257,6 +259,7 @@ void Optimizer::RuleInfo::FindNumSatisfactions(){
      max_work_/denominator_+10, 0);
   if (!success) {
     hopeless_ = true;
+    hopeless_cause_ = 1;
     // needs_bigger_sample_ = true;
     return;
   }
@@ -265,6 +268,7 @@ void Optimizer::RuleInfo::FindNumSatisfactions(){
   
   if (max_work_>=0 && estimated_satisfactions_ > (uint64)max_work_){
     hopeless_ = true;
+    hopeless_cause_ = 2;
     return;
   }
 }
@@ -361,7 +365,10 @@ bool Optimizer::RuleInfo::Vette(){
   VLOG(0) << "Raw=" << CandidateRuleToString(r_) << endl;
   Canonicalize();
   BailIfRecentlyChecked();
-  if (hopeless_) return false;
+  if (hopeless_) {
+    VLOG(0) << "Hopeless checked recently" << endl;
+    return false;
+  }
 
   // since things within the loops can change r_, we revert it every time
   // to make sure nothing weird is going on.  
@@ -395,11 +402,21 @@ bool Optimizer::RuleInfo::Vette(){
       }
       // first find satisfactions of the whole thing.
       FindCandidateFirings();
-      if (needs_bigger_sample_) continue; if (hopeless_) return false;
+      if (needs_bigger_sample_) continue; 
+      if (hopeless_) {
+	VLOG(0) << "Quit after FindCandidateFirings denom:" << denominator_ 
+		<< " cause:" << hopeless_cause_ << endl;
+	return false;
+      }
       
       // count the number of satisfactions of the preconditions
       FindNumSatisfactions();
-      if (needs_bigger_sample_) continue; if (hopeless_) return false;
+      if (needs_bigger_sample_) continue; 
+      if (hopeless_) {
+	VLOG(0) << "Quit after FindNumSatisfactions denom:" << denominator_
+		<< " cause:" << hopeless_cause_ << endl;
+	return false;
+      }
 
       // TODO: Make estimates of the complexity savings and possibly fail
 
@@ -410,18 +427,28 @@ bool Optimizer::RuleInfo::Vette(){
       if (needs_bigger_sample_) continue; if (hopeless_) return false;
 
       RemoveBoringVariables();
-      if (needs_bigger_sample_) continue; if (hopeless_) return false;
+      if (needs_bigger_sample_) continue; 
+      if (hopeless_) {
+	VLOG(0) << "Quit after RemoveBoringVariables denom:" << denominator_
+		<< endl;
+	return false;
+      }
 
       Canonicalize();
       if (needs_bigger_sample_) continue; if (hopeless_) return false;
 
       BailIfRecentlyChecked();
-      if (needs_bigger_sample_) continue; if (hopeless_) return false;
-
+      if (needs_bigger_sample_) continue; 
+      if (hopeless_) {
+	VLOG(0) << "Quit after RecentlyChecked(2) denom:" << denominator_ << endl;
+	return false;
+      }
       return true;
     }
   }
+
   hopeless_ = true;
+  VLOG(0) << "Quit because no sample worked well" << endl;
   return false;
 } 
 
