@@ -1,0 +1,9 @@
+digraph components { // red green blue
+	graph [label= "structural dependencies - green\ntemporal dependencies - red\npurposes - blue"]; // red green blue
+	Precondition -> Rule [color=blue];
+	Precondition -> NegRule [color=blue];
+	Satisfaction -> RuleSat [color=blue];
+	Satisfaction -> NegRuleSat [color=blue];
+	RuleSat -> Firing [color=blue];
+	RuleSat -> NegRuleSat [color=blue];
+} // red green blue
