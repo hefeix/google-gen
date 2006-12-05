@@ -360,6 +360,22 @@ Firing * Rule::AddFiring(const Substitution & sub) {
 	  << "left sub=" << sub.Restrict(RightVariables()).ToString() << endl;
   return ret;
 }
+
+// Only works for simple rules
+void Rule::AddAllSatisfactionsAsFirings() {
+
+  CHECK(type_ == SIMPLE_RULE);
+
+  // Get all the substitutions required
+  vector<Substitution> subs;
+  model_->GetTupleIndex()->FindSatisfactions
+    (precondition_->pattern_, NULL, &subs, NULL, -1, NULL);
+
+  // Add firings for each substitution
+  for (uint c=0; c<subs.size(); c++)
+    AddFiring(subs[c]);
+}
+
 RuleSat * Rule::FindRuleSat(Satisfaction *sat) const{
   RuleSat * const * rsp = rule_sats_ % sat;
   if (rsp) return *rsp;  
@@ -393,7 +409,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
 	   RuleType type, Rule * target_rule,
 	   vector<Tuple> result, EncodedNumber strength,
 	   EncodedNumber strength2)
-  :Component(precondition->model_){
+  : Component(precondition->model_){
   precondition_ = precondition;
   delay_ = delay;
   type_ = type;
@@ -419,6 +435,33 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
     model_->A1_InsertIntoWildcardTupleToResult
       (result_[i].VariablesToWildcards(), this, i);
   }
+  
+  // Look at all the subsets of tuples of the rule
+  if (type_ != NEGATIVE_RULE) {
+    Pattern combined = precondition_->pattern_;
+    combined.insert(combined.end(), result_.begin(), result_.end());
+    int max = 1 << combined.size();
+    for (int mask=0; mask < max; mask++) {
+      if ((mask & (mask-1)) == 0) continue;
+      SubRuleInfo sri;
+      sri.rule_ = this;
+      Pattern      subpattern, c_subpattern;
+      for (uint c=0; c < combined.size(); c++) {
+	if (mask & (1<<c)) {
+	  subpattern.push_back(combined[c]);
+	  if (c >= precondition_->pattern_.size())
+	    sri.postcondition_ = true;
+	}
+      }
+      if (IsConnectedPattern(subpattern)) {
+	c_subpattern = Canonicalize(subpattern, &sri.sub_);
+	model_->A1_InsertIntoSubrulePatternToRule(c_subpattern, sri);
+      } else {
+	VLOG(1) << "Disconnected Pattern " << TupleVectorToString(subpattern) << endl;
+      }
+    }
+  }
+
   vector<int> arbitrary_terms;
   direct_pattern_encoding_ln_likelihood_ = 
     PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);
@@ -467,6 +510,31 @@ void Rule::L1_EraseSubclass(){
 	(result_[i].VariablesToWildcards(), this, i);
     }
   }
+
+  // Remove from SubrulePatternToRule
+  if (type_ != NEGATIVE_RULE) {
+    Pattern combined = precondition_->pattern_;
+    combined.insert(combined.end(), result_.begin(), result_.end());
+    int max = 1 << combined.size();
+    for (int mask=0; mask < max; mask++) {
+      if ((mask & (mask-1)) == 0) continue;
+      SubRuleInfo sri;
+      sri.rule_ = this;
+      Pattern      subpattern, c_subpattern;
+      for (uint c=0; c < combined.size(); c++) {
+	if (mask & (1<<c)) {
+	  subpattern.push_back(combined[c]);
+	  if (c >= precondition_->pattern_.size())
+	    sri.postcondition_ = true;
+	}
+      }
+      if (IsConnectedPattern(subpattern)) {
+	c_subpattern = Canonicalize(subpattern, &sri.sub_);
+	model_->A1_RemoveFromSubrulePatternToRule(c_subpattern, sri);
+      }
+    } 
+  }
+
   vector<int> arbitrary_terms;
   PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);  
   for (uint i=0; i<arbitrary_terms.size(); i++)
@@ -781,7 +849,6 @@ string Firing::ImplicationString() const{
   return rule_sat_->ImplicationString(this);
 }
 
-
 // ----- TRUETUPLE -----
 TrueTuple::TrueTuple(Model * model, Tuple tuple)
   :Component(model){
@@ -1086,7 +1153,6 @@ vector<Component *> TrueTuple::TemporalDependents() const{
   return ret;
 }
 
-// WORKING
 vector<Component *> Component::StructuralDependents() const{
   return vector<Component *>();
 }
@@ -1160,21 +1226,28 @@ vector<vector<Component *> > TrueTuple::TemporalCodependents() const{
 vector<Component *> Component::Purposes() const{
   return vector<Component *>();
 }
+
 bool Component::HasPurpose() const { return true; }
+
 vector<Component *> Precondition::Purposes() const{
   return vector<Component *>(rules_.begin(), rules_.end());
 }
+
 bool Precondition::HasPurpose() const { return rules_.size(); }
+
 vector<Component *> Satisfaction::Purposes() const{
   return vector<Component *>(rule_sats_.begin(), rule_sats_.end());
 }
+
 bool Satisfaction::HasPurpose() const { return rule_sats_.size(); }
+
 vector<Component *> RuleSat::Purposes() const{
   vector<Firing*> v = VectorOfValues(firings_);
   vector<Component*> ret(v.begin(), v.end());
   ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
   return ret;
 }
+
 bool RuleSat::HasPurpose() const {return firings_.size()||inhibitors_.size();}
 
 vector<Component *> Component::Copurposes() const{

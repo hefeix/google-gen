@@ -222,6 +222,21 @@ string ModelShell::Handle(string command) {
     /*else if (command == "o") {
       m.OptimizeRound();
       }*/
+    else if (command == "combinerules") {
+      // OptimizationCheckpoint cp(optimizer_, true);
+      int duration;
+      command_stream >> duration;
+      time_t end_time = time(0) + duration;
+      while (time(0) < end_time) {
+	string comments;
+	if (!optimizer_->
+	    CombineRules(end_time-time(0), &comments)) break;
+	//if (cp.KeepChanges()) {
+	  VLOG(0) << "Combined rules" << endl;
+	  VLOG(0) << comments;
+	  //}
+      }
+    }
     else if (command == "i") {
       int tactic;
       command_stream >> tactic;
@@ -250,13 +265,23 @@ string ModelShell::Handle(string command) {
 	}
       }
       model_->ToHTML("html");
-      
     }
     else if (command == "verify"){
       model_->VerifyLayer2();
     }
     // Here's an example
     // addrule { lhs="[ Successor *0 *1 ]" , rhs = "[ Successor *1 *2 ]"  }
+    else if (command == "componentcheck") {
+      Pattern p;
+      Record r;
+      command_stream >> r;
+      p = StringToTupleVector(r["p"]); 
+      if (IsConnectedPattern(p)) {
+	VLOG(0) << "Connected" << endl;
+      } else {
+	VLOG(0) << "Not Connected" << endl;
+      }
+    }
     else if (command == "addrule"){
       string pat;
       Record r;

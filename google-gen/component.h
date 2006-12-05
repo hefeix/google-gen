@@ -388,6 +388,7 @@ class Precondition : public Component {
   // Under direct encoding, the encoding cost of the tuples, excluding for
   // universal naming costs accounted for elsewhere.
   double direct_pattern_encoding_ln_likelihood_;
+
   // The additional ln likelihood added to the model for each satisfaction
   // of the precondition for which none of the associated rules are satisfied.
   double ln_likelihood_per_sat_;
@@ -434,7 +435,6 @@ class Satisfaction : public Component {
   vector<Component *> Purposes() const; // the rule_sats
   bool HasPurpose() const;
   const set<RuleSat *> & GetRuleSats() const { return rule_sats_;}
-
 
  private:
   // ----- CONSTRUCTOR(S) ----- Satisfaction
@@ -484,6 +484,11 @@ class Rule : public Component{
   // Adds a firing, possibly also adding a satisfaction, a rulesat, and
   // some truetuples.  If one already exists, just returns it.
   Firing * AddFiring(const Substitution & sub);
+
+  // This is a convenience function, add ALL satisfactions of a rule's
+  // preconditions as firings. This must be applied to a simple rule
+  void AddAllSatisfactionsAsFirings();
+
   // Changes the strength of the rule, keeping the model likelihood updated
   void ChangeStrength(EncodedNumber new_strength, 
 		      EncodedNumber new_strength2);

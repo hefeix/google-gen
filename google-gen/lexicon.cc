@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
+// Author: Noam Shazeer and Georges Harik
 
 
 #include "lexicon.h"
@@ -24,6 +24,13 @@ LexiconWithVariables LEXICON;
 
 Lexicon::Lexicon() {}
 Lexicon::~Lexicon() {}
+
+bool Lexicon::Contains(const string& s) const {
+  const int * look = string_to_id_ % s;
+  if (look) return true;
+  return false;
+}
+
 bool Lexicon::GetID(const string & s, int * id) const {
   const int * look = string_to_id_ % s;
   if (look) {
@@ -31,6 +38,7 @@ bool Lexicon::GetID(const string & s, int * id) const {
     return true;
   } else return false;
 }
+
 bool LexiconWithVariables::GetID(const string & s, int * id) const{
   if (s.size() && s[0]=='*') {
     if (s.size()==1) {
@@ -43,15 +51,18 @@ bool LexiconWithVariables::GetID(const string & s, int * id) const{
   }
   return Lexicon::GetID(s, id);
 }
+
 int Lexicon::GetAddID(const string & s) {
   int id;
   if (GetID(s, &id)) return id;
   return Add(s);
 }
+
 string Lexicon::GetString(int id) const {
   CHECK(id>=0 && id<(int)id_to_string_.size());
   return id_to_string_[id];
 }
+
 string LexiconWithVariables::GetString(int id) const {
   if (IsWildcard(id)) return "*";
   if (IsVariable(id)) {

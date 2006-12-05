@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
-
+// Author: Noam Shazeer and Georges Harik
 
 // Contains optimization routines
 #include <cmath>
@@ -38,6 +37,150 @@ Optimizer::Optimizer(Model *model){
     }
   }
   }*/
+
+bool Optimizer::CombineRules(int time_limit, string * comments) {
+  time_t end_time = time(NULL) + time_limit;
+  while (!MaybeCombineRules(comments)) {
+    if (time(NULL) >= end_time) return false;
+  }
+  return true;
+}
+
+bool Optimizer::MaybeCombineRules(string * comments) {
+  const map<Pattern, set<SubRuleInfo> >& index = 
+    model_->GetSubrulePatternToRule();
+  RandomElement(p, index);
+  typeof(p) q = p;
+  ++p;
+  while (p->second.size() < 2) {
+    if (p == q) break;
+    ++p;
+    if (p == index.end()) p = index.begin();
+  }
+  if (p->second.size() < 2) return false;
+
+  // get rid of the postcondition ones, and pick one out of every rule represented more than once
+  vector<SubRuleInfo> filtered;
+  double rule_count = 0.0;
+  forall(sri, p->second) {
+    if (sri->postcondition_) continue;
+    SubRuleInfo * last = (filtered.size() ? &filtered[filtered.size()-1]:NULL);
+    if (last && (last->rule_ == sri->rule_)) {
+      rule_count += 1.0;
+      if (RandomFraction() > (rule_count/rule_count+1))
+	*last = *sri;
+    } else {
+      rule_count = 0.0;
+      filtered.push_back(*sri);
+    }
+  }
+  
+  if (filtered.size() <2) return false;
+  
+  VLOG(0) << "Picked For Combination " << endl
+	  << TupleVectorToString(p->first) << endl;
+  for (uint c=0; c<filtered.size(); c++)
+    VLOG(0) << filtered[c].ToString();
+
+  // Do the combination
+  TryCombineRules(p->first, filtered, comments);
+  return true;
+}
+
+// WORKING
+void Optimizer::TryCombineRules(Pattern lhs, 
+				const vector<SubRuleInfo> & info,
+				string * comments) {
+  
+  set<int> pre_variables = GetVariables(lhs);
+  set<int> post_variables;
+
+  // TODO: This would be a good place to check that the preconditions are reasonable
+
+  // What postcondition variables do we need?
+  for (uint c=0; c<info.size(); c++) {
+    const SubRuleInfo & sri = info[c];
+    CHECK(sri.rule_->GetRuleType() != NEGATIVE_RULE);
+    
+    // Figure out which post variables this rule needs
+    // from the new rule
+    Pattern result = sri.rule_->GetResult();
+    sri.sub_.Substitute(&result);
+    set<int> int_set =
+      Intersection(pre_variables, GetVariables(result));
+    post_variables.insert(int_set.begin(), int_set.end());
+  }
+
+  // Do we need to check whether this exists? who knows?
+  string rel_name = model_->FindName(":CR");
+  int rel_id = LEXICON.GetAddID(rel_name);
+
+  Tuple rhs_t;
+  rhs_t.terms_.push_back(rel_id);
+  set<int>::iterator run = post_variables.end();
+  while (true) {
+    --run;
+    rhs_t.terms_.push_back(*run);
+    if (run == post_variables.begin()) break;
+  }
+  Pattern rhs;
+  rhs.push_back(rhs_t);
+
+  // Make the new rule and make all its satisfactions true
+  Rule * new_rule = model_->MakeNewRule
+    (lhs, EncodedNumber(), SIMPLE_RULE, NULL,
+     rhs, EncodedNumber("uuue"), EncodedNumber("ddde"));
+  new_rule->AddAllSatisfactionsAsFirings();
+  VLOG(0) << "Made the new rule and added all its satisfactions" << endl;
+  
+  // Delete the old rules and for each one make a replacement rule
+  VLOG(0) << "About to delete the old rules" << endl;
+  
+  set<Tuple> new_rule_lhs_set;
+  new_rule_lhs_set.insert(lhs.begin(), lhs.end());
+  for (uint c=0; c<info.size(); c++) {
+    const SubRuleInfo & sri = info[c];
+
+    // Grab the original's full substitutions
+    vector<Substitution> original_substitutions;
+    vector<Firing *> firings = sri.rule_->Firings();
+    for (uint c2=0; c2<firings.size(); c2++) {
+      original_substitutions.push_back(firings[c2]->GetFullSubstitution());
+    }
+
+    // The left hand side of the rule removes the common tuples, replacing by 
+    // the right hand side of the common rule instead
+    Pattern prefilter_instead_lhs = sri.rule_->GetPrecondition()->GetPattern();
+    sri.sub_.Substitute(&prefilter_instead_lhs);
+    Pattern instead_lhs;
+    for (uint c2=0; c2<prefilter_instead_lhs.size(); c2++) {
+      if (new_rule_lhs_set % prefilter_instead_lhs[c2]) continue;
+      instead_lhs.push_back(prefilter_instead_lhs[c2]);
+    }
+    instead_lhs.insert(instead_lhs.begin(), rhs.begin(), rhs.end());
+    // TODO now canonicalize this new instead_lhs jeez...
+
+    // The result of the rule stays the same (modulo substitution)
+    Pattern instead_rhs = sri.rule_->GetResult();
+    sri.sub_.Substitute(&instead_rhs);
+
+    // Delete the rule 
+    VLOG(0) << "About to delete rule " << sri.rule_->GetID() << endl;
+    sri.rule_->Erase();
+    VLOG(0) << "Deleted" << endl;
+
+    // Add the modified rule instead    
+    // Rule * instead_rule = 
+      model_->MakeNewRule
+      (instead_lhs, sri.rule_->GetDelay(), sri.rule_->GetRuleType(), NULL, 
+       instead_rhs, sri.rule_->GetStrength(), sri.rule_->GetStrength2());
+
+    // Now add firings for this modified rule TODO
+    
+  }
+  
+
+}
 
 bool Optimizer::FindRandomCandidateRule(CandidateRule *ret, Tactic tactic,
 					int time_limit, string * comments){
@@ -532,8 +675,11 @@ void Optimizer::PushTimesAfterChangeDelay(Rule *rule){
   }  
 }
 
-void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
-		   int max_recursion){
+// TODO: this now needs to be updated to del properly with tuples that aren't
+// required.
+
+void Optimizer::TryAddFirings
+(Rule * rule, const vector<Substitution> & subs, int max_recursion) {
   // alternate explanations to remove, grouped by rule
   map<Rule *, set<Firing *> > to_remove;
   for (uint snum=0; snum<subs.size(); snum++) {
@@ -774,6 +920,7 @@ void Optimizer::TryAddPositiveRule(
   VLOG(1) << "after OptimizeStrength: ll=" << model_->GetLnLikelihood() << endl;
   // ToHTML("html");
 }
+
 /*
 void Model::TrySpecifyCreativeRule(Rule *r){
   CHECK(r->type_ == CREATIVE_RULE);

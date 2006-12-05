@@ -32,6 +32,36 @@
 
 #define GAVE_UP (-1)
 
+struct SubRuleInfo {
+  Rule *        rule_;
+  // This is a variable to variable sub to get to the common canonicalized form
+  Substitution  sub_;
+  bool          postcondition_;
+  SubRuleInfo() {
+    rule_ = NULL;
+    postcondition_ = false;
+  }
+
+  bool operator<(const SubRuleInfo& s) const {
+    if (rule_->GetID() < s.rule_->GetID()) return true;
+    if (rule_->GetID() == s.rule_->GetID())
+      if (sub_ < s.sub_) return true;
+    if ( (rule_->GetID() == s.rule_->GetID() ) && ( sub_ == s.sub_ ) )
+      if (postcondition_ < s.postcondition_) return true;
+    return false;
+  }
+
+  string ToString() const {
+    stringstream ret;
+    ret << "RuleID:" << rule_->GetID() << endl;
+    ret << "Sub:" << sub_.ToString() << endl;
+    if (postcondition_) 
+      ret << "Postcondition" << endl;
+    return ret.str();
+  }
+
+};
+
 class Model {
  public:
   friend class Precondition;
@@ -110,6 +140,10 @@ class Model {
   }
   inline const map<Tuple, TrueTuple*>& GetTupleToTrueTuple() {
     return tuple_to_true_tuple_;
+  }
+
+  inline const map<Pattern, set<SubRuleInfo> >& GetSubrulePatternToRule() {
+    return subrule_pattern_to_rule_;
   }
 
   // Checks that the ln_likelihood of the model is correctly the sum
@@ -215,8 +249,9 @@ class Model {
 
   // Finds or adds a Precondition
   Precondition * L1_GetAddPrecondition(const vector<Tuple> & tuples);
-  
+
   // misc.
+  string FindName(string base);
 
   // I/O
   // writes the model to a file (including the spec)
@@ -264,6 +299,8 @@ class Model {
     (Tuple t, Precondition *p, int position);
   void A1_InsertIntoWildcardTupleToResult(Tuple t, Rule *r, int position);
   void A1_RemoveFromWildcardTupleToResult(Tuple t, Rule *r, int position);
+  void A1_InsertIntoSubrulePatternToRule(Pattern p, SubRuleInfo s);
+  void A1_RemoveFromSubrulePatternToRule(Pattern p, SubRuleInfo s);
   void A1_InsertIntoPreconditionIndex(const Pattern &pat, Precondition *p);
   void A1_RemoveFromPreconditionIndex(const Pattern &pat);
   void A1_InsertIntoProhibitionIndex(Tuple t, Prohibition *p);
@@ -305,11 +342,18 @@ class Model {
   // but let's keep it around in case we need it later.
   set<TrueTuple *> spec_requirements_;
   set<Prohibition *> spec_prohibitions_;
+
+  // Index rules by subpatterns
+  map<Pattern, set<SubRuleInfo> > subrule_pattern_to_rule_;
   
   // Which prohibitions are currently violated
   set<Prohibition *> violated_prohibitions_;
   
   map<int, int> arbitrary_term_counts_;
+
+  // To help with naming
+  map<string, int> namer_;
+
   int total_arbitrary_terms_;
   double arbitrary_term_ln_likelihood_; // superfluous
   double ln_likelihood_;

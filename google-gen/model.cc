@@ -728,6 +728,40 @@ Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
   else return new Precondition(this, tuples);
 }
 
+// Can make this more efficient later
+string Model::FindName(string base) {
+  int * count = namer_ % base;
+
+  if (count && ((*count) != 0)) {
+    stringstream proposed;
+    proposed << base << namer_[base];
+    changelist_.Make
+      (new MapOfCountsAddChange<string, int>(&namer_, base, 1));
+    return proposed.str();
+  }
+
+  int trynum = 0;
+  int diff = 1;
+  while (true) {
+    stringstream proposed;
+    proposed << base << trynum;
+    if (LEXICON.Contains(proposed.str())) {
+      diff <<= 1;
+    }
+    else {
+      if (diff == 1) {
+	changelist_.Make
+	  (new MapOfCountsAddChange<string, int>(&namer_, base, trynum+1));
+	return proposed.str();
+      }	  
+      trynum -= diff;
+      diff >>= 1;
+    }
+    trynum += diff;
+  }
+  return "bad server. no doughnut";
+}
+
 TrueTuple * Model::FindTrueTuple(const Tuple & s) const {
   TrueTuple * const * tuple = tuple_to_true_tuple_ % s;
   if (tuple) return *tuple;
@@ -847,6 +881,18 @@ void Model::A1_RemoveFromWildcardTupleToResult(Tuple t, Rule *r, int position) {
   changelist_.Make(new MapOfSetsRemoveChange<Tuple, pair<Rule *, int> >
 		   (&wildcard_tuple_to_result_, t, make_pair(r, position)));
 }
+void Model::A1_InsertIntoSubrulePatternToRule(Pattern p, SubRuleInfo s) {
+  VLOG(0) << "New subrule Pattern:" << TupleVectorToString(p)
+	  << " SRI:" << s.ToString();
+  changelist_.Make(new MapOfSetsInsertChange<Pattern, SubRuleInfo>
+		   (&subrule_pattern_to_rule_, p, s));
+}
+void Model::A1_RemoveFromSubrulePatternToRule(Pattern p, SubRuleInfo s) {
+  VLOG(0) << "Deleting subrule Pattern:" << TupleVectorToString(p)
+	  << " SRI:" << s.ToString();
+  changelist_.Make(new MapOfSetsRemoveChange<Pattern, SubRuleInfo>
+		   (&subrule_pattern_to_rule_, p, s));
+}
 void Model::A1_InsertIntoPreconditionIndex(const Pattern &pat, Precondition *p){
   changelist_.Make
     (new MapInsertChange<Pattern, Precondition *>
@@ -913,7 +959,3 @@ void Model::A1_RemoveFromViolatedProhibitions(Prohibition *p) {
 void Model::A1_IncrementNextID(){
   changelist_.Make(new ValueChange<int>(&next_id_, next_id_+1));
 }
-
-
-
- 

@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
-
+// Author: Noam Shazeer and Georges Harik
 
 #include <sstream>
 #include <math.h>
@@ -174,6 +173,41 @@ set<int> GetVariables(const Pattern & v) {
       if (IsVariable(v[i][j])) ret.insert(v[i][j]);
   return ret;
 }
+
+// If a pattern's variables are connected
+bool IsConnectedPattern(const Pattern& v) {
+
+  set<int> variables;
+  map<int, set<int> > adj;
+  for (uint c=0; c<v.size(); c++) {
+    for (uint c2=0; c2<v[c].size(); c2++) {
+      for (uint c3=0; c3<c2; c3++) {
+	if (IsVariable(v[c][c2])) variables.insert(v[c][c2]);
+	if (IsVariable(v[c][c2]) && IsVariable(v[c][c3])) {
+	  VLOG(2) << "adjacent " << v[c][c2] << " & " << v[c][c3] << endl;
+	  adj[v[c][c2]].insert(v[c][c3]);
+	  adj[v[c][c3]].insert(v[c][c2]);
+	}
+      }
+    }
+  }
+
+  CHECK(variables.size());
+  vector<int> to_visit;
+  to_visit.push_back(*(variables.begin()));
+  for(uint where=0; where < to_visit.size(); where++) {
+    int visiting = to_visit[where];
+    if (!(variables % visiting)) continue;
+    to_visit.insert(to_visit.end(), 
+		    adj[visiting].begin(), adj[visiting].end());
+    VLOG(2) << "Visited " << visiting << endl;
+    variables.erase(visiting);
+  }
+  
+  if (variables.size()) return false;
+  return true;
+}
+
 Pattern RemoveVariableFreeTuples(const Pattern &v) {
   Pattern ret;
   for (uint i=0; i<v.size(); i++) {
@@ -239,6 +273,7 @@ string ToString(const Tuple & s, const Substitution & sub){
   ret += "]";
   return ret;
 }
+
 double PatternLnLikelihood(const Pattern &context, 
 			   const Pattern &to_encode, 
 			   vector<int> * arbitrary_terms){
@@ -291,8 +326,14 @@ void RenameVariablesInOrder(Pattern * v, Substitution *s){
 }
 
 Pattern Canonicalize(const Pattern & v, Substitution *sub){
+
+  // Figerprints of all of the tuples, with variables changed to wildcards
+  // aligned with the pattern
   vector<uint64> fprints;
+
   Pattern ret;
+
+  // Map between fingerprints and position in the pattern
   map<uint64, int> sorted;
   for (uint i=0; i<v.size(); i++) {
     fprints.push_back(v[i].VariablesToWildcards().Fingerprint());
@@ -309,7 +350,7 @@ Pattern Canonicalize(const Pattern & v, Substitution *sub){
 	  if (IsVariable(v[i][j])) {
 	    var_hashes[v[i][j]] += Fingerprint(fprints[i], j);
 	  }
-	}	
+	}
       }
       for (uint i=0; i<v.size(); i++) {
 	for (uint j=0; j<v[i].size(); j++) {
