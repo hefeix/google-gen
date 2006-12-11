@@ -29,12 +29,15 @@ class Lexicon {
  public:
   Lexicon();
   virtual ~Lexicon();
+
   bool Contains(const string & s) const;                // is a string present
   virtual bool GetID(const string & s, int * id) const; // returns wheter found
-  int GetAddID(const string & s);               // adds to lexicon if not found
   virtual string GetString(int id) const;
+
+  int GetAddID(const string & s);               // adds to lexicon if not found
+
  private:
-  int Add(const string & s); // assumes s is not in lexicon.
+  int Add(const string & s);                    // assumes s is not in lexicon.
   vector<string> id_to_string_;
   hash_map<string, int> string_to_id_; 
 };

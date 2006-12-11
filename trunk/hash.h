@@ -70,6 +70,4 @@ template <class T> uint64 Fingerprint(const vector<T> & s, uint64 level = 0){
   return FingerprintIterator(s.begin(), s.end(), level);
 }
 
-
-
 #endif 

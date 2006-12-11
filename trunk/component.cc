@@ -360,6 +360,22 @@ Firing * Rule::AddFiring(const Substitution & sub) {
 	  << "left sub=" << sub.Restrict(RightVariables()).ToString() << endl;
   return ret;
 }
+
+// Only works for simple rules
+void Rule::AddAllSatisfactionsAsFirings() {
+
+  CHECK(type_ == SIMPLE_RULE);
+
+  // Get all the substitutions required
+  vector<Substitution> subs;
+  model_->GetTupleIndex()->FindSatisfactions
+    (precondition_->pattern_, NULL, &subs, NULL, -1, NULL);
+
+  // Add firings for each substitution
+  for (uint c=0; c<subs.size(); c++)
+    AddFiring(subs[c]);
+}
+
 RuleSat * Rule::FindRuleSat(Satisfaction *sat) const{
   RuleSat * const * rsp = rule_sats_ % sat;
   if (rsp) return *rsp;  
@@ -393,7 +409,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
 	   RuleType type, Rule * target_rule,
 	   vector<Tuple> result, EncodedNumber strength,
 	   EncodedNumber strength2)
-  :Component(precondition->model_){
+  : Component(precondition->model_){
   precondition_ = precondition;
   delay_ = delay;
   type_ = type;
@@ -419,6 +435,35 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
     model_->A1_InsertIntoWildcardTupleToResult
       (result_[i].VariablesToWildcards(), this, i);
   }
+  
+  // Look at all the subsets of tuples of the rule
+  if (type_ != NEGATIVE_RULE) {
+    Pattern combined = precondition_->pattern_;
+    combined.insert(combined.end(), result_.begin(), result_.end());
+    int max = 1 << combined.size();
+    for (int mask=0; mask < max; mask++) {
+
+      // Don't index subsets of one element or 0 elements
+      if ((mask & (mask-1)) == 0) continue;
+      SubRuleInfo sri;
+      sri.rule_ = this;
+      Pattern      subpattern, c_subpattern;
+      for (uint c=0; c < combined.size(); c++) {
+	if (mask & (1<<c)) {
+	  subpattern.push_back(combined[c]);
+	  if (c >= precondition_->pattern_.size())
+	    sri.postcondition_ = true;
+	}
+      }
+      if (IsConnectedPattern(subpattern)) {
+	c_subpattern = Canonicalize(subpattern, &sri.sub_);
+	model_->A1_InsertIntoSubrulePatternToRule(c_subpattern, sri);
+      } else {
+	VLOG(1) << "Disconnected Pattern " << TupleVectorToString(subpattern) << endl;
+      }
+    }
+  }
+
   vector<int> arbitrary_terms;
   direct_pattern_encoding_ln_likelihood_ = 
     PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);
@@ -467,6 +512,33 @@ void Rule::L1_EraseSubclass(){
 	(result_[i].VariablesToWildcards(), this, i);
     }
   }
+
+  // Remove from SubrulePatternToRule
+  // Maybe we want to pull this out into a separate function
+  // That determines the pair <Pattern, SubRuleInfo> based on a rule
+  if (type_ != NEGATIVE_RULE) {
+    Pattern combined = precondition_->pattern_;
+    combined.insert(combined.end(), result_.begin(), result_.end());
+    int max = 1 << combined.size();
+    for (int mask=0; mask < max; mask++) {
+      if ((mask & (mask-1)) == 0) continue;
+      SubRuleInfo sri;
+      sri.rule_ = this;
+      Pattern      subpattern, c_subpattern;
+      for (uint c=0; c < combined.size(); c++) {
+	if (mask & (1<<c)) {
+	  subpattern.push_back(combined[c]);
+	  if (c >= precondition_->pattern_.size())
+	    sri.postcondition_ = true;
+	}
+      }
+      if (IsConnectedPattern(subpattern)) {
+	c_subpattern = Canonicalize(subpattern, &sri.sub_);
+	model_->A1_RemoveFromSubrulePatternToRule(c_subpattern, sri);
+      }
+    } 
+  }
+
   vector<int> arbitrary_terms;
   PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);  
   for (uint i=0; i<arbitrary_terms.size(); i++)
@@ -742,25 +814,31 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
   CHECK(!(rule_sat_->FindFiring(right_substitution_)));
   rule_sat_->A1_AddFiring(right_substitution_, this);
   rule_sat_->ComputeSetLnLikelihood();
+
   // perform the substitution to find the TrueTuples.
   vector<Tuple> results = rule_sat->rule_->result_;
   GetFullSubstitution().Substitute(&results);
+
   // Now we have the vector of constant tuples which come true.
   for (uint i=0; i<results.size(); i++){
     TrueTuple * tp = model_->GetAddTrueTuple(results[i]);
     true_tuples_.insert(tp); // Note: duplicate insertions OK.
   }
+
   // Note: we need two loops because of duplicates.
   forall(run, true_tuples_) { 
     (*run)->A1_AddCause(this);
   }
+
   // For creative rules, this counts the names and adjusts the naming costs.
   forall (run, right_substitution_.sub_)  
     model_->L1_AddArbitraryTerm(run->second);
+
   ComputeSetTime();
   ComputeSetLnLikelihood();
   model_->A1_InsertIntoComponentsByType(this);
 }
+
 void Firing::L1_EraseSubclass() {
   forall(run, true_tuples_) {
     (*run)->A1_RemoveCause(this);
@@ -780,7 +858,6 @@ string Firing::ImplicationString() const{
   if (this==NULL) return "SPONTANEOUS";
   return rule_sat_->ImplicationString(this);
 }
-
 
 // ----- TRUETUPLE -----
 TrueTuple::TrueTuple(Model * model, Tuple tuple)
@@ -830,12 +907,14 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
 void TrueTuple::L1_EraseSubclass(){
   // We don't have to deal with firings, since they are structural dependents.
   CHECK(required_count_ == 0);
+
   // Caveat: we can't directly iterate over violated_prohibitions_, since
   // we are implicitly erasing its elements. 
   while (violated_prohibitions_.size()) {
     (*violated_prohibitions_.begin())->
       L1_RemoveViolationOnTrueTupleDelete(this);
   }
+
   // The satisfactions that are explicitly represented have been destroyed, 
   // as they are structural dependents, but we still need to decrease the
   // satisfaction counts at the preconditions.  
@@ -847,8 +926,10 @@ void TrueTuple::L1_EraseSubclass(){
       ->A1_AddToNumSatisfactions(-satisfactions[i].second.first);
     satisfactions[i].first->ComputeSetLnLikelihood();
   }
-  
-  model_->A1_RemoveFromRequiredNeverHappen(this);
+
+  //  Why do we have this??
+  // model_->A1_RemoveFromRequiredNeverHappen(this);
+
   model_->A1_RemoveFromTupleToTrueTuple(tuple_);
   model_->changelist_.Make
     (new MemberCall1Change<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
@@ -957,8 +1038,6 @@ Record TrueTuple::RecordForStorageSubclass() const{
   r["tuple"] = tuple_.ToString();
   return r;
 }
-
-
 
 Record Component::RecordForDisplay() const{
   Record r = RecordForDisplaySubclass();
@@ -1086,7 +1165,6 @@ vector<Component *> TrueTuple::TemporalDependents() const{
   return ret;
 }
 
-// WORKING
 vector<Component *> Component::StructuralDependents() const{
   return vector<Component *>();
 }
@@ -1160,21 +1238,28 @@ vector<vector<Component *> > TrueTuple::TemporalCodependents() const{
 vector<Component *> Component::Purposes() const{
   return vector<Component *>();
 }
+
 bool Component::HasPurpose() const { return true; }
+
 vector<Component *> Precondition::Purposes() const{
   return vector<Component *>(rules_.begin(), rules_.end());
 }
+
 bool Precondition::HasPurpose() const { return rules_.size(); }
+
 vector<Component *> Satisfaction::Purposes() const{
   return vector<Component *>(rule_sats_.begin(), rule_sats_.end());
 }
+
 bool Satisfaction::HasPurpose() const { return rule_sats_.size(); }
+
 vector<Component *> RuleSat::Purposes() const{
   vector<Firing*> v = VectorOfValues(firings_);
   vector<Component*> ret(v.begin(), v.end());
   ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
   return ret;
 }
+
 bool RuleSat::HasPurpose() const {return firings_.size()||inhibitors_.size();}
 
 vector<Component *> Component::Copurposes() const{
@@ -1287,8 +1372,10 @@ double Rule::LnLikelihood() const {
   if (type_ != NEGATIVE_RULE)  ret += EncodedNumberLnLikelihood(delay_);
   return ret;
 }
+
 double RuleSat::LnLikelihood() const {
   if (rule_->type_ == NEGATIVE_RULE) return 0;
+
   // this is what was counted implicitly by the precondition.
   double cancelled_ln_likelihood = log(1-rule_->strength_d_);
 
@@ -1311,7 +1398,8 @@ double RuleSat::LnLikelihood() const {
   }
   return new_ln_likelihood - cancelled_ln_likelihood;
 }
-void Component::ComputeSetLnLikelihood(){
+
+void Component::ComputeSetLnLikelihood() {
   if (!exists_) return;
 
   CHECK(!really_dead_);

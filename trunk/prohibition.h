@@ -65,7 +65,6 @@ class Prohibition {
 
   Prohibition(Model *m, Tuple prohibited);
 
-
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
   // These are not just accessor functions.  They also add/remove links to the
@@ -81,7 +80,6 @@ class Prohibition {
   void A1_RemoveException(Tuple exception);
   void A1_AddViolation(TrueTuple *t);
   void A1_RemoveViolation(TrueTuple *t);
-
 
   // ----- DATA -----
 
