@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
-
+// Author: Noam Shazeer and Georges Harik
 
 // Contains optimization routines
 #include <cmath>
@@ -38,6 +37,182 @@ Optimizer::Optimizer(Model *model){
     }
   }
   }*/
+
+bool Optimizer::CombineRules(int time_limit, string * comments) {
+  time_t end_time = time(NULL) + time_limit;
+  while (!MaybeCombineRules(comments)) {
+    if (time(NULL) >= end_time) return false;
+  }
+  return true;
+}
+
+bool Optimizer::MaybeCombineRules(string * comments) {
+  const map<Pattern, set<SubRuleInfo> >& index = 
+    model_->GetSubrulePatternToRule();
+  RandomElement(p, index);
+  typeof(p) q = p;
+  ++p;
+  while (p->second.size() < 2) {
+    if (p == q) break;
+    ++p;
+    if (p == index.end()) p = index.begin();
+  }
+  if (p->second.size() < 2) return false;
+
+  // get rid of the postcondition ones, and pick one out of every rule represented more than once
+  vector<SubRuleInfo> filtered;
+  double rule_count = 0.0;
+  forall(sri, p->second) {
+    if (sri->postcondition_) continue;
+    SubRuleInfo * last = (filtered.size() ? &filtered[filtered.size()-1]:NULL);
+    if (last && (last->rule_ == sri->rule_)) {
+      rule_count += 1.0;
+      if (RandomFraction() > (rule_count/rule_count+1))
+	*last = *sri;
+    } else {
+      rule_count = 0.0;
+      filtered.push_back(*sri);
+    }
+  }
+  
+  if (filtered.size() <2) return false;
+  
+  VLOG(0) << "Picked For Combination " << endl
+	  << TupleVectorToString(p->first) << endl;
+  for (uint c=0; c<filtered.size(); c++)
+    VLOG(0) << filtered[c].ToString();
+
+  // Do the combination
+  TryCombineRules(p->first, filtered, comments);
+  return true;
+}
+
+void Optimizer::TryCombineRules(Pattern lhs, 
+				const vector<SubRuleInfo> & info,
+				string * comments) {
+  
+  set<int> pre_variables = GetVariables(lhs);
+  set<int> post_variables;
+
+  // TODO: This would be a good place to check that the preconditions are reasonable
+
+  // What postcondition variables do we need?
+  for (uint c=0; c<info.size(); c++) {
+    const SubRuleInfo & sri = info[c];
+    CHECK(sri.rule_->GetRuleType() != NEGATIVE_RULE);
+    
+    // Figure out which post variables this rule needs
+    // from the new rule
+    Pattern result = sri.rule_->GetResult();
+    sri.sub_.Substitute(&result);
+    set<int> int_set =
+      Intersection(pre_variables, GetVariables(result));
+    post_variables.insert(int_set.begin(), int_set.end());
+  }
+
+  // Do we need to check whether this rule exists? who knows?
+
+  string rel_name = model_->FindName(":CR");
+  int rel_id = LEXICON.GetAddID(rel_name);
+
+  Tuple rhs_t;
+  rhs_t.terms_.push_back(rel_id);
+  set<int>::iterator run = post_variables.end();
+  while (true) {
+    --run;
+    rhs_t.terms_.push_back(*run);
+    if (run == post_variables.begin()) break;
+  }
+  Pattern rhs;
+  rhs.push_back(rhs_t);
+
+  // Make the new rule and make all its satisfactions true
+  Rule * new_rule = model_->MakeNewRule
+    (lhs, EncodedNumber(), SIMPLE_RULE, NULL,
+     rhs, EncodedNumber("e"), EncodedNumber("e"));
+  new_rule->AddAllSatisfactionsAsFirings();
+  OptimizeStrength(new_rule);
+  VLOG(0) << "Made the new rule and added all its satisfactions" << endl;
+  
+  // Delete the old rules and for each one make a replacement rule
+  VLOG(0) << "About to delete the old rules" << endl;
+  
+  for (uint c=0; c<info.size(); c++) {
+    const SubRuleInfo & sri = info[c];
+
+    VLOG(0) << "Working on rule " << sri.rule_->GetID() << endl;
+
+    // Find the set of tuples in this rule's LHS that must be removed
+    set<Tuple> remove_set;
+    Pattern new_lhs = lhs;
+    sri.sub_.Reverse().Substitute(&new_lhs);    
+    remove_set.insert(new_lhs.begin(), new_lhs.end());
+    if (GetVerbosity() >= 0) {
+      forall(run, remove_set)
+	VLOG(0) << "Must remove " << run->ToString() << endl;
+    }
+
+    // The left hand side of the rule removes the common tuples, replacing by 
+    // the right hand side of the common rule instead
+    Pattern old_lhs = sri.rule_->GetPrecondition()->GetPattern();
+    Pattern instead_lhs;
+    for (uint c2=0; c2< old_lhs.size(); c2++) {
+      if (remove_set % old_lhs[c2]) continue;
+      instead_lhs.push_back(old_lhs[c2]);
+    }
+    Pattern extra_instead_lhs = rhs;
+    sri.sub_.Reverse().Substitute(&extra_instead_lhs);
+    instead_lhs.insert(instead_lhs.begin(), 
+		       extra_instead_lhs.begin(),
+		       extra_instead_lhs.end());
+    VLOG(0) << "New (uncanonicalized) LHS " 
+	    << TupleVectorToString(instead_lhs) << endl;
+
+    // The result of the rule stays the same entirely
+    Pattern instead_rhs = sri.rule_->GetResult();
+
+    // Ok one last step, canonicalize the new rule
+    Substitution c_sub;
+    CandidateRule instead = CanonicalizeRule
+      (make_pair(instead_lhs,instead_rhs), &c_sub);
+    VLOG(0) << "Canonicalization substitution " 
+	    << c_sub.ToString() << endl;
+
+    // Find the new substitutions
+    vector<Substitution> new_substitutions;
+    vector<Firing *> firings = sri.rule_->Firings();
+    for (uint c2=0; c2<firings.size(); c2++) {
+      Substitution original = firings[c2]->GetFullSubstitution();
+      Substitution new_sub;
+      forall(run, original.sub_) {
+	int * new_var = c_sub.sub_ % run->first;
+	if (new_var) {
+	  new_sub.sub_[(*new_var)] = run->second;
+	}
+      }
+      new_substitutions.push_back(new_sub);
+    }
+
+    // Erase the old rule 
+    sri.rule_->Erase();
+    VLOG(0) << "Erased" << endl;
+    
+    // Add the modified rule instead    
+    Rule * instead_rule = 
+      model_->MakeNewRule
+      (instead.first, sri.rule_->GetDelay(), sri.rule_->GetRuleType(), NULL, 
+       instead.second, sri.rule_->GetStrength(), sri.rule_->GetStrength2());
+    
+    // Now add firings for this modified rule
+    for (uint c2=0; c2<new_substitutions.size(); c2++) {
+      instead_rule->AddFiring(new_substitutions[c2]);
+    }
+    OptimizeStrength(instead_rule);
+  }
+  
+  // TADA
+
+}
 
 bool Optimizer::FindRandomCandidateRule(CandidateRule *ret, Tactic tactic,
 					int time_limit, string * comments){
@@ -64,6 +239,67 @@ TrueTuple * Optimizer::GetRandomTrueTuple(){
   TrueTuple *ret = model_->FindTrueTuple((model_->GetTupleIndex()->RandomTuple()));
   CHECK(ret);
   return ret;
+}
+
+// This assumes the truetuple currently happens at some time
+double Optimizer::GuessBenefit(const TrueTuple * tp) {
+
+  // Get all causes
+  const set<Firing*> & causes = tp->GetCauses();
+  CHECK(causes.size());			    
+
+  // Find the earliest cause...
+  Time earliest = Time::Never();
+  Firing * first_cause = NULL;
+  forall (run, causes)
+    if ((*run)->GetTime() < earliest) {
+      earliest = ((*run)->GetTime());
+      first_cause = (*run);
+    }
+
+  // Get some info on the rule and rulesat
+  RuleSat * rule_sat = first_cause->GetRuleSat();
+  Rule * rule = first_cause->GetRule();
+  double strength = rule->GetStrengthD();
+  if (rule_sat->NumFirings() > 1)
+    strength = rule->GetStrength2D();
+
+  // See if functional negative rule could be used
+  bool can_keep_firing_lose_arbitrary = false;
+  if (rule_sat->NumFirings() == 1) {
+    can_keep_firing_lose_arbitrary = true;
+    VLOG(1) << "Can use negative rule" << endl;
+  }
+
+  // How much could we save getting rid of the firing
+  double firing_diff = log(1 - strength) - log(strength);
+  VLOG(1) << "Remove firing Savings:" << firing_diff << endl;
+    
+  // How much could we save in naming?
+  // We don't want to count things that have ArbitraryTermCount 1
+  double arbitrary_diff = 0.0;
+  {
+    DestructibleCheckpoint checkp(model_->GetChangelist());    
+    double old_likelihood = model_->GetLnLikelihood();
+    Substitution sub = first_cause->GetRightSubstitution();
+    forall(run, sub.sub_) {
+      int term = run->second;
+      int count = model_->ArbitraryTermCount(term);
+      if (count != 1) model_->L1_SubtractArbitraryTerm(term);
+    }
+    arbitrary_diff = model_->GetLnLikelihood() - old_likelihood;
+  }
+  VLOG(1) << "Arbitrary diff: " << arbitrary_diff << endl;
+
+  // Choices (do nothing, lose both, lose arbitrary only)
+  double final_diff = 0.0;
+  final_diff = max(final_diff, firing_diff + arbitrary_diff);
+  if (can_keep_firing_lose_arbitrary)
+    final_diff = max(final_diff, arbitrary_diff);
+
+  VLOG(1) <<   "Tuple " << tp->GetTuple().ToString()
+	  << " Diff: " << final_diff << endl;
+  return final_diff;
 }
 
 int64 Optimizer::StandardMaxWork(){
@@ -132,14 +368,25 @@ bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
 
 
 bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
-  int64 max_work = 5  * (uint)model_->GetNumTrueTuples();
   uint num_clauses = 1;
   while (RandomFraction() < 0.7) num_clauses++;  
-  vector<Tuple> p;
+  Pattern p;
   Substitution sub;
   int next_var = 0;
   set<Tuple> used_tuples;
-  Tuple s1 = model_->GetTupleIndex()->RandomTuple();
+
+  double best_guess = 0;
+  Tuple s1;
+  for (uint c=0; c<5; c++) {
+    TrueTuple * tt = GetRandomTrueTuple();
+    double bits = GuessBenefit(tt);
+    if ( (c==0) || (bits > best_guess) ) {
+      s1 = tt->GetTuple();
+      best_guess = bits;
+    }
+  }
+  VLOG(1) << "Settled on Tuple " << s1.ToString() << endl;
+
   used_tuples.insert(s1);
   p.push_back(s1);
   int tries = 100;
@@ -182,13 +429,14 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
 	  sub.Substitute(&p);
 	}
       }
+  Tuple dummy = p[0]; p[0] = p[p.size()-1];  p[p.size()-1] = dummy;
   CandidateRule r = SplitOffLast(p);
   *comments = "NewRule";
-  return VetteCandidateRule(r, ret, max_work, comments);
+  return VetteCandidateRule(r, ret, StandardMaxWork(), comments);
 }
 
 void Optimizer::RuleInfo::Canonicalize(){
-  r_ = CanonicalizeRule(r_);
+  r_ = CanonicalizeRule(r_, NULL);
 }
 
 void Optimizer::RuleInfo::FindCandidateFirings(){
@@ -443,6 +691,7 @@ bool Optimizer::RuleInfo::Vette(){
 	VLOG(0) << "Quit after RecentlyChecked(2) denom:" << denominator_ << endl;
 	return false;
       }
+      
       return true;
     }
   }
@@ -532,8 +781,11 @@ void Optimizer::PushTimesAfterChangeDelay(Rule *rule){
   }  
 }
 
-void Optimizer::TryAddFirings(Rule * rule, const vector<Substitution> & subs,
-		   int max_recursion){
+// TODO: this now needs to be updated to del properly with tuples that aren't
+// required.
+
+void Optimizer::TryAddFirings
+(Rule * rule, const vector<Substitution> & subs, int max_recursion) {
   // alternate explanations to remove, grouped by rule
   map<Rule *, set<Firing *> > to_remove;
   for (uint snum=0; snum<subs.size(); snum++) {
@@ -713,7 +965,7 @@ void Optimizer::TryRuleVariations(const Pattern & preconditions,
     Pattern rhs = result;
     lhs[i] = result[0];
     rhs[0] = preconditions[i];
-    CandidateRule cr = CanonicalizeRule(make_pair(lhs, rhs));
+    CandidateRule cr = CanonicalizeRule(make_pair(lhs, rhs), NULL);
     OptimizationCheckpoint cp(this, false);
     string comments = "recursively added as a variation of "
       + CandidateRuleToString(make_pair(preconditions, result));
@@ -736,13 +988,19 @@ void Optimizer::TryAddPositiveRule(
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
-  model_->GetTupleIndex()->FindSatisfactions(combined, NULL, &subs, 0, UNLIMITED_WORK, 0);
+  bool last_ditch = 
+    model_->GetTupleIndex()->FindSatisfactions
+    (combined, NULL, &subs, 0, StandardMaxWork(), 0);
+  if (last_ditch == false) {
+    VLOG(0) << "Somehow this one got this far! no further!" << endl;
+    return;
+  }
   set<int> precondition_vars = GetVariables(preconditions);
   set<int> result_vars = GetVariables(result);
   result_vars = result_vars-precondition_vars;
   RuleType type = result_vars.size()?CREATIVE_RULE:SIMPLE_RULE;
   VLOG(0) 
-    << string(10-max_recursion, ' ')
+    << string(10 - 3*max_recursion, ' ')
     << "Contemplating creating rule " 
     << TupleVectorToString(preconditions)
     << " ->" << TupleVectorToString(result) << endl;
@@ -774,6 +1032,7 @@ void Optimizer::TryAddPositiveRule(
   VLOG(1) << "after OptimizeStrength: ll=" << model_->GetLnLikelihood() << endl;
   // ToHTML("html");
 }
+
 /*
 void Model::TrySpecifyCreativeRule(Rule *r){
   CHECK(r->type_ == CREATIVE_RULE);
@@ -896,12 +1155,15 @@ OptimizationCheckpoint::~OptimizationCheckpoint() {
 }
 bool OptimizationCheckpoint::Better() {
   return (model_->MayBeTimeFixable()
-	  && (model_->GetLnLikelihood() > old_ln_likelihood_ + 
+	  && (model_->GetLnLikelihood() > old_ln_likelihood_ + 0.01 + 
 	      (1+fabs(model_->GetLnLikelihood())) * 1e-14));
 }
 bool OptimizationCheckpoint::KeepChanges() {
   if (!Better()) return false;
-  if (fix_times_) optimizer_->FixTimesFixCircularDependencies();
+  if (fix_times_) {
+    bool result = optimizer_->FixTimesFixCircularDependencies();
+    if (!result) return false;
+  }
   return Better();
 }
 
@@ -984,11 +1246,19 @@ void Optimizer::Explain(TrueTuple *p,
   explanations[which].first->AddFiring(explanations[which].second);
   OptimizeStrength(explanations[which].first);
 }
-void Optimizer::FixTimesFixCircularDependencies() {
+
+// Returns false if fails to finish in time
+bool Optimizer::FixTimesFixCircularDependencies(int time_limit) {
   // TODO: make this smarter.  much smarter
+  time_t end_time = time(NULL) + time_limit;
+  
   VLOG(1) << " start ln_likelihood_=" << model_->GetLnLikelihood() << endl;
   while (model_->GetTimesDirty().size() || model_->GetRequiredNeverHappen().size()) {
-    model_->FixTimes();
+    bool result = model_->FixTimes();
+    if (!result) {
+      VLOG(0) << "FixTimes failed" << endl;
+      return false;
+    }
     if (model_->GetRequiredNeverHappen().size()) {
       VLOG(1) << "  explaining a required proposition" << endl;
       TrueTuple * p 
@@ -997,10 +1267,15 @@ void Optimizer::FixTimesFixCircularDependencies() {
       VLOG(1) << "   explained " << p->GetID() << endl;
       if (GetVerbosity() >= 1) model_->ToHTML("html");
     }
+    if (time(NULL) >= end_time) {
+      VLOG(0) << "FixTimesFixCircularDependencies failed!!!" << endl;
+      return false;
+    }
   }
   model_->DeleteNeverHappeningComponents();
   CHECK(model_->GetRequiredNeverHappen().size() == 0);
   VLOG(1) << " end ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+  return true;
   //if (absent_required_.size()){
   //  ToHTML("html");
   //  CHECK(absent_required_.size()==0);

@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
-
+// Author: Noam Shazeer and Georges Harik
 
 #ifndef _OPTIMIZATION_H_
 #define _OPTIMIZATION_H_
@@ -89,6 +88,13 @@ struct Optimizer{
   
   void TryMakeFunctionalNegativeRule(Rule *r);
   
+  // Combining rules
+  bool CombineRules(int time_limit, string * comments);
+  bool MaybeCombineRules(string * comments);
+  void TryCombineRules(Pattern lhs,
+		       const vector<SubRuleInfo>& info,
+		       string * comments);
+
   // finds a candidate rule unless it runs out of time.  
   // time_limit is in seconds
   bool FindRandomCandidateRule(CandidateRule *ret, 
@@ -134,7 +140,10 @@ struct Optimizer{
     void RemoveBoringVariables();
     const Tuple & GetSampledTuple();
   };
-  
+
+  // How useful is it to generate this another way
+  double GuessBenefit(const TrueTuple * tp);
+
   int64 StandardMaxWork();
   bool VetteCandidateRule(CandidateRule r, 
 			  CandidateRule * simplified_rule, 
@@ -180,7 +189,8 @@ struct Optimizer{
   
   // Fixes the times.  Adds explanations for required things that never happen,
   // and deletes all remaining components whose time is NEVER
-  void FixTimesFixCircularDependencies();
+  // returns false if it can't fix things in 10 seconds
+  bool FixTimesFixCircularDependencies(int time_limit = 200);
   
   // data:
   Model *model_;

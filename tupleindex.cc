@@ -174,6 +174,9 @@ TupleIndex::GetRandomTupleContaining(Tuple * ret,
 void TupleIndex::Add(Tuple t) {  
 
   // Make sure it's a constant tuple, and it's not already in there
+  if (!t.IsConstantTuple()) {
+    VLOG(0) << "Trying to add Tuple " << t.ToString() << endl;
+  }
   CHECK(t.IsConstantTuple());
   CHECK(!(tuples_ % t));
 

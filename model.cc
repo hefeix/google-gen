@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
-
+// Author: Noam Shazeer and Georges Harik
 
 // Contains functions declared in model.h, except those in component.cc 
 // and optimize.cc
@@ -30,8 +29,6 @@
 
 // ----- LAYER 3 FUNCTIONS -----
 
-
-
 // ----- LAYER 2 FUNCTIONS -----
 
 TrueTuple * Model::AddRequirementToSpec(Tuple t){
@@ -44,6 +41,7 @@ TrueTuple * Model::AddRequirementToSpec(Tuple t){
   }
   return tt;
 }
+
 Prohibition * Model::AddProhibitionToSpec(Tuple t, vector<Tuple> exceptions){
   Prohibition *p = Prohibition::L1_MakeProhibition(this, t);
   A1_InsertIntoSpecProhibitions(p);
@@ -135,7 +133,7 @@ vector<Tuple> Model::ComputeTupleEncoding(const Tuple & s, int name){
 }
 */
 
-
+// Why are these here?
 set<Firing *> TrueTuple::GetResultFirings() const {
   set<Firing *> ret;
   forall(run_s, satisfactions_)
@@ -227,6 +225,7 @@ void Model::L1_AddArbitraryTerm(int w){ // TODO: more to encode here.
   A1_AddToArbitraryTermLnLikelihood(d_prob);
   A1_AddToLnLikelihood(d_prob);
 }
+
 void Model::L1_SubtractArbitraryTerm(int w){
   double d_prob = DProb(arbitrary_term_counts_[w]-1, 
 			arbitrary_term_counts_.size(),
@@ -238,7 +237,9 @@ void Model::L1_SubtractArbitraryTerm(int w){
 }
 
 // postcondition: no times dirty.
-void Model::FixTimes() {
+bool Model::FixTimes() {
+  // VLOG(0) << "FT";
+
   // TODO: Figure out how and why the heck this works.  
 
   // Within this function, we call ComputeTime using times_dirty_ as the 
@@ -267,6 +268,9 @@ void Model::FixTimes() {
     queue.insert(make_pair(t, c));
   }
 
+  int qsize = queue.size();
+  int original_qsize = max((int)queue.size(), 50);
+
   // We repeatedly deal with the first element of the queue, that is, the 
   // one that is indexed by the earliest time.
   while (queue.size()){
@@ -285,6 +289,11 @@ void Model::FixTimes() {
     if (!c->time_dirty_) continue;
 
     Time new_time = c->ComputeTime(&times_dirty_);
+
+    // Ignore the entry if it's obsolete
+    // if it's not the current time or the computed time
+    if (c->time_ != t && new_time != t) continue;
+
     // Set the time for this component.  
     if (c->time_ != new_time) c->L1_SetTimeMaintainIndices(new_time, false);
 
@@ -320,16 +329,27 @@ void Model::FixTimes() {
 	queue.insert(make_pair(min(dep_time, d->time_), d));
       }
     }
+    if (queue.size() > (uint)2*qsize) {
+      VLOG(0) << "queue.size() : " << queue.size() << endl;
+      qsize = queue.size();
+    }
+    if (queue.size() > (uint)20*original_qsize) {
+      VLOG(0) << "Aborting FixTimes" << endl;
+      return false;
+    }
   }
   // Now that all of the dirty stuff happens NEVER, we can make it clean.  
   // TODO, is this really necessary, or could we have just let the previous 
   // loop run until the queue was empty?
+  // VLOG(0) << "left main loop" << endl;
   while(times_dirty_.size()){
     Component *c = *times_dirty_.begin();
     c->L1_SetTimeMaintainIndices(NEVER, false);
     c->L1_MakeTimeClean();
   }
   CHECK(times_dirty_.size()==0);
+  // VLOG(0) << "left fixtimes" << endl;
+  return true;
 }
 
 void Model::DeleteNeverHappeningComponents() {
@@ -722,10 +742,50 @@ set<Rule *> Model::GetAllRules() const {
   return ret;
 }
 
+int Model::ArbitraryTermCount(int term) const {
+  const int * res = arbitrary_term_counts_ % term;
+  if (!res) return 0;
+  return *res;
+}
+
 Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
   Precondition * p = FindPrecondition(tuples);
   if (p) { return p; }
   else return new Precondition(this, tuples);
+}
+
+// Can make this more efficient later
+string Model::FindName(string base) {
+  int * count = namer_ % base;
+
+  if (count && ((*count) != 0)) {
+    stringstream proposed;
+    proposed << base << namer_[base];
+    changelist_.Make
+      (new MapOfCountsAddChange<string, int>(&namer_, base, 1));
+    return proposed.str();
+  }
+
+  int trynum = 0;
+  int diff = 1;
+  while (true) {
+    stringstream proposed;
+    proposed << base << trynum;
+    if (LEXICON.Contains(proposed.str())) {
+      diff <<= 1;
+    }
+    else {
+      if (diff == 1) {
+	changelist_.Make
+	  (new MapOfCountsAddChange<string, int>(&namer_, base, trynum+1));
+	return proposed.str();
+      }	  
+      trynum -= diff;
+      diff >>= 1;
+    }
+    trynum += diff;
+  }
+  return "bad server. no doughnut";
 }
 
 TrueTuple * Model::FindTrueTuple(const Tuple & s) const {
@@ -847,6 +907,18 @@ void Model::A1_RemoveFromWildcardTupleToResult(Tuple t, Rule *r, int position) {
   changelist_.Make(new MapOfSetsRemoveChange<Tuple, pair<Rule *, int> >
 		   (&wildcard_tuple_to_result_, t, make_pair(r, position)));
 }
+void Model::A1_InsertIntoSubrulePatternToRule(Pattern p, SubRuleInfo s) {
+  VLOG(2) << "New subrule Pattern:" << TupleVectorToString(p)
+	  << " SRI:" << s.ToString();
+  changelist_.Make(new MapOfSetsInsertChange<Pattern, SubRuleInfo>
+		   (&subrule_pattern_to_rule_, p, s));
+}
+void Model::A1_RemoveFromSubrulePatternToRule(Pattern p, SubRuleInfo s) {
+  VLOG(2) << "Deleting subrule Pattern:" << TupleVectorToString(p)
+	  << " SRI:" << s.ToString();
+  changelist_.Make(new MapOfSetsRemoveChange<Pattern, SubRuleInfo>
+		   (&subrule_pattern_to_rule_, p, s));
+}
 void Model::A1_InsertIntoPreconditionIndex(const Pattern &pat, Precondition *p){
   changelist_.Make
     (new MapInsertChange<Pattern, Precondition *>
@@ -913,7 +985,3 @@ void Model::A1_RemoveFromViolatedProhibitions(Prohibition *p) {
 void Model::A1_IncrementNextID(){
   changelist_.Make(new ValueChange<int>(&next_id_, next_id_+1));
 }
-
-
-
- 

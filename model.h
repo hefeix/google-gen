@@ -1,4 +1,4 @@
-// Copyright (C) 2006 Google Inc.
+// Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Noam Shazeer
+// Author: Noam Shazeer and Georges Harik
 
 #ifndef _MODEL_H_
 #define _MODEL_H_
@@ -31,6 +31,42 @@
 #include <map>
 
 #define GAVE_UP (-1)
+
+struct SubRuleInfo {
+  Rule *        rule_;
+  // This is a variable to variable sub to get to the common canonicalized form
+  Substitution  sub_;
+  bool          postcondition_;
+
+  SubRuleInfo() {
+    rule_ = NULL;
+    postcondition_ = false;
+  }
+
+  bool operator<(const SubRuleInfo& s) const {
+    // Ironically pointers are more stable than IDs
+    if (rule_ < s.rule_) return true;
+    if (rule_ == s.rule_)
+      if (sub_ < s.sub_) return true;
+    if ( (rule_ == s.rule_ ) && ( sub_ == s.sub_ ) )
+      if (postcondition_ < s.postcondition_) return true;
+    return false;
+  }
+
+  string ToString() const {
+    stringstream ret;
+    ret << "RuleID:" << rule_->GetID() << endl;
+    ret << "RulePtr:" << (uint64) rule_ << " ";
+    ret << "Sub:" << sub_.ToString() << endl;
+    if (postcondition_) 
+      ret << "Postcondition" << endl;
+    return ret.str();
+  }
+
+};
+inline ostream& operator<<(ostream& o, const SubRuleInfo& sri) {
+  return (o << sri.ToString());
+}
 
 class Model {
  public:
@@ -86,7 +122,7 @@ class Model {
 
   // Makes all of the times correct and sets the dirty bits to false
   // Some of the times may end up as NEVER
-  void FixTimes();
+  bool FixTimes();
 
   // Deletes all of the components whose times are NEVER
   // Precondition: times are all clean.
@@ -110,6 +146,10 @@ class Model {
   }
   inline const map<Tuple, TrueTuple*>& GetTupleToTrueTuple() {
     return tuple_to_true_tuple_;
+  }
+
+  inline const map<Pattern, set<SubRuleInfo> >& GetSubrulePatternToRule() {
+    return subrule_pattern_to_rule_;
   }
 
   // Checks that the ln_likelihood of the model is correctly the sum
@@ -196,6 +236,8 @@ class Model {
     return components_by_type_[t];
   }
 
+  int ArbitraryTermCount(int term) const;
+
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
     // Assigns a fresh new ID to a component. 
@@ -215,8 +257,9 @@ class Model {
 
   // Finds or adds a Precondition
   Precondition * L1_GetAddPrecondition(const vector<Tuple> & tuples);
-  
+
   // misc.
+  string FindName(string base);
 
   // I/O
   // writes the model to a file (including the spec)
@@ -264,6 +307,8 @@ class Model {
     (Tuple t, Precondition *p, int position);
   void A1_InsertIntoWildcardTupleToResult(Tuple t, Rule *r, int position);
   void A1_RemoveFromWildcardTupleToResult(Tuple t, Rule *r, int position);
+  void A1_InsertIntoSubrulePatternToRule(Pattern p, SubRuleInfo s);
+  void A1_RemoveFromSubrulePatternToRule(Pattern p, SubRuleInfo s);
   void A1_InsertIntoPreconditionIndex(const Pattern &pat, Precondition *p);
   void A1_RemoveFromPreconditionIndex(const Pattern &pat);
   void A1_InsertIntoProhibitionIndex(Tuple t, Prohibition *p);
@@ -305,11 +350,18 @@ class Model {
   // but let's keep it around in case we need it later.
   set<TrueTuple *> spec_requirements_;
   set<Prohibition *> spec_prohibitions_;
+
+  // Index rules by subpatterns
+  map<Pattern, set<SubRuleInfo> > subrule_pattern_to_rule_;
   
   // Which prohibitions are currently violated
   set<Prohibition *> violated_prohibitions_;
   
   map<int, int> arbitrary_term_counts_;
+
+  // To help with naming
+  map<string, int> namer_;
+
   int total_arbitrary_terms_;
   double arbitrary_term_ln_likelihood_; // superfluous
   double ln_likelihood_;

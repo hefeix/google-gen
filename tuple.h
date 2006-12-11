@@ -1,3 +1,20 @@
+// Copyright (C) 2006 Google Inc. and Georges Harik
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// 
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Author: Noam Shazeer and Georges Harik
 
 #ifndef _TUPLE_H_
 #define _TUPLE_H_
@@ -127,10 +144,17 @@ struct Substitution {
   }
   // Provide a restricted substitution to a set of terms
   Substitution Restrict(const set<int> & terms) const;
+
+  Substitution Reverse() const;
+
 };
 
 inline bool operator <(const Substitution & a, const Substitution & b){
   return (a.sub_ < b.sub_);
+}
+
+inline bool operator==(const Substitution & a, const Substitution & b) {
+  return (a.sub_ == b.sub_);
 }
 
 inline uint64 Fingerprint(const Substitution & s, uint64 level = 0){
@@ -140,6 +164,8 @@ Substitution Union(const Substitution & s1, const Substitution & s2);
 
 set<int> GetVariables(const Tuple & t);
 set<int> GetVariables(const Pattern & v);
+
+bool IsConnectedPattern(const Pattern & v);
 
 // removes the tuples that have no variables
 Pattern RemoveVariableFreeTuples(const Pattern & v);
@@ -176,6 +202,6 @@ void RenameVariablesInOrder(Pattern * v, Substitution *s);
 Pattern Canonicalize(const Pattern & v, Substitution *sub);
 
 // Put a rule (an ordered pair of tuple vectors) in canonical form.
-CandidateRule CanonicalizeRule(const CandidateRule & r);
+CandidateRule CanonicalizeRule(const CandidateRule & r, Substitution * out_sub);
 		 
 #endif

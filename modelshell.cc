@@ -192,16 +192,16 @@ string ModelShell::Handle(string command) {
       model_->VerifyLayer2();
     }
     /*
-    else if (command == "checkpoint") {
+      else if (command == "checkpoint") {
       string cname;
       command_stream >> cname;
       checkpoints[cname] = model_->GetChangelist()->GetCheckpoint();
-    }
-    else if (command == "rollback") {
+      }
+      else if (command == "rollback") {
       string cname;
       command_stream >> cname;
       model_->GetChangelist()->Rollback(checkpoints[cname]);
-    }
+      }
     */
     else if (command == "spec") {
       string fname;
@@ -222,6 +222,16 @@ string ModelShell::Handle(string command) {
     /*else if (command == "o") {
       m.OptimizeRound();
       }*/
+    else if (command == "combinerules") {
+      int duration;
+      command_stream >> duration;
+      time_t end_time = time(0) + duration;
+      string comments;
+      optimizer_->CombineRules(end_time-time(0), &comments);
+      bool res = optimizer_->FixTimesFixCircularDependencies();
+      CHECK(res); // don't have this wrapped in a checkpoint but could ...
+      VLOG(0) << "Combined rules" << endl;
+    }
     else if (command == "i") {
       int tactic;
       command_stream >> tactic;
@@ -236,7 +246,7 @@ string ModelShell::Handle(string command) {
 				    end_time-time(0), &comments)) break;
 	OptimizationCheckpoint cp(optimizer_, true);
 	optimizer_->TryAddPositiveRule(cand.first, cand.second, 
-					  10, comments);	
+				       3, comments);	
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "
 		  << CandidateRuleToString(cand)
@@ -247,101 +257,137 @@ string ModelShell::Handle(string command) {
 	  improvement_counter_++;	  
 	  VLOG(0) << "About to store improvement\n";
 	  model_->Store("stored/auto."+itoa(improvement_counter_)+".model");
+	  string cmd = "ln -sf auto." + 
+	    itoa(improvement_counter_) + ".model stored/working.model";
+	  system(cmd.c_str());
 	}
       }
       model_->ToHTML("html");
-      
     }
     else if (command == "verify"){
       model_->VerifyLayer2();
     }
     // Here's an example
     // addrule { lhs="[ Successor *0 *1 ]" , rhs = "[ Successor *1 *2 ]"  }
-    else if (command == "addrule"){
-      string pat;
+    else if (command == "componentcheck") {
+      Pattern p;
       Record r;
       command_stream >> r;
-      CandidateRule original = make_pair(
-					 StringToTupleVector(r["lhs"]),
-					 StringToTupleVector(r["rhs"]));
-      {
-	OptimizationCheckpoint cp(optimizer_, true);
-	string comments;
-	CandidateRule simplified;
-	bool success 
-	  = optimizer_->VetteCandidateRule(original, &simplified, 
-					   optimizer_->StandardMaxWork(), 
-					   &comments);
-	comments += " added by hand ";
-	cerr << "Vette " << (success?"succeeded":"failed") << endl;
-	if (success) original = simplified;
-	optimizer_->TryAddPositiveRule(original.first, original.second, 
-				       10, comments);
-	if (cp.KeepChanges()) {
-	  VLOG(0) << " Created rule "
-		  << CandidateRuleToString(original)
-		  << " model likelihood: " << model_->GetLnLikelihood()
-		  << " gain=" << cp.Gain() << endl;
-	}
-      }
-      model_->ToHTML("html");
-    } 
-    else if (command=="rs"){ // random tuple
-      string l;
-      GetLine(command_stream, &l);
-      istringstream istr(l);
-      vector<int> terms;      
-      string w;
-      while (istr >> w){
-	int wid;
-	CHECK(LEXICON.GetID(w, &wid));
-	terms.push_back(wid);
-      }
-      for (int i=0; i<10; i++) {
-	Tuple s;
-	bool found_random 
-	  = model_->GetTupleIndex()->GetRandomTupleContaining(&s, terms, true);
-	if (found_random) {
-	  cout << s.ToString() << endl;
-	}
+      p = StringToTupleVector(r["p"]); 
+      if (IsConnectedPattern(p)) {
+	VLOG(0) << "Connected" << endl;
+      } else {
+	VLOG(0) << "Not Connected" << endl;
       }
     }
-    else if (command=="v") {
-      int v;
-      command_stream >> v;
-      SetVerbosity(v);
-    }
-    else if (command=="candidates"){
-      uint num;
-      int tactic;
-      command_stream >> tactic >> num;
-      for (uint i=0; i<num; i++) {
-	CandidateRule cand;
-	string comments;
-	if (!optimizer_->FindRandomCandidateRule(&cand, (Tactic)tactic,
-						 10, &comments)) break;
-	cout << CandidateRuleToString(cand) << endl;
+    else if (command == "benefit") {
+      Record r;
+      command_stream >> r;
+      Tuple tp;
+      tp.FromString(r["tuple"]);
+      const TrueTuple * tt = *((model_->GetTupleToTrueTuple()) % tp);
+      if (tt) {
+	VLOG(0) << "guess: " << optimizer_->GuessBenefit(tt) << endl;
+      } else {
+	VLOG(0) << "Can't find tuple" << endl;
       }
     }
-    else if (command=="h"){
-      model_->ToHTML("html");
-    }
-    else if (command=="store") {
-      model_->VerifyLayer2();
-      system("mkdir -p stored");
-      string fn;
-      command_stream >> fn;
-      fn = "stored/"+fn+".model";
-      model_->Store(fn);
-    }
-    else if (command=="load") {      
-      string fn;
-      command_stream >> fn;
+    else if (command == "autobenefit") {
+      int count;
+      command_stream >> count;
+      for (uint c=0; c < (uint)count; c++) {
+	TrueTuple * tt = optimizer_->GetRandomTrueTuple();
+	VLOG(0) << "Tuple:" << tt->GetTuple().ToString() << endl;
+	VLOG(0) << "guess: " << optimizer_->GuessBenefit(tt) << endl;
+       }
+     }
+     else if (command == "addrule"){
+       string pat;
+       Record r;
+       command_stream >> r;
+       CandidateRule original = make_pair(
+ 					 StringToTupleVector(r["lhs"]),
+ 					 StringToTupleVector(r["rhs"]));
+       {
+ 	OptimizationCheckpoint cp(optimizer_, true);
+ 	string comments;
+ 	CandidateRule simplified;
+ 	bool success 
+ 	  = optimizer_->VetteCandidateRule(original, &simplified, 
+ 					   optimizer_->StandardMaxWork(), 
+ 					   &comments);
+ 	comments += " added by hand ";
+ 	cerr << "Vette " << (success?"succeeded":"failed") << endl;
+ 	if (!success) return "Vette failed";
+ 	if (success) original = simplified;
+ 	optimizer_->TryAddPositiveRule(original.first, original.second, 
+ 				       3, comments);
+ 	if (cp.KeepChanges()) {
+ 	  VLOG(0) << " Created rule "
+ 		  << CandidateRuleToString(original)
+ 		  << " model likelihood: " << model_->GetLnLikelihood()
+ 		  << " gain=" << cp.Gain() << endl;
+ 	}
+       }
+       model_->ToHTML("html");
+     }  
+     else if (command=="rs"){ // random tuple
+       string l;
+       GetLine(command_stream, &l);
+       istringstream istr(l);
+       vector<int> terms;      
+       string w;
+       while (istr >> w){
+ 	int wid;
+ 	CHECK(LEXICON.GetID(w, &wid));
+ 	terms.push_back(wid);
+       }
+       for (int i=0; i<10; i++) {
+ 	Tuple s;
+ 	bool found_random 
+ 	  = model_->GetTupleIndex()->GetRandomTupleContaining(&s, terms, true);
+ 	if (found_random) {
+ 	  cout << s.ToString() << endl;
+ 	}
+       }
+     }
+     else if (command=="v") {
+       int v;
+       command_stream >> v;
+       SetVerbosity(v);
+     }
+     else if (command=="candidates"){
+       uint num;
+       int tactic;
+       command_stream >> tactic >> num;
+       for (uint i=0; i<num; i++) {
+ 	CandidateRule cand;
+ 	string comments;
+ 	if (!optimizer_->FindRandomCandidateRule(&cand, (Tactic)tactic,
+ 						 10, &comments)) break;
+ 	cout << CandidateRuleToString(cand) << endl;
+       }
+     }
+     else if (command=="h"){
+       model_->ToHTML("html");
+       model_->Store("stored/working.model");
+     }
+     else if (command=="store") {
+       model_->VerifyLayer2();
+       system("mkdir -p stored");
+       string fn;
+       command_stream >> fn;
+       fn = "stored/"+fn+".model";
+       model_->Store(fn);
+     }
+     else if (command=="load") {      
+       string fn;
+       command_stream >> fn;
       fn = "stored/"+fn+".model";
       model_->Load(fn);
       model_->VerifyLayer2();
-    }
-    else cerr << "UNKNOWN COMMAND " << command << endl;
+     }
+     else cerr << "UNKNOWN COMMAND " << command << endl;
     model_->FixTimes();
     // ToHTML("/Users/guest/tmp/model.html");
     cout << "?";
