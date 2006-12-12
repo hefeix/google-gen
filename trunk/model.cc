@@ -171,6 +171,14 @@ Model::Model(){
   arbitrary_term_ln_likelihood_ = 0.0;
   total_arbitrary_terms_ = 0;
   old_style_display_ = false;
+
+  // Load up the words
+  ifstream input("words");
+  string w;
+  while (input >> w) {
+    words_.push_back(w);
+  }
+  VLOG(0) << "Loaded " << words_.size() << " English words" << endl;
 }
 
 Model::~Model(){
@@ -754,38 +762,17 @@ Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
   else return new Precondition(this, tuples);
 }
 
-// Can make this more efficient later
+// Pick a random word and go with it! (or 2 after 10 tries)
 string Model::FindName(string base) {
-  int * count = namer_ % base;
-
-  if (count && ((*count) != 0)) {
-    stringstream proposed;
-    proposed << base << namer_[base];
-    changelist_.Make
-      (new MapOfCountsAddChange<string, int>(&namer_, base, 1));
-    return proposed.str();
-  }
-
-  int trynum = 0;
-  int diff = 1;
+  int tries = 0;
   while (true) {
-    stringstream proposed;
-    proposed << base << trynum;
-    if (LEXICON.Contains(proposed.str())) {
-      diff <<= 1;
-    }
-    else {
-      if (diff == 1) {
-	changelist_.Make
-	  (new MapOfCountsAddChange<string, int>(&namer_, base, trynum+1));
-	return proposed.str();
-      }	  
-      trynum -= diff;
-      diff >>= 1;
-    }
-    trynum += diff;
+    string w1 = base; 
+    w1 += words_[RandomUInt32() % words_.size()];
+    if (tries > 10) w1 += "." + words_[RandomUInt32() % words_.size()];
+    if (!LEXICON.Contains(w1)) return w1;
+    tries++;
   }
-  return "bad server. no doughnut";
+  return "ERROR";
 }
 
 TrueTuple * Model::FindTrueTuple(const Tuple & s) const {

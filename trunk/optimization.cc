@@ -139,7 +139,7 @@ void Optimizer::TryCombineRules(Pattern lhs,
 
   // Do we need to check whether this rule exists? who knows?
 
-  string rel_name = model_->FindName(":CR");
+  string rel_name = model_->FindName("");
   int rel_id = LEXICON.GetAddID(rel_name);
 
   Tuple rhs_t;
