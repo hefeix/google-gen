@@ -97,18 +97,45 @@ void Optimizer::TryCombineRules(Pattern lhs,
   // TODO: This would be a good place to check that the preconditions are reasonable
 
   // What postcondition variables do we need?
+  // Also what is the minimum delay of the rules
+  EncodedNumber minimum_delay = info[0].rule_->GetDelay();
+
   for (uint c=0; c<info.size(); c++) {
     const SubRuleInfo & sri = info[c];
     CHECK(sri.rule_->GetRuleType() != NEGATIVE_RULE);
     
     // Figure out which post variables this rule needs
-    // from the new rule
-    Pattern result = sri.rule_->GetResult();
-    sri.sub_.Substitute(&result);
-    set<int> int_set =
-      Intersection(pre_variables, GetVariables(result));
-    post_variables.insert(int_set.begin(), int_set.end());
+    // Figure out which tuples will be removed by factoring
+    set<Tuple> remove_set;
+    Pattern new_lhs = lhs;
+    sri.sub_.Reverse().Substitute(&new_lhs);    
+    remove_set.insert(new_lhs.begin(), new_lhs.end());
+
+    // Get the preconditions and result and filter them
+    Pattern filtered;
+    Pattern old_in_rule = Concat(sri.rule_->GetResult(), sri.rule_->GetPrecondition()->GetPattern());
+    for (uint c2=0; c2< old_in_rule.size(); c2++)
+      if (!(remove_set % old_in_rule[c2])) filtered.push_back(old_in_rule[c2]);
+
+    // Check with post filter variables are in the subsitution
+    set<int> rule_post_variables = GetVariables(filtered);
+    forall(run, rule_post_variables) {
+      const int * new_val = sri.sub_.sub_ % (*run);
+      if (new_val)  {
+	post_variables.insert(*new_val);
+      }
+    }
+
+    // Track the minimum delay
+    if (sri.rule_->GetDelay() < minimum_delay)
+      minimum_delay = sri.rule_->GetDelay();
   }
+  
+  // Log the post variables
+  forall (run, post_variables) {
+    VLOG(0) << "RHS variable " << LEXICON.GetString(*run) << endl;
+  }
+
 
   // Do we need to check whether this rule exists? who knows?
 
@@ -128,7 +155,7 @@ void Optimizer::TryCombineRules(Pattern lhs,
 
   // Make the new rule and make all its satisfactions true
   Rule * new_rule = model_->MakeNewRule
-    (lhs, EncodedNumber(), SIMPLE_RULE, NULL,
+    (lhs, minimum_delay, SIMPLE_RULE, NULL,
      rhs, EncodedNumber("e"), EncodedNumber("e"));
   new_rule->AddAllSatisfactionsAsFirings();
   OptimizeStrength(new_rule);
