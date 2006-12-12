@@ -359,15 +359,14 @@ class Model {
   
   map<int, int> arbitrary_term_counts_;
 
-  // To help with naming
-  map<string, int> namer_;
-
   int total_arbitrary_terms_;
   double arbitrary_term_ln_likelihood_; // superfluous
   double ln_likelihood_;
 
   Changelist changelist_;
   bool old_style_display_;
+
+  vector<string> words_; // This is for randomly generating words
 };
 
 #endif
