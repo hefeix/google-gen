@@ -26,17 +26,17 @@ using namespace std;
 int main() {
   char c;
   int pos=0;
-  cout << "[ Successor START *POS0 ]" << endl;
+  cout << "[ S START *POS0 ]" << endl;
   while (cin.get(c)){    
-    if (pos>0) cout << "[ Successor POS" << pos-1 << " *POS" << pos << " ]"
+    if (pos>0) cout << "[ S POS" << pos-1 << " *POS" << pos << " ]"
 		    << endl;    
-    cout << "[ HasChar POS" << pos << " *Char_";
+    cout << "[ C POS" << pos << " *\'";
     if (c=='\n') cout << "newline";
     else if (isspace(c)) cout << "space";
     else cout << c;
-    cout << " ]" << endl;
+    cout << "\' ]" << endl;
     pos++;
   }
-  cout << "[ Successor POS" << pos-1 << " *END ]" << endl;
+  cout << "[ S POS" << pos-1 << " *END ]" << endl;
   return 0;
 }
