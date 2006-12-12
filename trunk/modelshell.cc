@@ -223,14 +223,15 @@ string ModelShell::Handle(string command) {
       m.OptimizeRound();
       }*/
     else if (command == "combinerules") {
+      OptimizationCheckpoint cp(optimizer_, true);
       int duration;
       command_stream >> duration;
       time_t end_time = time(0) + duration;
       string comments;
       optimizer_->CombineRules(end_time-time(0), &comments);
-      bool res = optimizer_->FixTimesFixCircularDependencies();
-      CHECK(res); // don't have this wrapped in a checkpoint but could ...
-      VLOG(0) << "Combined rules" << endl;
+      if (cp.KeepChanges()) {
+	VLOG(0) << "Combined rules" << endl;
+      }
     }
     else if (command == "i") {
       int tactic;
