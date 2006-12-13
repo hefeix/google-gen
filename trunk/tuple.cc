@@ -200,7 +200,10 @@ bool IsConnectedPattern(const Pattern& v) {
     }
   }
 
-  CHECK(variables.size());
+  if (variables.size()==0) {
+    cout << "no variables in " << TupleVectorToString(v) << endl;
+    CHECK(variables.size());
+  }
   vector<int> to_visit;
   to_visit.push_back(*(variables.begin()));
   for(uint where=0; where < to_visit.size(); where++) {
@@ -333,6 +336,63 @@ void RenameVariablesInOrder(Pattern * v, Substitution *s){
   if (s) *s = sub;
 }
 
+// smaller is better.
+int PatternReadability(const Pattern & p){
+  int ret =0;
+  map<int, set<int> > m; // maps variables to sets of positions.
+  int pos =0;
+  for (uint i=0; i<p.size(); i++) {
+    for (uint j=0; j<p[i].size(); j++) {
+      pos++;
+      if (IsVariable(p[i][j])) m[p[i][j]].insert(pos);
+    }
+  }
+  forall(run, m) forall(run2, run->second) forall(run3, run->second)
+    ret += abs(*run2-*run3);
+  return ret;
+}
+Pattern SortPatternForReadability(Pattern p){
+  if (p.size() < 7){
+    // iterate over all permutations
+    Pattern best = p;
+    int m = PatternReadability(p);
+    for (PermutationIterator iter(p.size(), p.size()); !iter.done(); ++iter){
+      Pattern q;
+      for (uint i=0; i<p.size(); i++) q.push_back(p[iter.current()[i]]);
+      int u = PatternReadability(q);
+      if (u<m) {
+	m = u;
+	best = q;
+      }
+    }
+    return best;
+  }
+  // heuristic search over permutations.
+  while(true){
+
+    bool any_better = false;
+    for (uint source=0; source<p.size(); source++) {
+      for (uint dest=0; dest<p.size(); dest++) {
+	Pattern q = p;
+	q[dest] = p[source];
+	uint write_ptr = 0; if (write_ptr==dest) write_ptr++;
+	for (uint read_ptr=0; read_ptr<p.size(); read_ptr++) {
+	  if (read_ptr==source) continue;
+	  q[write_ptr] = p[read_ptr];
+	  write_ptr++;
+	  if (write_ptr==dest) write_ptr++;
+	}
+	if (PatternReadability(q) < PatternReadability(p)) {
+	  p = q;
+	  any_better = true;
+	}	
+      }
+    }
+    if (!any_better) break;
+  }
+  return p;
+}
+
 Pattern Canonicalize(const Pattern & v, Substitution *sub){
 
   // Figerprints of all of the tuples, with variables changed to wildcards
@@ -375,6 +435,7 @@ Pattern Canonicalize(const Pattern & v, Substitution *sub){
     }
     forall(run, order) ret.push_back(v[run->second]);
   }
+  ret = SortPatternForReadability(ret);
   RenameVariablesInOrder(&ret, sub);
   return ret;
 }
