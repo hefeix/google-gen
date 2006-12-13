@@ -39,15 +39,28 @@ bool Lexicon::GetID(const string & s, int * id) const {
   } else return false;
 }
 
+char VarToChar(int var){
+  CHECK(var < 26);
+  return 'a'+var;
+}
+int CharToVar(char c){
+  CHECK(islower(c));
+  return c-'a';
+}
+
 bool LexiconWithVariables::GetID(const string & s, int * id) const{
-  if (s.size() && s[0]=='*') {
-    if (s.size()==1) {
-      *id = WILDCARD;
-      return true;
-    } else {
-      *id = Variable(atoi(s.c_str()+1));
-      return true;
-    }
+  CHECK(s.size());
+  if (s == "*") {
+    *id = WILDCARD;
+    return true;
+  } 
+  if (s.size()==1 && islower(s[0])) {
+    *id = Variable(CharToVar(s[0]));
+    return true;
+  }
+  if (s[0]=='$'){
+    *id = Variable(atoi(s.c_str()+1));
+    return true;
   }
   return Lexicon::GetID(s, id);
 }
@@ -60,14 +73,18 @@ int Lexicon::GetAddID(const string & s) {
 
 string Lexicon::GetString(int id) const {
   CHECK(id>=0 && id<(int)id_to_string_.size());
-  return id_to_string_[id];
+  return id_to_string_[id];  
 }
 
 string LexiconWithVariables::GetString(int id) const {
   if (IsWildcard(id)) return "*";
   if (IsVariable(id)) {
-    string ret ="*" + itoa(Variable(id));
-    return ret;
+    if (Variable(id) < 26) {
+      string ret = string() + VarToChar(Variable(id));
+      return ret;
+    } else {
+      return "$" + itoa(Variable(id));
+    }
   }
   return Lexicon::GetString(id);
 }

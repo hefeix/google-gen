@@ -176,6 +176,8 @@ Model::Model(){
   ifstream input("words");
   string w;
   while (input >> w) {
+    if (!isalpha(w[0])) continue;
+    w[0] = toupper(w[0]);
     words_.push_back(w);
   }
   VLOG(0) << "Loaded " << words_.size() << " English words" << endl;
