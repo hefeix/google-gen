@@ -25,43 +25,6 @@
 
 typedef uint Checkpoint;
   
-class Change;
-
-// A changelist is a stack of changes which allows you to set checkpoints and
-// rollback to desired checkpoints.  To use a changelist object, you will need
-// to use either the already defined change types, or to write your own 
-// subclasses of Change to do what you want.  When you subclass Change, code
-// for making the change goes in the constructor, and code for rolling it 
-// back goes into the destructor.  It's that simple.  
-//
-// When adding changes, always create them with "new" and pass them right
-// to MakeChange.  For example:
-// 
-// Checkpoint cp = my_changelist.GetCheckpoint();
-// my_changelist.Make(new MySubclassOfChange(params));
-// if (UnhappyWithResults()) {
-//    my_changelist.Rollback(cp);
-// }
-
-class Changelist {
- public:
-  void Make(Change * c); // Make a change (use 'new' to create c inline)
-  Checkpoint GetCheckpoint();  // Create a checkpoint.
-  void Rollback(Checkpoint cp); // Roll back to a checkpoint.
-  void MakeChangesPermanent(); // Invalidates checkpoints and frees memory.
- private:
-  vector<Change *> history_;
-};
-
-class DestructibleCheckpoint{
- public:
-  DestructibleCheckpoint(Changelist * cl);
-  ~DestructibleCheckpoint();
- private:
-  Checkpoint cp_;
-  Changelist *cl_;
-};
-
 // Subclass this.  
 // Use the constructor to make changes and the Undo() function to undo them.
 // You can optionally implement the MakePermanent() function which is called
@@ -89,6 +52,7 @@ template <class C> class ValueChange : public Change{
   C * location_;
   C old_val_;
 };
+
 
 // Inserts a value into a set.
 template <class C> class SetInsertChange : public Change {
@@ -246,6 +210,20 @@ template <class C> class DeleteOnRollbackChange : public Change {
   C * object_;
 };
 
+// Create one of these when you new an object
+template <class C> class DeleteOnMakePermanentChange : public Change {
+ public:
+  DeleteOnMakePermanentChange(C * object){
+    object_ = object;
+  }
+  void Undo(){}
+  void MakePermanent(){
+    delete object_;
+  }
+ private:
+  C * object_;
+};
+
 // Takes a class instance and two void member functions with no arguments,
 // and calls the first one on creation and the second one on desrtuction.
 // You can also pass a MakePermanent function, or NULL.  
@@ -304,5 +282,58 @@ template <class C, class P> class MemberCall1Change : public Change {
   C * object_;
   P parameter_;
 };
+
+// A changelist is a stack of changes which allows you to set checkpoints and
+// rollback to desired checkpoints.  To use a changelist object, you will need
+// to use either the already defined change types, or to write your own 
+// subclasses of Change to do what you want.  When you subclass Change, code
+// for making the change goes in the constructor, and code for rolling it 
+// back goes into the destructor.  It's that simple.  
+//
+// When adding changes, always create them with "new" and pass them right
+// to MakeChange.  For example:
+// 
+// Checkpoint cp = my_changelist.GetCheckpoint();
+// my_changelist.Make(new MySubclassOfChange(params));
+// if (UnhappyWithResults()) {
+//    my_changelist.Rollback(cp);
+// }
+
+class Changelist {
+ public:
+  void Make(Change * c); // Make a change (use 'new' to create c inline)
+  Checkpoint GetCheckpoint();  // Create a checkpoint.
+  void Rollback(Checkpoint cp); // Roll back to a checkpoint.
+  void MakeChangesPermanent(); // Invalidates checkpoints and frees memory.
+ private:
+  vector<Change *> history_;
+
+ public:
+  // convenience functions:
+  template <class C> void ChangeValue(C * location, const C & new_val){
+    Make(new ValueChange<C>(location, new_val));
+  }
+  // delete on rollback
+  template <class C> void Creating(C * object){
+    Make(new DeleteOnRollbackChange<C>(object);
+  }
+  // delete on make permanent
+  template <class C> void Destroying(C * object){
+    Make(new DeleteOnMakePermanentChange<C>(object);
+  }
+
+};
+
+class DestructibleCheckpoint{
+ public:
+  DestructibleCheckpoint(Changelist * cl);
+  ~DestructibleCheckpoint();
+ private:
+  Checkpoint cp_;
+  Changelist *cl_;
+};
+
+
+
 
 #endif // _CHANGELIST_H_

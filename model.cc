@@ -170,6 +170,7 @@ Model::Model(){
   ln_likelihood_ = 0.0;
   arbitrary_term_ln_likelihood_ = 0.0;
   total_arbitrary_terms_ = 0;
+  work_penalty_ = 0.01;
   old_style_display_ = false;
 
   // Load up the words
@@ -626,53 +627,86 @@ void Model::VerifyLayer2() const {
   VerifyLikelihood();
 }
 int64 Model::FindSatisfactionsForTuple
-( const Tuple & s, 
-  vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > *results,
+( const Tuple & tuple, 
+  map<Precondition *, pair<uint64, vector<Substitution> > > *results,
   int64 max_work,
+  bool adding_tuple, // updates search trees
   bool return_subs_for_negative_rules = true,
   bool return_subs_for_all_rules = false) {
+  if (adding_tuple) {
+    CHECK(max_work == UNLIMITED_WORK);
+  }
   DestructibleCheckpoint dcp(&changelist_);
-  if (!tuple_index_.Lookup(s, NULL, NULL))
+  if (!tuple_index_.Lookup(tuple, NULL, NULL)) {
+    CHECK(!adding_tuple);
     changelist_.Make
       (new MemberCall1Change<TupleIndex, Tuple>(&tuple_index_, s,
 					       &TupleIndex::Add,
 					       &TupleIndex::Remove));
+  }
   if (results) results->clear();
   int64 total_work = 0;
-  for (GeneralizationIterator run_g(s); !run_g.done(); ++run_g) {
-    const set<pair<Precondition *, int> > * preconditions
-      = wildcard_tuple_to_precondition_ % run_g.generalized();
-    if (preconditions) forall(run, (*preconditions)) {
-      Precondition * precondition = run->first;
-      int clause_num = run->second;
-      Substitution partial_sub;
-      vector<Tuple> simplified_precondition = precondition->pattern_;
-      // This can fail (gracefully) if the clause contains the same variable 
-      // at two positions and the tuple doesn't.
-      if (!ComputeSubstitution(precondition->pattern_[clause_num], s, 
-			       &partial_sub)) continue;
-      partial_sub.Substitute(&simplified_precondition);
-      uint64 num_complete_subs;
+  for (GeneralizationIterator run_g(tuple); !run_g.done(); ++run_g) {
+    set<SearchNode *> * search_nodes = wildcard_tuple_to_search_node_ %
+      run_g.generalized();
+    if (search_nodes) forall(run, *search_nodes) {
+      total_work++;
+      if (max_work != UNLIMITED_WORK && total_work > max_work) return GAVE_UP;
+      SearchNode *node = *run;
+      CHECK(node->split_tuple_ != -1);
+      if (adding_tuple) node->L1_SetWork(node->work_+1);
+      // The substitution will come in three parts
+      // 1. the substitution so far inherent in the search node
+      // 2. the substitution for tuple (the split tuple at the search node)
+      // 3. the substitution for future tuples.      
+      Substitution sub_for_split_tuple; // #2
+      if (!ComputeSubstitution(node_->pattern_[node_->split_tuple_], tuple, 
+			       &sub_for_split_tuple)) continue;
+      if (node->pattern_.size()==1) {
+	if (adding_tuple) {
+	  node->L1_SetNumSatisfactions(node->num_satisfactions_+1);
+	}
+	if (!results) continue;
+	results[precondition].first++;
+	results[precondition].second.push_back(complete_sub);
+	
+	// TODO: pass back substitution if necessary, and other shit
+	continue;
+      }
+      Precondition * precondition = node->precondition_;
+      Pattern simplified_pattern = node->pattern_;
+      sub_for_split_tuple.Substitute(&simplified_pattern);
+      simplified_pattern 
+	= RemoveFromVector(simplified_pattern, node->split_tuple_);
+      uint64 num_simplified_subs;
       uint64 work = 0;
       bool return_subs = return_subs_for_all_rules;
       if (return_subs_for_negative_rules && 
 	  (precondition->negative_rules_.size()>0)) {
 	return_subs = true;
       }
-      vector<Substitution> complete_subs;
+      SearchNode * child_node = NULL;
+      if (adding_tuple) {
+	child_node = node->L1_CreateChild(tuple, simplified_pattern);
+      }
+      vector<Substitution> subs_for_simplified_pattern; // #3 above
       if (!tuple_index_.FindSatisfactions
-	  (simplified_precondition, 
+	  (simplified_pattern, 
+	   child_node, 
 	   NULL,
-	   return_subs?(&complete_subs):NULL,
-	   &num_complete_subs,
+	   return_subs?(&subs_for_simplified_pattern):NULL,
+	   &num_simplified_subs,
 	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
 	   &work)) return GAVE_UP;
-      if (num_complete_subs > 0 && results) {
-	for (uint i=0; i<complete_subs.size(); i++) {
-	  complete_subs[i].Add(partial_sub);
+      if (num_simplified_subs > 0 && results) {
+	(*results)[precondition].first += num_simplified_subs;
+	Substitution substitution_so_far = node->GetSubstitutionSoFar(); // #1
+	for (uint i=0; i<subs_for_simplified_pattern.size(); i++) {
+	  Substitution complete_sub = subs_for_simplified_pattern[i]; // #3
+	  complete_sub.Add(substitution_so_far); // #1
+	  complete_sub.Add(sub_for_split_tuple); // #2
+	  (*results)[precondition].second.push_back(complete_sub);
 	}
-	results->push_back(make_pair(precondition, make_pair(num_complete_subs, 
-							complete_subs)));
       }
       total_work += work;
     }
@@ -705,6 +739,7 @@ int64 Model::FindExplanationsForResult
       if (!tuple_index_.FindSatisfactions
 	  (simplified_precondition, 
 	   NULL,
+	   NULL, 
 	   &complete_subs,
 	   &num_complete_subs,
 	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
@@ -963,6 +998,10 @@ void Model::A1_AddToLnLikelihood(double delta) {
   changelist_.Make
     (new ValueChange<double>(&ln_likelihood_, ln_likelihood_+delta));
 }
+void Model::A1_AddToSearchWork(int64 delta) {
+  changelist_.Make
+    (new ValueChange<uint64>(&search_work_, search_work_+delta));
+}
 void Model::A1_InsertIntoViolatedProhibitions(Prohibition *p) {
   changelist_.Make
     (new SetInsertChange<Prohibition *>(&violated_prohibitions_, p));
@@ -973,4 +1012,60 @@ void Model::A1_RemoveFromViolatedProhibitions(Prohibition *p) {
 }
 void Model::A1_IncrementNextID(){
   changelist_.Make(new ValueChange<int>(&next_id_, next_id_+1));
+}
+
+
+// ----- SearchNode stuff
+
+SearchNode::SearchNode(Pattern pattern, 
+		       Tuple tuple, 
+		       SearchNode *parent,
+		       Precondition *precondition){
+  pattern_ = pattern;
+  tuple_ = tuple;
+  parent_ = parent;
+  precondition_ = precondition;
+  split_tuple_ = -1;
+  num_satisfactions_ = 0;
+  work_ = 0;
+  GetChangelist()->Make
+    (new DeleteOnRollbackChange<SearchNode>(this));
+}
+
+
+
+
+
+
+
+void SearchNode::L1_EraseChild(Tuple matching_tuple){
+  SearchNode ** childp = children_ % matching_tuple;
+  CHECK(childp);
+  SearchNode *child = *childp;
+  child->L1_Erase();
+  GetChangelist->Make
+    (new MapRemoveChange<Tuple, SearchNode *>(&children_, matching_tuple));  
+}
+void SearchNode::L1_EraseTree(){
+  CHECK(!parent);
+  L1_Erase();
+}
+SearchNode * 
+SearchNode::L1_CreateChild(Tuple matching_tuple, Pattern child_pattern){
+  SearchNode * ret = new SearchNode(child_pattern, matching_tuple, 
+				    this, precondition_);
+  CHECK(!(children_ % matching_tuple));
+  GetChangelist()->Make(new MapInsertChange<Tuple, SearchNode *>
+			(&children_, matching_tuple, ret));
+  return ret;
+}
+Substitution SearchNode::GetSubstitutionSoFar() const {
+  Substitution ret;
+  for (const SearchNode * n = this; n->parent_ != NULL; n = n->parent_){
+    Substitution partial_sub;
+    CHECK(ComputeSubstitution(n->parent_->pattern_[n->parent_->split_tuple_],
+			      n->tuple, &partial_sub));
+    ret.Add(partial_sub);
+  }
+  return ret;
 }

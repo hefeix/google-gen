@@ -18,6 +18,7 @@
 
 #include "tupleindex.h"
 #include "lexicon.h"
+#include "model.h"
 
 SamplingInfo::SamplingInfo() {
   sampled_ = false;
@@ -302,12 +303,26 @@ int TupleIndex::Lookup(const Tuple &t, vector<Tuple> * results,
 
 // Eliminate the simplest tuple first, recursively call this function
 // to find matches to the pattern in the tupleindex.
+// TODO: may want actual_work to be the same as the work recorded in the
+// search_node.   For now, at a leaf node without repeated variables, 
+// if not asking for substitutions, we return actual_work as 1.
 bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern, 
+				   SearchNode * search_node,
 				   const SamplingInfo * sampling,
 				   vector<Substitution> * substitutions,
 				   uint64 * num_satisfactions, 
 				   int64 max_work,
 				   uint64 * actual_work) {
+  CHECK(!(search_node && sampling));
+  if (sampling) CHECK(sampling->position_ < pattern.size());
+  if (search_node) {
+    CHECK(search_node->pattern_ == pattern);
+    CHECK(search_node->children_.size()==0);
+    CHECK(search_node->num_satisfactions_ == 0);
+    CHECK(search_node->split_tuple_ == -1);
+    CHECK(max_work == UNLIMITED_WORK);
+  }
+
   // ignore sampling if it doesn't apply  
   if (sampling && !sampling->sampled_) sampling = NULL;
   
@@ -319,26 +334,54 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
     if (substitutions) substitutions->push_back(Substitution());
     if (num_satisfactions) *num_satisfactions = 1;
     if (actual_work) *actual_work = 1;
+    if (search_node) {
+      search_node->L1_SetNumSatisfactions(1);
+      search_node->L1_SetWork(1);
+    }
     return true;
   }
 
   // If the pattern is one tuple, with no duplicate variables,
   // and we don't need the results, we can just look up the answer quickly
-  if (pattern.size()==1 && !substitutions) {
-    if (sampling) CHECK(sampling->position_ == 0);
-    if (!pattern[0].HasDuplicateVariables()) {
-      if (num_satisfactions)
-	*num_satisfactions = Lookup(pattern[0].VariablesToWildcards(), 
-				    0, sampling);
-      if (actual_work) *actual_work = 1; 
-      return true;
+  if (pattern.size()==1) {
+    bool duplicate_vars = pattern[0].HasDuplicateVariables();
+    uint64 num_matches = Lookup(pattern[0].VariablesToWildcards(), 
+				0, sampling);
+    if (search_node) {
+      search_node->L1_SetSplitTuple(0);
+      search_node->L1_SetWork(num_matches);
     }
+    if (!duplicate_vars && !substitutions) {
+      if (num_satisfactions) *num_satisfactions = num_matches;
+      if (actual_work) *actual_work = 1;
+      if (search_node) {
+	search_node->L1_SetNumSatisfactions(num_matches);
+      }
+      return true;
+    } 
+    if (max_work != UNLIMITED_WORK && (int64)num_matches > max_work) {
+      return false;
+    }
+    vector<Tuple> matches;
+    Lookup(pattern[0].VariablesToWildcards(), &matches, sampling);
+    uint64 num_sat = 0;
+    for (uint i=0; i<matches.size(); i++) {
+      Substitution sub;
+      if (!ComputeSubstitution(pattern[0], matches[i], &sub)) continue;
+      num_sat++;
+      if (substitutions) substitutions->push_back(sub);
+    }
+    if (num_satisfactions) *num_satisfactions = num_sat;
+    if (actual_work) *actual_work = num_matches;
+    if (search_node) {
+      search_node->L1_SetNumSatisfactions(num_sat);
+      }
+    return true;
   }
   
   // Begin with the clause with the least Lookup matches
   int best_clause = -1;
   int64 least_work = 0;
-  //FullySpecifiedNode ** matches;
   for (uint i=0; i<pattern.size(); i++) {    
     uint32 num_matches = 
       Lookup(pattern[i].VariablesToWildcards(), NULL, 
@@ -357,6 +400,11 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
   uint32 num_matches = 
     Lookup(pattern[best_clause].VariablesToWildcards(), &matches, 
 	 (sampling && sampling->position_==(uint32) best_clause)?sampling:NULL);
+
+  if (search_node) {
+    search_node->L1_SetSplitTuple(best_clause);
+    search_node->L1_SetWork(num_matches);
+  }
   
   // Create a simpler pattern without the best_clause
   vector<Tuple> simplified_pattern = pattern;
@@ -392,20 +440,27 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
 	    << " post=" << post_sub.ToString()
 	    << " partial_sub=" << partial_sub.ToString() << endl;
     partial_sub.Substitute(&substituted_pattern);
+    SearchNode * child_search_node = NULL;
+    if (search_node) {
+      child_search_node = search_node->L1_CreateChild(matches[match], 
+						      substituted_pattern);
+    }
 
     uint64 additional_num_satisfactions;
     uint64 added_work = 0;
+
+    // Look for satisfactions to the simpler problem, but the substitutions
+    // are really unions of that for the best_clause and theirs
+    vector<Substitution> additional_substitutions;
+    if (!FindSatisfactions
+	(substituted_pattern,
+	 child_search_node,
+	 sampling,
+	 substitutions?(&additional_substitutions):NULL, 
+	 &additional_num_satisfactions,
+	 (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
+	 &added_work)) return false;
     if (substitutions) {
-      // Look for satisfactions to the simpler problem, but the substitutions
-      // are really unions of that for the best_clause and theirs
-      vector<Substitution> additional_substitutions;
-      if (!FindSatisfactions
-	  (substituted_pattern, 
-	   sampling,
-	   &additional_substitutions, 
-	   &additional_num_satisfactions,
-	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
-	   &added_work)) return false;
       for (uint i=0; i<additional_substitutions.size(); i++) {
 	VLOG(2) << "partial=" << partial_sub.ToString() 
 		<< " additional=" << additional_substitutions[i].ToString();
@@ -414,15 +469,6 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
 	// This is the merged substitution, add it in
 	substitutions->push_back(additional_substitutions[i]);
       }
-    } else {
-      // If you don't require actual substitutions this is simple, 
-      // just keep looking and keeping tallies
-      if (!FindSatisfactions
-	  (substituted_pattern,
-	   sampling,
-	   0, &additional_num_satisfactions, 
-	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
-	   &added_work)) return false;
     }
     // Add up the work done, and the number of satisfactions for this match
     total_work += added_work;

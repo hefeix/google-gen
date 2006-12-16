@@ -32,6 +32,11 @@
 
 #define GAVE_UP (-1)
 
+struct SearchNode;
+class TupleIndex;
+
+// Used in combining rules
+// GEORGES - COMMENT
 struct SubRuleInfo {
   Rule *        rule_;
   // This is a variable to variable sub to get to the common canonicalized form
@@ -62,7 +67,6 @@ struct SubRuleInfo {
       ret << "Postcondition" << endl;
     return ret.str();
   }
-
 };
 inline ostream& operator<<(ostream& o, const SubRuleInfo& sri) {
   return (o << sri.ToString());
@@ -78,6 +82,7 @@ class Model {
   friend class Rule;
   friend class Component;
   friend class Prohibition;
+  friend class SearchNode;
 
   // ----- LAYER 3 FUNCTIONS -----
 
@@ -178,8 +183,7 @@ class Model {
   // TODO, make actual_work a parameter, for uniformity sake.
   int64 FindSatisfactionsForTuple
     ( const Tuple & s,
-      vector<pair<Precondition *, pair<uint64, vector<Substitution> > > >
-      *results,
+      map<Precondition *, pair<uint64, vector<Substitution> > > *results,
       int64 max_work,
       bool return_subs_for_negative_rules,
       bool return_subs_for_all_rules);
@@ -218,6 +222,10 @@ class Model {
   double GetArbitraryTermLnLikelihood() const 
   { return arbitrary_term_ln_likelihood_;}
 
+  double GetSearchWork() const { return search_work_;}
+  double GetUtility() const { return ln_likelihood_ 
+      - search_work_ * work_penalty_; } 
+  
   Precondition * FindPrecondition(const vector<Tuple> & tuples) const;
 
   set<Rule *> GetAllRules() const;
@@ -321,6 +329,7 @@ class Model {
   void A1_AddToTotalArbitraryTerms(int delta);
   void A1_AddToArbitraryTermLnLikelihood(double delta);
   void A1_AddToLnLikelihood(double delta);
+  void A1_AddToSearchWork(int64 delta);
   void A1_InsertIntoViolatedProhibitions(Prohibition *p);
   void A1_RemoveFromViolatedProhibitions(Prohibition *p);
   void A1_IncrementNextID();
@@ -358,9 +367,20 @@ class Model {
   set<Prohibition *> violated_prohibitions_;
   
   map<int, int> arbitrary_term_counts_;
-
   int total_arbitrary_terms_;
   double arbitrary_term_ln_likelihood_; // superfluous
+
+  map<Tuple, set<SearchNode *> > wildcard_tuple_to_search_node_;
+
+  // Total of search_work_ for all preconditions.
+  uint64 search_work_; 
+  // We prefer models that cost us less work in searching for satisfactions of 
+  // preconditions, since they are quicker to reason about.  The number of 
+  // units of search work is multiplied by this number and subtracted from the
+  // ln_likelihood_ of the model (in nats).  Guess: make this number about 
+  // 1/1000
+  double work_penalty_;
+  
   double ln_likelihood_;
 
   Changelist changelist_;
@@ -368,5 +388,53 @@ class Model {
 
   vector<string> words_; // This is for randomly generating words
 };
+
+struct SearchNode {
+  SearchNode(Pattern pattern,
+	     Tuple tuple, 
+	     SearchNode *parent,
+	     Precondition *precondition);
+
+  void L1_SetSplitTuple(int pos);
+  // propagates changes up to parents
+  void L1_SetNumSatisfactions(uint64 new_num_satisfactions);
+  // propagates changes up to parents
+  void L1_SetWork(uint64 new_work);
+  // this does not unlink you from your parent.
+  // don't call this except from L1_EraseChild() and L1_EraseTree();
+  void L1_Erase();
+  // erase a child of a node (and its subtree) and unlink it
+  void L1_EraseChild(Tuple matching_tuple);
+  // erase a whole tree for a precondition (must be called on root).
+  void L1_EraseTree();
+  // create a child node.
+  SearchNode * L1_CreateChild(Tuple matching_tuple, Pattern child_pattern);
+  Substitution GetSubstitutionSoFar() const;
+
+  Pattern pattern_;
+  SearchNode * parent_;
+  // the tuple that matches the parent's split tuple.
+  Tuple tuple_; 
+  Precondition * precondition_;
+  Model * GetModel() { return precondition_->GetModel();}
+  Changelist * GetChangelist() { return GetModel()->GetChangelist();}
+  int split_tuple_;
+  map<Tuple, SearchNode *> children_;
+  // number of satisfactions of this pattern  
+  uint64 num_satisfactions_; 
+  // how much work is done in adding and removing tuples.
+  // this is equal to the sum over this node and all descendents of the 
+  // number of matches of the wildcard tuple in the tuple index.  This 
+  // differs in two ways from num_satisfactions_:
+  // 1. it incudes interior nodes (not just leaves)
+  // 2. In the case of duplicate variables in a tuple, there can be wildcard
+  //    matches that are not true matches.  These are counted in work_, but
+  //    they do not lead to satisfactions.
+  uint64 work_; 
+};
+
+
+
+
 
 #endif

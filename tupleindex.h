@@ -25,6 +25,8 @@
 // TODO: Try to make this a class static constant to not pollute global namespace
 #define UNLIMITED_WORK (-1) 
 
+class SearchNode;
+
 struct SamplingInfo{
   bool sampled_;
   uint32 position_;
@@ -83,7 +85,8 @@ class TupleIndex{
   // a non-null pointer for num_satisfactions.  
   // You can tell how much work the function did using the parameter actual_work
   // The function returns true if it doesn't run out of time
-  bool FindSatisfactions(const vector<Tuple> & pattern, 
+  bool FindSatisfactions(const vector<Tuple> & pattern,
+			 SearchNode * search_node_,
 			 const SamplingInfo * sampling,
 			 vector<Substitution> * substitutions, // can be null
 			 uint64 * num_satisfactions,  // can be null

@@ -176,7 +176,7 @@ string ModelShell::Handle(string command) {
 	  subs = new vector<Substitution>();
       }
       model_->GetTupleIndex()->
-	FindSatisfactions(p, &sampling, subs, 
+	FindSatisfactions(p, NULL, &sampling, subs, 
 			  &num_sat, UNLIMITED_WORK, &actual_work);
       cout << "Pattern=" << TupleVectorToString(p)
 	   << " num_sat=" << num_sat 

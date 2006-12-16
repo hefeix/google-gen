@@ -130,6 +130,7 @@ void Component::L1_Erase(){
 
   L1_EraseSubclass();
   A1_SetReallyDead(true);
+  model_->changelist_.Make(new DeleteOnMakePermanentChange<Component>(this));
 
   for (uint i=0; i<copurposes.size(); i++) {
     if (copurposes[i]->Exists() && copurposes[i]->IsSuperfluous()) 
@@ -159,9 +160,11 @@ Precondition::Precondition(Model * model,
     model_->L1_AddArbitraryTerm(arbitrary_terms[i]);
   model_->A1_InsertIntoPreconditionIndex(pattern_, this);
   ComputeSetTime();
+  search_node_ = new SearchNode(pattern_, Tuple(), NULL, this);
   uint64 num_sat;
-  uint64 work;
-  model_->tuple_index_.FindSatisfactions(pattern_, NULL, 0, &num_sat, 
+  uint64 work;  
+  model_->tuple_index_.FindSatisfactions(pattern_, search_node_, 
+					 NULL, NULL, &num_sat,
 					 UNLIMITED_WORK, &work);
   num_satisfactions_ = num_sat;
   ComputeSetLnLikelihood();
@@ -182,6 +185,7 @@ void Precondition::L1_EraseSubclass(){
   PatternLnLikelihood(Pattern(), pattern_, &arbitrary_terms);  
   for (uint i=0; i<arbitrary_terms.size(); i++)
     model_->L1_SubtractArbitraryTerm(arbitrary_terms[i]);
+  search_node_->L1_Erase();
 }
 
 /*
@@ -369,7 +373,7 @@ void Rule::AddAllSatisfactionsAsFirings() {
   // Get all the substitutions required
   vector<Substitution> subs;
   model_->GetTupleIndex()->FindSatisfactions
-    (precondition_->pattern_, NULL, &subs, NULL, -1, NULL);
+    (precondition_->pattern_, NULL, NULL, &subs, NULL, -1, NULL);
 
   // Add firings for each substitution
   for (uint c=0; c<subs.size(); c++)
@@ -485,6 +489,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
     uint64 num_sat;
     uint64 work;
     model_->tuple_index_.FindSatisfactions(precondition_->pattern_, 
+					   NULL, 
 					   NULL,
 					   &substitutions,
 					   &num_sat, UNLIMITED_WORK, &work);
@@ -876,7 +881,7 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
   vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > 
     satisfactions;
   model_->FindSatisfactionsForTuple(tuple_, &satisfactions, UNLIMITED_WORK, 
-				    true, false);
+				    true, true, false);
   for (uint i=0; i<satisfactions.size(); i++) {
     Precondition * precondition = satisfactions[i].first;
     // The number of new satisfactions of thiss precondition.
@@ -1432,13 +1437,15 @@ void Component::VerifyLayer2Subclass() const{}
 void Precondition::VerifyLayer2Subclass() const{
   uint64 num_sat;
   model_->tuple_index_.
-    FindSatisfactions(pattern_, NULL, NULL, &num_sat, UNLIMITED_WORK, NULL);
+    FindSatisfactions(pattern_, NULL, NULL, NULL, &num_sat, 
+		      UNLIMITED_WORK, NULL);
   CHECK(num_sat == (uint64)num_satisfactions_);
 }
 void Rule::VerifyLayer2Subclass() const{
   if (type_ == NEGATIVE_RULE) {  // Make all the RuleSats exist.
     vector<Substitution> substitutions;
     model_->tuple_index_.FindSatisfactions(precondition_->pattern_, 
+					   NULL, 
 					   NULL,
 					   &substitutions,
 					   NULL, UNLIMITED_WORK, NULL);
