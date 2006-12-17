@@ -33,16 +33,31 @@ struct SearchTree;
 //   satisfactions of the pattern is the cross-product of the satisfactions 
 //   of the subsets.
 struct SearchNode{
+  enum NodeType { BABY=0, NO_TUPLES, ONE_TUPLE, SPLIT, PARTITION };
+
   SearchNode(SearchTree *tree, SearchNode *parent);
   Search(int64 max_work_now, uint64 * work_now);
-  SamplingInfo GetSampling();
-  Pattern GetPattern();
-  Model *GetModel();
-  Changelist *GetChangelist();
-  Precondition *GetPrecondition();
+  SamplingInfo GetSampling() const;
+  void GetPatternAndSampling(Pattern *pattern, SamplingInfo *sampling) const;
+  Model *GetModel() const;
+  Changelist *GetChangelist() const;
+  Precondition *GetPrecondition() const;
+  set<SearchNode *> GetChildren() const;
+  uint64 ComputeWork() const;
+  uint64 ComputeNumSatisfactions() const;
 
-  enum NodeType { BABY=0, NO_TUPLES, ONE_TUPLE, SPLIT, PARTITION };
-  set<SearchNode *> GetChildren();
+  
+  void L1_Erase(); //  does not unlink you from parent
+  // set the work and propagate up the tree.
+  void L1_SetWork(uint64 new_work);
+  // set the number of satisfactions and propagate up the tree.
+  void L1_SetNumSatisfactions(uint64 new_num_satisfactions);
+  // Call this from externally after (not before) a tuple which 
+  // wildcard-matches your the split tuple is added to the tuple_index 
+  // upadtes the search tree.
+  // calls search (with no maximum work) if necessary.
+  void L1_AddTuple(Tuple new_tuple);
+
   
   SearchNode *parent_;
   SearchTree *tree_;

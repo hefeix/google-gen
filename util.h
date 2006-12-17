@@ -294,5 +294,11 @@ enum ComputationResult {
   RESULT_GAVE_UP,  // I gave up for lack of time.
 };
 
+// returns a vector of size num_objects with densely packed component ids.
+// precondition: adjacency_matrix is symmetric
+int ConnectedComponents(int num_objects, 
+			const map<int, set<int> > & adjancency_matrix,
+			vector<int> * components);
+
 
 #endif
