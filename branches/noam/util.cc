@@ -143,3 +143,30 @@ void PermutationIterator::operator++(){
     Move(item, pos);
   }
 }
+
+// returns a vector of size num_objects with densely packed component ids.
+// precondition: adjacency_matrix is symmetric
+int ConnectedComponents(int num_objects, 
+			const map<int, set<int> > & adjancency_matrix,
+			vector<int> * components){
+  vector<int> c(num_objects, -1);
+  int num_components = 0;
+  for (int root=0; root<num_objects; root++) {
+    if (c[root]!=-1) continue;
+    int component = c[root] = num_components;
+    num_components++;
+    set<int> new_members;
+    new_members.insert(root);
+    while(new_members.size()){
+      int to_add = *(new_members.begin());
+      new_members.erase(to_add);
+      c[to_add] = component;
+      const set<int> * neighbors = adjancency_matrix % to_add;
+      if (neighbors) forall(run, *neighbors) {
+	if (c[*run] == -1) to_add.insert(*run);
+      }
+    }
+  }
+  if (*components) *components = c;
+  return num_components;
+}
