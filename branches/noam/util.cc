@@ -144,6 +144,34 @@ void PermutationIterator::operator++(){
   }
 }
 
+ProductIterator::ProductIterator(vector<uint> bounds){
+  bounds_ = bounds;
+  done_ = false;
+  current_ = vector<uint>(bounds_.size());
+  for (uint i=0; i<bounds_.size(); i++) {
+    if (bounds_[i]==0) {
+      done_ = true;
+      return;
+    }
+  }
+}
+void ProductIterator::operator++(){
+  uint dim = 0;
+  while(1) {
+    if (dim >= bounds_.size()){
+      done_ = true;
+      return;
+    }
+    current_[dim]++;
+    if (current_[dim] == bounds_[dim]) {
+      current_[dim] = 0;
+      dim++;
+    } else {
+      break;
+    }
+  }
+}
+
 // returns a vector of size num_objects with densely packed component ids.
 // precondition: adjacency_matrix is symmetric
 int ConnectedComponents(int num_objects, 
@@ -163,10 +191,10 @@ int ConnectedComponents(int num_objects,
       c[to_add] = component;
       const set<int> * neighbors = adjancency_matrix % to_add;
       if (neighbors) forall(run, *neighbors) {
-	if (c[*run] == -1) to_add.insert(*run);
+	if (c[*run] == -1) new_members.insert(*run);
       }
     }
   }
-  if (*components) *components = c;
+  if (components) *components = c;
   return num_components;
 }

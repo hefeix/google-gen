@@ -19,6 +19,7 @@
 #include "tupleindex.h"
 #include "lexicon.h"
 #include "model.h"
+#include "searchtree.h"
 
 SamplingInfo::SamplingInfo() {
   sampled_ = false;
@@ -193,7 +194,7 @@ void TupleIndex::Add(Tuple t) {
     if (iter.VariableMask()==0) continue;
 
     // Get the generalized tuple, and its node
-    const Tuple & g = iter.generalized();
+    const Tuple & g = iter.Current();
     Node * n = nodes_[g];
     // Create if necessary
     if (n==NULL) {
@@ -229,7 +230,7 @@ void TupleIndex::Remove(Tuple t) {
     if (iter.VariableMask()==0) continue;
 
     // Find the underspecified node, make sure it exists
-    const Tuple & g = iter.generalized();
+    const Tuple & g = iter.Current();
     Node * n = nodes_[g];
     CHECK(n!=NULL);
 
@@ -301,6 +302,24 @@ int TupleIndex::Lookup(const Tuple &t, vector<Tuple> * results,
   return CountRange(start, end);
 }
 
+bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern, 
+				   const SamplingInfo & sampling, 
+				   vector<Substitution> *substitutions, 
+				   uint64 * num_satisfactions, 
+				   int64 * max_work_now){
+  SearchTree tree(pattern, this, NULL, sampling);
+  if (!tree.L1_Search(max_work_now)) return false;
+  uint64 num_sat = tree.GetNumSatisfactions();
+  if (num_satisfactions) *num_satisfactions = num_sat;
+  MOREWORK(num_sat);
+  if (substitutions) {
+    tree.GetSubstitutions(substitutions);
+  }
+  return true;
+}
+
+
+/*
 // Eliminate the simplest tuple first, recursively call this function
 // to find matches to the pattern in the tupleindex.
 // TODO: may want actual_work to be the same as the work recorded in the
@@ -480,6 +499,7 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
   if (actual_work) *actual_work = total_work;
   return true;
 }
+*/
 
 // Just create all wildcard tuples of all lengths with the term in one position
 // and use the internal Lookup

@@ -315,11 +315,11 @@ class Changelist {
   }
   // delete on rollback
   template <class C> void Creating(C * object){
-    Make(new DeleteOnRollbackChange<C>(object);
+    Make(new DeleteOnRollbackChange<C>(object));
   }
   // delete on make permanent
   template <class C> void Destroying(C * object){
-    Make(new DeleteOnMakePermanentChange<C>(object);
+    Make(new DeleteOnMakePermanentChange<C>(object));
   }
 
 };

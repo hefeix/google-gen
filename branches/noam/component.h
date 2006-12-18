@@ -70,6 +70,7 @@ class RuleSat;      // An instance of a rule being satisfied.
 class Firing;       // An instance of a rule firing.
 class TrueTuple;
 
+class SearchTree;
 class SearchNode;
 
 // Something else entirely
@@ -292,6 +293,7 @@ class Precondition : public Component {
   friend class TrueTuple;
   friend class Component;
   friend class Model;
+  friend class SearchNode;
 
   // ----- LAYER 2 FUNCTIONS ----- Precondition
   
@@ -395,7 +397,7 @@ class Precondition : public Component {
   // of the precondition for which none of the associated rules are satisfied.
   double ln_likelihood_per_sat_;
 
-  SearchNode * search_node_;
+  SearchTree * search_tree_;
 
   // TUPLE ENCODING STUFF
   // Under direct encoding, the encoding cost of the tuples, excluding

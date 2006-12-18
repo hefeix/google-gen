@@ -96,7 +96,7 @@ struct GeneralizationIterator {
   GeneralizationIterator(const Tuple & s) ;
   void operator++();
   bool done() const;
-  const Tuple & generalized() const;
+  const Tuple & Current() const;
   int VariableMask() const;
   int max_;
   int variable_mask_;

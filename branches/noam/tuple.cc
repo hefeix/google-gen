@@ -106,7 +106,7 @@ void GeneralizationIterator::operator++(){
   }
 }
 bool GeneralizationIterator::done() const{ return (variable_mask_ >= max_); }
-const Tuple & GeneralizationIterator::generalized() const { 
+const Tuple & GeneralizationIterator::Current() const { 
   return generalized_; 
 }
 int GeneralizationIterator::VariableMask() const{ 
@@ -184,16 +184,16 @@ set<int> GetVariables(const Pattern & v) {
 
 // If a pattern's variables are connected
 bool IsConnectedPattern(const Pattern& v) {
-  return (GetConnectedComponents(v)<=1);
+  return (GetConnectedComponents(v, NULL)<=1);
 }
 int GetConnectedComponents(const Pattern &p, vector<int> *components){
   set<int> variables;
   map<int, set<int> > var_to_tuple;
   for (uint c=0; c<p.size(); c++)
     for (uint c2=0; c2<p[c].size(); c2++)
-      if (IsVariable(v[c][c2])) var_to_tuple[v[c][c2]].insert(c);
+      if (IsVariable(p[c][c2])) var_to_tuple[p[c][c2]].insert(c);
   map<int, set<int> > tuple_adjacency;
-  forall(run, var_to_tuple) forall(run2, *run) forall (run3, *run)
+  forall(run, var_to_tuple) forall(run2, run->second) forall (run3, run->second)
     tuple_adjacency[*run2].insert(*run3);
   return ConnectedComponents(p.size(), tuple_adjacency, components);
 }
@@ -212,11 +212,11 @@ bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
   CHECK(pre_sub.size() == post_sub.size());
   for (uint i=0; i<pre_sub.size(); i++) {
     if (pre_sub[i] < 0) {
-      if (sub->sub_.find(pre_sub[i]) != sub->sub_.end() && 
-	  sub->sub_[pre_sub[i]] != post_sub[i]) {
+      if (sub.sub_.find(pre_sub[i]) != sub.sub_.end() && 
+	  sub.sub_[pre_sub[i]] != post_sub[i]) {
 	return false;
       }
-      sub->sub_[pre_sub[i]] = post_sub[i];
+      sub.sub_[pre_sub[i]] = post_sub[i];
     }
   }
   if (substitution) *substitution = sub;

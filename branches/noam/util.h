@@ -51,6 +51,9 @@ void SetVerbosity(int v);
 
 #define forall(A, B) for ( typeof((B).begin()) A = (B).begin(); A!=(B).end(); ++A )
 
+#define MOREWORK(x) if (max_work_now) {(*max_work_now)-=(x); \
+    if (*max_work_now<0) return false;}
+
 // A simple timing class
 class Timer {
  public:
@@ -285,6 +288,22 @@ class PermutationIterator {
   bool done_;
   void Move(int item, int new_slot);
 };
+
+// runs through all tuples of non-negative integers such that each value of the
+// tuple is less than the corresponding value of a bounding tuple
+class ProductIterator {
+ public:
+  ProductIterator(vector<uint> bounds);
+  void operator ++();
+  inline bool done() const { return done_;}
+  inline const vector<uint> & Current() const {return current_;}
+ private:
+  vector<uint> bounds_;
+  vector<uint> current_;
+  bool done_;
+};
+
+
 
 // the result of a computation that may not have finished
 enum ComputationResult {

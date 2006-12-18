@@ -18,8 +18,16 @@
 
 #ifndef _SEARCHTREE_H_
 #define _SEARCHTREE_H_
+#include "util.h"
+#include "tuple.h"
+#include "tupleindex.h"
 
 struct SearchTree;
+class Precondition;
+class TupleIndex;
+class SamplingInfo;
+class Model;
+class Changelist;
 
 
 // A SearchNode represnets a particular Pattern we want to match.  
@@ -36,16 +44,22 @@ struct SearchNode{
   enum NodeType { BABY=0, NO_TUPLES, ONE_TUPLE, SPLIT, PARTITION };
 
   SearchNode(SearchTree *tree, SearchNode *parent);
-  Search(int64 max_work_now, uint64 * work_now);
-  SamplingInfo GetSampling() const;
+  bool L1_Search(int64 *max_work_now);
   void GetPatternAndSampling(Pattern *pattern, SamplingInfo *sampling) const;
   Model *GetModel() const;
   Changelist *GetChangelist() const;
   Precondition *GetPrecondition() const;
   set<SearchNode *> GetChildren() const;
-  uint64 ComputeWork() const;
-  uint64 ComputeNumSatisfactions() const;
+  TupleIndex * GetTupleIndex() const;
+  bool LinkedToModel() const;
+  void GetSubstitutions(vector<Substitution> * substitutions) const;
+  // for convenience
+  uint64 GetNumWildcardMatches(Tuple t, SamplingInfo sampling) const; 
+  void GetWildcardMatches(Tuple t, SamplingInfo sampling, 
+			  vector<Tuple> *ret) const;
 
+
+  void A1_SetType(NodeType t);
   
   void L1_Erase(); //  does not unlink you from parent
   // set the work and propagate up the tree.
@@ -54,10 +68,26 @@ struct SearchNode{
   void L1_SetNumSatisfactions(uint64 new_num_satisfactions);
   // Call this from externally after (not before) a tuple which 
   // wildcard-matches your the split tuple is added to the tuple_index 
-  // upadtes the search tree.
+  // updates the search tree.
   // calls search (with no maximum work) if necessary.
   void L1_AddTuple(Tuple new_tuple);
+  // Call this externally after (not before) removing a tuple from the 
+  // tuple_index.  Updates and prunes the search tree.
+  // Caveat: There is a danger of calling this method on a deleted object if
+  // the removed tuple matches multiple clauses of the same pattern.
+  void L1_RemoveTuple(Tuple tuple);
 
+  // Adds a new child node for a new value of the split tuple.  Doesn't search.
+  SearchNode * L1_AddSplitChild(Tuple tuple);
+  // Removes (and erases) a child node of a split tuple.
+  void L1_RemoveSplitChild(Tuple tuple);
+
+  void L1_SetSplitTuple(int pos);
+  void L1_MakeBaby();
+  bool L1_MakeNoTuples();
+  bool L1_MakeOneTuple(int64 * max_work_now);
+  bool L1_MakeSplit(int split_tuple, int64 * max_work_now);
+  bool L1_MakePartition(int64 * max_work_now);
   
   SearchNode *parent_;
   SearchTree *tree_;
@@ -73,24 +103,30 @@ struct SearchNode{
   // If it's a partition
   // this vector is aligned with the pattern.
   // the same SeachNode can occur multiple times in the vector. 
-  vector<SearchNode *> * partition_; // if a partition
+  vector<SearchNode *> *partition_; // if a partition
 };
 
 // Pass in a precondition if you want the model updated
 // and a tupleindex if you don't
 struct SearchTree{
-  SearchTree(Pattern pattern, Precondition *precondition);
+  SearchTree(Pattern pattern, TupleIndex *tupleindex,
+	     Precondition *precondition, const SamplingInfo & sampling);
   ~SearchTree();
   void L1_Erase();
-  bool LinkedToModel() { return precondition_; }
+  bool LinkedToModel() const { return precondition_; }
   Model * GetModel();
+  uint64 GetNumSatisfactions() const { return root_->num_satisfactions_;}
+  uint64 GetWork() const { return root_->work_;}
+  void GetSubstitutions(vector<Substitution> *substitutions) const{
+    root_->GetSubstitutions(substitutions);
+  }
   Changelist * changelist_;
   TupleIndex * tuple_index_;
   Precondition * precondition_;
   SearchNode * root_;
   Pattern pattern_;
   SamplingInfo sampling_;
-  bool Search(int64 max_work_now, uint64 *work_now);
+  bool L1_Search(int64 *max_work_now);
 };
 
 

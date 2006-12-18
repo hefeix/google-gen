@@ -20,19 +20,16 @@
 #include "model.h"
 #include "tupleindex.h"
 
-#define MOREWORK(x) if (max_work_now) {(*max_work_now)-=(x); \
-    if (*max_work_now<0) return false;}
-
-
 Model * SearchTree::GetModel() {
   CHECK(precondition_);
   return precondition_->GetModel();
 }
 
+
 SearchTree::SearchTree(Pattern pattern,
 		       TupleIndex   *tupleindex,
 		       Precondition *precondition,
-		       SamplingInfo sampling) {
+		       const SamplingInfo & sampling) {
   CHECK (! (tupleindex && precondition) );
 
   pattern_ = pattern;
@@ -74,13 +71,17 @@ void SearchTree::L1_Erase() {
 }
 
 // TODO
-bool SearchTree::Search(int64 max_work_now, uint64 * work_now) {
+bool SearchTree::L1_Search(int64 *max_work_now) {
+  return root_->L1_Search(max_work_now);  
 }
 
-SearchNode::SearchNode(SearchTree * tree, SeachNode * parent) {
+
+
+
+SearchNode::SearchNode(SearchTree * tree, SearchNode * parent) {
   tree_ = tree;
   parent_ = parent;
-  split_tuple = -1;
+  split_tuple_ = -1;
   num_satisfactions_ = 0;
   work_ = 0;
   GetChangelist()->Creating(this);
@@ -90,17 +91,57 @@ SearchNode::SearchNode(SearchTree * tree, SeachNode * parent) {
   type_ = BABY;
 }
 
-SearchNode::L1_AddSplitChild(Tuple tuple){
-  Searchnode * newchild = new SearchNode(tree_, this);
+Model * SearchNode::GetModel() const { 
+  return tree_->GetModel();
+}
+Changelist * SearchNode::GetChangelist() const {
+  return tree_->changelist_;
+}
+Precondition * SearchNode::GetPrecondition() const {
+  return tree_->precondition_;
+}
+TupleIndex * SearchNode::GetTupleIndex() const {
+  return tree_->tuple_index_;
+}
+bool SearchNode::LinkedToModel() const {
+  return tree_->LinkedToModel();
+}
+set<SearchNode *> SearchNode::GetChildren() const {
+  set<SearchNode *> ret;
+  if (type_ == SPLIT) {
+    forall(run, *child_to_tuple_){
+      ret.insert(run->first);
+    }
+  } else if (type_ == PARTITION){
+    for (uint i=0; i<partition_->size(); i++) 
+      ret.insert((*partition_)[i]);
+  }
+  return ret;
+}
+
+SearchNode * SearchNode::L1_AddSplitChild(Tuple tuple){
+  CHECK(type_ == SPLIT);
+  SearchNode * newchild = new SearchNode(tree_, this);
   GetChangelist()->Make
     (new MapInsertChange<Tuple, SearchNode *>(tuple_to_child_, 
 					      tuple, newchild));
   GetChangelist()->Make
     (new MapInsertChange<SearchNode *, Tuple>(child_to_tuple_, 
 					      newchild, tuple));
+  return newchild;
+}
+void SearchNode::L1_RemoveSplitChild(Tuple tuple){
+  CHECK(type_ == SPLIT);
+  SearchNode * child = (*tuple_to_child_)[tuple];
+  CHECK(child);
+  child->L1_Erase();
+  GetChangelist()->Make
+    (new MapRemoveChange<Tuple, SearchNode *>(tuple_to_child_, tuple));
+  GetChangelist()->Make
+    (new MapRemoveChange<SearchNode *, Tuple>(child_to_tuple_, child));
 }
 
-SearchNode::L1_MakePartition(int64 * max_work_now) {
+bool SearchNode::L1_MakePartition(int64 * max_work_now) {
   CHECK(type_ == BABY);
   VLOG(0) << "Partition - YEAHH BABY  YEAH BABY!!!!" << endl;
   vector<int> comp;
@@ -113,16 +154,17 @@ SearchNode::L1_MakePartition(int64 * max_work_now) {
   vector<SearchNode *> new_components;
   for (int i=0; i<num_components; i++) 
     new_components.push_back(new SearchNode(tree_, this));
-  for (int i=0; i<pattern.size(); i++) {
+  for (uint i=0; i<pattern.size(); i++) {
     (*partition_)[i] = new_components[comp[i]];
   }
   L1_SetWork(1);
   L1_SetNumSatisfactions(1);
   A1_SetType(PARTITION);
+  return true;
 }
 bool SearchNode::L1_MakeSplit(int split_tuple, int64 * max_work_now){
   CHECK(type_==BABY);
-  L1_SetType(SPLIT);
+  A1_SetType(SPLIT);
   Pattern pattern;
   SamplingInfo sampling;
   GetPatternAndSampling(&pattern, &sampling);
@@ -137,10 +179,10 @@ bool SearchNode::L1_MakeSplit(int split_tuple, int64 * max_work_now){
   GetChangelist()->Creating(child_to_tuple_);
 
   uint64 num_matches = 
-    GetTupleIndex->Lookup(tuple.VariablesToWildcards(), NULL, sampling);
+    GetNumWildcardMatches(tuple, sampling);
   MOREWORK(num_matches);
   vector<Tuple> matches;
-  GetTupleIndex->Lookup(tuple.VariablesToWildcards(), &matches, sampling);
+  GetWildcardMatches(tuple, sampling, &matches);
   for (uint i=0; i<matches.size(); i++) {
     Substitution sub;
     if (!ComputeSubstitution(tuple, matches[i], &sub)) continue;
@@ -156,7 +198,7 @@ bool SearchNode::L1_MakeNoTuples() {
   return true;
 }
 bool SearchNode::L1_MakeOneTuple(int64* max_work_now) {
-  CHECK(type==BABY);
+  CHECK(type_==BABY);
   A1_SetType(ONE_TUPLE);
   Pattern pattern;
   SamplingInfo sampling;
@@ -165,9 +207,7 @@ bool SearchNode::L1_MakeOneTuple(int64* max_work_now) {
   Tuple tuple = pattern[0];
   L1_SetSplitTuple(0);
   bool duplicate_vars = pattern[0].HasDuplicateVariables();
-  uint64 num_matches 
-    = GetTupleIndex()->Lookup(tuple.VariablesToWildcards(), 
-			    NULL, sampling);
+  uint64 num_matches = GetNumWildcardMatches(tuple, sampling);
   L1_SetWork(num_matches);
   if (!duplicate_vars){
     L1_SetNumSatisfactions(num_matches);
@@ -176,8 +216,7 @@ bool SearchNode::L1_MakeOneTuple(int64* max_work_now) {
   } else {
     MOREWORK(num_matches);
     vector<Tuple> matches;
-    GetTupleIndex->Lookup(pattern[0].VariablesToWildcards(), 
-			  &matches, sampling);
+    GetWildcardMatches(pattern[0], sampling, &matches);
     uint64 num_sat = 0;
     for (uint i=0; i<matches.size(); i++) {
       Substitution sub;
@@ -190,8 +229,8 @@ bool SearchNode::L1_MakeOneTuple(int64* max_work_now) {
 }
 void SearchNode::L1_MakeBaby(){
   CHECK(type_ != BABY);
-  set<SeachNode*> children_ = GetChildren();  
-  forall(run, children_) run->L1_Erase();
+  set<SearchNode*> children_ = GetChildren();  
+  forall(run, children_) (*run)->L1_Erase();
   L1_SetWork(0);
   L1_SetNumSatisfactions(0);
   if (type_ == ONE_TUPLE || type_ == SPLIT) {
@@ -202,15 +241,17 @@ void SearchNode::L1_MakeBaby(){
   if (type_ == SPLIT) {
     GetChangelist()->Destroying(tuple_to_child_);
     GetChangelist()->Destroying(child_to_tuple_);
-    GetChangelist()->ChangeValue(tuple_to_child_, NULL);
-    GetChangelist()->ChangeValue(child_to_tuple_, NULL);
+    GetChangelist()->ChangeValue(&tuple_to_child_, 
+				 (typeof(tuple_to_child_))NULL);
+    GetChangelist()->ChangeValue(&child_to_tuple_, 
+				 (typeof(child_to_tuple_))NULL);
   } else {
     CHECK(tuple_to_child_ == NULL);
     CHECK(child_to_tuple_ == NULL);
   }
   if (type_ == PARTITION) {
     GetChangelist()->Destroying(partition_);
-    GetChangelist()->ChangeValue(partition_, NULL);
+    GetChangelist()->ChangeValue(&partition_, (typeof(partition_))NULL);
   } else {
     CHECK(partition_ == NULL);
   }
@@ -218,59 +259,65 @@ void SearchNode::L1_MakeBaby(){
 }
 
 uint64 SearchNode::GetNumWildcardMatches(Tuple t, SamplingInfo sampling) const {
-  return GetTupleIndex()->Lookup(t.VariablesToWildcards(), NULL, sampling);
+  return GetTupleIndex()->Lookup(t.VariablesToWildcards(), NULL, &sampling);
 }
 void SearchNode::
-GetWildcardMatches(Tuple t, SamplingInfo sampling, vector<Tuple> *ret){
-  return GetTupleIndex()->Lookup(t.VariablesToWildcards(), ret, sampling);
+GetWildcardMatches(Tuple t, SamplingInfo sampling, vector<Tuple> *ret) const{
+  GetTupleIndex()->Lookup(t.VariablesToWildcards(), ret, &sampling);
 }
 
 bool SearchNode::L1_Search(int64 * max_work_now) {
   Pattern pattern;
   SamplingInfo sampling;
   GetPatternAndSampling(&pattern, &sampling);
-  if (pattern.size()==0) return L1_MakeNoTuples(max_work_now);
+  if (pattern.size()==0) return L1_MakeNoTuples();
   if (pattern.size()==1) return L1_MakeOneTuple(max_work_now);
   
   vector<uint64> num_matches;
-  for (int i=0; i<pattern.size(); i++) 
+  for (uint i=0; i<pattern.size(); i++) 
     num_matches.push_back(GetNumWildcardMatches(pattern[i], sampling));
   int best_tuple 
     = min_element(num_matches.begin(), num_matches.end())-num_matches.begin();
   uint64 least_matches = num_matches[best_tuple];
-  if (least_matches == 0) return L1_MakeSplit(best_tuple, max_work_now);
-  vector<int> comp;
-  int num_components = GetConnectedComponents(pattern, &comp);
-  if (num_components > 1) return L1_MakePartition(max_work_now);
-  return L1_MakeSplit(best_tuple, max_work_now);
+  int num_components = GetConnectedComponents(pattern, NULL);
+  if (least_matches == 0 || num_components==1) {
+    if (!L1_MakeSplit(best_tuple, max_work_now)) return false;
+  } else {
+    if (!L1_MakePartition(max_work_now)) return false;
+  }
+  set<SearchNode *> children = GetChildren();
+  forall(run, children) {
+    if (!(*run)->L1_Search(max_work_now)) return false;
+  }
+  return true;
 }
 
 void SearchNode::
-GetPatternAndSampling(Pattern * pattern, SamplingInfo * sampling){
+GetPatternAndSampling(Pattern * pattern, SamplingInfo * sampling) const{
   // Note the code would be simpler and slower implemented recursively.
 
   // includes this node and all ancestors up to but not including the root.
-  vector<SearchNode *> path_to_root;
-  for (SearchNode * n=this; n->parent_ != NULL; n = n->parent_) 
+  vector<const SearchNode *> path_to_root;
+  for (const SearchNode * n=this; n->parent_ != NULL; n = n->parent_) 
     path_to_root.push_back(n);
   // maps from the tuple in the pattern for the node under consideration
   // to the index of the corresponding tuple in the original pattern
   vector<int> tuple_to_tree_tuple;
   Substitution complete_sub;
-  for (int i=0; i<tree_->pattern_.size(); i++) {
+  for (uint i=0; i<tree_->pattern_.size(); i++) {
     tuple_to_tree_tuple.push_back(i);
   }
   // Iterate from the root to this
   // the first value of the parent is the root.
   // the last value of child is this.
   // As we iterate, tuple_to_tree_tuple is accurate for parent.  
-  for (int i=path_to_root.size()-1; i>=0; i--) {
-    SearchNode *child = path_to_root[i];
-    SearchNode *parent = child->parent_;
+  for (int i=(int)path_to_root.size()-1; i>=0; i--) {
+    const SearchNode *child = path_to_root[i];
+    const SearchNode *parent = child->parent_;
     if (parent_->type_ == SPLIT) {
       Tuple variable_tuple 
 	= tree_->pattern_[tuple_to_tree_tuple[parent_->split_tuple_]];
-      Tuple constant_tuple = parent_->child_to_tuple_[child];
+      Tuple constant_tuple = (*parent_->child_to_tuple_)[(SearchNode *)child];
       Substitution mini_sub;
       CHECK(ComputeSubstitution(variable_tuple, constant_tuple, &mini_sub));
       complete_sub.Add(mini_sub);
@@ -278,8 +325,8 @@ GetPatternAndSampling(Pattern * pattern, SamplingInfo * sampling){
 	= RemoveFromVector(tuple_to_tree_tuple, parent_->split_tuple_);
     } else if (parent_->type_ == PARTITION) {
       vector<int> new_vec;
-      for (int i=0; i<tuple_to_tree_tuple.size(); i++) {
-	if (parent_->partition_[i] == child_) 
+      for (uint i=0; i<tuple_to_tree_tuple.size(); i++) {
+	if ((*parent->partition_)[i] == child) 
 	  new_vec.push_back(tuple_to_tree_tuple[i]);
       }
       tuple_to_tree_tuple = new_vec;
@@ -290,7 +337,7 @@ GetPatternAndSampling(Pattern * pattern, SamplingInfo * sampling){
   }
   if (pattern) {
     *pattern = Pattern();
-    for (int i=0; i<tuple_to_tree_tuple.size(); i++) {
+    for (uint i=0; i<tuple_to_tree_tuple.size(); i++) {
       pattern->push_back(tree_->pattern_[tuple_to_tree_tuple[i]]);
     }
     complete_sub.Substitute(pattern);
@@ -299,10 +346,10 @@ GetPatternAndSampling(Pattern * pattern, SamplingInfo * sampling){
     *sampling = SamplingInfo();
     if (tree_->sampling_.sampled_) {
       int tree_tuple = tree_->sampling_.position_;
-      for (int i=0; i<tuple_to_tree_tuple.size(); i++) {
+      for (uint i=0; i<tuple_to_tree_tuple.size(); i++) {
 	if (tuple_to_tree_tuple[i]==tree_tuple) {
 	  *sampling = tree_->sampling_;
-	  sampling_->position_ = i;
+	  sampling->position_ = i;
 	}
       }
     }
@@ -315,7 +362,7 @@ void SearchNode::A1_SetType(NodeType t){
 
 void SearchNode::L1_SetSplitTuple(int pos){
   CHECK(GetChildren().size()==0);
-  CHECK(type_ == SPLIT);
+  CHECK(type_ == SPLIT || type_ == ONE_TUPLE);
   Pattern pattern;
   GetPatternAndSampling(&pattern, NULL);
   if (LinkedToModel() && split_tuple_ != -1) {
@@ -324,8 +371,8 @@ void SearchNode::L1_SetSplitTuple(int pos){
        (&GetModel()->wildcard_tuple_to_search_node_, 
 	pattern[split_tuple_], this));
   }
-  GetChangelist()->ChangeValue(&split_tuple_, pos));			
-  if (LinkedToModel && split_tuple_ != -1) {
+  GetChangelist()->ChangeValue(&split_tuple_, pos);			
+  if (LinkedToModel() && split_tuple_ != -1) {
     GetChangelist()->Make
       (new MapOfSetsInsertChange<Tuple, SearchNode *>
        (&GetModel()->wildcard_tuple_to_search_node_, 
@@ -333,7 +380,7 @@ void SearchNode::L1_SetSplitTuple(int pos){
   }
 }
 void SearchNode::L1_SetNumSatisfactions(uint64 new_num_satisfactions){
-  uint64 old_num_satisfactions = num_num_satisfactions_;
+  uint64 old_num_satisfactions = num_satisfactions_;
   GetChangelist()->ChangeValue(&num_satisfactions_, new_num_satisfactions);
   if (parent_) {
     if (parent_->type_ == SPLIT) {
@@ -341,14 +388,20 @@ void SearchNode::L1_SetNumSatisfactions(uint64 new_num_satisfactions){
 	(parent_->num_satisfactions_ + 
 	 new_num_satisfactions - old_num_satisfactions);    
     } else if (parent_->type_ == PARTITION) {
-      vector<SearchNode *> children = parent_->GetChildren();
+      set<SearchNode *> children = parent_->GetChildren();
       uint64 product = 1;
-      for (int i=0; i<children.size(); i++) 
-	product *= children[i]->num_satisfactions_;
+      forall(run, children) {
+	product *= (*run)->num_satisfactions_;
+      }
       parent_->L1_SetNumSatisfactions(product);
     } else {
       CHECK(false);
     }
+  } else {
+    // we're the root
+    if (LinkedToModel())
+      GetPrecondition()->A1_AddToNumSatisfactions
+	((int64)new_num_satisfactions - (int64)old_num_satisfactions);
   }
 }
 void SearchNode::L1_SetWork(uint64 new_work){
@@ -367,7 +420,9 @@ void SearchNode::L1_Erase(){
 
 void SearchNode::L1_AddTuple(Tuple new_tuple){
   CHECK(type_==ONE_TUPLE || type_==SPLIT);
-  CHECK(!tree_->sampling_->sampled_);
+  CHECK(!tree_->sampling_.sampled_);
+  // See the comment in TrueTuple::TrueTuple() for why we need this line.
+  if (type_==SPLIT && (*tuple_to_child_) % new_tuple) return;
   L1_SetWork(work_ + 1);
   Pattern pattern;
   GetPatternAndSampling(&pattern, NULL);
@@ -375,10 +430,84 @@ void SearchNode::L1_AddTuple(Tuple new_tuple){
     if (type_==ONE_TUPLE) {
       L1_SetNumSatisfactions(num_satisfactions_+1);
     } else if (type_ == SPLIT) {
-      SearchNode * new_child = AddSplitChild(new_tuple);
-      new_child->Search(NULL);
+      SearchNode * new_child = L1_AddSplitChild(new_tuple);
+      new_child->L1_Search(NULL);
     } else {
       CHECK(false);
     }
   }
+}
+void SearchNode::L1_RemoveTuple(Tuple tuple){
+  CHECK(type_==ONE_TUPLE || type_==SPLIT);
+  CHECK(!tree_->sampling_.sampled_);
+  L1_SetWork(work_ - 1);
+  Pattern pattern;
+  GetPatternAndSampling(&pattern, NULL);
+  if (ComputeSubstitution(pattern[split_tuple_], tuple, NULL)) {
+    if (type_==ONE_TUPLE) {
+      L1_SetNumSatisfactions(num_satisfactions_-1);
+    } else if (type_ == SPLIT) {
+      L1_RemoveSplitChild(tuple);
+    } else {
+      CHECK(false);
+    }
+  }
+}
+
+void SearchNode::GetSubstitutions(vector<Substitution> *substitutions) const{
+  substitutions->clear();
+  Pattern pattern;
+  SamplingInfo sampling;
+  GetPatternAndSampling(&pattern, &sampling);
+  if (type_ == NO_TUPLES) {
+    substitutions->push_back(Substitution());
+    return;
+  } 
+  if (type_ == ONE_TUPLE) {
+    vector<Tuple> matches;
+    GetWildcardMatches(pattern[0], sampling, &matches);
+    for (uint i=0; i<matches.size(); i++) {
+      Substitution sub;
+      if (!ComputeSubstitution(pattern[0], matches[i], &sub)) continue;
+      substitutions->push_back(sub);
+    }
+    return;
+  } 
+  if (type_ == SPLIT) {
+    forall(run, *tuple_to_child_) {
+      Tuple tuple = run->first;
+      vector<Substitution> partial_subs;
+      run->second->GetSubstitutions(&partial_subs);
+      Substitution additional_sub;
+      CHECK(ComputeSubstitution(pattern[split_tuple_], tuple, &additional_sub));
+      for (uint i=0; i<partial_subs.size(); i++) {
+	partial_subs[i].Add(additional_sub);
+	substitutions->push_back(partial_subs[i]);
+      }	
+    }
+    return;
+  }
+  if (type_ == PARTITION) {
+    set<SearchNode *> children = GetChildren();
+    vector<vector<Substitution> > partial_subs;
+    uint num_children = children.size();
+    vector<uint> sizes;
+    forall(run, children){
+      partial_subs.push_back(vector<Substitution>());
+      (*run)->GetSubstitutions(&partial_subs.back());
+      sizes.push_back(partial_subs.back().size());
+    }
+    CHECK(sizes.size()==num_children);
+    CHECK(partial_subs.size() == num_children);
+    for (ProductIterator run(sizes); !run.done(); ++run){
+      Substitution sub;
+      for (uint i=0; i<num_children; i++) {
+	sub.Add(partial_subs[i][run.Current()[i]]);
+      }
+      substitutions->push_back(sub);
+    }
+    return;
+  }
+  CHECK(false);
+  
 }

@@ -26,6 +26,7 @@
 #include "changelist.h"
 #include "component.h"
 #include "prohibition.h"
+#include "searchtree.h"
 
 bool FLAGS_firing_tuple = false;
 
@@ -160,13 +161,9 @@ Precondition::Precondition(Model * model,
     model_->L1_AddArbitraryTerm(arbitrary_terms[i]);
   model_->A1_InsertIntoPreconditionIndex(pattern_, this);
   ComputeSetTime();
-  search_node_ = new SearchNode(pattern_, Tuple(), NULL, this);
-  uint64 num_sat;
-  uint64 work;  
-  model_->tuple_index_.FindSatisfactions(pattern_, search_node_, 
-					 NULL, NULL, &num_sat,
-					 UNLIMITED_WORK, &work);
-  num_satisfactions_ = num_sat;
+  num_satisfactions_ = 0;
+  search_tree_ = new SearchTree(pattern_, NULL, this, Unsampled());
+  search_tree_->L1_Search(NULL);
   ComputeSetLnLikelihood();
   model_->A1_InsertIntoComponentsByType(this);
 }
@@ -185,7 +182,7 @@ void Precondition::L1_EraseSubclass(){
   PatternLnLikelihood(Pattern(), pattern_, &arbitrary_terms);  
   for (uint i=0; i<arbitrary_terms.size(); i++)
     model_->L1_SubtractArbitraryTerm(arbitrary_terms[i]);
-  search_node_->L1_Erase();
+  search_tree_->L1_Erase();
 }
 
 /*
@@ -372,8 +369,7 @@ void Rule::AddAllSatisfactionsAsFirings() {
 
   // Get all the substitutions required
   vector<Substitution> subs;
-  model_->GetTupleIndex()->FindSatisfactions
-    (precondition_->pattern_, NULL, NULL, &subs, NULL, -1, NULL);
+  precondition_->search_tree_->GetSubstitutions(&subs);
 
   // Add firings for each substitution
   for (uint c=0; c<subs.size(); c++)
@@ -486,13 +482,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   ComputeSetTime();  
   if (type == NEGATIVE_RULE) {  // Make all the RuleSats exist.
     vector<Substitution> substitutions;
-    uint64 num_sat;
-    uint64 work;
-    model_->tuple_index_.FindSatisfactions(precondition_->pattern_, 
-					   NULL, 
-					   NULL,
-					   &substitutions,
-					   &num_sat, UNLIMITED_WORK, &work);
+    precondition_->search_tree_->GetSubstitutions(&substitutions);
     for (uint i=0; i<substitutions.size(); i++) {
       new RuleSat(this, substitutions[i]);
     }
@@ -874,11 +864,13 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
     (new MemberCall1Change<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
 					     &TupleIndex::Add,
 					     &TupleIndex::Remove));
+  model_->L1_UpdateSearchTreesAfterAddTuple(tuple_);
+  
   // Add it to the map from tuple to TrueTuple
   model_->A1_InsertIntoTupleToTrueTuple(tuple_, this);
   ComputeSetTime();
   // Find the new satisfactions.
-  vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > 
+  /*vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > 
     satisfactions;
   model_->FindSatisfactionsForTuple(tuple_, &satisfactions, UNLIMITED_WORK, 
 				    true, true, false);
@@ -897,10 +889,11 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
       }
     }
   }
+  */
   // Figure out whether any prohibitions are violated.  
   for (GeneralizationIterator run_g(tuple_); !run_g.done(); ++run_g) {
     set<Prohibition *> * prohibitions 
-      = model_->prohibition_index_ % run_g.generalized();
+      = model_->prohibition_index_ % run_g.Current();
     if (prohibitions) forall(run_p, *prohibitions) {
       (*run_p)->L1_CheckAddViolation(this);
     }
@@ -920,6 +913,8 @@ void TrueTuple::L1_EraseSubclass(){
       L1_RemoveViolationOnTrueTupleDelete(this);
   }
 
+
+  /*
   // The satisfactions that are explicitly represented have been destroyed, 
   // as they are structural dependents, but we still need to decrease the
   // satisfaction counts at the preconditions.  
@@ -931,15 +926,14 @@ void TrueTuple::L1_EraseSubclass(){
       ->A1_AddToNumSatisfactions(-satisfactions[i].second.first);
     satisfactions[i].first->ComputeSetLnLikelihood();
   }
-
-  //  Why do we have this??
-  // model_->A1_RemoveFromRequiredNeverHappen(this);
+  */
 
   model_->A1_RemoveFromTupleToTrueTuple(tuple_);
   model_->changelist_.Make
     (new MemberCall1Change<TupleIndex, Tuple>(&model_->tuple_index_, tuple_,
 					     &TupleIndex::Remove,
 					     &TupleIndex::Add));
+  model_->L1_UpdateSearchTreesAfterRemoveTuple(tuple_);
 }
  
 void TrueTuple::A1_MakeRequired(){
@@ -1434,21 +1428,16 @@ void Component::VerifyLayer2() const {
   VerifyLayer2Subclass();
 }
 void Component::VerifyLayer2Subclass() const{}
-void Precondition::VerifyLayer2Subclass() const{
+void Precondition::VerifyLayer2Subclass() const{  
   uint64 num_sat;
   model_->tuple_index_.
-    FindSatisfactions(pattern_, NULL, NULL, NULL, &num_sat, 
-		      UNLIMITED_WORK, NULL);
+    FindSatisfactions(pattern_, Unsampled(), NULL, &num_sat, NULL);
   CHECK(num_sat == (uint64)num_satisfactions_);
 }
 void Rule::VerifyLayer2Subclass() const{
   if (type_ == NEGATIVE_RULE) {  // Make all the RuleSats exist.
     vector<Substitution> substitutions;
-    model_->tuple_index_.FindSatisfactions(precondition_->pattern_, 
-					   NULL, 
-					   NULL,
-					   &substitutions,
-					   NULL, UNLIMITED_WORK, NULL);
+    precondition_->search_tree_->GetSubstitutions(&substitutions);
     for (uint i=0; i<substitutions.size(); i++) {
       CHECK(FindRuleSat(substitutions[i]));
     }
