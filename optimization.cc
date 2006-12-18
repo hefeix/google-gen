@@ -468,12 +468,12 @@ void Optimizer::RuleInfo::Canonicalize(){
 
 void Optimizer::RuleInfo::FindCandidateFirings(){
   vector<Substitution> subs;
+  int64 max_work_now = max_work_/denominator_ + 10;
   bool success = 
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
     (Concat(r_),
-     NULL,
-     &combined_sampling_, 
-     &subs_, &sampled_num_firings_, max_work_/denominator_ + 10, NULL);
+     combined_sampling_, 
+     &subs_, &sampled_num_firings_, &max_work_now);
   if (!success) {
     hopeless_ = true;
     hopeless_cause_ = 1;
@@ -528,11 +528,13 @@ void Optimizer::RuleInfo::BailIfRecentlyChecked(){
 }
 void Optimizer::RuleInfo::FindNumSatisfactions(){
   // check that the preconditions aren't too much work to searh for.
+  int64 max_work_now = max_work_/denominator_+10;
   bool success = 
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
-    (r_.first, NULL, &precondition_sampling_, 0, 
+    (r_.first, precondition_sampling_, 
+     NULL, // substitutions 
      &sampled_num_satisfactions_, 
-     max_work_/denominator_+10, 0);
+     &max_work_now);
   if (!success) {
     hopeless_ = true;
     hopeless_cause_ = 1;
@@ -569,10 +571,13 @@ void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
       if ((Intersection(GetVariables(r_.first[i]), GetVariables(r_.second))
 	   - GetVariables(simplified_preconditions)).size()) continue;
       uint64 simplified_num_satisfactions = 0;
+      int64 max_work_now = max_work_;
       if (optimizer_->model_->GetTupleIndex()->FindSatisfactions
-	  (simplified_preconditions, NULL, &simplified_sampling, 0,
+	  (simplified_preconditions, 
+	   simplified_sampling, 
+	   NULL, // satisfaction
 	   &simplified_num_satisfactions,
-	   max_work_, 0)) {
+	   &max_work_now)) {
 	if (simplified_num_satisfactions
 	    <= sampled_num_satisfactions_ * 1.1){
 	  // adjust the samplinginfo object
@@ -583,7 +588,7 @@ void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
 	      precondition_sampling_.position_--;
 	      combined_sampling_.position_--;
 	    } else if ((int)i==sample_clause_){
-	      precondition_sampling_ = SamplingInfo();
+	      precondition_sampling_ = Unsampled();
 	      sampled_ = false;
 	    }
 	  }
@@ -1014,9 +1019,12 @@ void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
+  int64 max_work_now = StandardMaxWork();
   bool last_ditch = 
     model_->GetTupleIndex()->FindSatisfactions
-    (combined, NULL, NULL, &subs, 0, StandardMaxWork(), 0);
+    (combined, Unsampled(), &subs, 
+     NULL, // num_satisfactions 
+     &max_work_now);
   if (last_ditch == false) {
     VLOG(0) << "Somehow this one got this far! no further!" << endl;
     return;
@@ -1249,7 +1257,7 @@ void Optimizer::Explain(TrueTuple *p,
   }
   vector<pair<Rule *, Substitution> > explanations;
   Tuple s = p->GetTuple();
-  model_->FindExplanationsForResult(s, &explanations, excluded, UNLIMITED_WORK);
+  model_->FindExplanationsForResult(s, &explanations, excluded, NULL);
   if (explanations.size()==0) {
     Rule * r = model_->GetAddUniversalRule(s.size());
     Substitution right_sub;

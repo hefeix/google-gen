@@ -39,6 +39,7 @@ struct SamplingInfo{
   static SamplingInfo RandomRange(int position, int denominator);
   static SamplingInfo StringToSamplingInfo(const string& s);
 };
+inline SamplingInfo Unsampled() { return SamplingInfo();}
 
   
 // A TupleIndex is, as it suggests, an index over tuples of constants, 
@@ -77,21 +78,16 @@ class TupleIndex{
 
   // Searches over the index to match a pattern.
   // Pattern can contain literals and variables.  Multiple instances of the
-  // same variable only match the same literal.  You can limit the work done
-  // by setting max_work to something other than -1.  The function returns 
+  // same variable only match the same literal.  The function returns 
   // substitutions for the variables in pattern which correspond to
   // satisfactions.  If you don't need the actual substitutions, and just 
   // want to know how many there are, pass NULL for substitutions and 
   // a non-null pointer for num_satisfactions.  
-  // You can tell how much work the function did using the parameter actual_work
-  // The function returns true if it doesn't run out of time
   bool FindSatisfactions(const vector<Tuple> & pattern,
-			 SearchNode * search_node_,
-			 const SamplingInfo * sampling,
+			 const SamplingInfo & sampling,
 			 vector<Substitution> * substitutions, // can be null
 			 uint64 * num_satisfactions,  // can be null
-			 int64 max_work, // -1 for no limit
-			 uint64 * actual_work); // can be null
+			 int64 * max_work_now);
 
   // Get a random tuple containing all of the given terms.  
   // If funky_distribution is set, we first choose uniformly over the positions

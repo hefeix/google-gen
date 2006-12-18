@@ -185,6 +185,7 @@ class Model {
     ( const Tuple & s,
       map<Precondition *, pair<uint64, vector<Substitution> > > *results,
       int64 max_work,
+      bool adding_tuple,
       bool return_subs_for_negative_rules,
       bool return_subs_for_all_rules);
 
@@ -193,11 +194,10 @@ class Model {
   // You can exclude some TrueTuples as dependents, for example to 
   // aviod circular causation.  In the results, if the value of a variable 
   // does not matter, sets it to the word "whatever".   TODO: wtf?
-  // returns work, or GAVE_UP if we ran out of time.
-  int64 FindExplanationsForResult (const Tuple & t, 
-				   vector<pair<Rule *, Substitution> > *results,
-				   const set<Component *> * excluded_dependents,
-				   int64 max_work); 
+  bool FindExplanationsForResult (const Tuple & t, 
+				  vector<pair<Rule *, Substitution> > *results,
+				  const set<Component *> * excluded_dependents,
+				  int64 *max_work_now); 
   
   
   // Finds a TrueTuple
@@ -262,6 +262,11 @@ class Model {
   // encoder, and to update the global likelihood.
   void L1_AddArbitraryTerm(int w);
   void L1_SubtractArbitraryTerm(int w);
+
+  // Call these functions after adding(removing) a tuple to(from) the tuple 
+  // index to keep the search trees for the preconditions updated.
+  void L1_UpdateSearchTreesAfterAddTuple(Tuple t);
+  void L1_UpdateSearchTreesAfterRemoveTuple(Tuple t);
 
   // Finds or adds a Precondition
   Precondition * L1_GetAddPrecondition(const vector<Tuple> & tuples);
@@ -388,53 +393,5 @@ class Model {
 
   vector<string> words_; // This is for randomly generating words
 };
-
-struct SearchNode {
-  SearchNode(Pattern pattern,
-	     Tuple tuple, 
-	     SearchNode *parent,
-	     Precondition *precondition);
-
-  void L1_SetSplitTuple(int pos);
-  // propagates changes up to parents
-  void L1_SetNumSatisfactions(uint64 new_num_satisfactions);
-  // propagates changes up to parents
-  void L1_SetWork(uint64 new_work);
-  // this does not unlink you from your parent.
-  // don't call this except from L1_EraseChild() and L1_EraseTree();
-  void L1_Erase();
-  // erase a child of a node (and its subtree) and unlink it
-  void L1_EraseChild(Tuple matching_tuple);
-  // erase a whole tree for a precondition (must be called on root).
-  void L1_EraseTree();
-  // create a child node.
-  SearchNode * L1_CreateChild(Tuple matching_tuple, Pattern child_pattern);
-  Substitution GetSubstitutionSoFar() const;
-
-  Pattern pattern_;
-  SearchNode * parent_;
-  // the tuple that matches the parent's split tuple.
-  Tuple tuple_; 
-  Precondition * precondition_;
-  Model * GetModel() { return precondition_->GetModel();}
-  Changelist * GetChangelist() { return GetModel()->GetChangelist();}
-  int split_tuple_;
-  map<Tuple, SearchNode *> children_;
-  // number of satisfactions of this pattern  
-  uint64 num_satisfactions_; 
-  // how much work is done in adding and removing tuples.
-  // this is equal to the sum over this node and all descendents of the 
-  // number of matches of the wildcard tuple in the tuple index.  This 
-  // differs in two ways from num_satisfactions_:
-  // 1. it incudes interior nodes (not just leaves)
-  // 2. In the case of duplicate variables in a tuple, there can be wildcard
-  //    matches that are not true matches.  These are counted in work_, but
-  //    they do not lead to satisfactions.
-  uint64 work_; 
-};
-
-
-
-
 
 #endif
