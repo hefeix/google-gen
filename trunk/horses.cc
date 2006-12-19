@@ -48,7 +48,7 @@ public:
     ComputeVisible();
     if (log_propositions_) {
       for (int i=0; i<size_; i++)
-	printf("[ Successor POS_%d *POS_%d ]\n", i, (i+1)%size_);
+	printf("[ PS POS_%d *POS_%d ]\n", i, (i+1)%size_);
     }
   }
 
@@ -75,7 +75,7 @@ public:
       // printf("[ TIME_%d POS_%d CHAR_]");
       printf("[ ACT TIME_%d *POS_%d *%s ]\n", timestep_, 
 	     pos, (dir?"RIGHT":"LEFT"));
-      printf("[ SUC TIME_%d *TIME_%d ]\n", timestep_, timestep_+1);
+      printf("[ TS TIME_%d *TIME_%d ]\n", timestep_, timestep_+1);
     }
     timestep_++;
     ComputeVisible();
@@ -88,7 +88,7 @@ public:
       Visible(pos, 0, &c);
       visible_ += c;
       if (log_propositions_) {
-	printf("[ OBS TIME_%d POS_%d *CHAR_%c ]\n", timestep_, pos, c);
+	printf("[ OBS TIME_%d POS_%d *\'%c\' ]\n", timestep_, pos, c);
 	//printf("OBS_%d_%d AT_TIME TIME_%d\n", timestep_, pos, timestep_);
 	//printf("OBS_%d_%d AT_POS POS_%d\n", timestep_, pos, pos);
 	//printf("OBS_%d_%d OBSERVES CHAR_%c\n", timestep_, pos, c);

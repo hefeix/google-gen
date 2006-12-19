@@ -84,6 +84,7 @@ struct SearchNode{
   SearchNode * L1_AddSplitChild(Tuple tuple);
   // Removes (and erases) a child node of a split tuple.
   void L1_RemoveSplitChild(Tuple tuple);
+  void L1_RemoveAllSplitChildren();
 
   // Sets which tuple we split on, and updates the model indices.
   void L1_SetSplitTuple(int pos);
