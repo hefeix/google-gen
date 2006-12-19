@@ -143,3 +143,61 @@ void PermutationIterator::operator++(){
     Move(item, pos);
   }
 }
+
+ProductIterator::ProductIterator(vector<uint> bounds){
+  bounds_ = bounds;
+  done_ = false;
+  current_ = vector<uint>(bounds_.size());
+  for (uint i=0; i<bounds_.size(); i++) {
+    if (bounds_[i]==0) {
+      done_ = true;
+      return;
+    }
+  }
+}
+void ProductIterator::operator++(){
+  uint dim = 0;
+  while(1) {
+    if (dim >= bounds_.size()){
+      done_ = true;
+      return;
+    }
+    current_[dim]++;
+    if (current_[dim] == bounds_[dim]) {
+      current_[dim] = 0;
+      dim++;
+    } else {
+      break;
+    }
+  }
+}
+
+// Given a set of num_objects objects numbered from 0..num_objects-1 and a 
+// symmetric adjacency matrix (self-adjacency allowed and ignored), we 
+// find the connected components and number them from 
+// 0..num_connected_components-1.  We return the number of connected components
+// and pass back in *components a vector mapping object to component.
+int ConnectedComponents(int num_objects, 
+			const map<int, set<int> > & adjancency_matrix,
+			vector<int> * components){
+  vector<int> c(num_objects, -1);
+  int num_components = 0;
+  for (int root=0; root<num_objects; root++) {
+    if (c[root]!=-1) continue;
+    int component = c[root] = num_components;
+    num_components++;
+    set<int> to_add;
+    to_add.insert(root);
+    while(to_add.size()){
+      int new_guy = *(to_add.begin());
+      to_add.erase(new_guy);
+      c[new_guy] = component;
+      const set<int> * neighbors = adjancency_matrix % new_guy;
+      if (neighbors) forall(run, *neighbors) {
+	if (c[*run] == -1) to_add.insert(*run);
+      }
+    }
+  }
+  if (components) *components = c;
+  return num_components;
+}

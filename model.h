@@ -32,6 +32,11 @@
 
 #define GAVE_UP (-1)
 
+struct SearchNode;
+class TupleIndex;
+
+// Used in combining rules
+// GEORGES - COMMENT
 struct SubRuleInfo {
   Rule *        rule_;
   // This is a variable to variable sub to get to the common canonicalized form
@@ -62,7 +67,6 @@ struct SubRuleInfo {
       ret << "Postcondition" << endl;
     return ret.str();
   }
-
 };
 inline ostream& operator<<(ostream& o, const SubRuleInfo& sri) {
   return (o << sri.ToString());
@@ -78,6 +82,7 @@ class Model {
   friend class Rule;
   friend class Component;
   friend class Prohibition;
+  friend class SearchNode;
 
   // ----- LAYER 3 FUNCTIONS -----
 
@@ -168,32 +173,15 @@ class Model {
   // Checks that all of the Layer 2 requirements are met.
   void VerifyLayer2() const;
 
-  // Finds all satisfactions of preconditions that involve a given tuple.
-  // If the tuple is not in the model, it pretends that it is.
-  // returns work, or GAVE_UP if we run out of time.
-  // In the results vector, it puts triples of precondition, number of
-  // satisfactions, and actual satisfactions.  Some or all of the actual
-  // satisfactions may be omitted based on the settings of the last two
-  // parameters.
-  // TODO, make actual_work a parameter, for uniformity sake.
-  int64 FindSatisfactionsForTuple
-    ( const Tuple & s,
-      vector<pair<Precondition *, pair<uint64, vector<Substitution> > > >
-      *results,
-      int64 max_work,
-      bool return_subs_for_negative_rules,
-      bool return_subs_for_all_rules);
-
   // Finds possible pairs of rules and substitutions such that the 
   // preconditios are satisfied, and one of the results is the given tuple.
   // You can exclude some TrueTuples as dependents, for example to 
   // aviod circular causation.  In the results, if the value of a variable 
   // does not matter, sets it to the word "whatever".   TODO: wtf?
-  // returns work, or GAVE_UP if we ran out of time.
-  int64 FindExplanationsForResult (const Tuple & t, 
-				   vector<pair<Rule *, Substitution> > *results,
-				   const set<Component *> * excluded_dependents,
-				   int64 max_work); 
+  bool FindExplanationsForResult (const Tuple & t, 
+				  vector<pair<Rule *, Substitution> > *results,
+				  const set<Component *> * excluded_dependents,
+				  int64 *max_work_now); 
   
   
   // Finds a TrueTuple
@@ -218,6 +206,10 @@ class Model {
   double GetArbitraryTermLnLikelihood() const 
   { return arbitrary_term_ln_likelihood_;}
 
+  double GetSearchWork() const { return search_work_;}
+  double GetUtility() const { return ln_likelihood_ 
+      - search_work_ * work_penalty_; } 
+  
   Precondition * FindPrecondition(const vector<Tuple> & tuples) const;
 
   set<Rule *> GetAllRules() const;
@@ -254,6 +246,11 @@ class Model {
   // encoder, and to update the global likelihood.
   void L1_AddArbitraryTerm(int w);
   void L1_SubtractArbitraryTerm(int w);
+
+  // Call these functions after adding(removing) a tuple to(from) the tuple 
+  // index to keep the search trees for the preconditions updated.
+  void L1_UpdateSearchTreesAfterAddTuple(Tuple t);
+  void L1_UpdateSearchTreesAfterRemoveTuple(Tuple t);
 
   // Finds or adds a Precondition
   Precondition * L1_GetAddPrecondition(const vector<Tuple> & tuples);
@@ -321,6 +318,7 @@ class Model {
   void A1_AddToTotalArbitraryTerms(int delta);
   void A1_AddToArbitraryTermLnLikelihood(double delta);
   void A1_AddToLnLikelihood(double delta);
+  void A1_AddToSearchWork(int64 delta);
   void A1_InsertIntoViolatedProhibitions(Prohibition *p);
   void A1_RemoveFromViolatedProhibitions(Prohibition *p);
   void A1_IncrementNextID();
@@ -358,9 +356,20 @@ class Model {
   set<Prohibition *> violated_prohibitions_;
   
   map<int, int> arbitrary_term_counts_;
-
   int total_arbitrary_terms_;
   double arbitrary_term_ln_likelihood_; // superfluous
+
+  map<Tuple, set<SearchNode *> > wildcard_tuple_to_search_node_;
+
+  // Total of search_work_ for all preconditions.
+  uint64 search_work_; 
+  // We prefer models that cost us less work in searching for satisfactions of 
+  // preconditions, since they are quicker to reason about.  The number of 
+  // units of search work is multiplied by this number and subtracted from the
+  // ln_likelihood_ of the model (in nats).  Guess: make this number about 
+  // 1/1000
+  double work_penalty_;
+  
   double ln_likelihood_;
 
   Changelist changelist_;

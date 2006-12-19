@@ -21,6 +21,7 @@
 #include "model.h"
 #include "probutil.h"
 #include "prohibition.h"
+#include "searchtree.h"
 #include <sstream>
 #include <deque>
 #include <fstream>
@@ -87,7 +88,7 @@ void Model::ReadSpec(istream * input){
 bool Model::IsForbidden(const Tuple & t) const{
   for (GeneralizationIterator run_g(t); !run_g.done(); ++run_g) {
     set<Prohibition *> const * prohibitions 
-      = prohibition_index_ % run_g.generalized();
+      = prohibition_index_ % run_g.Current();
     if (prohibitions) forall(run_p, *prohibitions) {
       if ((*run_p)->TupleIsProhibited(t)) return true;
     }
@@ -170,6 +171,7 @@ Model::Model(){
   ln_likelihood_ = 0.0;
   arbitrary_term_ln_likelihood_ = 0.0;
   total_arbitrary_terms_ = 0;
+  work_penalty_ = 0.01;
   old_style_display_ = false;
 
   // Load up the words
@@ -625,69 +627,14 @@ void Model::VerifyLayer2() const {
   VerifyLinkBidirectionality();
   VerifyLikelihood();
 }
-int64 Model::FindSatisfactionsForTuple
-( const Tuple & s, 
-  vector<pair<Precondition *, pair<uint64, vector<Substitution> > > > *results,
-  int64 max_work,
-  bool return_subs_for_negative_rules = true,
-  bool return_subs_for_all_rules = false) {
-  DestructibleCheckpoint dcp(&changelist_);
-  if (!tuple_index_.Lookup(s, NULL, NULL))
-    changelist_.Make
-      (new MemberCall1Change<TupleIndex, Tuple>(&tuple_index_, s,
-					       &TupleIndex::Add,
-					       &TupleIndex::Remove));
-  if (results) results->clear();
-  int64 total_work = 0;
-  for (GeneralizationIterator run_g(s); !run_g.done(); ++run_g) {
-    const set<pair<Precondition *, int> > * preconditions
-      = wildcard_tuple_to_precondition_ % run_g.generalized();
-    if (preconditions) forall(run, (*preconditions)) {
-      Precondition * precondition = run->first;
-      int clause_num = run->second;
-      Substitution partial_sub;
-      vector<Tuple> simplified_precondition = precondition->pattern_;
-      // This can fail (gracefully) if the clause contains the same variable 
-      // at two positions and the tuple doesn't.
-      if (!ComputeSubstitution(precondition->pattern_[clause_num], s, 
-			       &partial_sub)) continue;
-      partial_sub.Substitute(&simplified_precondition);
-      uint64 num_complete_subs;
-      uint64 work = 0;
-      bool return_subs = return_subs_for_all_rules;
-      if (return_subs_for_negative_rules && 
-	  (precondition->negative_rules_.size()>0)) {
-	return_subs = true;
-      }
-      vector<Substitution> complete_subs;
-      if (!tuple_index_.FindSatisfactions
-	  (simplified_precondition, 
-	   NULL,
-	   return_subs?(&complete_subs):NULL,
-	   &num_complete_subs,
-	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
-	   &work)) return GAVE_UP;
-      if (num_complete_subs > 0 && results) {
-	for (uint i=0; i<complete_subs.size(); i++) {
-	  complete_subs[i].Add(partial_sub);
-	}
-	results->push_back(make_pair(precondition, make_pair(num_complete_subs, 
-							complete_subs)));
-      }
-      total_work += work;
-    }
-  }
-  return total_work;
-}
 
-int64 Model::FindExplanationsForResult
+bool Model::FindExplanationsForResult
 (const Tuple & s, vector<pair<Rule *, Substitution> > *results, 
- const set<Component *> *excluded_dependents, int64 max_work){
+ const set<Component *> *excluded_dependents, int64 *max_work_now){
   CHECK(results);
-  int64 total_work = 0;
   for (GeneralizationIterator run_g(s); !run_g.done(); ++run_g) {
     const set<pair<Rule *, int> > * rules
-      = wildcard_tuple_to_result_ % run_g.generalized();
+      = wildcard_tuple_to_result_ % run_g.Current();
     if (rules) forall(run, (*rules)) {
       Rule * rule = run->first;
       if (excluded_dependents && 
@@ -700,15 +647,13 @@ int64 Model::FindExplanationsForResult
 	continue;
       partial_sub.Substitute(&simplified_precondition);
       uint64 num_complete_subs;
-      uint64 work = 0;
       vector<Substitution> complete_subs;
       if (!tuple_index_.FindSatisfactions
 	  (simplified_precondition, 
-	   NULL,
+	   SamplingInfo::Unsampled(),
 	   &complete_subs,
 	   &num_complete_subs,
-	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
-	   &work)) return GAVE_UP;
+	   max_work_now)) return false;
       if (num_complete_subs == 0) continue;
       set<int> result_vars = GetVariables(rule->result_);
       for (uint i=0; i<complete_subs.size(); i++) {
@@ -731,10 +676,9 @@ int64 Model::FindExplanationsForResult
 	}
 	results->push_back(make_pair(rule, complete_subs[i]));
       }
-      total_work += work;
     }
   }
-  return total_work;
+  return true;
 }
 
 Precondition * Model::FindPrecondition(const vector<Tuple> & tuples) const{
@@ -963,6 +907,10 @@ void Model::A1_AddToLnLikelihood(double delta) {
   changelist_.Make
     (new ValueChange<double>(&ln_likelihood_, ln_likelihood_+delta));
 }
+void Model::A1_AddToSearchWork(int64 delta) {
+  changelist_.Make
+    (new ValueChange<uint64>(&search_work_, search_work_+delta));
+}
 void Model::A1_InsertIntoViolatedProhibitions(Prohibition *p) {
   changelist_.Make
     (new SetInsertChange<Prohibition *>(&violated_prohibitions_, p));
@@ -974,3 +922,53 @@ void Model::A1_RemoveFromViolatedProhibitions(Prohibition *p) {
 void Model::A1_IncrementNextID(){
   changelist_.Make(new ValueChange<int>(&next_id_, next_id_+1));
 }
+
+
+void Model::L1_UpdateSearchTreesAfterAddTuple(Tuple t){
+  // Now we let the searchnodes know about the new tuple.  This is a little
+  // tricky, as it is possible that the search trees reorganize as we are doing
+  // this.  It works to call SearchNode::L1_AddTuple once for each pre-existing
+  // matching entry in wildcard_tuple_to_search_node_ which still exists at the
+  // time of the call.  Here's why:
+  // New searchnodes already know about the new tuple.
+  // ONE_TUPLE searchnodes don't change type, so if they still exist, they
+  // haven't been touched and need to be updated once. 
+  // SPLIT searchnodes may have changed type to PARTITION and back, but if they
+  // already know about the new tuple, they know to ignore the call. 
+  map<Tuple, set<SearchNode *> > to_update;
+  for (GeneralizationIterator gen(t); !gen.done(); ++gen) {
+    set<SearchNode *> * s
+      = wildcard_tuple_to_search_node_ % gen.Current();
+    if (s) to_update[gen.Current()] = *s;    
+  }
+  forall(run, to_update) {
+    Tuple generalized = run->first;
+    forall(run2, run->second) {
+      SearchNode *n = *run2;
+      if (wildcard_tuple_to_search_node_ % generalized 
+	  && wildcard_tuple_to_search_node_[generalized] % n) {
+	n->L1_AddTuple(t);
+      }
+    }
+  }
+}
+// Pretty much the same thing as above, but in reverse
+void Model::L1_UpdateSearchTreesAfterRemoveTuple(Tuple t){
+  map<Tuple, set<SearchNode *> > to_update;
+  for (GeneralizationIterator gen(t); !gen.done(); ++gen) {
+    set<SearchNode *> * s
+      = wildcard_tuple_to_search_node_ % gen.Current();
+    if (s) to_update[gen.Current()] = *s;    
+  }
+  forall(run, to_update) {
+    Tuple generalized = run->first;
+    forall(run2, run->second) {
+      SearchNode *n = *run2;
+      if (wildcard_tuple_to_search_node_ % generalized 
+	  && wildcard_tuple_to_search_node_[generalized] % n) {
+	n->L1_RemoveTuple(t);
+      }
+    }
+  }
+}
+

@@ -247,7 +247,7 @@ bool Optimizer::FindRandomCandidateRule(CandidateRule *ret, Tactic tactic,
   while (!MaybeFindRandomCandidateRule(ret, tactic, comments)){
     if (time(NULL) >= end_time) return false;
   }
-  recently_checked_[*ret] = model_->GetLnLikelihood();
+  recently_checked_[*ret] = model_->GetUtility();
   return true;
 }
 bool Optimizer::MaybeFindRandomCandidateRule(CandidateRule *ret, 
@@ -307,14 +307,14 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
   double arbitrary_diff = 0.0;
   {
     DestructibleCheckpoint checkp(model_->GetChangelist());    
-    double old_likelihood = model_->GetLnLikelihood();
+    double old_utility = model_->GetUtility();
     Substitution sub = first_cause->GetRightSubstitution();
     forall(run, sub.sub_) {
       int term = run->second;
       int count = model_->ArbitraryTermCount(term);
       if (count != 1) model_->L1_SubtractArbitraryTerm(term);
     }
-    arbitrary_diff = model_->GetLnLikelihood() - old_likelihood;
+    arbitrary_diff = model_->GetUtility() - old_utility;
   }
   VLOG(1) << "Arbitrary diff: " << arbitrary_diff << endl;
 
@@ -468,11 +468,12 @@ void Optimizer::RuleInfo::Canonicalize(){
 
 void Optimizer::RuleInfo::FindCandidateFirings(){
   vector<Substitution> subs;
+  int64 max_work_now = max_work_/denominator_ + 10;
   bool success = 
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
     (Concat(r_),
-     &combined_sampling_, 
-     &subs_, &sampled_num_firings_, max_work_/denominator_ + 10, NULL);
+     combined_sampling_, 
+     &subs_, &sampled_num_firings_, &max_work_now);
   if (!success) {
     hopeless_ = true;
     hopeless_cause_ = 1;
@@ -521,17 +522,19 @@ void Optimizer::RuleInfo::CheckForMultipleValuesOfSampledTuple(){
 void Optimizer::RuleInfo::BailIfRecentlyChecked(){
   if ((optimizer_->recently_checked_ % r_) 
       && (optimizer_->recently_checked_[r_] 
-	  >= optimizer_->model_->GetLnLikelihood()-1.0)) {
+	  >= optimizer_->model_->GetUtility()-1.0)) {
     hopeless_ = true;
   }
 }
 void Optimizer::RuleInfo::FindNumSatisfactions(){
   // check that the preconditions aren't too much work to searh for.
+  int64 max_work_now = max_work_/denominator_+10;
   bool success = 
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
-    (r_.first, &precondition_sampling_, 0, 
+    (r_.first, precondition_sampling_, 
+     NULL, // substitutions 
      &sampled_num_satisfactions_, 
-     max_work_/denominator_+10, 0);
+     &max_work_now);
   if (!success) {
     hopeless_ = true;
     hopeless_cause_ = 1;
@@ -568,10 +571,13 @@ void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
       if ((Intersection(GetVariables(r_.first[i]), GetVariables(r_.second))
 	   - GetVariables(simplified_preconditions)).size()) continue;
       uint64 simplified_num_satisfactions = 0;
+      int64 max_work_now = max_work_;
       if (optimizer_->model_->GetTupleIndex()->FindSatisfactions
-	  (simplified_preconditions, &simplified_sampling, 0,
+	  (simplified_preconditions, 
+	   simplified_sampling, 
+	   NULL, // satisfaction
 	   &simplified_num_satisfactions,
-	   max_work_, 0)) {
+	   &max_work_now)) {
 	if (simplified_num_satisfactions
 	    <= sampled_num_satisfactions_ * 1.1){
 	  // adjust the samplinginfo object
@@ -582,7 +588,7 @@ void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
 	      precondition_sampling_.position_--;
 	      combined_sampling_.position_--;
 	    } else if ((int)i==sample_clause_){
-	      precondition_sampling_ = SamplingInfo();
+	      precondition_sampling_ = SamplingInfo::Unsampled();
 	      sampled_ = false;
 	    }
 	  }
@@ -836,7 +842,7 @@ void Optimizer::TryAddFirings
   }
   OptimizeStrength(rule);
   VLOG(1) << "Added " << subs.size() << " firings " 
-	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+	  << " utility_=" << model_->GetUtility() << endl;
 
   set<CandidateRule> variants;
   forall (run_r, to_remove) {
@@ -883,7 +889,7 @@ void Optimizer::TryAddFirings
     OptimizeStrength(alt_r);
     VLOG(1) << "Removed " << firings.size() 
 	    << " firings for rule " << alt_r->GetID()
-	    << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+	    << " utility_=" << model_->GetUtility() << endl;
         
     
     // Try to remove the alternate rule if it has few firings.
@@ -913,7 +919,7 @@ void Optimizer::TryAddFirings
 	  Explain(*run, NULL, false);
       }
       VLOG(1) << "Erased Rule " 
-	      << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+	      << " utility_=" << model_->GetUtility() << endl;
 
       // Try to make a variation on the alternate rule that switches
       // the result with one of the preconditions.  
@@ -932,18 +938,18 @@ void Optimizer::TryAddFirings
       }
       TryMakeFunctionalNegativeRule(alt_r);
       VLOG(1) << "Made a negative rule. "
-	      << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;      
+	      << " utility_=" << model_->GetUtility() << endl;      
     }
   }
   VLOG(1) << "removed all alternate explanations " 
-	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+	  << " utility_=" << model_->GetUtility() << endl;
   if (max_recursion >0) 
     forall(run, variants) {
       OptimizationCheckpoint cp_variation(this, false);
       TryRuleVariations(run->first, run->second, max_recursion-1);
     }
   VLOG(1) << "Added variant rules " 
-	  << " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+	  << " utility_=" << model_->GetUtility() << endl;
 }
   
 void Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
@@ -968,16 +974,16 @@ void Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
   // negative_rule->ExplainEncoding();
   //model_->FixTimes(); // TODO: do we need this?
   VLOG(1) 
-    << "added negative " << " lnlikelihood=" << model_->GetLnLikelihood() << endl;
+    << "added negative " << " utility=" << model_->GetUtility() << endl;
   // go back and forth and optimize the rule weights of the negative rule 
   // and the inhibited rule.
   // TODO: optimize it all together?
   for (int rep=0; rep<2; rep++) { 
     OptimizeStrength(negative_rule);
-    VLOG(1) << "opt_neg " << " lnlikelihood=" << model_->GetLnLikelihood() 
+    VLOG(1) << "opt_neg " << " utility=" << model_->GetUtility() 
 	    << "  val=" << negative_rule->GetStrengthD() << endl;
     OptimizeStrength(r);
-    VLOG(1) << "opt_alt " << " lnlikelihood=" << model_->GetLnLikelihood() 
+    VLOG(1) << "opt_alt " << " utility=" << model_->GetUtility() 
 	    << "  val=" << r->GetStrengthD() << endl;
   }
   if (GetVerbosity() >= 1) model_->ToHTML("html");
@@ -1002,12 +1008,10 @@ void Optimizer::TryRuleVariations(const Pattern & preconditions,
   }
 }
 
-void Optimizer::TryAddPositiveRule(
-			   const Pattern & preconditions,
-			   const Pattern & result,
-			   int max_recursion,
-			   string comments){
-
+void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
+				   const Pattern & result,
+				   int max_recursion,
+				   string comments){  
   if (GetVerbosity() >= 2) {
     model_->VerifyLayer2();
   }
@@ -1015,9 +1019,12 @@ void Optimizer::TryAddPositiveRule(
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
   combined.insert(combined.end(), result.begin(), result.end());
+  int64 max_work_now = StandardMaxWork();
   bool last_ditch = 
     model_->GetTupleIndex()->FindSatisfactions
-    (combined, NULL, &subs, 0, StandardMaxWork(), 0);
+    (combined, SamplingInfo::Unsampled(), &subs, 
+     NULL, // num_satisfactions 
+     &max_work_now);
   if (last_ditch == false) {
     VLOG(0) << "Somehow this one got this far! no further!" << endl;
     return;
@@ -1035,8 +1042,8 @@ void Optimizer::TryAddPositiveRule(
     VLOG(1) << "rule already exists" << endl;
     return;
   }
-  VLOG(1) << "before adding rule ll=" 
-	  << model_->GetLnLikelihood() << endl;
+  VLOG(1) << "before adding rule utility=" 
+	  << model_->GetUtility() << endl;
   double added_arbitrary_term_ll = -model_->GetArbitraryTermLnLikelihood();
   Rule * r = model_->MakeNewRule(preconditions, EncodedNumber(), 
 			    type, 0, result, EncodedNumber(), EncodedNumber());
@@ -1050,13 +1057,13 @@ void Optimizer::TryAddPositiveRule(
 	  << added_arbitrary_term_ll
 	  << endl;
   // r->ExplainEncoding();
-  VLOG(1) << "after adding rule ll=" 
-	  << model_->GetLnLikelihood() << endl;
+  VLOG(1) << "after adding rule utility=" 
+	  << model_->GetUtility() << endl;
   TryAddFirings(r, subs, max_recursion-1);
   if (!r->Exists()) return;
-  VLOG(1) << "after TryAddFirings: ll=" << model_->GetLnLikelihood() << endl;
+  VLOG(1) << "after TryAddFirings: utility=" << model_->GetUtility() << endl;
   OptimizeStrength(r);
-  VLOG(1) << "after OptimizeStrength: ll=" << model_->GetLnLikelihood() << endl;
+  VLOG(1) << "after OptimizeStrength: utility=" << model_->GetUtility() << endl;
   // ToHTML("html");
 }
 
@@ -1170,20 +1177,20 @@ OptimizationCheckpoint::OptimizationCheckpoint(Optimizer * optimizer,
   fix_times_ = fix_times;
   logging_ = false;
   cp_ = model_->GetChangelist()->GetCheckpoint();
-  old_ln_likelihood_ = model_->GetLnLikelihood();
+  old_utility_ = model_->GetUtility();
 }
 OptimizationCheckpoint::~OptimizationCheckpoint() {
   if (!KeepChanges()) {
     model_->GetChangelist()->Rollback(cp_);
     if (logging_)
-      VLOG(1) << "reverting ln_likelihood_="
-	   << model_->GetLnLikelihood() << endl;
+      VLOG(1) << "reverting utility="
+	   << model_->GetUtility() << endl;
   }
 }
 bool OptimizationCheckpoint::Better() {
   return (model_->MayBeTimeFixable()
-	  && (model_->GetLnLikelihood() > old_ln_likelihood_ + 0.01 + 
-	      (1+fabs(model_->GetLnLikelihood())) * 1e-14));
+	  && (model_->GetUtility() > old_utility_ + 0.01 + 
+	      (1+fabs(model_->GetUtility())) * 1e-14));
 }
 bool OptimizationCheckpoint::KeepChanges() {
   if (!Better()) return false;
@@ -1195,7 +1202,7 @@ bool OptimizationCheckpoint::KeepChanges() {
 }
 
 double OptimizationCheckpoint::Gain() {
-  return model_->GetLnLikelihood() - old_ln_likelihood_;
+  return model_->GetUtility() - old_utility_;
 }
 
 void Optimizer::OptimizeStrength(Rule *r){
@@ -1217,7 +1224,7 @@ void Optimizer::OptimizeStrength(Rule *r){
 	EncodedNumber old_val = *to_alter;
 	VLOG(2) << "trial=" << trial 
 		<< " to_alter=" << to_alter->ToSortableString()
-		<< " ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+		<< " utility_=" << model_->GetUtility() << endl;
 	if (trial==0) { // drop last bit
 	  if (to_alter->bits_.size()==0) continue;
 	  to_alter->bits_.pop_back();	  
@@ -1227,7 +1234,7 @@ void Optimizer::OptimizeStrength(Rule *r){
 	OptimizationCheckpoint cp(this, false);
 	r->ChangeStrength(strength, strength2);
 	VLOG(2) << "   new_val=" << to_alter->ToSortableString()
-		<< " new_ln_likelihood=" << model_->GetLnLikelihood() << endl;
+		<< " new_utility=" << model_->GetUtility() << endl;
 	if (cp.KeepChanges()) {
 	  any_improvement = true;
 	  if (trial==0) avoid_trying = old_val.bits_.back()?2:1;
@@ -1250,7 +1257,7 @@ void Optimizer::Explain(TrueTuple *p,
   }
   vector<pair<Rule *, Substitution> > explanations;
   Tuple s = p->GetTuple();
-  model_->FindExplanationsForResult(s, &explanations, excluded, UNLIMITED_WORK);
+  model_->FindExplanationsForResult(s, &explanations, excluded, NULL);
   if (explanations.size()==0) {
     Rule * r = model_->GetAddUniversalRule(s.size());
     Substitution right_sub;
@@ -1264,9 +1271,9 @@ void Optimizer::Explain(TrueTuple *p,
     Checkpoint cp = model_->GetChangelist()->GetCheckpoint();
     explanations[i].first->AddFiring(explanations[i].second);
     OptimizeStrength(explanations[i].first);
-    if (i==0 || model_->GetLnLikelihood() > best) {
+    if (i==0 || model_->GetUtility() > best) {
       which=i;
-      best = model_->GetLnLikelihood();
+      best = model_->GetUtility();
     }
     model_->GetChangelist()->Rollback(cp);
   }
@@ -1279,7 +1286,7 @@ bool Optimizer::FixTimesFixCircularDependencies(int time_limit) {
   // TODO: make this smarter.  much smarter
   time_t end_time = time(NULL) + time_limit;
   
-  VLOG(1) << " start ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+  VLOG(1) << " start utility_=" << model_->GetUtility() << endl;
   while (model_->GetTimesDirty().size() || model_->GetRequiredNeverHappen().size()) {
     bool result = model_->FixTimes();
     if (!result) {
@@ -1301,7 +1308,7 @@ bool Optimizer::FixTimesFixCircularDependencies(int time_limit) {
   }
   model_->DeleteNeverHappeningComponents();
   CHECK(model_->GetRequiredNeverHappen().size() == 0);
-  VLOG(1) << " end ln_likelihood_=" << model_->GetLnLikelihood() << endl;
+  VLOG(1) << " end utility_=" << model_->GetUtility() << endl;
   return true;
   //if (absent_required_.size()){
   //  ToHTML("html");

@@ -106,7 +106,7 @@ void GeneralizationIterator::operator++(){
   }
 }
 bool GeneralizationIterator::done() const{ return (variable_mask_ >= max_); }
-const Tuple & GeneralizationIterator::generalized() const { 
+const Tuple & GeneralizationIterator::Current() const { 
   return generalized_; 
 }
 int GeneralizationIterator::VariableMask() const{ 
@@ -184,39 +184,17 @@ set<int> GetVariables(const Pattern & v) {
 
 // If a pattern's variables are connected
 bool IsConnectedPattern(const Pattern& v) {
-
-  set<int> variables;
-  map<int, set<int> > adj;
-  for (uint c=0; c<v.size(); c++) {
-    for (uint c2=0; c2<v[c].size(); c2++) {
-      for (uint c3=0; c3<c2; c3++) {
-	if (IsVariable(v[c][c2])) variables.insert(v[c][c2]);
-	if (IsVariable(v[c][c2]) && IsVariable(v[c][c3])) {
-	  VLOG(2) << "adjacent " << v[c][c2] << " & " << v[c][c3] << endl;
-	  adj[v[c][c2]].insert(v[c][c3]);
-	  adj[v[c][c3]].insert(v[c][c2]);
-	}
-      }
-    }
-  }
-
-  if (variables.size()==0) {
-    cout << "no variables in " << TupleVectorToString(v) << endl;
-    CHECK(variables.size());
-  }
-  vector<int> to_visit;
-  to_visit.push_back(*(variables.begin()));
-  for(uint where=0; where < to_visit.size(); where++) {
-    int visiting = to_visit[where];
-    if (!(variables % visiting)) continue;
-    to_visit.insert(to_visit.end(), 
-		    adj[visiting].begin(), adj[visiting].end());
-    VLOG(2) << "Visited " << visiting << endl;
-    variables.erase(visiting);
-  }
-  
-  if (variables.size()) return false;
-  return true;
+  return (GetConnectedComponents(v, NULL)<=1);
+}
+int GetConnectedComponents(const Pattern &p, vector<int> *components){
+  map<int, set<int> > var_to_tuple;
+  for (uint c=0; c<p.size(); c++)
+    for (uint c2=0; c2<p[c].size(); c2++)
+      if (IsVariable(p[c][c2])) var_to_tuple[p[c][c2]].insert(c);
+  map<int, set<int> > tuple_adjacency;
+  forall(run, var_to_tuple) forall(run2, run->second) forall (run3, run->second)
+    tuple_adjacency[*run2].insert(*run3);
+  return ConnectedComponents(p.size(), tuple_adjacency, components);
 }
 
 Pattern RemoveVariableFreeTuples(const Pattern &v) {
@@ -228,18 +206,19 @@ Pattern RemoveVariableFreeTuples(const Pattern &v) {
   return ret;
 }
 bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
-			 Substitution * sub){
-  sub->sub_.clear();
+			 Substitution * substitution){
+  Substitution sub;
   CHECK(pre_sub.size() == post_sub.size());
   for (uint i=0; i<pre_sub.size(); i++) {
     if (pre_sub[i] < 0) {
-      if (sub->sub_.find(pre_sub[i]) != sub->sub_.end() && 
-	  sub->sub_[pre_sub[i]] != post_sub[i]) {
+      if (sub.sub_.find(pre_sub[i]) != sub.sub_.end() && 
+	  sub.sub_[pre_sub[i]] != post_sub[i]) {
 	return false;
       }
-      sub->sub_[pre_sub[i]] = post_sub[i];
+      sub.sub_[pre_sub[i]] = post_sub[i];
     }
   }
+  if (substitution) *substitution = sub;
   return true;
 }
 set<int> GetAllTerms(const Pattern & v) {

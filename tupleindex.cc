@@ -18,6 +18,8 @@
 
 #include "tupleindex.h"
 #include "lexicon.h"
+#include "model.h"
+#include "searchtree.h"
 
 SamplingInfo::SamplingInfo() {
   sampled_ = false;
@@ -192,7 +194,7 @@ void TupleIndex::Add(Tuple t) {
     if (iter.VariableMask()==0) continue;
 
     // Get the generalized tuple, and its node
-    const Tuple & g = iter.generalized();
+    const Tuple & g = iter.Current();
     Node * n = nodes_[g];
     // Create if necessary
     if (n==NULL) {
@@ -228,7 +230,7 @@ void TupleIndex::Remove(Tuple t) {
     if (iter.VariableMask()==0) continue;
 
     // Find the underspecified node, make sure it exists
-    const Tuple & g = iter.generalized();
+    const Tuple & g = iter.Current();
     Node * n = nodes_[g];
     CHECK(n!=NULL);
 
@@ -300,138 +302,19 @@ int TupleIndex::Lookup(const Tuple &t, vector<Tuple> * results,
   return CountRange(start, end);
 }
 
-// Eliminate the simplest tuple first, recursively call this function
-// to find matches to the pattern in the tupleindex.
 bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern, 
-				   const SamplingInfo * sampling,
-				   vector<Substitution> * substitutions,
+				   const SamplingInfo & sampling, 
+				   vector<Substitution> *substitutions, 
 				   uint64 * num_satisfactions, 
-				   int64 max_work,
-				   uint64 * actual_work) {
-  // ignore sampling if it doesn't apply  
-  if (sampling && !sampling->sampled_) sampling = NULL;
-  
-  // Make sure the result is clean
-  if (substitutions) substitutions->clear();
-
-  // If the pattern has no tuples, there is one (trivial) match
-  if (pattern.size()==0) {
-    if (substitutions) substitutions->push_back(Substitution());
-    if (num_satisfactions) *num_satisfactions = 1;
-    if (actual_work) *actual_work = 1;
-    return true;
+				   int64 * max_work_now){
+  SearchTree tree(pattern, this, NULL, sampling);
+  if (!tree.L1_Search(max_work_now)) return false;
+  uint64 num_sat = tree.GetNumSatisfactions();
+  if (num_satisfactions) *num_satisfactions = num_sat;
+  MOREWORK(num_sat);
+  if (substitutions) {
+    tree.GetSubstitutions(substitutions);
   }
-
-  // If the pattern is one tuple, with no duplicate variables,
-  // and we don't need the results, we can just look up the answer quickly
-  if (pattern.size()==1 && !substitutions) {
-    if (sampling) CHECK(sampling->position_ == 0);
-    if (!pattern[0].HasDuplicateVariables()) {
-      if (num_satisfactions)
-	*num_satisfactions = Lookup(pattern[0].VariablesToWildcards(), 
-				    0, sampling);
-      if (actual_work) *actual_work = 1; 
-      return true;
-    }
-  }
-  
-  // Begin with the clause with the least Lookup matches
-  int best_clause = -1;
-  int64 least_work = 0;
-  //FullySpecifiedNode ** matches;
-  for (uint i=0; i<pattern.size(); i++) {    
-    uint32 num_matches = 
-      Lookup(pattern[i].VariablesToWildcards(), NULL, 
-	     (sampling && sampling->position_==i)?sampling:NULL);
-    if (i==0 || num_matches < least_work) {
-      least_work = num_matches;
-      best_clause = i;
-    }
-  }
-  CHECK(best_clause != -1);
-
-  // break out if we've done too much work reading matches
-  if (max_work != UNLIMITED_WORK && least_work > max_work) return false;
-
-  vector<Tuple> matches;
-  uint32 num_matches = 
-    Lookup(pattern[best_clause].VariablesToWildcards(), &matches, 
-	 (sampling && sampling->position_==(uint32) best_clause)?sampling:NULL);
-  
-  // Create a simpler pattern without the best_clause
-  vector<Tuple> simplified_pattern = pattern;
-  simplified_pattern.erase(simplified_pattern.begin()+best_clause);
-
-  // we will point sampling at a local object which we can modify.
-  SamplingInfo simplified_sampling;
-  if (sampling) {
-    simplified_sampling = *sampling;
-    sampling = &simplified_sampling;
-    if (simplified_sampling.position_ == (uint32)best_clause) sampling=NULL;
-    else if (simplified_sampling.position_ > (uint32)best_clause) {
-      SamplingInfo * temp = const_cast<SamplingInfo *>(sampling);
-      temp->position_--;
-    }
-  }
-
-  int total_work = least_work;
-  uint64 total_num_satisfactions = 0;
-  // Run over the 'matches' of the best clause
-  for (uint64 match=0; match<num_matches; match++){
-
-    // Reduce to a subproblem consisting of finding satisfactions to the
-    // simplified (without the best clause) and substituted 
-    // (for the current match) problem.
-    vector<Tuple> substituted_pattern = simplified_pattern;
-    Substitution partial_sub;
-    const Tuple & pre_sub = pattern[best_clause];
-    const Tuple & post_sub = matches[match];
-    // Compute substitution of pattern to match. None -> not a real match
-    if (!ComputeSubstitution(pre_sub, post_sub, &partial_sub)) continue;
-    VLOG(2) << "pre=" << pre_sub.ToString() 
-	    << " post=" << post_sub.ToString()
-	    << " partial_sub=" << partial_sub.ToString() << endl;
-    partial_sub.Substitute(&substituted_pattern);
-
-    uint64 additional_num_satisfactions;
-    uint64 added_work = 0;
-    if (substitutions) {
-      // Look for satisfactions to the simpler problem, but the substitutions
-      // are really unions of that for the best_clause and theirs
-      vector<Substitution> additional_substitutions;
-      if (!FindSatisfactions
-	  (substituted_pattern, 
-	   sampling,
-	   &additional_substitutions, 
-	   &additional_num_satisfactions,
-	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
-	   &added_work)) return false;
-      for (uint i=0; i<additional_substitutions.size(); i++) {
-	VLOG(2) << "partial=" << partial_sub.ToString() 
-		<< " additional=" << additional_substitutions[i].ToString();
-	additional_substitutions[i].Add(partial_sub);
-	VLOG(2) << " total=" << additional_substitutions[i].ToString() << endl;
-	// This is the merged substitution, add it in
-	substitutions->push_back(additional_substitutions[i]);
-      }
-    } else {
-      // If you don't require actual substitutions this is simple, 
-      // just keep looking and keeping tallies
-      if (!FindSatisfactions
-	  (substituted_pattern,
-	   sampling,
-	   0, &additional_num_satisfactions, 
-	   (max_work==UNLIMITED_WORK)?UNLIMITED_WORK:max_work-total_work,
-	   &added_work)) return false;
-    }
-    // Add up the work done, and the number of satisfactions for this match
-    total_work += added_work;
-    total_num_satisfactions += additional_num_satisfactions;
-  }
-
-  // Here return some housekeeping numbers, total number found and work done.
-  if (num_satisfactions) *num_satisfactions = total_num_satisfactions;
-  if (actual_work) *actual_work = total_work;
   return true;
 }
 
