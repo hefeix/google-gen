@@ -96,7 +96,7 @@ struct GeneralizationIterator {
   GeneralizationIterator(const Tuple & s) ;
   void operator++();
   bool done() const;
-  const Tuple & generalized() const;
+  const Tuple & Current() const;
   int VariableMask() const;
   int max_;
   int variable_mask_;
@@ -165,7 +165,15 @@ Substitution Union(const Substitution & s1, const Substitution & s2);
 set<int> GetVariables(const Tuple & t);
 set<int> GetVariables(const Pattern & v);
 
-bool IsConnectedPattern(const Pattern & v);
+// find ths connecnted components of the pattern.  
+// connectivity means shared variables.
+// Returns the number of connected components. 
+// components is optional and is set to a vector aligned with p, represnenting
+// a mapping from tuples to densely numbered component ids.
+int GetConnectedComponents(const Pattern & p, vector<int> *components);
+// Simpler interface if you only care whether the pattern has at most one 
+// component.
+bool IsConnectedPattern(const Pattern & p);
 
 // removes the tuples that have no variables
 Pattern RemoveVariableFreeTuples(const Pattern & v);

@@ -167,7 +167,6 @@ string ModelShell::Handle(string command) {
 	sampling = SamplingInfo::StringToSamplingInfo(r["sample"]);
       }
       uint64 num_sat;
-      uint64 actual_work;
       vector<Substitution> * subs = NULL;
       uint num_show = 0;
       if (r["show"] != "") {
@@ -176,11 +175,10 @@ string ModelShell::Handle(string command) {
 	  subs = new vector<Substitution>();
       }
       model_->GetTupleIndex()->
-	FindSatisfactions(p, &sampling, subs, 
-			  &num_sat, UNLIMITED_WORK, &actual_work);
+	FindSatisfactions(p, sampling, subs, 
+			  &num_sat, NULL);
       cout << "Pattern=" << TupleVectorToString(p)
-	   << " num_sat=" << num_sat 
-	   << " actual_work=" << actual_work << endl;
+	   << " num_sat=" << num_sat << endl; 
       if (num_show) {
 	for (uint c=0; c<num_show && c<subs->size(); c++) {
 	  cout << (*subs)[c].ToString() << endl;

@@ -23,7 +23,6 @@ Keep an index between constants and (Rule,variable) pairs.
 (to be used in the accuracy stuff above)
 (maybe even pairs/triples of constants)
 
-
 hard/nebulous stuff:
 
 N: keep track of computational complexity costs.

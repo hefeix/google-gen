@@ -51,6 +51,9 @@ void SetVerbosity(int v);
 
 #define forall(A, B) for ( typeof((B).begin()) A = (B).begin(); A!=(B).end(); ++A )
 
+#define MOREWORK(x) if (max_work_now) {(*max_work_now)-=(x); \
+    if (*max_work_now<0) return false;}
+
 // A simple timing class
 class Timer {
  public:
@@ -286,6 +289,25 @@ class PermutationIterator {
   void Move(int item, int new_slot);
 };
 
+// runs through all vector of non-negative integers such that each element
+// in the vector is less than the corresponding value of a bounding vector
+// We are using this for computing cross-products of vectors of vectors.
+// Pass in the sizes of the vectors in bounds, and the iterator iterates through
+// vectors of indices.
+class ProductIterator {
+ public:
+  ProductIterator(vector<uint> bounds);
+  void operator ++();
+  inline bool done() const { return done_;}
+  inline const vector<uint> & Current() const {return current_;}
+ private:
+  vector<uint> bounds_;
+  vector<uint> current_;
+  bool done_;
+};
+
+
+
 // the result of a computation that may not have finished
 enum ComputationResult {
   RESULT_FALSE, // the anser is no
@@ -293,6 +315,15 @@ enum ComputationResult {
   RESULT_MAYBE, // I don't know, and more time won't help.
   RESULT_GAVE_UP,  // I gave up for lack of time.
 };
+
+// Given a set of num_objects objects numbered from 0..num_objects-1 and a 
+// symmetric adjacency matrix (self-adjacency allowed and ignored), we 
+// find the connected components and number them from 
+// 0..num_connected_components-1.  We return the number of connected components
+// and pass back in *components a vector mapping object to component.
+int ConnectedComponents(int num_objects, 
+			const map<int, set<int> > & adjancency_matrix,
+			vector<int> * components);
 
 
 #endif
