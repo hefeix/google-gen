@@ -46,6 +46,7 @@ SearchTree::SearchTree(Pattern pattern,
     tuple_index_ = tupleindex,
     changelist_ = new Changelist();
   }
+  root_ = new SearchNode(this, NULL);
 }
 
 // Called when
@@ -106,6 +107,7 @@ bool SearchNode::LinkedToModel() const {
 set<SearchNode *> SearchNode::GetChildren() const {
   set<SearchNode *> ret;
   if (type_ == SPLIT) {
+    CHECK(child_to_tuple_);
     forall(run, *child_to_tuple_){
       ret.insert(run->first);
     }
@@ -137,10 +139,16 @@ void SearchNode::L1_RemoveSplitChild(Tuple tuple){
   GetChangelist()->Make
     (new MapRemoveChange<SearchNode *, Tuple>(child_to_tuple_, child));
 }
+void SearchNode::L1_RemoveAllSplitChildren(){
+  CHECK(tuple_to_child_);
+  while (tuple_to_child_->size()) {
+    L1_RemoveSplitChild(tuple_to_child_->begin()->first);
+  }
+}
 
 bool SearchNode::L1_MakePartition(int64 * max_work_now) {
   CHECK(type_ == BABY);
-  VLOG(0) << "Partition - YEAHH BABY  YEAH BABY!!!!" << endl;
+  VLOG(2) << "Partition - YEAHH BABY  YEAH BABY!!!!" << endl;
   vector<int> comp;
   Pattern pattern;
   GetPatternAndSampling(&pattern, NULL);
@@ -165,15 +173,16 @@ bool SearchNode::L1_MakeSplit(int split_tuple, int64 * max_work_now){
   Pattern pattern;
   SamplingInfo sampling;
   GetPatternAndSampling(&pattern, &sampling);
-  CHECK(pattern.size()==1);
-  Tuple tuple = pattern[split_tuple];
-  L1_SetSplitTuple(split_tuple);
+  CHECK(pattern.size()>1);
  
   // create the @#$*ing maps
   GetChangelist()->ChangeValue(&tuple_to_child_, new map<Tuple, SearchNode *>);
   GetChangelist()->Creating(tuple_to_child_);
   GetChangelist()->ChangeValue(&child_to_tuple_, new map<SearchNode *, Tuple>);
   GetChangelist()->Creating(child_to_tuple_);
+
+  Tuple tuple = pattern[split_tuple];
+  L1_SetSplitTuple(split_tuple);
 
   uint64 num_matches = 
     GetNumWildcardMatches(tuple, sampling);
@@ -226,14 +235,12 @@ bool SearchNode::L1_MakeOneTuple(int64* max_work_now) {
 }
 void SearchNode::L1_MakeBaby(){
   CHECK(type_ != BABY);
-  set<SearchNode*> children_ = GetChildren();  
-  forall(run, children_) (*run)->L1_Erase();
-  L1_SetWork(0);
-  L1_SetNumSatisfactions(0);
-  if (type_ == ONE_TUPLE || type_ == SPLIT) {
+  if (type_ == ONE_TUPLE) {    
     L1_SetSplitTuple(-1);
   }
   if (type_ == SPLIT) {
+    L1_RemoveAllSplitChildren();
+    L1_SetSplitTuple(-1);
     GetChangelist()->Destroying(tuple_to_child_);
     GetChangelist()->Destroying(child_to_tuple_);
     GetChangelist()->ChangeValue(&tuple_to_child_, 
@@ -242,9 +249,13 @@ void SearchNode::L1_MakeBaby(){
 				 (typeof(child_to_tuple_))NULL);
   }
   if (type_ == PARTITION) {
+    set<SearchNode*> children_ = GetChildren();
+    forall(run, children_) (*run)->L1_Erase();
     GetChangelist()->Destroying(partition_);
     GetChangelist()->ChangeValue(&partition_, (typeof(partition_))NULL);
   } 
+  L1_SetWork(0);
+  L1_SetNumSatisfactions(0);
   A1_SetType(BABY);  
   BabyCheck();
 }
@@ -315,16 +326,17 @@ GetPatternAndSampling(Pattern * pattern, SamplingInfo * sampling) const{
   for (int i=(int)path_to_root.size()-1; i>=0; i--) {
     const SearchNode *child = path_to_root[i];
     const SearchNode *parent = child->parent_;
-    if (parent_->type_ == SPLIT) {
+    if (parent->type_ == SPLIT) {
+      CHECK((*parent->child_to_tuple_) % (SearchNode *)child);
       Tuple variable_tuple 
-	= tree_->pattern_[tuple_to_tree_tuple[parent_->split_tuple_]];
-      Tuple constant_tuple = (*parent_->child_to_tuple_)[(SearchNode *)child];
+	= tree_->pattern_[tuple_to_tree_tuple[parent->split_tuple_]];
+      Tuple constant_tuple = (*parent->child_to_tuple_)[(SearchNode *)child];
       Substitution mini_sub;
       CHECK(ComputeSubstitution(variable_tuple, constant_tuple, &mini_sub));
       complete_sub.Add(mini_sub);
       tuple_to_tree_tuple 
-	= RemoveFromVector(tuple_to_tree_tuple, parent_->split_tuple_);
-    } else if (parent_->type_ == PARTITION) {
+	= RemoveFromVector(tuple_to_tree_tuple, parent->split_tuple_);
+    } else if (parent->type_ == PARTITION) {
       vector<int> new_vec;
       for (uint i=0; i<tuple_to_tree_tuple.size(); i++) {
 	if ((*parent->partition_)[i] == child) 
