@@ -157,8 +157,10 @@ Precondition::Precondition(Model * model,
   vector<int> arbitrary_terms;
   direct_pattern_encoding_ln_likelihood_ = 
     PatternLnLikelihood(Pattern(), pattern_, &arbitrary_terms);  
+
   for (uint i=0; i<arbitrary_terms.size(); i++)
-    model_->L1_AddArbitraryTerm(arbitrary_terms[i]);
+    model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], 1);
+
   model_->A1_InsertIntoPreconditionIndex(pattern_, this);
   ComputeSetTime();
   num_satisfactions_ = 0;
@@ -181,7 +183,7 @@ void Precondition::L1_EraseSubclass(){
   vector<int> arbitrary_terms;
   PatternLnLikelihood(Pattern(), pattern_, &arbitrary_terms);  
   for (uint i=0; i<arbitrary_terms.size(); i++)
-    model_->L1_SubtractArbitraryTerm(arbitrary_terms[i]);
+    model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], -1);
   search_tree_->L1_Erase();
 }
 
@@ -469,7 +471,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
     PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);
   if (IsUniversalRule()) direct_pattern_encoding_ln_likelihood_ = 0;
   for (uint i=0; i<arbitrary_terms.size(); i++)
-    model_->L1_AddArbitraryTerm(arbitrary_terms[i]);
+    model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], 1);
 
   // TUPLE ENCODING STUFF
   //vector<Tuple> causes = ComputeCauses();
@@ -537,7 +539,7 @@ void Rule::L1_EraseSubclass(){
   vector<int> arbitrary_terms;
   PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);  
   for (uint i=0; i<arbitrary_terms.size(); i++)
-    model_->L1_SubtractArbitraryTerm(arbitrary_terms[i]);
+    model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], -1);
   //forall(run, causing_tuples_) (*run)->A1_RemoveFromRulesCaused(this);
 }
 
@@ -827,7 +829,8 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
 
   // For creative rules, this counts the names and adjusts the naming costs.
   forall (run, right_substitution_.sub_)  
-    model_->L1_AddArbitraryTerm(run->second);
+    model_->chooser_->L1_ChangeObjectCount(run->second, 1);
+    // TODO make this reference the local chooser
 
   ComputeSetTime();
   ComputeSetLnLikelihood();
@@ -842,8 +845,9 @@ void Firing::L1_EraseSubclass() {
   rule_sat_->A1_RemoveFiring(right_substitution_);
   rule_sat_->ComputeSetLnLikelihood();
   forall (run, right_substitution_.sub_)
-    model_->L1_SubtractArbitraryTerm(run->second);
+    model_->chooser_->L1_ChangeObjectCount(run->second, -1);
 }
+
 Substitution Firing::GetFullSubstitution() const{
   Substitution ret = right_substitution_;
   ret.Add(rule_sat_->satisfaction_->substitution_);
@@ -1023,6 +1027,7 @@ Record Precondition::RecordForDisplaySubclass() const{
   }
   r["num_sat(explicit)"]
     = itoa(num_satisfactions_) + " (" + itoa(satisfactions_.size()) + ")";
+  r["work"] = itoa(search_tree_->GetWork());
   return r;
 }
 Record Rule::RecordForDisplaySubclass() const{

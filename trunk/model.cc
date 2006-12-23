@@ -169,10 +169,9 @@ TrueTuple::GetCauseTrueTuples() const{
 Model::Model(){
   next_id_ = 0;
   ln_likelihood_ = 0.0;
-  arbitrary_term_ln_likelihood_ = 0.0;
-  total_arbitrary_terms_ = 0;
-  work_penalty_ = 0.01;
+  work_penalty_ = 0.001;
   old_style_display_ = false;
+  chooser_ = new Chooser(this, NULL);
 
   // Load up the words
   ifstream input("words");
@@ -206,46 +205,124 @@ void Model::L1_ReleaseID(int id) {
   A1_RemoveFromIDToComponent(id);
 }
 
-// if there are k distinct terms and n total terms, and the frequency of
-// term i is f_i, and E is our favorite probabilitiy distribution over 
-// non-negative integers then arbitrary_term_ln_likelihood_ is the log of:
-// E(k) PROD[f_i! E(f_i-1)] k! / n!
-
-// this is the change in arbitrary_term_ln_likelihood_ when adding 1 to f_i
-double DProb(int f_i, // before 1 is added
-	     int k, // including term i
-	     int n) { // before 1 is added
-  double d_prob = 0;
-  d_prob += log(f_i+1.0) - log(n+1.0);
-  d_prob += uintQuadraticLnProb(f_i+1-1);
-  if (f_i > 0) d_prob -= uintQuadraticLnProb(f_i-1);
-  if (f_i == 0) {
-    d_prob += log((double)k);
-    d_prob += uintQuadraticLnProb(k)-uintQuadraticLnProb(k-1);
+/*
+  To compute the likelihood, we multiply the following:
+  1.  The likelihood of the ordering : Prod(count_i!)/(total!) 
+  2.  The number of ways we could have picked these objects
+       from the parent distribution: (count.size()!)
+  3.  The sequence of object counts:
+    a.  The number of counts which are ones: 1/(count.size()+1)
+    b.  Which ones are ones (num_ones_!*(count.size()-num_ones_)!/count.size()!)
+    c.  The other counts: Prod(L(count_i-2))
+        Where L is a probility distribution over non-negative integers.  
+  (note that the count.size()! cancels.).
+*/
+double Chooser::ComputeLnLikelihood() const {
+  double ret;
+  int total = 0;
+  int num_ones = 0;
+  forall(run, counts_) {
+    int count = run->second;
+    total += count;
+    ret += LnFactorial(count);
+    if (count > 1) {
+      ret += uintQuadraticLnProb(count-2);    
+    } else {
+      CHECK(count > 0);
+      num_ones++;
+    }
   }
-  CHECK(finite(d_prob));
-  return d_prob;
+  CHECK(num_ones == num_ones_);
+  CHECK(total == total_);
+  ret -= LnFactorial(total_);
+  ret -= log(counts_.size()+1);
+  ret += LnFactorial(num_ones_) + LnFactorial(counts_.size()-num_ones_);
+  return ret;
 }
 
-
-void Model::L1_AddArbitraryTerm(int w){ // TODO: more to encode here.
-  A1_AddToArbitraryTermCounts(w, 1);
-  A1_AddToTotalArbitraryTerms(1);
-  double d_prob = DProb(arbitrary_term_counts_[w]-1, 
-			arbitrary_term_counts_.size(), 
-			total_arbitrary_terms_-1);
-  A1_AddToArbitraryTermLnLikelihood(d_prob);
-  A1_AddToLnLikelihood(d_prob);
+void Chooser::L1_AddToLnLikelihood(double delta) {
+  model_->GetChangelist()->ChangeValue(&ln_likelihood_, 
+				       ln_likelihood_ +  delta);
+  model_->A1_AddToLnLikelihood(delta);
 }
 
-void Model::L1_SubtractArbitraryTerm(int w){
-  double d_prob = DProb(arbitrary_term_counts_[w]-1, 
-			arbitrary_term_counts_.size(),
-			total_arbitrary_terms_-1);
-  A1_AddToArbitraryTermCounts(w, -1);
-  A1_AddToTotalArbitraryTerms(-1);
-  A1_AddToArbitraryTermLnLikelihood(-d_prob);
-  A1_AddToLnLikelihood(-d_prob);
+void Chooser::L1_ChangeObjectCount(int object, int delta) {
+
+  CHECK (delta != 0);
+  int * look = counts_ % object;
+  int old_count = look ? *look : 0;
+  int new_count = old_count + delta;
+  CHECK (new_count >= 0);
+  
+  Changelist * cl = model_->GetChangelist();
+  int old_num_objects = counts_.size();
+  int old_num_ones = num_ones_;
+  int64 old_total = total_;
+  
+  cl->Make(new MapOfCountsAddChange<int, int>(&counts_, object, delta));
+  cl->ChangeValue(&total_, delta + old_total);
+  if (old_count == 1) cl->ChangeValue(&num_ones_, num_ones_ - 1);
+  if (new_count == 1) cl->ChangeValue(&num_ones_, num_ones_ + 1);
+  
+  int new_num_objects = counts_.size();
+  int new_num_ones = num_ones_;
+  int64 new_total = total_;
+
+  double ll_delta = 0;
+  ll_delta -= LnFactorial(old_count); ll_delta += LnFactorial(new_count);
+  CHECK(finite(ll_delta));
+  if (old_count > 1) ll_delta -= uintQuadraticLnProb(old_count - 2);
+  if (new_count > 1) ll_delta += uintQuadraticLnProb(new_count - 2);
+  CHECK(finite(ll_delta));
+  
+  ll_delta += LnFactorial(old_total); ll_delta -= LnFactorial(new_total);
+  ll_delta += log(old_num_objects + 1); ll_delta -= log(new_num_objects + 1);
+  CHECK(finite(ll_delta));
+  ll_delta -= LnFactorial(old_num_ones); ll_delta += LnFactorial(new_num_ones);
+  CHECK(finite(ll_delta));
+  ll_delta -= LnFactorial(old_num_objects - old_num_ones);
+  ll_delta += LnFactorial(new_num_objects - new_num_ones);
+  CHECK(finite(ll_delta));
+
+  L1_AddToLnLikelihood(ll_delta);
+
+  // Propagate to parent
+  if (!parent_) return;
+  if (new_count == 0)
+    parent_->L1_ChangeObjectCount(object, -1);
+  if (old_count == 0)
+    parent_->L1_ChangeObjectCount(object, 1);
+}
+
+Chooser::Chooser(Model *model, Chooser *parent){
+  parent_ = parent;
+  model_ = model;
+  ln_likelihood_ = 0;
+  total_ = 0;
+  num_ones_ = 0;
+  model_->GetChangelist()->Creating(this);
+}
+void Chooser::L1_Erase(){
+  CHECK(counts_.size()==0);
+  CHECK(fabs(ln_likelihood_) < .0001);
+  CHECK(total_ ==0);
+  model_->GetChangelist()->Destroying(this);
+}
+
+Record Chooser::ChooserInfo(bool include_objects) {
+  Record r;
+  r["Ln Likelihood"] = dtoa(ln_likelihood_);
+  r["Num Ones"] = itoa(num_ones_);
+  r["Total"] = itoa(total_);
+  r["Num Objects"] = itoa(counts_.size());
+  if (!include_objects) return r;
+
+  forall (run, counts_) {
+    int object = run->first;
+    int count = run->second;
+    r["objects"] += LEXICON.GetString(object) + ":" + itoa(count) + "<br>";
+  }
+  return r;
 }
 
 // postcondition: no times dirty.
@@ -485,14 +562,13 @@ void Model::Load(string filename) {
 Record Model::ModelInfo() const{ 
   Record r;
   r["Ln Likelihood"] = dtoa(ln_likelihood_);
-  r["Ln likelihood(arbitrary terms)"] = dtoa(arbitrary_term_ln_likelihood_);
+  r["Ln likelihood(global chooser)"] = dtoa(GetChooserLnLikelihood());
+  r["Work"] = itoa(GetSearchWork());
+  r["Utility"] = dtoa(GetUtility());
   r["required never happen"] = itoa(required_never_happen_.size());
   r["violated prohibitions"] = itoa(violated_prohibitions_.size());
-  string awc;
-  forall(run, arbitrary_term_counts_) 
-    awc += itoa(run->second) + " : " + LEXICON.GetString(run->first) + "<br>\n";
-  r["Term Counts (arbitrary terms)"] = awc;
-  return r;  
+  r["chooser"] = RecordToHTMLTable(chooser_->ChooserInfo(true));
+  return r;
 }
 
 string Model::DLinkBar() const {
@@ -564,7 +640,8 @@ void Model::ToHTML(string dirname) const {
 }
 
 void Model::VerifyLikelihood() const{
-  double total = arbitrary_term_ln_likelihood_;
+  double total = GetChooserLnLikelihood();
+  // TODO add in the likelihoods from all choosers
   forall(run, id_to_component_){
     total += run->second->ln_likelihood_;
   }
@@ -576,6 +653,7 @@ void Model::VerifyLikelihood() const{
     CHECK(false);
   }
 }
+
 void Model::VerifyLinkBidirectionality() const {
   set<pair<Component *, Component *> > td1, td2, p1, p2;
   forall(run, id_to_component_){
@@ -694,12 +772,6 @@ set<Rule *> Model::GetAllRules() const {
 	       run->second->rules_.end());
   }
   return ret;
-}
-
-int Model::ArbitraryTermCount(int term) const {
-  const int * res = arbitrary_term_counts_ % term;
-  if (!res) return 0;
-  return *res;
 }
 
 Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
@@ -887,21 +959,6 @@ void Model::A1_InsertIntoSpecProhibitions(Prohibition *p) {
 void Model::A1_RemoveFromSpecProhibitions(Prohibition *p) {
   changelist_.Make
     (new SetRemoveChange<Prohibition *>(&spec_prohibitions_, p));
-}
-void Model::A1_AddToArbitraryTermCounts(int t, int delta) {
-  changelist_.Make
-    (new MapOfCountsAddChange<int, int>(&arbitrary_term_counts_, 
-					t, delta));
-}
-void Model::A1_AddToTotalArbitraryTerms(int delta) {
-  changelist_.Make
-    (new ValueChange<int>(&total_arbitrary_terms_, 
-			  total_arbitrary_terms_+delta));
-}
-void Model::A1_AddToArbitraryTermLnLikelihood(double delta) {
-  changelist_.Make
-    (new ValueChange<double>(&arbitrary_term_ln_likelihood_, 
-			     arbitrary_term_ln_likelihood_+delta));
 }
 void Model::A1_AddToLnLikelihood(double delta) {
   changelist_.Make

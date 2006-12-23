@@ -107,15 +107,15 @@ public:
 
 int main(){
   vector<string> v;
-  v.push_back("cat");
-  v.push_back("r");
-  v.push_back("dog");
-  Horses h(5, v, true);
-
-  //v.push_back("horses");
+  //v.push_back("cat");
   //v.push_back("r");
-  //v.push_back("elephants");
-  //v.push_back("cows");
-  //Horses h(12, v, true);
+  //v.push_back("dog");
+  //Horses h(5, v, true);
+
+  v.push_back("horses");
+  v.push_back("r");
+  v.push_back("elephants");
+  v.push_back("cows");
+  Horses h(13, v, true);
   h.Run(1000);  
 }

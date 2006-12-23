@@ -72,6 +72,35 @@ inline ostream& operator<<(ostream& o, const SubRuleInfo& sri) {
   return (o << sri.ToString());
 }
 
+// Keeps track of the likelihood of a sequence of choices of objects.  
+// Doesn't actually keep track of the sequence.
+// A chooser can have a parent chooser.  This means that the different objects
+// in this chooser are chosen (once each) by the parent chooser.  Modifying 
+// this chooser automatically modifies the parent chooser.
+// 
+// We use choosers in the model in several places where we need to encode 
+// sequences of objects.  The current two places are naming objects in 
+// defining rules and preconditions, and dynamic naming choices.  
+// In defining rules and preconditions, we use a global chooser associated
+// with the model, and in dynamic naming choices, we use one child chooser per
+// creative variable per rule.  
+
+struct Chooser {
+  Model * model_;
+  Chooser *parent_;
+  double ln_likelihood_;
+  map<int, int> counts_;
+  int num_ones_; // nuber of objects with count 1.
+  int64 total_;
+  Chooser(Model *model, Chooser *parent);
+  void L1_Erase();
+  void L1_ChangeObjectCount(int object, int delta);
+  //  update the ln likelihood of this object and of the model.
+  void L1_AddToLnLikelihood(double delta); 
+  double ComputeLnLikelihood() const; // from scratch for verification.
+  Record ChooserInfo(bool include_objects);
+};
+
 class Model {
  public:
   friend class Precondition;
@@ -83,6 +112,7 @@ class Model {
   friend class Component;
   friend class Prohibition;
   friend class SearchNode;
+  friend class Chooser;
 
   // ----- LAYER 3 FUNCTIONS -----
 
@@ -158,8 +188,7 @@ class Model {
   }
 
   // Checks that the ln_likelihood of the model is correctly the sum
-  // of the ln_likelihood of all of the components plus the arbitrary term
-  // naming costs.
+  // of the ln_likelihood of all of the components plus the naming costs
   void VerifyLikelihood() const;
   
   // Checks that the TemporalDependents() and TemporalCodependents() functions 
@@ -203,10 +232,9 @@ class Model {
   bool MayBeTimeFixable() const;
 
   double GetLnLikelihood() const { return ln_likelihood_;}
-  double GetArbitraryTermLnLikelihood() const 
-  { return arbitrary_term_ln_likelihood_;}
+  double GetChooserLnLikelihood() const { return chooser_->ln_likelihood_;}
 
-  double GetSearchWork() const { return search_work_;}
+  uint64 GetSearchWork() const { return search_work_;}
   double GetUtility() const { return ln_likelihood_ 
       - search_work_ * work_penalty_; } 
   
@@ -228,24 +256,12 @@ class Model {
     return components_by_type_[t];
   }
 
-  int ArbitraryTermCount(int term) const;
-
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
     // Assigns a fresh new ID to a component. 
   void L1_AssignNewID(Component * component);
   // When a component is deleted, removes it from the id_to_component_ map.
   void L1_ReleaseID(int id);
-
-
-  // In some parts of the model, we need to encode terms, where context doesn't
-  // help us.  This is accounted for by a global arbitrary term encoder, which
-  // accounts for the entropy of encoding a sequence of terms, using the 
-  // frequencies of the terms to reduce complexity, but not their order. 
-  // The following functions are called to add and remove a term from that 
-  // encoder, and to update the global likelihood.
-  void L1_AddArbitraryTerm(int w);
-  void L1_SubtractArbitraryTerm(int w);
 
   // Call these functions after adding(removing) a tuple to(from) the tuple 
   // index to keep the search trees for the preconditions updated.
@@ -314,9 +330,6 @@ class Model {
   void A1_RemoveFromSpecRequirements(TrueTuple *t);
   void A1_InsertIntoSpecProhibitions(Prohibition *p);
   void A1_RemoveFromSpecProhibitions(Prohibition *p);
-  void A1_AddToArbitraryTermCounts(int t, int delta);
-  void A1_AddToTotalArbitraryTerms(int delta);
-  void A1_AddToArbitraryTermLnLikelihood(double delta);
   void A1_AddToLnLikelihood(double delta);
   void A1_AddToSearchWork(int64 delta);
   void A1_InsertIntoViolatedProhibitions(Prohibition *p);
@@ -354,10 +367,8 @@ class Model {
   
   // Which prohibitions are currently violated
   set<Prohibition *> violated_prohibitions_;
-  
-  map<int, int> arbitrary_term_counts_;
-  int total_arbitrary_terms_;
-  double arbitrary_term_ln_likelihood_; // superfluous
+
+  Chooser * chooser_;
 
   map<Tuple, set<SearchNode *> > wildcard_tuple_to_search_node_;
 

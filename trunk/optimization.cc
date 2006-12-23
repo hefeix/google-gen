@@ -305,6 +305,8 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
   // How much could we save in naming?
   // We don't want to count things that have ArbitraryTermCount 1
   double arbitrary_diff = 0.0;
+
+  /* This no longer works, TODO fix it
   {
     DestructibleCheckpoint checkp(model_->GetChangelist());    
     double old_utility = model_->GetUtility();
@@ -316,6 +318,7 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
     }
     arbitrary_diff = model_->GetUtility() - old_utility;
   }
+  */
   VLOG(1) << "Arbitrary diff: " << arbitrary_diff << endl;
 
   // Choices (do nothing, lose both, lose arbitrary only)
@@ -528,7 +531,7 @@ void Optimizer::RuleInfo::BailIfRecentlyChecked(){
 }
 void Optimizer::RuleInfo::FindNumSatisfactions(){
   // check that the preconditions aren't too much work to searh for.
-  int64 max_work_now = max_work_/denominator_+10;
+  int64 max_work_now = max_work_/denominator_ * 2 +10;
   bool success = 
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
     (r_.first, precondition_sampling_, 
@@ -544,11 +547,11 @@ void Optimizer::RuleInfo::FindNumSatisfactions(){
   estimated_satisfactions_ 
     = sampled_num_satisfactions_ * (sample_postcondition_?1:denominator_);
   
-  if (max_work_>=0 && estimated_satisfactions_ > (uint64)max_work_){
+  /*if (max_work_ >=0 && estimated_satisfactions_ > (uint64)max_work_){
     hopeless_ = true;
     hopeless_cause_ = 2;
     return;
-  }
+    }*/
 }
 
 void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
@@ -927,8 +930,7 @@ void Optimizer::TryAddFirings
       if (!alt_r->Exists()) continue;
     }  
     if (may_want_to_add_negative_rule) {
-      OptimizationCheckpoint cp_negative_rule(this, false);
-      cp_negative_rule.logging_ = true;
+      OptimizationCheckpoint cp_reduce_delay(this, false);
       // make sure r has a smaller delay than alt_r
       if (!(rule->GetDelay() < alt_r->GetDelay())) {
 	EncodedNumber new_delay = alt_r->GetDelay();
@@ -936,9 +938,13 @@ void Optimizer::TryAddFirings
 	rule->ChangeDelay(new_delay);
 	PushTimesAfterChangeDelay(rule);
       }
-      TryMakeFunctionalNegativeRule(alt_r);
-      VLOG(1) << "Made a negative rule. "
-	      << " utility_=" << model_->GetUtility() << endl;      
+      {
+	OptimizationCheckpoint cp_negative_rule(this, false);
+	cp_negative_rule.logging_ = true;
+	TryMakeFunctionalNegativeRule(alt_r);
+	VLOG(1) << "Made a negative rule. "
+		<< " utility_=" << model_->GetUtility() << endl;      
+      }
     }
   }
   VLOG(1) << "removed all alternate explanations " 
@@ -1044,11 +1050,11 @@ void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
   }
   VLOG(1) << "before adding rule utility=" 
 	  << model_->GetUtility() << endl;
-  double added_arbitrary_term_ll = -model_->GetArbitraryTermLnLikelihood();
+  double added_arbitrary_term_ll = -model_->GetChooserLnLikelihood();
   Rule * r = model_->MakeNewRule(preconditions, EncodedNumber(), 
 			    type, 0, result, EncodedNumber(), EncodedNumber());
   r->AddComments(comments);
-  added_arbitrary_term_ll += model_->GetArbitraryTermLnLikelihood();
+  added_arbitrary_term_ll += model_->GetChooserLnLikelihood();
   VLOG(1) << "Rule encoding costs: "
 	  << r->GetPrecondition()->GetDirectPatternEncodingLnLikelihood()
 	  << " + " 

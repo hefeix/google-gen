@@ -311,10 +311,10 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
   if (!tree.L1_Search(max_work_now)) return false;
   uint64 num_sat = tree.GetNumSatisfactions();
   if (num_satisfactions) *num_satisfactions = num_sat;
-  MOREWORK(num_sat);
-  if (substitutions) {
-    tree.GetSubstitutions(substitutions);
-  }
+   if (substitutions) {
+     MOREWORK(num_sat);
+     tree.GetSubstitutions(substitutions);
+   }
   return true;
 }
 

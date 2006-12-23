@@ -152,6 +152,9 @@ bool SearchNode::L1_MakePartition(int64 * max_work_now) {
   vector<int> comp;
   Pattern pattern;
   GetPatternAndSampling(&pattern, NULL);
+  VLOG(2) << "Make Partition pattern=" << TupleVectorToString(pattern)
+	  << " max_work_now=" << (max_work_now?itoa(*max_work_now):"UNLIMITED")
+	  << endl;
   GetChangelist()->ChangeValue(&partition_, 
 			       new vector<SearchNode *>(pattern.size()));
   GetChangelist()->Creating(partition_);
@@ -174,6 +177,9 @@ bool SearchNode::L1_MakeSplit(int split_tuple, int64 * max_work_now){
   SamplingInfo sampling;
   GetPatternAndSampling(&pattern, &sampling);
   CHECK(pattern.size()>1);
+  VLOG(2) << "Make Split pattern=" << TupleVectorToString(pattern)
+	  << " max_work_now=" << (max_work_now?itoa(*max_work_now):"UNLIMITED")
+	  << endl;
  
   // create the @#$*ing maps
   GetChangelist()->ChangeValue(&tuple_to_child_, new map<Tuple, SearchNode *>);
@@ -209,6 +215,9 @@ bool SearchNode::L1_MakeOneTuple(int64* max_work_now) {
   Pattern pattern;
   SamplingInfo sampling;
   GetPatternAndSampling(&pattern, &sampling);
+  VLOG(2) << "MakeOneTuple pattern=" << TupleVectorToString(pattern)
+	  << " max_work_now=" << (max_work_now?itoa(*max_work_now):"UNLIMITED")
+	  << endl;
   CHECK(pattern.size()==1);
   Tuple tuple = pattern[0];
   L1_SetSplitTuple(0);
@@ -216,7 +225,6 @@ bool SearchNode::L1_MakeOneTuple(int64* max_work_now) {
   uint64 num_matches = GetNumWildcardMatches(tuple, sampling);
   L1_SetWork(num_matches);
   if (!duplicate_vars){
-    L1_SetNumSatisfactions(num_matches);
     MOREWORK(1);
     L1_SetNumSatisfactions(num_matches);
   } else {
@@ -282,6 +290,10 @@ bool SearchNode::L1_Search(int64 * max_work_now) {
   Pattern pattern;
   SamplingInfo sampling;
   GetPatternAndSampling(&pattern, &sampling);
+  VLOG(2) << "Search pattern=" << TupleVectorToString(pattern)
+	  << " max_work_now=" << (max_work_now?itoa(*max_work_now):"UNLIMITED")
+	  << endl;
+    
   if (pattern.size()==0) return L1_MakeNoTuples();
   if (pattern.size()==1) return L1_MakeOneTuple(max_work_now);
   
@@ -301,6 +313,8 @@ bool SearchNode::L1_Search(int64 * max_work_now) {
   forall(run, children) {
     if (!(*run)->L1_Search(max_work_now)) return false;
   }
+  VLOG(2) << "Search returning true " << TupleVectorToString(pattern)
+	  << endl;
   return true;
 }
 
