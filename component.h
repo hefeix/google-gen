@@ -60,6 +60,7 @@
 #include "numbers.h"
 
 class Model;
+class Chooser;
 class Component; //  a basic part of the model.  There are several subtypes.
 
 // These are the types of components
@@ -146,10 +147,11 @@ class Component{
   string HTMLLink(string text) const;
   
   // Key-Value pairs to be displayed in the HTML viewer. 
-  Record RecordForDisplay() const;
+  Record RecordForDisplay(bool verbose) const;
   
   // Type-specific key-value pairs.  Called by RecordForDisplay()
-  virtual Record RecordForDisplaySubclass() const {CHECK(0); return Record(); }
+  virtual Record RecordForDisplaySubclass(bool verbose) 
+    const {CHECK(0); return Record(); }
 
   // Used when storing the model
   Record RecordForStorge() const;
@@ -305,7 +307,7 @@ class Precondition : public Component {
   // ----- CONST FUNCTIONS ----- Precondition
 
   ComponentType Type() const;
-  Record RecordForDisplaySubclass() const;
+  Record RecordForDisplaySubclass(bool verbose) const;
   Record RecordForStorageSubclass() const;
   bool HasPurpose() const;
   vector<Component *> Purposes() const; // Rules
@@ -432,7 +434,7 @@ class Satisfaction : public Component {
   // ----- CONST FUNCTIONS ----- Satisfaction
 
   ComponentType Type() const;
-  Record RecordForDisplaySubclass() const;
+  Record RecordForDisplaySubclass(bool verbose) const;
   Record RecordForStorageSubclass() const;
   inline bool NeedsPurpose() const; // yes
   vector<Component *> TemporalDependents() const; // the rule_sats
@@ -514,7 +516,7 @@ class Rule : public Component{
   // figures out what tuples cause the rule under the tuple encoding.
   // set<Tuple> ComputeTupleCauses() const;
   ComponentType Type() const;
-  Record RecordForDisplaySubclass() const;
+  Record RecordForDisplaySubclass(bool verbose) const;
   Record RecordForStorageSubclass() const;
   vector<Component *> TemporalDependents() const;
   vector<Component *> StructuralDependents() const;
@@ -524,7 +526,7 @@ class Rule : public Component{
   // Variables in the precondition
   set<int> LeftVariables() const;
   // Variables in the result which are not in the precondition.
-  set<int> RightVariables() const;
+  set<int> CreativeVariables() const;
   // Does this rule ever fire?
   bool HasFiring() const;
   // How many times does this rule fire?
@@ -635,7 +637,10 @@ class Rule : public Component{
   // Under direct encoding, the encoding cost of the tuples, excluding
   // universal naming costs accounted for elsewhere.
   double direct_pattern_encoding_ln_likelihood_;
-
+  
+  // One chooser for each creative variable.
+  map<int, Chooser *> choosers_;
+  
   // TUPLE ENCODING STUFF
   // used if the rule is tuple encoded.
   // The rule only comes into the model once the TrueTuples that describe
@@ -667,7 +672,7 @@ class RuleSat : public Component{ // an instance of a rule coming true
   Firing * FindFiring(const Substitution &sub) const;
   int NumFirings() const { return firings_.size(); }
   ComponentType Type() const;
-  Record RecordForDisplaySubclass() const;
+  Record RecordForDisplaySubclass(bool verbose) const;
   Record RecordForStorageSubclass() const;
   bool NeedsPurpose() const;
   string ImplicationString(const Firing *firing) const;
@@ -737,7 +742,7 @@ class Firing : public Component{
   // ----- CONST FUNCTIONS ----- Firing
 
   ComponentType Type() const;
-  Record RecordForDisplaySubclass() const;
+  Record RecordForDisplaySubclass(bool verbose) const;
   Record RecordForStorageSubclass() const;
   string ImplicationString() const;
   RuleSat * GetRuleSat() const{ return rule_sat_;}
@@ -794,7 +799,7 @@ class TrueTuple : public Component{
   // ----- CONST FUNCTIONS ----- TrueTuple
 
   ComponentType Type() const;
-  Record RecordForDisplaySubclass() const;
+  Record RecordForDisplaySubclass(bool verbose) const;
   Record RecordForStorageSubclass() const;
   set<Firing *> GetResultFirings() const;
   set<TrueTuple *> GetResultTrueTuples() const;

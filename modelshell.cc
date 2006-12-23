@@ -130,7 +130,7 @@ string ModelShell::HandleHtml(map<string, string> params) {
   if (command == "showcomponent") {
     uint id = atoi(params["id"]);
     Component * c = model_->GetComponent(id);
-    if (c) ret << RecordToHTMLTable(c->RecordForDisplay());
+    if (c) ret << RecordToHTMLTable(c->RecordForDisplay(true));
   }
 
   // This should be last :)

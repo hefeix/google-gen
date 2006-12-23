@@ -603,7 +603,7 @@ void Model::ToHTMLByComponentType
   forall(run, id_to_component_) {
     Component * c = run->second;
     if (ct % c->Type()) 
-      m[c->Type()].push_back(c->RecordForDisplay());
+      m[c->Type()].push_back(c->RecordForDisplay(false));// TODO
   }
   forall(run, m) {
     string type_name = ComponentTypeToString(run->first);
@@ -624,24 +624,33 @@ void Model::ToHTML(string dirname) const {
   output.close();
   
   map<ComponentType, vector<Record> > m;
-  forall(run, id_to_component_) {
-    Component * c = run->second;
-    m[c->Type()].push_back(c->RecordForDisplay());
-  }
-  forall(run, m) {
-    string type_name = ComponentTypeToString(run->first);
-    output.open((dirname + "/" + type_name + ".html").c_str());
-    output << LinkBar();
-    output << "<h1>" << ComponentTypeToString(run->first) << "</h1>" 
-	   << endl << RecordVectorToHTMLTable(run->second);
-    output.close();
+  for (int pass=0; pass<2; pass++) { 
+    bool verbose = pass;
+    forall(run, id_to_component_) {
+      Component * c = run->second;
+      m[c->Type()].push_back(c->RecordForDisplay(verbose));
+    }
+    forall(run, m) {
+      string type_name = ComponentTypeToString(run->first);
+      output.open((dirname + "/" + type_name + 
+		   (verbose?".v":"")+".html").c_str());
+      output << LinkBar();
+      output << "<h1>" << ComponentTypeToString(run->first) << "</h1>" 
+	     << endl << RecordVectorToHTMLTable(run->second);
+      output.close();
+    }
   }
   cthis->old_style_display_ = false;
 }
 
 void Model::VerifyLikelihood() const{
   double total = GetChooserLnLikelihood();
-  // TODO add in the likelihoods from all choosers
+  set<Rule *> rules = GetAllRules();
+  forall(run, rules) forall(run_c, (*run)->choosers_) {
+    Chooser * c = run_c->second;
+    total += c->ln_likelihood_;
+  }
+    // TODO add in the likelihoods from all choosers
   forall(run, id_to_component_){
     total += run->second->ln_likelihood_;
   }
