@@ -353,14 +353,14 @@ Firing * Rule::FindFiring(const Substitution & sub) const {
   Substitution left_sub = sub.Restrict(LeftVariables());
   RuleSat * rs = FindRuleSat(left_sub);
   if (!rs) return NULL;
-  return rs->FindFiring(sub.Restrict(RightVariables()));
+  return rs->FindFiring(sub.Restrict(CreativeVariables()));
 }
 Firing * Rule::AddFiring(const Substitution & sub) {
   RuleSat * rs = L1_GetAddRuleSat(sub.Restrict(LeftVariables()));
   CHECK(rs);
-  Firing * ret = rs->AddFiring(sub.Restrict(RightVariables()));
+  Firing * ret = rs->AddFiring(sub.Restrict(CreativeVariables()));
   VLOG(2) << "left sub=" << sub.Restrict(LeftVariables()).ToString()
-	  << "left sub=" << sub.Restrict(RightVariables()).ToString() << endl;
+	  << "left sub=" << sub.Restrict(CreativeVariables()).ToString() << endl;
   return ret;
 }
 
@@ -473,6 +473,11 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   for (uint i=0; i<arbitrary_terms.size(); i++)
     model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], 1);
 
+  set<int> creative_vars = CreativeVariables();
+  forall(run, creative_vars) {
+    choosers_[*run] = new Chooser(model_, model_->chooser_);
+  }
+
   // TUPLE ENCODING STUFF
   //vector<Tuple> causes = ComputeCauses();
   //for (uint i=0; i<causes.size(); i++) {
@@ -543,7 +548,7 @@ void Rule::L1_EraseSubclass(){
   //forall(run, causing_tuples_) (*run)->A1_RemoveFromRulesCaused(this);
 }
 
-set<int> Rule::RightVariables() const{
+set<int> Rule::CreativeVariables() const{
   return GetVariables(result_)-LeftVariables();
 }
 set<int> Rule::LeftVariables() const{
@@ -829,7 +834,7 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
 
   // For creative rules, this counts the names and adjusts the naming costs.
   forall (run, right_substitution_.sub_)  
-    model_->chooser_->L1_ChangeObjectCount(run->second, 1);
+    GetRule()->choosers_[run->first]->L1_ChangeObjectCount(run->second, 1);
     // TODO make this reference the local chooser
 
   ComputeSetTime();
@@ -845,7 +850,7 @@ void Firing::L1_EraseSubclass() {
   rule_sat_->A1_RemoveFiring(right_substitution_);
   rule_sat_->ComputeSetLnLikelihood();
   forall (run, right_substitution_.sub_)
-    model_->chooser_->L1_ChangeObjectCount(run->second, -1);
+    GetRule()->choosers_[run->first]->L1_ChangeObjectCount(run->second, -1);
 }
 
 Substitution Firing::GetFullSubstitution() const{
@@ -1006,8 +1011,8 @@ Record TrueTuple::RecordForStorageSubclass() const{
   return r;
 }
 
-Record Component::RecordForDisplay() const{
-  Record r = RecordForDisplaySubclass();
+Record Component::RecordForDisplay(bool verbose) const{
+  Record r = RecordForDisplaySubclass(verbose);
   r["Comments"] = GetComments();
   if (time_dirty_) r["D"] = "DIRTY";
   r["ID"] = itoa(id_) + "<a name=\"" + itoa(id_) + "\">";
@@ -1017,7 +1022,7 @@ Record Component::RecordForDisplay() const{
     r["LL"] += " (" + dtoa(LnLikelihood()) + ")";
   return r;
 }
-Record Precondition::RecordForDisplaySubclass() const{
+Record Precondition::RecordForDisplaySubclass(bool verbose) const{
   Record r;
   r["precondition"] = TupleVectorToString(pattern_);
   r["dpe LL"] = dtoa(direct_pattern_encoding_ln_likelihood_);
@@ -1030,10 +1035,15 @@ Record Precondition::RecordForDisplaySubclass() const{
   r["work"] = itoa(search_tree_->GetWork());
   return r;
 }
-Record Rule::RecordForDisplaySubclass() const{
+Record Rule::RecordForDisplaySubclass(bool verbose) const{
   Record r;
   r["Rule"] = ImplicationString();
   r["Type"] = RuleTypeToString(type_).substr(0, 1);
+  forall(run, choosers_) {
+    r["choosers"] += LEXICON.GetString(run->first) + 
+      RecordToHTMLTable(run->second->ChooserInfo(verbose))
+      + "<br>";
+  }
   r["f/ff/s"] = "f " + itoa(NumFirings()) + "<br>ff " + itoa(NumFirstFirings())
     + "<br>s " + itoa(precondition_->num_satisfactions_); 
   r["dpe LL"] = dtoa(direct_pattern_encoding_ln_likelihood_);
@@ -1047,19 +1057,20 @@ Record Rule::RecordForDisplaySubclass() const{
   }
   if(type_==NEGATIVE_RULE) 
     r["target"] = target_rule_->HTMLLink(itoa(target_rule_->id_));
+  if (!verbose)  return r;
   vector<Firing *> f = Firings();
   for(uint i=0; i<f.size(); i++) {
-    r["firngs"] += f[i]->ImplicationString() + "<br>\n";
+    r["firings"] += f[i]->ImplicationString() + "<br>\n";
   }
   return r;
 }
-Record Satisfaction::RecordForDisplaySubclass() const{
+Record Satisfaction::RecordForDisplaySubclass(bool verbose) const{
   Record r;
   r["precondition"] = precondition_->HTMLLink(TupleVectorToString(precondition_->pattern_));
   r["substitution"] = substitution_.ToString();
   return r;
 }
-Record RuleSat::RecordForDisplaySubclass() const{
+Record RuleSat::RecordForDisplaySubclass(bool verbose) const{
   Record r;
   r["rule"] = ImplicationString(NULL);
   r["sat."] = satisfaction_->HTMLLink(itoa(satisfaction_->id_));
@@ -1076,7 +1087,7 @@ Record RuleSat::RecordForDisplaySubclass() const{
   }
   return r;
 }
-Record Firing::RecordForDisplaySubclass() const{
+Record Firing::RecordForDisplaySubclass(bool verbose) const{
   Record r;
   r["rule_sat"] = rule_sat_->HTMLLink(itoa(rule_sat_->id_));
   r["implication"] = ImplicationString();
@@ -1084,7 +1095,7 @@ Record Firing::RecordForDisplaySubclass() const{
     r["true_tuples"] += (*run)->HTMLLink((*run)->tuple_.ToString());
   return r;
 }
-Record TrueTuple::RecordForDisplaySubclass() const {
+Record TrueTuple::RecordForDisplaySubclass(bool verbose) const {
   Record r;
   r["Tuple"] = tuple_.ToString();
   forall(run, causes_) {
