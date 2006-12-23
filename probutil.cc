@@ -32,7 +32,7 @@ double LnFactorial(uint n){
   if (!init) {
     init = true;
     cache[0] = 0;
-    for (int i=0; i<1001; i++) cache[i] = cache[i-1] + log((double)i);    
+    for (int i=1; i<1001; i++) cache[i] = cache[i-1] + log((double)i);    
   }
   if (n<=1000) return cache[n];
   double lower = 1000.5;
