@@ -218,7 +218,7 @@ void Model::L1_ReleaseID(int id) {
   (note that the count.size()! cancels.).
 */
 double Chooser::ComputeLnLikelihood() const {
-  double ret;
+  double ret = 0;
   int total = 0;
   int num_ones = 0;
   forall(run, counts_) {
@@ -623,8 +623,8 @@ void Model::ToHTML(string dirname) const {
   output << RecordToHTMLTable(ModelInfo());
   output.close();
   
-  map<ComponentType, vector<Record> > m;
   for (int pass=0; pass<2; pass++) { 
+    map<ComponentType, vector<Record> > m;
     bool verbose = pass;
     forall(run, id_to_component_) {
       Component * c = run->second;
