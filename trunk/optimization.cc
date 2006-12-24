@@ -270,7 +270,6 @@ TrueTuple * Optimizer::GetRandomTrueTuple(){
 
 // This assumes the truetuple currently happens at some time
 double Optimizer::GuessBenefit(const TrueTuple * tp) {
-
   // Get all causes
   const set<Firing*> & causes = tp->GetCauses();
   CHECK(causes.size());			    
@@ -306,19 +305,22 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
   // We don't want to count things that have ArbitraryTermCount 1
   double arbitrary_diff = 0.0;
 
-  /* This no longer works, TODO fix it
   {
     DestructibleCheckpoint checkp(model_->GetChangelist());    
     double old_utility = model_->GetUtility();
     Substitution sub = first_cause->GetRightSubstitution();
     forall(run, sub.sub_) {
       int term = run->second;
-      int count = model_->ArbitraryTermCount(term);
-      if (count != 1) model_->L1_SubtractArbitraryTerm(term);
+      // int count = model_->ArbitraryTermCount(term);
+      // if (count != 1) 
+      // model_->L1_SubtractArbitraryTerm(term);
+      int var = run->first;
+      Chooser * ch = (*rule->GetChoosers())[var];
+      CHECK(ch);
+      ch->L1_ChangeObjectCount(term, -1);
     }
     arbitrary_diff = model_->GetUtility() - old_utility;
   }
-  */
   VLOG(1) << "Arbitrary diff: " << arbitrary_diff << endl;
 
   // Choices (do nothing, lose both, lose arbitrary only)
@@ -563,6 +565,8 @@ void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
       vector<Tuple> simplified_preconditions = RemoveFromVector(r_.first, i);
       SamplingInfo simplified_sampling = precondition_sampling_;
       if (sampled_) {
+	// TODO: We probably won't be able to remove the sampled precondition
+	// do something about this.
 	if ((int)i < sample_clause_) {
 	  simplified_sampling.position_--;	  
 	} else if ((int)i == sample_clause_){
@@ -706,10 +710,6 @@ bool Optimizer::RuleInfo::Vette(){
 
       // TODO: Try adding clauses to increase precision.
 
-      // Try to remove preconditions that are not very restrictive.
-      RemoveUnrestrictivePreconditions();
-      if (needs_bigger_sample_) continue; if (hopeless_) return false;
-
       RemoveBoringVariables();
       if (needs_bigger_sample_) continue; 
       if (hopeless_) {
@@ -717,6 +717,10 @@ bool Optimizer::RuleInfo::Vette(){
 		<< endl;
 	return false;
       }
+
+      // Try to remove preconditions that are not very restrictive.
+      RemoveUnrestrictivePreconditions();
+      if (needs_bigger_sample_) continue; if (hopeless_) return false;
 
       Canonicalize();
       if (needs_bigger_sample_) continue; if (hopeless_) return false;

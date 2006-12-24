@@ -559,6 +559,10 @@ class Rule : public Component{
   const set<Rule *> & GetInhibitors() const {
     return inhibitors_;
   }
+
+  // TODO: THIS IS A HACK.  SHOULD BE PRIVATE
+  map<int, Chooser *> * GetChoosers() { return &choosers_;}
+
  private:
   // ----- CONSTRUCTOR(S) ----- Rule
 
