@@ -35,8 +35,25 @@
 struct SearchNode;
 class TupleIndex;
 
-// Used in combining rules
-// GEORGES - COMMENT
+//
+// In factoring rules, the model stores a map from Patterns to SubRuleInfo(s)
+//
+// Each SubRuleInfo represents a subset of a rule. These are indexed by 
+// Pattern. The model stores this as a map from Patterns to SubRuleInfo(s).
+// SubRuleInfos include clauses from the preconditions as well as the 
+// postconditions. 
+//
+// In order for us to notice similarities between subsets of rules, each
+// subset Pattern is represented in canonical form. In order to be able to go 
+// back to the clauses that contributed to this subrule, that canonicalization 
+// is stored in sub_.
+//
+// This is used in the optimization by looking at a random Pattern, and making
+// that pattern the LHS of a new rule that introduces a new predicate, and then
+// factoring the pattern in all existing rules, replacing it by the new
+// predicate.
+//
+
 struct SubRuleInfo {
   Rule *        rule_;
   // This is a variable to variable sub to get to the common canonicalized form
@@ -48,6 +65,10 @@ struct SubRuleInfo {
     postcondition_ = false;
   }
 
+  // Since Rule*s are stable, and our main storage structure is a map, the 
+  // most important thing to compare in subrule infos are the Rule *s
+  // We still need the other comparators because one Rule may contribute 
+  // multiple times to the same Pattern as different SubRuleInfos
   bool operator<(const SubRuleInfo& s) const {
     // Ironically pointers are more stable than IDs
     if (rule_ < s.rule_) return true;
