@@ -1,0 +1,18 @@
+= The GeN Project Introduction (non-technical) =
+
+== What's this project all about? ==
+The time has come to build a system that can use unlabeled data to deduce the relationships between objects with no human input or labelling.   The system should be able to discover hidden relationships, as well as hypothesize new types of relationships and hidden rules of its own invention.   
+== How can the computer know what is right without human-labeled data? ==
+The same way scientists have been doing it for hundreds of years.  It's called Occham's Razor.  The simplest (or most likely) explanation is generally the best, and even though we can't know that it's true, it is quite useful for predicting new and unobserved data.
+== Isn't this a very ambitious project? ==
+Yes.
+== Who are you? == 
+We are a couple of computer scientists who have built some big (but not as general-purpose) machine learning systems at [http://google.com Google] (which is a very fun place to  [http://google.com/jobs work]). Here's our <a href="contact.html">Contact Info</a>.
+== Why is this project open source? ==
+Because it is a very ambitious project.  We think we could get pretty far ourselves, but we think we have designed our system in a way that lots of other researchers could usefully contribute.  We think this system could be a big technological leap forward, and we are excited to see it succeed. 
+== How is your system different from all the other overblown "AI" claims?  Why would I want to work with you? ==
+If you are not our close personal friend, we are shocked you have read this far.   If after reading our <a href="system_intro.html">System Intro</a> page, you know in your heart that our approach is the right one, and if you want to work with us, then <a href="contact.html">Contact Us</a>.  Otherwise, we will try to get our system to do something moderately impressive in the next few months, (like learning to do arithmetic by example) in order to convince you. 
+
+
+
+
