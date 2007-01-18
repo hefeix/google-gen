@@ -6,7 +6,7 @@ The time has come to build a system that can use unlabeled data to deduce the re
 The same way scientists have been doing it for hundreds of years.  It's called Occham's Razor.  The simplest (or most likely) explanation is generally the best, and even though we can't know that it's true, it is quite useful for predicting new and unobserved data.
 == Isn't this a very ambitious project? ==
 Yes.
-== Who are you? == 
+== Who are you? ==
 We are a couple of computer scientists who have built some big (but not as general-purpose) machine learning systems at [http://google.com Google] (which is a very fun place to  [http://google.com/jobs work]). Here's our [http://code.google.com/p/google-gen/wiki/Contact Contact Info].
 == Why is this project open source? ==
 Because it is a very ambitious project.  We think we could get pretty far ourselves, but we think we have designed our system in a way that lots of other researchers could usefully contribute.  We think this system could be a big technological leap forward, and we are excited to see it succeed. 
