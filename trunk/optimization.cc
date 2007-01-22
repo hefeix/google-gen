@@ -789,8 +789,20 @@ void Optimizer::TryRemoveFiring(Firing *f){
   }
 }
 
+void Optimizer::PushTimesThroughRuleSats(TrueTuple *tt){
+  if (!tt->ComputeSetTime()) return;
+  forall(run_sat, tt->GetSatisfactions()) {
+    Satisfaction *sat = *run_sat;
+    if (!sat->ComputeSetTime()) continue;
+    forall(run_rs, sat->GetRuleSats()) {
+      RuleSat * neg_rs = *run_rs;
+      neg_rs->ComputeSetTime();
+    }
+  }
+}
+
 // Propagates the time change after we change the delay of a rule
-// through the true tuples it causes and the negative rule sats in which
+// through the true tuples it causes and the rule sats in which
 // they participate.
 // This is to avoid fixing all of the times in the model.
 void Optimizer::PushTimesAfterChangeDelay(Rule *rule){
@@ -803,17 +815,8 @@ void Optimizer::PushTimesAfterChangeDelay(Rule *rule){
       if (!f->ComputeSetTime()) continue;
       forall(run_tt, f->GetTrueTuples()){
 	TrueTuple * tt = *run_tt;
-	if (!tt->ComputeSetTime()) continue;
-	forall(run_sat, tt->GetSatisfactions()) {
-	  Satisfaction *sat = *run_sat;
-	  if (!sat->ComputeSetTime()) continue;
-	  forall(run_neg_rs, sat->GetRuleSats()) {
-	    RuleSat * neg_rs = *run_neg_rs;
-	    if (neg_rs->GetRule()->GetRuleType() == NEGATIVE_RULE) 
-	      neg_rs->ComputeSetTime();
-	  }
-	}
-      }
+	PushTimesThroughRuleSats(tt);
+      }	
     }
   }  
 }
@@ -944,7 +947,7 @@ void Optimizer::TryAddFirings
       }
       VLOG(1) << "added functional negative rule. "
 	      << " utility_=" << model_->GetUtility() << endl;      
-      
+
       MakeNegativeRuleSatsHappenInTime(negative_rule_sats);
       model_->FixTimes(); // TODO - just fix some times.
       VLOG(1) << "after MakeNegativeRuleSatsHappenInTime "
@@ -1028,6 +1031,19 @@ struct RuleSatTimeNode{
   }
   ~RuleSatTimeNode(){
     forall (run, children_) delete (*run);
+  }
+  void Display(int indentation){
+    Pattern prec = rulesat_->GetRule()->GetPrecondition()->GetPattern();
+    Pattern res = rulesat_->GetRule()->GetResult();
+    Substitution sub = rulesat_->GetSatisfaction()->GetSubstitution();
+    sub.Substitute(&prec);
+    sub.Substitute(&res);
+    VLOG(0) << string(indentation, ' ') 
+	    << "t=" << time_.ToSortableString()
+	    << " muct=" << max_unrepresented_child_time_.ToSortableString()
+	    << " rs=" << TupleVectorToString(prec) 
+	    << "->" << TupleVectorToString(res) << endl;
+    forall(run, children_) (*run)->Display(indentation+2);
   }
   bool UsesNonstandardDelay() {
     return delay_map_->UsesNonstandardDelay(rulesat_);
@@ -1150,8 +1166,14 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
     int max_nodes = 10;
     neg_tree.ExpandBackTo(pos_tree.time_, &max_nodes);
     neg_tree.ComputeTime();
-    VLOG(1) << "neg_time=" << neg_tree.time_.ToSortableString()
-	    << " pos_time=" << pos_tree.time_.ToSortableString() << endl;
+    if (GetVerbosity() >= 1) {
+      VLOG(0) << "neg_time=" << neg_tree.time_.ToSortableString()
+	      << " pos_time=" << pos_tree.time_.ToSortableString() << endl;
+      VLOG(0) << "neg_tree="<< endl;
+      neg_tree.Display(0);
+      VLOG(0) << "pos_tree=" << endl;
+      pos_tree.Display(0);
+    }
     if (neg_tree.time_ < pos_tree.time_) continue;
     neg_tree.SpeedUpToHappenBefore(&pos_tree);
   }

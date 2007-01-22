@@ -445,6 +445,7 @@ class Satisfaction : public Component {
   bool HasPurpose() const;
   const set<RuleSat *> & GetRuleSats() const { return rule_sats_;}
   const set<TrueTuple *> GetTrueTuples() const { return true_tuples_;}
+  const Substitution & GetSubstitution() const { return substitution_;}
 
  private:
   // ----- CONSTRUCTOR(S) ----- Satisfaction

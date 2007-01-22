@@ -62,6 +62,8 @@ struct Optimizer{
   // Removes a firing and might remove the rule.  
   void TryRemoveFiring(Firing *f);
   
+  void PushTimesThroughRuleSats(TrueTuple *tt);
+
   // Propagates the time change after we change the delay of a rule
   // through the true tuples it causes and the negative rule sats in which
   // they participate.
