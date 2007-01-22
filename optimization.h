@@ -77,16 +77,18 @@ struct Optimizer{
   //void TrySpecifyCreativeRule(Rule * r);
   
   // TODO, document this
-  void TryAddPositiveRule(
-			  const vector<Tuple> & preconditions, 
+  void TryAddPositiveRule(const vector<Tuple> & preconditions, 
 			  const vector<Tuple> & result,
 			  int max_recursion, string comments);
   
   void TryRuleVariations(const Pattern & preconditions, 
-		       const Pattern & result, 
+			 const Pattern & result, 
 			 int max_recursion);
   
-  void TryMakeFunctionalNegativeRule(Rule *r);
+  Rule * TryMakeFunctionalNegativeRule(Rule *r);
+  // HERE
+  void MakeNegativeRuleSatsHappenInTime(const set<RuleSat *> rule_sats);
+  void OptimizeRuleStrengths(set<Rule *> rules);
   
   // Combining rules
   bool CombineRules(int time_limit, string * comments);

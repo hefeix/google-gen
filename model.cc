@@ -358,8 +358,8 @@ bool Model::FixTimes() {
   }
 
   int qsize = queue.size();
-  int original_qsize = max((int)queue.size(), 50);
-
+  //int original_qsize = max((int)queue.size(), 50);
+  
   // We repeatedly deal with the first element of the queue, that is, the 
   // one that is indexed by the earliest time.
   while (queue.size()){
@@ -422,10 +422,11 @@ bool Model::FixTimes() {
       VLOG(0) << "queue.size() : " << queue.size() << endl;
       qsize = queue.size();
     }
-    if (queue.size() > (uint)20*original_qsize) {
+    // GEORGES-WTF?
+    /*if (queue.size() > (uint)20*original_qsize) {
       VLOG(0) << "Aborting FixTimes" << endl;
       return false;
-    }
+      }*/
   }
   // Now that all of the dirty stuff happens NEVER, we can make it clean.  
   // TODO, is this really necessary, or could we have just let the previous 

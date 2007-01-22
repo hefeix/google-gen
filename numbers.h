@@ -81,11 +81,18 @@ struct Time{
   bool IsNever() { return never_;}
   static Time Never() { Time t; t.never_ = true; return t;}
 };
+inline Time operator +(const Time & t, EncodedNumber coordninate){
+  Time ret = t;
+  ret.Increment(coordninate, 1);
+  return ret;
+}
 #define NEVER Time::Never()
 #define CREATION Time()
 bool OPERATORLESS(const Time & a, const Time & b);
 bool OPERATOREQ(const Time & a, const Time & b);
 inline bool OPERATORGT(const Time & a, const Time & b) { return (b<a);}
+inline bool OPERATORLE(const Time & a, const Time & b) { return !(b<a);}
+inline bool OPERATORGE(const Time & a, const Time & b) { return !(a<b);}
 inline bool operator !=(const Time & a, const Time & b){return !(a==b);}
 void TestNumbersShell(); // shell for testing this module
 

@@ -943,6 +943,15 @@ void TrueTuple::A1_RemoveViolatedProhibition(Prohibition *p){
     (new SetRemoveChange<Prohibition *>(&violated_prohibitions_, p));
 }
 
+Firing * TrueTuple::GetFirstCause() const { 
+  set<Firing *> causes = GetCauses();
+  if (causes.size() == 0) return NULL;
+  Firing * ret = *causes.begin();
+  forall(run, causes){
+    if ( (*run)->time_ < ret->time_) ret = *run;
+  }
+  return ret;
+}
 
 ComponentType Precondition::Type() const { return PRECONDITION; }
 ComponentType Satisfaction::Type() const { return SATISFACTION; }

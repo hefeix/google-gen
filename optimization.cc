@@ -794,9 +794,6 @@ void Optimizer::TryRemoveFiring(Firing *f){
 // they participate.
 // This is to avoid fixing all of the times in the model.
 void Optimizer::PushTimesAfterChangeDelay(Rule *rule){
-  // Push the time change up through the consequences of the rule.	
-  // RecomputeTimesThroughTrueTuples(rule);
-  
   forall(run_rs, rule->GetRuleSats()) {
     RuleSat * rs = run_rs->second;
     // the times of the rule sats are already updated.
@@ -889,9 +886,12 @@ void Optimizer::TryAddFirings
 	    << " new_nff=" << new_num_first_firings
 	    << endl;
 
+    vector<Substitution> subs_for_removed_firings;
     forall(run, firings) {
-      if ((*run)->Exists())
+      if ((*run)->Exists()) {
+	subs_for_removed_firings.push_back((*run)->GetFullSubstitution());
 	(*run)->Erase();
+      }
     }
     OptimizeStrength(alt_r);
     VLOG(1) << "Removed " << firings.size() 
@@ -932,9 +932,33 @@ void Optimizer::TryAddFirings
       // the result with one of the preconditions.  
       variants.insert(make_pair(lhs, rhs));
       if (!alt_r->Exists()) continue;
-    }  
+    }
     if (may_want_to_add_negative_rule) {
-      OptimizationCheckpoint cp_reduce_delay(this, false);
+      OptimizationCheckpoint cp_negative_rule(this, false);
+
+      Rule * negative_rule = TryMakeFunctionalNegativeRule(alt_r);
+      set<RuleSat *> negative_rule_sats;
+      for (uint i=0; i<subs_for_removed_firings.size(); i++) {
+	RuleSat * rs = negative_rule->FindRuleSat(subs_for_removed_firings[i]);
+	if (rs) negative_rule_sats.insert(rs);
+      }
+      VLOG(1) << "added functional negative rule. "
+	      << " utility_=" << model_->GetUtility() << endl;      
+
+      MakeNegativeRuleSatsHappenInTime(negative_rule_sats);
+      model_->FixTimes(); // TODO - just fix some times.
+      VLOG(1) << "after MakeNegativeRuleSatsHappenInTime "
+	      << " utility_=" << model_->GetUtility() << endl;      
+
+      set<Rule *> to_optimize; 
+      to_optimize.insert(negative_rule);
+      to_optimize.insert(alt_r);
+      OptimizeRuleStrengths(to_optimize);
+
+      VLOG(1) << "after OptimizeRuleStrengths "
+	      << " utility_=" << model_->GetUtility() << endl;      
+      
+      /*
       // make sure r has a smaller delay than alt_r
       if (!(rule->GetDelay() < alt_r->GetDelay())) {
 	EncodedNumber new_delay = alt_r->GetDelay();
@@ -945,10 +969,7 @@ void Optimizer::TryAddFirings
       {
 	OptimizationCheckpoint cp_negative_rule(this, false);
 	cp_negative_rule.logging_ = true;
-	TryMakeFunctionalNegativeRule(alt_r);
-	VLOG(1) << "Made a negative rule. "
-		<< " utility_=" << model_->GetUtility() << endl;      
-      }
+		}*/
     }
   }
   VLOG(1) << "removed all alternate explanations " 
@@ -961,42 +982,261 @@ void Optimizer::TryAddFirings
   VLOG(1) << "Added variant rules " 
 	  << " utility_=" << model_->GetUtility() << endl;
 }
+
+struct DelayMap {
+  map<Rule * , pair<EncodedNumber, EncodedNumber> > delays_;
+  set<RuleSat *> rulesats_with_nonstandard_delay_;
+  /// add a rule with its current delay
+  void Add(Rule * r) {
+    delays_[r] = make_pair(r->GetDelay(), r->GetDelay());
+  }
+  void SetStandardDelay(Rule * r, EncodedNumber new_delay){
+    CHECK(delays_ % r);
+    delays_[r].first = new_delay;
+  }
+  void SetNonstandardDelay(Rule * r, EncodedNumber new_delay){
+    CHECK(delays_ % r);
+    delays_[r].second = new_delay;
+  }
+  EncodedNumber GetDelay(Rule * r, bool alternate_delay){
+    if (!(delays_ % r)) Add(r);
+    return alternate_delay?delays_[r].second:delays_[r].first;
+  }
+  EncodedNumber GetDelay(RuleSat *rs){
+    return GetDelay(rs->GetRule(), UsesNonstandardDelay(rs));
+  }
+  void MakeDelayNonstandard(RuleSat * rs){
+    rulesats_with_nonstandard_delay_.insert(rs);
+  }
+  bool UsesNonstandardDelay(RuleSat * rs) const {
+    return (rulesats_with_nonstandard_delay_ % rs);
+  }
+};
+
+// represents the time compuation for a rulesat.
+struct RuleSatTimeNode{
+  Rule * rule_;
+  RuleSat * rulesat_;
+  DelayMap * delay_map_;
+  Time time_;
+  set<RuleSatTimeNode *> children_;
+  Time max_unrepresented_child_time_;  
+  RuleSatTimeNode(RuleSat * rs, DelayMap * delays){
+    rule_ = rs->GetRule();
+    rulesat_ = rs;    
+    delay_map_ = delays;
+  }
+  ~RuleSatTimeNode(){
+    forall (run, children_) delete (*run);
+  }
+  bool UsesNonstandardDelay() {
+    return delay_map_->UsesNonstandardDelay(rulesat_);
+  }
+  void MakeDelayNonstandard(){
+    delay_map_->MakeDelayNonstandard(rulesat_);
+  }
+  Time MaxChildTime() {
+    Time max_child_time = max_unrepresented_child_time_;
+    forall(run, children_) {
+      if ((*run)->time_ > max_child_time) max_child_time = (*run)->time_;
+    }
+    return max_child_time;
+  }
+  void ComputeTime(){
+    forall(run, children_) (*run)->ComputeTime();
+    time_ = MaxChildTime();
+    if (rule_->GetRuleType() != NEGATIVE_RULE) 
+      time_.Increment(delay_map_->GetDelay(rulesat_), 1);
+  }
+  RuleSatTimeNode * AddChild(RuleSat *rs){
+    RuleSatTimeNode * ret = new RuleSatTimeNode(rs, delay_map_);
+    children_.insert(ret);
+    return ret;
+  }
+  // adds all decendents that with time >=horizon, but fails if more than 
+  // max_nodes.  Returns true on success.
+  bool ExpandBackTo(Time horizon, int *max_nodes) {
+    max_unrepresented_child_time_ = Time();
+    set<TrueTuple *> tuples = rulesat_->GetSatisfaction()->GetTrueTuples();
+    forall (run_t, tuples){
+      Firing * f = (*run_t)->GetFirstCause();
+      if (!f) return false;
+      RuleSat * rs = f->GetRuleSat();
+      if (rs->GetTime() < horizon) {
+	if (rs->GetTime() > max_unrepresented_child_time_)
+	  max_unrepresented_child_time_ = rs->GetTime();
+      } else {
+	*max_nodes--;
+	if (*max_nodes<0) return false;
+	RuleSatTimeNode * child = AddChild(rs);
+	if (!(child->ExpandBackTo(horizon, max_nodes))) return false;
+      }      
+    }
+    return true;
+  }
+  void ExpandLinearly(int num_steps) {
+    max_unrepresented_child_time_ = Time();
+    set<TrueTuple *> tuples = rulesat_->GetSatisfaction()->GetTrueTuples();    
+    // find the last one to happen.
+    if (tuples.size()==0) return;
+    TrueTuple * last = *tuples.begin();
+    forall(run, tuples) {
+      if ((*run)->GetTime() > last->GetTime()) last = *run;
+    }
+    if (num_steps == 0){
+      max_unrepresented_child_time_ = last->GetTime();
+      return;
+    }
+    forall(run, tuples) {
+      if ((*run != last) && ((*run)->GetTime() > max_unrepresented_child_time_))
+	max_unrepresented_child_time_ = (*run)->GetTime();
+    }
+    Firing * f = last->GetFirstCause();
+    if (!f) {
+      cerr << "weird - tuple with no cause" << endl;
+      return;
+    }
+    RuleSat * rs = f->GetRuleSat();
+    RuleSatTimeNode * child = AddChild(rs);
+    child->ExpandLinearly(num_steps-1);
+    return;
+  }
+  // returns true on success
+  bool SpeedUpToHappenBefore(RuleSatTimeNode * to_beat) {
+    forall(run, children_){
+      (*run)->SpeedUpToHappenBefore(to_beat);      
+    }
+    ComputeTime();
+    to_beat->ComputeTime();
+    if (time_ < to_beat->time_) return true;
+    Time max_child_time = MaxChildTime();
+    if (max_child_time >= to_beat->time_) return false;
+    // try speeding up this rule. (changing the standard delay)
+    EncodedNumber fast_enough;
+    while (max_child_time + fast_enough >= to_beat->time_)
+      fast_enough.bits_.push_back(false);    
+    EncodedNumber old_delay = delay_map_->GetDelay(rulesat_);
+    if (!UsesNonstandardDelay()) {
+      delay_map_->SetStandardDelay(rule_, fast_enough);
+      ComputeTime();
+      to_beat->ComputeTime();
+      if (time_ < to_beat->time_) return true;
+      delay_map_->SetStandardDelay(rule_, old_delay);      
+    }
+    MakeDelayNonstandard();
+    if (fast_enough < delay_map_->GetDelay(rule_, true))
+      delay_map_->SetNonstandardDelay(rule_, fast_enough);
+    ComputeTime();
+    to_beat->ComputeTime();
+    if (time_ < to_beat->time_) return true;
+    cerr << "all efforts failed to speed up negative rulesat" << endl;
+    return false;
+  }
+};
+
+void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *> 
+						 rule_sats){
+  DelayMap delay_map;
+  forall(run_rs, rule_sats) {
+    RuleSat * neg_rs = *run_rs;
+    RuleSat * pos_rs = neg_rs->GetTarget();
+    // we want neg_rs to happen before pos_rs
+    RuleSatTimeNode neg_tree(neg_rs, &delay_map);
+    RuleSatTimeNode pos_tree(pos_rs, &delay_map);
+    pos_tree.ExpandLinearly(5);
+    pos_tree.ComputeTime();
+    int max_nodes = 10;
+    neg_tree.ExpandBackTo(pos_tree.time_, &max_nodes);
+    if (neg_tree.time_ < pos_tree.time_) continue;
+    neg_tree.SpeedUpToHappenBefore(&pos_tree);
+  }
+  forall(run, delay_map.delays_){
+    Rule * r = run->first;
+    EncodedNumber standard_delay = run->second.first;
+    EncodedNumber nonstandard_delay = run->second.second;
+    if (standard_delay != r->GetDelay()){
+      r->ChangeDelay(standard_delay);
+    }    
+  }
+  // make alternate rules where we need to change the delay per rulesat
+  // to a non-standard value.
+  // TODO: may want to add a functional negative rule here?
+  map<Rule *, set<RuleSat *> > by_rule;
+  forall(run, delay_map.rulesats_with_nonstandard_delay_){
+    by_rule[(*run)->GetRule()].insert(*run);    
+  }
+  forall(run_r, by_rule){
+    Rule * r = run_r->first;
+    set<Firing *> old_firings;
+    forall(run_rs, run_r->second){
+      RuleSat * rs = *run_rs;
+      forall(run_f, rs->GetFirings())
+	old_firings.insert(run_f->second);
+    }
+    // figure out if we can easily specify the new rule by replacing
+    // any of its variables with constants.
+    map<int, set<int> > var_to_values;
+    forall(run_f, old_firings) {
+      Firing *f = *run_f;
+      Substitution s = f->GetFullSubstitution();
+      forall(run_sub, s.sub_) {
+	var_to_values[run_sub->first].insert(run_sub->second);
+      }
+    }
+    Substitution simplify_sub;
+    forall(run_vv, var_to_values){
+      if (run_vv->second.size()==1)
+	simplify_sub.Add(run_vv->first, *(run_vv->second.begin()));
+    }
+    Pattern precondition = r->GetPrecondition()->GetPattern();
+    Pattern result = r->GetResult();
+    simplify_sub.Substitute(&precondition);
+    simplify_sub.Substitute(&result);
+    set<int> new_rule_vars 
+      = Union(GetVariables(precondition), GetVariables(result));
+    RuleType type = GetVariables(result).size()?CREATIVE_RULE:SIMPLE_RULE;
+    Rule * new_rule = 
+      model_->MakeNewRule(precondition, delay_map.GetDelay(r, true), type, 
+			  NULL, result, r->GetStrength(), r->GetStrength2());
+    forall(run_f, old_firings){
+      Firing *f = *run_f;
+      Substitution new_sub = f->GetFullSubstitution().Restrict(new_rule_vars);
+      new_rule->AddFiring(new_sub);
+      f->Erase();
+    }
+    set<Rule *> to_optimize;
+    to_optimize.insert(new_rule);
+    to_optimize.insert(r);
+    OptimizeRuleStrengths(to_optimize);
+  }
+}
+
+void Optimizer::OptimizeRuleStrengths(set<Rule *>rules){
+  double improvement = 0;
+  do {
+    double old_utility = model_->GetUtility();
+    forall(run, rules) OptimizeStrength(*run);
+    improvement = model_->GetUtility() - old_utility;
+  } while (improvement > 0.1);
+}
   
-void Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
+Rule *  Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
   // TODO: maybe play with the delay.
   Pattern precondition 
     = Concat(r->GetPrecondition()->GetPattern(), r->GetResult());
   Rule * negative_rule = model_->FindNegativeRule(precondition, r);
-  if (!negative_rule) {
-    negative_rule = 
-      model_->MakeNewRule(precondition, 
-			  EncodedNumber(),
-			  NEGATIVE_RULE, r,
-			  vector<Tuple>(),
-			  EncodedNumber(),
-			  EncodedNumber());
-    VLOG(1) << " made new negative rule " << endl;
-  } else {
-    VLOG(1) << " used existing negative rule " << endl;
-  }
-  VLOG(1) << "Negative rule:" << negative_rule->GetID() << endl;
-  VLOG(1) << "Positive rule:" << r->GetID() << endl;
-  // negative_rule->ExplainEncoding();
-  //model_->FixTimes(); // TODO: do we need this?
-  VLOG(1) 
-    << "added negative " << " utility=" << model_->GetUtility() << endl;
-  // go back and forth and optimize the rule weights of the negative rule 
-  // and the inhibited rule.
-  // TODO: optimize it all together?
-  for (int rep=0; rep<2; rep++) { 
-    OptimizeStrength(negative_rule);
-    VLOG(1) << "opt_neg " << " utility=" << model_->GetUtility() 
-	    << "  val=" << negative_rule->GetStrengthD() << endl;
-    OptimizeStrength(r);
-    VLOG(1) << "opt_alt " << " utility=" << model_->GetUtility() 
-	    << "  val=" << r->GetStrengthD() << endl;
-  }
-  if (GetVerbosity() >= 1) model_->ToHTML("html");
+  if (negative_rule) {
+    VLOG(1) << "used existing negative rule" << endl;
+    return negative_rule;
+  } 
+  VLOG(1) << "making a new negative rule" << endl;
+  return 
+    model_->MakeNewRule(precondition, 
+			EncodedNumber(),
+			NEGATIVE_RULE, r,
+			vector<Tuple>(),
+			EncodedNumber(),
+			EncodedNumber());
 }
 
 void Optimizer::TryRuleVariations(const Pattern & preconditions, 
@@ -1012,7 +1252,7 @@ void Optimizer::TryRuleVariations(const Pattern & preconditions,
     OptimizationCheckpoint cp(this, false);
     string comments = "recursively added as a variation of "
       + CandidateRuleToString(make_pair(preconditions, result));
-    TryAddPositiveRule(cr.first, cr.second, max_recursion-1,
+    TryAddPositiveRule(cr.first, cr.second, max_recursion,
 		       comments);
     if (cp.KeepChanges()) break;
   }
@@ -1052,6 +1292,7 @@ void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
     VLOG(1) << "rule already exists" << endl;
     return;
   }
+  
   VLOG(1) << "before adding rule utility=" 
 	  << model_->GetUtility() << endl;
   double added_arbitrary_term_ll = -model_->GetChooserLnLikelihood();
@@ -1069,7 +1310,7 @@ void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
   // r->ExplainEncoding();
   VLOG(1) << "after adding rule utility=" 
 	  << model_->GetUtility() << endl;
-  TryAddFirings(r, subs, max_recursion-1);
+  TryAddFirings(r, subs, max_recursion);
   if (!r->Exists()) return;
   VLOG(1) << "after TryAddFirings: utility=" << model_->GetUtility() << endl;
   OptimizeStrength(r);

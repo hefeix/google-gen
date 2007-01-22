@@ -46,6 +46,7 @@ class ModelShell {
   time_t model_last_written_;
   Optimizer * optimizer_;
   int improvement_counter_;
+  int max_recursion_;
 };
 
 map<string, string> ModelShellHandleExternal(map<string, string> parameters);

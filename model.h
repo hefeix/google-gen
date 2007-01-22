@@ -238,6 +238,7 @@ class Model {
   TrueTuple * FindTrueTuple(const Tuple & s) const;
 
   // Finds a positive rule
+  // If there are many such rules, returns an arbitrary one.
   Rule * FindPositiveRule(vector<Tuple> precondition, vector<Tuple> result)
     const;
   // Finds a negative rule

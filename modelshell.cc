@@ -28,6 +28,7 @@ ModelShell::ModelShell() {
   improvement_counter_ = 0;
   model_filename_ = "";
   model_last_written_ = 0;
+  max_recursion_ = 1;
 }
 
 // Whatever it does, destroy
@@ -245,7 +246,7 @@ string ModelShell::Handle(string command) {
 				    end_time-time(0), &comments)) break;
 	OptimizationCheckpoint cp(optimizer_, true);
 	optimizer_->TryAddPositiveRule(cand.first, cand.second, 
-				       3, comments);	
+				       max_recursion_, comments);	
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "
 		  << CandidateRuleToString(cand)
@@ -320,7 +321,7 @@ string ModelShell::Handle(string command) {
  	if (!success) return "Vette failed";
  	if (success) original = simplified;
  	optimizer_->TryAddPositiveRule(original.first, original.second, 
- 				       3, comments);
+ 				       max_recursion_, comments);
  	if (cp.KeepChanges()) {
  	  VLOG(0) << " Created rule "
  		  << CandidateRuleToString(original)
@@ -354,6 +355,11 @@ string ModelShell::Handle(string command) {
        int v;
        command_stream >> v;
        SetVerbosity(v);
+     }
+     else if (command=="r"){
+       int r;
+       command_stream >> r;
+       max_recursion_ = r;
      }
      else if (command=="candidates"){
        uint num;
