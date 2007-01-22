@@ -944,7 +944,7 @@ void Optimizer::TryAddFirings
       }
       VLOG(1) << "added functional negative rule. "
 	      << " utility_=" << model_->GetUtility() << endl;      
-
+      
       MakeNegativeRuleSatsHappenInTime(negative_rule_sats);
       model_->FixTimes(); // TODO - just fix some times.
       VLOG(1) << "after MakeNegativeRuleSatsHappenInTime "
@@ -1136,6 +1136,8 @@ struct RuleSatTimeNode{
 
 void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *> 
 						 rule_sats){
+  VLOG(1) << "MakeNegativeRuleSatsHappenInTime #rule_sats="
+	  << rule_sats.size() << endl;
   DelayMap delay_map;
   forall(run_rs, rule_sats) {
     RuleSat * neg_rs = *run_rs;
@@ -1147,6 +1149,9 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
     pos_tree.ComputeTime();
     int max_nodes = 10;
     neg_tree.ExpandBackTo(pos_tree.time_, &max_nodes);
+    neg_tree.ComputeTime();
+    VLOG(1) << "neg_time=" << neg_tree.time_.ToSortableString()
+	    << " pos_time=" << pos_tree.time_.ToSortableString() << endl;
     if (neg_tree.time_ < pos_tree.time_) continue;
     neg_tree.SpeedUpToHappenBefore(&pos_tree);
   }
@@ -1166,6 +1171,7 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
     by_rule[(*run)->GetRule()].insert(*run);    
   }
   forall(run_r, by_rule){
+    VLOG(1) << "Specifying a rule" << endl;
     Rule * r = run_r->first;
     set<Firing *> old_firings;
     forall(run_rs, run_r->second){
