@@ -1,0 +1,4 @@
+load working.horses
+v 1
+r 0
+addrule {lhs="[ PS a b ],[ OBS c b 'o' ]",rhs="[ OBS c a 'h' ]"}
