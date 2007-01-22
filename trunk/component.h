@@ -318,6 +318,7 @@ class Precondition : public Component {
   // returns pointer to a satisfaction object if one exists.
   Satisfaction * FindSatisfaction(const Substitution &sub) const;
   void VerifyLayer2Subclass() const;
+  // If there are multiple such rules, returns an arbitrary one.
   Rule * FindPositiveRule(const vector<Tuple> & result) const;
   Rule * FindNegativeRule(Rule * target_rule) const;
   int GetNumSatisfactions() const { return num_satisfactions_;}
@@ -443,6 +444,7 @@ class Satisfaction : public Component {
   vector<Component *> Purposes() const; // the rule_sats
   bool HasPurpose() const;
   const set<RuleSat *> & GetRuleSats() const { return rule_sats_;}
+  const set<TrueTuple *> GetTrueTuples() const { return true_tuples_;}
 
  private:
   // ----- CONSTRUCTOR(S) ----- Satisfaction
@@ -690,10 +692,12 @@ class RuleSat : public Component{ // an instance of a rule coming true
   double LnLikelihood() const;
   bool HasPurpose() const;
   const map<Substitution, Firing *> & GetFirings() const { return firings_;}
-  const Rule * GetRule() const { return rule_;}
+  Rule * GetRule() const { return rule_;}
+  const Satisfaction * GetSatisfaction() { return satisfaction_;}
   const set<RuleSat *> & GetInhibitors() const {
     return inhibitors_;
   }
+  RuleSat * GetTarget() const { return target_rule_sat_;}
  private:
 
 
@@ -813,6 +817,7 @@ class TrueTuple : public Component{
   vector<vector<Component *> > TemporalCodependents() const;
 
   const set<Firing *> & GetCauses() const { return causes_;}
+  Firing * GetFirstCause() const;
   int IsRequired() const { return required_count_; }
   const Tuple & GetTuple() const { return tuple_;}
   const set<Satisfaction *> & GetSatisfactions() const { return satisfactions_;}
