@@ -790,10 +790,10 @@ void Optimizer::TryRemoveFiring(Firing *f){
 }
 
 void Optimizer::PushTimesThroughRuleSats(TrueTuple *tt){
-  if (!tt->ComputeSetTime()) return;
+  tt->ComputeSetTime();
   forall(run_sat, tt->GetSatisfactions()) {
     Satisfaction *sat = *run_sat;
-    if (!sat->ComputeSetTime()) continue;
+    sat->ComputeSetTime();
     forall(run_rs, sat->GetRuleSats()) {
       RuleSat * neg_rs = *run_rs;
       neg_rs->ComputeSetTime();
@@ -893,7 +893,9 @@ void Optimizer::TryAddFirings
     forall(run, firings) {
       if ((*run)->Exists()) {
 	subs_for_removed_firings.push_back((*run)->GetFullSubstitution());
+	set<TrueTuple *> results = (*run)->GetTrueTuples();
 	(*run)->Erase();
+	forall(run, results) PushTimesThroughRuleSats(*run);
       }
     }
     OptimizeStrength(alt_r);
@@ -948,6 +950,7 @@ void Optimizer::TryAddFirings
       VLOG(1) << "added functional negative rule. "
 	      << " utility_=" << model_->GetUtility() << endl;      
 
+      model_->ToHTML("html.b");
       MakeNegativeRuleSatsHappenInTime(negative_rule_sats);
       model_->FixTimes(); // TODO - just fix some times.
       VLOG(1) << "after MakeNegativeRuleSatsHappenInTime "
