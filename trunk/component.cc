@@ -119,6 +119,7 @@ void Component::L1_Erase(){
   model_->A1_SetLnLikelihood(model_->ln_likelihood_ - ln_likelihood_);
 
   vector<Component *> dep = StructuralDependents();
+  vector<Component *> temp_dep = TemporalDependents();
   vector<Component *> copurposes = Copurposes();
   for (uint i=0; i<dep.size(); i++) {
     if (dep[i]->Exists()) dep[i]->L1_Erase();
@@ -132,6 +133,10 @@ void Component::L1_Erase(){
   L1_EraseSubclass();
   A1_SetReallyDead(true);
   model_->changelist_.Destroying(this);
+
+  for (uint i=0; i<temp_dep.size(); i++) {
+    if (temp_dep[i]->Exists()) temp_dep[i]->ComputeSetTime();
+  }
 
   for (uint i=0; i<copurposes.size(); i++) {
     if (copurposes[i]->Exists() && copurposes[i]->IsSuperfluous()) 
