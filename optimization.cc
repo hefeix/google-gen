@@ -949,8 +949,10 @@ void Optimizer::TryAddFirings
       }
       VLOG(1) << "added functional negative rule. "
 	      << " utility_=" << model_->GetUtility() << endl;      
+      
+      if (GetVerbosity() >= 1)
+	model_->ToHTML("html.r" + itoa(alt_r->GetID()));
 
-      model_->ToHTML("html.b");
       MakeNegativeRuleSatsHappenInTime(negative_rule_sats);
       model_->FixTimes(); // TODO - just fix some times.
       VLOG(1) << "after MakeNegativeRuleSatsHappenInTime "
@@ -977,6 +979,8 @@ void Optimizer::TryAddFirings
 	cp_negative_rule.logging_ = true;
 		}*/
     }
+    if (GetVerbosity() >= 1)
+      model_->ToHTML("html.rs" + itoa(alt_r->GetID()));
   }
   VLOG(1) << "removed all alternate explanations " 
 	  << " utility_=" << model_->GetUtility() << endl;
@@ -1077,19 +1081,34 @@ struct RuleSatTimeNode{
   bool ExpandBackTo(Time horizon, int *max_nodes) {
     max_unrepresented_child_time_ = Time();
     set<TrueTuple *> tuples = rulesat_->GetSatisfaction()->GetTrueTuples();
+    VLOG(2) << "expands to " << tuples.size() << " tuples" << endl;
     forall (run_t, tuples){
       Firing * f = (*run_t)->GetFirstCause();
-      if (!f) return false;
+      if (!f) {
+	VLOG(1) << "Didn't get first cause" << endl;
+	return false;
+      }
       RuleSat * rs = f->GetRuleSat();
+      if (GetVerbosity() >= 1) {
+	VLOG(2) << "rulesat " << rs->GetID() 
+		<< " time:" << rs->GetTime().ToSortableString() << endl;
+      }
       if (rs->GetTime() < horizon) {
 	if (rs->GetTime() > max_unrepresented_child_time_)
 	  max_unrepresented_child_time_ = rs->GetTime();
       } else {
-	*max_nodes--;
-	if (*max_nodes<0) return false;
+	(*max_nodes)--;
+	if (*max_nodes<0) {
+	  VLOG(2) << "Maxnodes:" << *max_nodes;
+	  return false;
+	}
 	RuleSatTimeNode * child = AddChild(rs);
-	if (!(child->ExpandBackTo(horizon, max_nodes))) return false;
-      }      
+	VLOG(2) << "Adding child for RuleSat " << rs->GetID() << endl;
+	if (!(child->ExpandBackTo(horizon, max_nodes))) {
+	  VLOG(2) << "Child expansion failed" << endl;
+	  return false;
+	}
+      }    
     }
     return true;
   }
@@ -1130,7 +1149,7 @@ struct RuleSatTimeNode{
     if (time_ < to_beat->time_) return true;
     Time max_child_time = MaxChildTime();
     if (max_child_time >= to_beat->time_) return false;
-    // try speeding up this rule. (changing the standard delay)
+    // try speeding up this rule. (changing the standard delay) 
     EncodedNumber fast_enough;
     while (max_child_time + fast_enough >= to_beat->time_)
       fast_enough.bits_.push_back(false);    
@@ -1139,7 +1158,10 @@ struct RuleSatTimeNode{
       delay_map_->SetStandardDelay(rule_, fast_enough);
       ComputeTime();
       to_beat->ComputeTime();
-      if (time_ < to_beat->time_) return true;
+      if (time_ < to_beat->time_) {
+	VLOG(1) << "TIMECHANGE Rule:" << rule_->GetID() << " new delay:" << fast_enough.ToSortableString() << endl;
+	return true;
+      }
       delay_map_->SetStandardDelay(rule_, old_delay);      
     }
     MakeDelayNonstandard();
@@ -1147,7 +1169,10 @@ struct RuleSatTimeNode{
       delay_map_->SetNonstandardDelay(rule_, fast_enough);
     ComputeTime();
     to_beat->ComputeTime();
-    if (time_ < to_beat->time_) return true;
+    if (time_ < to_beat->time_) {
+      VLOG(1) << "NONSTANDARD TIMECHANGE Rule:" << rule_->GetID() << " nonstandard delay:" << fast_enough.ToSortableString() << endl;
+      return true;
+    }
     cerr << "all efforts failed to speed up negative rulesat" << endl;
     return false;
   }
@@ -1167,7 +1192,12 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
     pos_tree.ExpandLinearly(5);
     pos_tree.ComputeTime();
     int max_nodes = 10;
-    neg_tree.ExpandBackTo(pos_tree.time_, &max_nodes);
+    bool expand_result = neg_tree.ExpandBackTo(pos_tree.time_, &max_nodes);
+    if (!expand_result) {
+      VLOG(1) << "Expansion failed" << endl;
+      continue;
+    }
+    VLOG(1) << "Expansion succeeded" << endl;
     neg_tree.ComputeTime();
     if (GetVerbosity() >= 1) {
       VLOG(0) << "neg_time=" << neg_tree.time_.ToSortableString()
@@ -1177,14 +1207,32 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
       VLOG(0) << "pos_tree=" << endl;
       pos_tree.Display(0);
     }
-    if (neg_tree.time_ < pos_tree.time_) continue;
-    neg_tree.SpeedUpToHappenBefore(&pos_tree);
+    if (neg_tree.time_ < pos_tree.time_) {
+      VLOG(0) << "nothing to do" << endl;
+      continue;
+    }
+    bool result = neg_tree.SpeedUpToHappenBefore(&pos_tree);
+    if (GetVerbosity() >= 1) {
+      if (result) {
+	VLOG(0) << "SPED UP VERSION" << endl;
+	VLOG(0) << "neg_time=" << neg_tree.time_.ToSortableString()
+		<< " pos_time=" << pos_tree.time_.ToSortableString() << endl;
+	VLOG(0) << "neg_tree="<< endl;
+	neg_tree.Display(0);
+	VLOG(0) << "pos_tree=" << endl;
+	pos_tree.Display(0);
+      }
+      else {
+	VLOG(0) << "Failed to speed up" << endl;
+      }
+    }
   }
   forall(run, delay_map.delays_){
     Rule * r = run->first;
     EncodedNumber standard_delay = run->second.first;
     EncodedNumber nonstandard_delay = run->second.second;
     if (standard_delay != r->GetDelay()){
+      // TODO: we should VLOG here
       r->ChangeDelay(standard_delay);
     }    
   }
@@ -1195,6 +1243,7 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
   forall(run, delay_map.rulesats_with_nonstandard_delay_){
     by_rule[(*run)->GetRule()].insert(*run);    
   }
+
   forall(run_r, by_rule){
     VLOG(1) << "Specifying a rule" << endl;
     Rule * r = run_r->first;
@@ -1206,18 +1255,24 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
     }
     // figure out if we can easily specify the new rule by replacing
     // any of its variables with constants.
-    map<int, set<int> > var_to_values;
+    map<int, map<int, int> > var_to_values;
     forall(run_f, old_firings) {
       Firing *f = *run_f;
       Substitution s = f->GetFullSubstitution();
       forall(run_sub, s.sub_) {
-	var_to_values[run_sub->first].insert(run_sub->second);
+	var_to_values[run_sub->first][run_sub->second]++;
       }
     }
     Substitution simplify_sub;
-    forall(run_vv, var_to_values){
-      if (run_vv->second.size()==1)
-	simplify_sub.Add(run_vv->first, *(run_vv->second.begin()));
+    forall(run_vars, var_to_values){
+      forall(run_values, run_vars->second) {
+	if (1.1 * run_values->second >= old_firings.size() && (old_firings.size() > 10)) {
+	  simplify_sub.Add(run_vars->first, run_values->first);
+	  VLOG(1) << "Specifying " << LEXICON.GetString(run_vars->first) 
+		  << " -> " << LEXICON.GetString(run_values->first)
+		  << endl;
+	}
+      }
     }
     Pattern precondition = r->GetPrecondition()->GetPattern();
     Pattern result = r->GetResult();
@@ -1225,13 +1280,21 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
     simplify_sub.Substitute(&result);
     set<int> new_rule_vars 
       = Union(GetVariables(precondition), GetVariables(result));
-    RuleType type = GetVariables(result).size()?CREATIVE_RULE:SIMPLE_RULE;
+
+    // TODO Is this correct? don't you have to subtract variables on the lhs
+    RuleType type = (GetVariables(result)-GetVariables(precondition)).size()?CREATIVE_RULE:SIMPLE_RULE;
+
+    // TODO maybe we want to find a rule with this precondition and result, and (= or faster? delay)
+    // TODO we should VLOG here
     Rule * new_rule = 
       model_->MakeNewRule(precondition, delay_map.GetDelay(r, true), type, 
 			  NULL, result, r->GetStrength(), r->GetStrength2());
     forall(run_f, old_firings){
       Firing *f = *run_f;
-      Substitution new_sub = f->GetFullSubstitution().Restrict(new_rule_vars);
+
+      Substitution old_sub = f->GetFullSubstitution();
+      if (!simplify_sub.IsSubsetOf(old_sub)) continue;
+      Substitution new_sub = old_sub.Restrict(new_rule_vars);
       new_rule->AddFiring(new_sub);
       f->Erase();
     }
@@ -1259,7 +1322,7 @@ Rule *  Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
   if (negative_rule) {
     VLOG(1) << "used existing negative rule" << endl;
     return negative_rule;
-  } 
+  }
   VLOG(1) << "making a new negative rule" << endl;
   return 
     model_->MakeNewRule(precondition, 

@@ -144,8 +144,16 @@ struct Substitution {
   }
   // Provide a restricted substitution to a set of terms
   Substitution Restrict(const set<int> & terms) const;
-
   Substitution Reverse() const;
+
+  // If a substitution is a subset of another one
+  // domain is a subset of other's domain, and ranges are equal
+  bool IsSubsetOf(const Substitution& s) {
+    forall (run, sub_) {
+      if (s.Lookup(run->first) != run->second) return false;
+    }
+    return true;
+  }
 
 };
 
