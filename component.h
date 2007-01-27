@@ -320,6 +320,7 @@ class Precondition : public Component {
   void VerifyLayer2Subclass() const;
   // If there are multiple such rules, returns an arbitrary one.
   Rule * FindPositiveRule(const vector<Tuple> & result) const;
+  set<Rule *> FindPositiveRules(const vector<Tuple> & result) const;
   Rule * FindNegativeRule(Rule * target_rule) const;
   int GetNumSatisfactions() const { return num_satisfactions_;}
   const Pattern & GetPattern() const { return pattern_;}

@@ -821,6 +821,14 @@ Rule * Model::FindPositiveRule(vector<Tuple> precondition, vector<Tuple> result)
   if (!p) return NULL;
   return p->FindPositiveRule(result);
 }
+
+set<Rule *> Model::FindPositiveRules(vector<Tuple> precondition, vector<Tuple> result) const
+{
+  Precondition *p = FindPrecondition(precondition);
+  if (!p) return set<Rule*>();
+  return p->FindPositiveRules(result);
+}
+
 Rule * Model::FindNegativeRule(vector<Tuple> precondition, Rule * target_rule) const{
   Precondition *p = FindPrecondition(precondition);
   if (!p) return NULL;

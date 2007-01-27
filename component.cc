@@ -289,6 +289,11 @@ Rule * Precondition::FindPositiveRule(const vector<Tuple> & result) const {
   CHECK(s->size() > 0);
   return *(s->begin());
 }
+set<Rule *> Precondition::FindPositiveRules(const vector<Tuple> & result) const {
+  const set<Rule *> * s = positive_rule_index_ % result;
+  if (!s) return set<Rule*>();
+  return *s;
+}
 Rule * Precondition::FindNegativeRule(Rule * target_rule) const{
   const set<Rule *> * s = negative_rule_index_ % target_rule;
   if (!s) return NULL;
@@ -1406,8 +1411,7 @@ double RuleSat::LnLikelihood() const {
 	  has_no_effect = false;
       }      
     }
-    // TODO remove this if you want this optimization
-    // if (!has_no_effect) 
+    if (!has_no_effect) 
       new_ln_likelihood += log(prob);
   }
   else new_ln_likelihood += log(1-prob);

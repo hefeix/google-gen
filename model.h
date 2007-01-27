@@ -241,6 +241,8 @@ class Model {
   // If there are many such rules, returns an arbitrary one.
   Rule * FindPositiveRule(vector<Tuple> precondition, vector<Tuple> result)
     const;
+  set<Rule *> FindPositiveRules(Pattern precondition, Pattern result) const;
+
   // Finds a negative rule
   Rule * FindNegativeRule(vector<Tuple> precondition, Rule * target_rule) const;
 

@@ -950,12 +950,12 @@ void Optimizer::TryAddFirings
       VLOG(1) << "added functional negative rule. "
 	      << " utility_=" << model_->GetUtility() << endl;      
       
-      if (GetVerbosity() >= 1) model_->ToHTML("html.r" + itoa(alt_r->GetID()));
-
       bool done_iterating = false;
       int utility_pass = 0;
       FixTimesFixCircularDependencies();
       VLOG(1) << "before utility pass utility " << model_->GetUtility() << endl;
+      if (GetVerbosity() >= 1) model_->ToHTML("html.rb" + itoa(alt_r->GetID()));
+
       do {
 	OptimizationCheckpoint speedupthings(this, false);
 	VLOG(1) << "utility pass A " << utility_pass << " utility " << model_->GetUtility() << endl;
@@ -965,6 +965,7 @@ void Optimizer::TryAddFirings
 	VLOG(1) << "utility pass C " << utility_pass << " utility " << model_->GetUtility() << endl;
 	done_iterating = !speedupthings.KeepChanges();
 	utility_pass++;
+	if (GetVerbosity() >= 1) model_->ToHTML("html.ra" + itoa(alt_r->GetID()));
       } while (!done_iterating);
 
       VLOG(1) << "after MakeNegativeRuleSatsHappenInTime "
@@ -978,7 +979,6 @@ void Optimizer::TryAddFirings
       VLOG(1) << "after OptimizeRuleStrengths "
 	      << " utility_=" << model_->GetUtility() << endl;      
     }
-    if (GetVerbosity() >= 1) model_->ToHTML("html.rs" + itoa(alt_r->GetID()));
   }
 
   VLOG(1) << "removed all alternate explanations " 
@@ -1315,9 +1315,17 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
     EncodedNumber delay_guess = find_delay->second;
     VLOG(1) << "Making a rule variant on rule:" << r->GetID()
 	    << " speed:" << delay_guess.ToSortableString() << endl;
-    Rule * new_rule = 
-      model_->MakeNewRule(precondition, delay_guess, type, 
-			  NULL, result, r->GetStrength(), r->GetStrength2());
+
+    // Let's look for a new rule or make it
+    Rule * new_rule = NULL;
+    set<Rule*> potential_rules = model_->FindPositiveRules(precondition, result);
+    forall (run, potential_rules) {
+      if ((*run)->GetDelay() <= delay_guess) new_rule = *run;
+    }
+    if (!new_rule)
+      new_rule = model_->MakeNewRule(precondition, delay_guess, type, 
+				     NULL, result, r->GetStrength(), r->GetStrength2());
+    
     forall(run_f, old_firings){
       Firing *f = *run_f;
       Substitution old_sub = f->GetFullSubstitution();
@@ -1327,6 +1335,7 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
       f->Erase();
     }
     set<Rule *> to_optimize;
+    FixTimesFixCircularDependencies();
     to_optimize.insert(new_rule);
     to_optimize.insert(r);
     OptimizeRuleStrengths(to_optimize);

@@ -2,3 +2,11 @@ load working.h2
 v 1
 r 0
 addrule {lhs="[ PS a b ],[ OBS c b 'o' ]",rhs="[ OBS c a 'h' ]"}
+addrule {lhs="[ PS b a ],[ OBS c b 'o' ]",rhs="[ OBS c a 'r' ]"}
+addrule {lhs="[ PS a b ],[ PS b c ],[ OBS d a 'o' ]",rhs="[ OBS d c 's' ]"}
+addrule {lhs="[ PS a b ],[ PS b c ],[ PS c d ],[ OBS t a 'o' ]",rhs="[ OBS t d 'e' ]"}
+
+addrule {lhs="[ PS a b ],[ PS b c ],[ OBS t a 'e' ]",rhs="[ OBS t b 'l' ],[ OBS t c 'e' ]"}
+
+
+Addrule {lhs="[ PS b a ],[ OBS c b 's' ]",rhs="[ OBS c a 'e' ]"}
