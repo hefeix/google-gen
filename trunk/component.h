@@ -773,6 +773,7 @@ class Firing : public Component{
   // ----- COMPLICATED LAYER 1 FUNCTIONS ----- Firing
 
   void L1_EraseSubclass();
+  void F2_AdjustLnLikelihoodForNewTime();
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS ----- Firing
 
@@ -834,7 +835,7 @@ class TrueTuple : public Component{
   // ----- COMPLICATED LAYER 1 FUNCTIONS ----- TrueTuple
 
   void L1_EraseSubclass();
-
+  void F2_AdjustLnLikelihoodForNewTime();
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS ----- TrueTuple
 
