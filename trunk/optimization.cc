@@ -998,19 +998,25 @@ struct DelayMap {
   set<RuleSat *> rulesats_with_nonstandard_delay_;
   /// add a rule with its current delay
   void Add(Rule * r) {
+    if (delays_ % r) return;
     delays_[r] = make_pair(r->GetDelay(), r->GetDelay());
   }
-  void SetStandardDelay(Rule * r, EncodedNumber new_delay){
-    CHECK(delays_ % r);
-    delays_[r].first = new_delay;
+  void SetStandardDelay(Rule *r, EncodedNumber new_delay) {
+    SetDelay(r, new_delay, false);
   }
-  void SetNonstandardDelay(Rule * r, EncodedNumber new_delay){
-    CHECK(delays_ % r);
-    delays_[r].second = new_delay;
+  void SetNonstandardDelay(Rule *r, EncodedNumber new_delay) {
+    SetDelay(r, new_delay, true);
   }
-  EncodedNumber GetDelay(Rule * r, bool alternate_delay){
-    if (!(delays_ % r)) Add(r);
-    return alternate_delay?delays_[r].second:delays_[r].first;
+  void SetDelay(Rule * r, EncodedNumber new_delay, bool nonstandard) {
+    Add(r);
+    if (nonstandard) delays_[r].second = new_delay;
+    else delays_[r].first = new_delay;
+    if (delays_[r].first == r->GetDelay() && delays_[r].second == r->GetDelay())
+      delays_.erase(r);
+  }
+  EncodedNumber GetDelay(Rule * r, bool nonstandard){
+    if (!(delays_ % r)) return r->GetDelay();
+    return nonstandard?delays_[r].second:delays_[r].first;
   }
   EncodedNumber GetDelay(RuleSat *rs){
     return GetDelay(rs->GetRule(), UsesNonstandardDelay(rs));
@@ -1039,7 +1045,7 @@ struct RuleSatTimeNode{
   ~RuleSatTimeNode(){
     forall (run, children_) delete (*run);
   }
-  void Display(int indentation){
+  void Display(int indentation) {
     Pattern prec = rulesat_->GetRule()->GetPrecondition()->GetPattern();
     Pattern res = rulesat_->GetRule()->GetResult();
     Substitution sub = rulesat_->GetSatisfaction()->GetSubstitution();
@@ -1142,7 +1148,8 @@ struct RuleSatTimeNode{
   // returns true on success
   bool SpeedUpToHappenBefore(RuleSatTimeNode * to_beat) {
     forall(run, children_){
-      (*run)->SpeedUpToHappenBefore(to_beat);      
+      bool result = (*run)->SpeedUpToHappenBefore(to_beat);
+      if (!result) return false;
     }
     ComputeTime();
     to_beat->ComputeTime();
@@ -1179,71 +1186,91 @@ struct RuleSatTimeNode{
 };
 
 void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *> 
-						 rule_sats){
-  VLOG(1) << "MakeNegativeRuleSatsHappenInTime #rule_sats="
-	  << rule_sats.size() << endl;
-  DelayMap delay_map;
+						 rule_sats) {
+
+  VLOG(1) << "MakeNegativeRuleSatsHappenInTime #rule_sats=" << rule_sats.size() << endl;
+
+  // Get a suggestion from each rulesat
+  map< map<Rule *, pair<EncodedNumber, EncodedNumber> >, pair<int, set<RuleSat*> > > proposals;
   forall(run_rs, rule_sats) {
+    // Compute all the RuleSatTimeNodes
+    DelayMap delay_map;
+    // Get the positive and negative rulesats
     RuleSat * neg_rs = *run_rs;
     RuleSat * pos_rs = neg_rs->GetTarget();
-    // we want neg_rs to happen before pos_rs
-    RuleSatTimeNode neg_tree(neg_rs, &delay_map);
-    RuleSatTimeNode pos_tree(pos_rs, &delay_map);
-    pos_tree.ExpandLinearly(5);
-    pos_tree.ComputeTime();
+    
+    // Form their trees and expand the trees and compute time
+    RuleSatTimeNode ntree = RuleSatTimeNode(neg_rs, &delay_map);
+    RuleSatTimeNode ptree = RuleSatTimeNode(pos_rs, &delay_map);
+    ptree.ExpandLinearly(5);
+    ptree.ComputeTime();
     int max_nodes = 10;
-    bool expand_result = neg_tree.ExpandBackTo(pos_tree.time_, &max_nodes);
+    bool expand_result = ntree.ExpandBackTo(ptree.time_, &max_nodes);
     if (!expand_result) {
-      VLOG(1) << "Expansion failed" << endl;
+      VLOG(1) << "Expansion failed" << endl; 
       continue;
     }
-    VLOG(1) << "Expansion succeeded" << endl;
-    neg_tree.ComputeTime();
+    ntree.ComputeTime();
+
+    // Nothing to do
+    if (ntree.time_ < ptree.time_) continue;
+
+    // Log the trees
     if (GetVerbosity() >= 1) {
-      VLOG(0) << "neg_time=" << neg_tree.time_.ToSortableString()
-	      << " pos_time=" << pos_tree.time_.ToSortableString() << endl;
-      VLOG(0) << "neg_tree="<< endl;
-      neg_tree.Display(0);
-      VLOG(0) << "pos_tree=" << endl;
-      pos_tree.Display(0);
+      VLOG(0) << "neg_tree="<< endl; ntree.Display(0);
+      VLOG(0) << "pos_tree=" << endl; ptree.Display(0);
     }
-    if (neg_tree.time_ < pos_tree.time_) {
-      VLOG(0) << "nothing to do" << endl;
-      continue;
-    }
-    bool result = neg_tree.SpeedUpToHappenBefore(&pos_tree);
+
+    // See if we can beat the positive tree
+    if (!ntree.SpeedUpToHappenBefore(&ptree)) continue;
     if (GetVerbosity() >= 1) {
-      if (result) {
 	VLOG(0) << "SPED UP VERSION" << endl;
-	VLOG(0) << "neg_time=" << neg_tree.time_.ToSortableString()
-		<< " pos_time=" << pos_tree.time_.ToSortableString() << endl;
-	VLOG(0) << "neg_tree="<< endl;
-	neg_tree.Display(0);
-	VLOG(0) << "pos_tree=" << endl;
-	pos_tree.Display(0);
-      }
-      else {
-	VLOG(0) << "Failed to speed up" << endl;
-      }
+	VLOG(0) << "neg_tree="<< endl; ntree.Display(0);
+	VLOG(0) << "pos_tree=" << endl; ptree.Display(0);
     }
+    // Save this result
+    (proposals[delay_map.delays_].first)++;
+    (proposals[delay_map.delays_].second).insert(delay_map.rulesats_with_nonstandard_delay_.begin(),
+						 delay_map.rulesats_with_nonstandard_delay_.end());
+    
   }
-  forall(run, delay_map.delays_){
+
+  // Find the best looking proposal
+  if (proposals.size() == 0) {
+    VLOG(1) << "Can't think of anything. No proposals" << endl;
+    return;
+  }
+  typeof(proposals.begin()) best = proposals.begin();
+  forall (run, proposals) {
+    if (run->second.first > best->second.first) best = run;
+  }
+
+  // Let's see the proposal
+  if (GetVerbosity() >= 1) {
+    VLOG(0) << "Prpoposal addresses " << best->second.first << " examples\n";
+  }
+
+  // Change the standard timing on all rules
+  forall (run, best->first) {
     Rule * r = run->first;
     EncodedNumber standard_delay = run->second.first;
     EncodedNumber nonstandard_delay = run->second.second;
     if (standard_delay != r->GetDelay()){
-      // TODO: we should VLOG here
       r->ChangeDelay(standard_delay);
+      VLOG(1) << "Changing delay on rule " << r->GetID() << " to " 
+	      << standard_delay.ToSortableString() << endl;
     }    
   }
+
   // make alternate rules where we need to change the delay per rulesat
   // to a non-standard value.
   // TODO: may want to add a functional negative rule here?
   map<Rule *, set<RuleSat *> > by_rule;
-  forall(run, delay_map.rulesats_with_nonstandard_delay_){
+  forall(run, best->second.second) { // runs through the nonstandard rulesats
     by_rule[(*run)->GetRule()].insert(*run);    
   }
 
+  // Try to specify the rule
   forall(run_r, by_rule){
     VLOG(1) << "Specifying a rule" << endl;
     Rule * r = run_r->first;
@@ -1281,17 +1308,17 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
     set<int> new_rule_vars 
       = Union(GetVariables(precondition), GetVariables(result));
 
-    // TODO Is this correct? don't you have to subtract variables on the lhs
     RuleType type = (GetVariables(result)-GetVariables(precondition)).size()?CREATIVE_RULE:SIMPLE_RULE;
 
     // TODO maybe we want to find a rule with this precondition and result, and (= or faster? delay)
-    // TODO we should VLOG here
+    const pair<EncodedNumber, EncodedNumber> * find_delay = best->first % r;
+    CHECK(find_delay);
+    EncodedNumber delay_guess = find_delay->second;
     Rule * new_rule = 
-      model_->MakeNewRule(precondition, delay_map.GetDelay(r, true), type, 
+      model_->MakeNewRule(precondition, delay_guess, type, 
 			  NULL, result, r->GetStrength(), r->GetStrength2());
     forall(run_f, old_firings){
       Firing *f = *run_f;
-
       Substitution old_sub = f->GetFullSubstitution();
       if (!simplify_sub.IsSubsetOf(old_sub)) continue;
       Substitution new_sub = old_sub.Restrict(new_rule_vars);
