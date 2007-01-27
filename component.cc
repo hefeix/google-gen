@@ -1350,6 +1350,18 @@ void RuleSat::F2_AdjustLnLikelihoodForNewTime(){
   }
   if (inhibitors_.size()) ComputeSetLnLikelihood();
 }
+void Firing::F2_AdjustLnLikelihoodForNewTime(){
+  if (GetRule()->GetRuleType() == SIMPLE_RULE) {
+    GetRuleSat()->ComputeSetLnLikelihood();
+  }
+}
+void TrueTuple::F2_AdjustLnLikelihoodForNewTime(){
+  forall(run, causes_) {
+    if ((*run)->GetRule()->GetRuleType() == SIMPLE_RULE) {
+      (*run)->GetRuleSat()->ComputeSetLnLikelihood();
+    }
+  }
+}
 double Component::LnLikelihood() const {
   return 0.0;
 }
@@ -1382,7 +1394,22 @@ double RuleSat::LnLikelihood() const {
   prob *= inhibition;
   double new_ln_likelihood = 0;
   int num_firings = firings_.size();
-  if (num_firings >= 1) new_ln_likelihood += log(prob);
+  if (num_firings >= 1) {
+    // we can get firing for free if it has no effect.
+    bool has_no_effect = false;
+    if (rule_->type_ == SIMPLE_RULE) {
+      has_no_effect = true;
+      CHECK(firings_.size() == 1);
+      Firing * f = firings_.begin()->second;
+      forall(run_tt, f->true_tuples_) {
+	if (!((*run_tt)->GetTime() < f->GetTime()))
+	  has_no_effect = false;
+      }      
+    }
+    // TODO remove this if you want this optimization
+    // if (!has_no_effect) 
+      new_ln_likelihood += log(prob);
+  }
   else new_ln_likelihood += log(1-prob);
   if (num_firings >= 1 && rule_->type_ == CREATIVE_RULE) {
     double prob2 = rule_->strength2_d_;

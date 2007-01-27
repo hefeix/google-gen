@@ -950,11 +950,23 @@ void Optimizer::TryAddFirings
       VLOG(1) << "added functional negative rule. "
 	      << " utility_=" << model_->GetUtility() << endl;      
       
-      if (GetVerbosity() >= 1)
-	model_->ToHTML("html.r" + itoa(alt_r->GetID()));
+      if (GetVerbosity() >= 1) model_->ToHTML("html.r" + itoa(alt_r->GetID()));
 
-      MakeNegativeRuleSatsHappenInTime(negative_rule_sats);
-      model_->FixTimes(); // TODO - just fix some times.
+      bool done_iterating = false;
+      int utility_pass = 0;
+      FixTimesFixCircularDependencies();
+      VLOG(1) << "before utility pass utility " << model_->GetUtility() << endl;
+      do {
+	OptimizationCheckpoint speedupthings(this, false);
+	VLOG(1) << "utility pass A " << utility_pass << " utility " << model_->GetUtility() << endl;
+	MakeNegativeRuleSatsHappenInTime(negative_rule_sats);
+	VLOG(1) << "utility pass B " << utility_pass << " utility " << model_->GetUtility() << endl;
+	FixTimesFixCircularDependencies();
+	VLOG(1) << "utility pass C " << utility_pass << " utility " << model_->GetUtility() << endl;
+	done_iterating = !speedupthings.KeepChanges();
+	utility_pass++;
+      } while (!done_iterating);
+
       VLOG(1) << "after MakeNegativeRuleSatsHappenInTime "
 	      << " utility_=" << model_->GetUtility() << endl;      
 
@@ -965,23 +977,10 @@ void Optimizer::TryAddFirings
 
       VLOG(1) << "after OptimizeRuleStrengths "
 	      << " utility_=" << model_->GetUtility() << endl;      
-      
-      /*
-      // make sure r has a smaller delay than alt_r
-      if (!(rule->GetDelay() < alt_r->GetDelay())) {
-	EncodedNumber new_delay = alt_r->GetDelay();
-	new_delay.bits_.push_back(false);
-	rule->ChangeDelay(new_delay);
-	PushTimesAfterChangeDelay(rule);
-      }
-      {
-	OptimizationCheckpoint cp_negative_rule(this, false);
-	cp_negative_rule.logging_ = true;
-		}*/
     }
-    if (GetVerbosity() >= 1)
-      model_->ToHTML("html.rs" + itoa(alt_r->GetID()));
+    if (GetVerbosity() >= 1) model_->ToHTML("html.rs" + itoa(alt_r->GetID()));
   }
+
   VLOG(1) << "removed all alternate explanations " 
 	  << " utility_=" << model_->GetUtility() << endl;
   if (max_recursion >0) 
@@ -1247,7 +1246,7 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
 
   // Let's see the proposal
   if (GetVerbosity() >= 1) {
-    VLOG(0) << "Prpoposal addresses " << best->second.first << " examples\n";
+    VLOG(0) << "Propoposal addresses " << best->second.first << " examples\n";
   }
 
   // Change the standard timing on all rules
@@ -1314,6 +1313,8 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
     const pair<EncodedNumber, EncodedNumber> * find_delay = best->first % r;
     CHECK(find_delay);
     EncodedNumber delay_guess = find_delay->second;
+    VLOG(1) << "Making a rule variant on rule:" << r->GetID()
+	    << " speed:" << delay_guess.ToSortableString() << endl;
     Rule * new_rule = 
       model_->MakeNewRule(precondition, delay_guess, type, 
 			  NULL, result, r->GetStrength(), r->GetStrength2());
