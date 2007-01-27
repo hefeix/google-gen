@@ -41,6 +41,9 @@ struct EncodedNumber {
 };
 bool OPERATORLESS(const EncodedNumber & a, const EncodedNumber & b);
 bool OPERATOREQ(const EncodedNumber & a, const EncodedNumber & b);
+inline bool OPERATORLE(const EncodedNumber & a, const EncodedNumber & b) {
+  return (!(b<a));
+}
 inline bool operator !=(const EncodedNumber & a, const EncodedNumber & b){return !(a==b);}
 
 string IntToSortableString(int x); // only on positive integers
