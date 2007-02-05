@@ -55,6 +55,15 @@ struct Tuple{
       if (IsVariable(ret[i])) ret[i] = WILDCARD;
     return ret;
   }  
+  Tuple WildcardsToVariables() const {
+    Tuple ret = *this;
+    int nextvar = 0;
+    for (uint c=0; c<size(); c++)
+      if (terms_[c] == WILDCARD) 
+	ret.terms_[c] = Variable(nextvar++);
+    return ret;
+  }
+
   uint64 Fingerprint(uint64 level = 0) const 
   { return ::Fingerprint(terms_, level); }
   // Creates an int where each bit is on if and only if the corresponding term
@@ -88,19 +97,18 @@ inline uint64 Fingerprint(const Tuple & s, uint64 level = 0){
 bool MatchesWildcardTuple(const Tuple & wildcard_tuple, 
 			  const Tuple & constant_tuple);
 			  
-// Iterates over generalizations of a tuple.  The tuple must be entirely
-// literals, and the generalized tuple iterates over all tuples for which
-// a possibly empty or full subset of the terms of s have been changed to 
-// a wildcard
+// Iterates over generalizations of a tuple.  Iterates over all generalizations
+// of a subset of the constants into wildcards.
 struct GeneralizationIterator {
-  GeneralizationIterator(const Tuple & s) ;
+  GeneralizationIterator(const Tuple & t) ;
   void operator++();
   bool done() const;
   const Tuple & Current() const;
-  int VariableMask() const;
+  int GeneralizeMask() const;
+  vector<int> constant_positions_;
   int max_;
-  int variable_mask_;
-  Tuple s_;
+  int generalize_mask_;
+  Tuple my_tuple_;
   Tuple generalized_;
 };
 
@@ -146,6 +154,11 @@ struct Substitution {
   Substitution Restrict(const set<int> & terms) const;
   Substitution Reverse() const;
 
+  // First unused variable as a positive number
+  uint FirstUnusedVariable() {
+    for (int i=0; true; i++) if (!Contains(Variable(i))) return i;
+  }
+  
   // If a substitution is a subset of another one
   // domain is a subset of other's domain, and ranges are equal
   bool IsSubsetOf(const Substitution& s) {
@@ -154,6 +167,8 @@ struct Substitution {
     }
     return true;
   }
+
+  uint size() const { return sub_.size(); }
 
 };
 

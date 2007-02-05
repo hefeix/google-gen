@@ -97,6 +97,25 @@ Tuple TupleIndex::RandomTuple() const {
   CHECK(false); return Tuple();
 }
 
+// Needs to get a wildcard tuple
+bool TupleIndex::GetRandomTupleMatching(Tuple wildcard_tuple, Tuple * result) {
+  CHECK(wildcard_tuple.IsWildcardTuple());
+
+  // Get rid of constants first
+  if (wildcard_tuple.IsConstantTuple()) {
+    bool found = tuples_ % t;
+    if (!found) return false;
+    *result = *wildcard_tuple;
+    return true;
+  }
+
+  // not a constant tuple
+  Node * const * np = nodes_ % wildcard_tuple;
+  if (!np) return false;
+  *result = (*np)->GetRandomTuple();
+  return true;
+}
+
 // We select a random tuple which contains all of the terms.
 // If funky_distribution is false, this selection is uniform. 
 // If funky_distribution is true, we first select a situation uniformly.  
@@ -253,7 +272,7 @@ void TupleIndex::Node::GetRange(const SamplingInfo &s,
   *end = (s.end_hash_==0xFFFFFFFF)? specifications_.end():
     specifications_.lower_bound(make_pair(s.end_hash_+1, Tuple()));
 }
-Tuple TupleIndex::Node::GetRandomTuple(){
+Tuple TupleIndex::Node::GetRandomTuple() const {
   CHECK(specifications_.size());
   set<pair<uint32, Tuple> >::iterator look 
     = specifications_.lower_bound(make_pair(RandomUInt32(), Tuple()));

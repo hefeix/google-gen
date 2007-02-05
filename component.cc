@@ -1408,11 +1408,11 @@ double RuleSat::LnLikelihood() const {
       Firing * f = firings_.begin()->second;
       forall(run_tt, f->true_tuples_) {
 	if (!((*run_tt)->GetTime() < f->GetTime()))
-	  has_no_effect = false;
+	  has_no_effect= false;
       }      
     }
-    if (!has_no_effect) 
-      new_ln_likelihood += log(prob);
+    // if (!has_no_effect) UNCOMMENT THIS FOR THIS OPTIMIZATION
+    new_ln_likelihood += log(prob);
   }
   else new_ln_likelihood += log(1-prob);
   if (num_firings >= 1 && rule_->type_ == CREATIVE_RULE) {

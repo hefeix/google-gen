@@ -106,6 +106,25 @@ struct Optimizer{
   bool MaybeFindRandomCandidateRule(CandidateRule * ret, Tactic tactic, 
 				    string *comments);
   
+  struct PatternBuilder {
+    Pattern pattern_;
+    vector<Substitution> subs_;
+    Optimizer * optimizer_;
+    PatternBuilder(Pattern p, const vector<Substitution>& vs, Optimizer * opt) {
+      pattern_ = p;
+      subs_ = vs;
+      optimizer_ = opt;
+    }
+
+    bool TryInitializeFromSurprisingTuple();
+
+    bool ExpandFully(int size);
+    bool TryExpandOnce();
+
+    void CollapseEquivalentVariables();
+    void CollapseConstantVariables();
+  };
+
   // used for accumulating information about a candidate rule in deciding
   // whether to try adding it.
   struct RuleInfo {
@@ -147,6 +166,7 @@ struct Optimizer{
 
   // How useful is it to generate this another way
   double GuessBenefit(const TrueTuple * tp);
+  Tuple  GetRandomSurprisingTuple();
 
   int64 StandardMaxWork();
   bool VetteCandidateRule(CandidateRule r, 
