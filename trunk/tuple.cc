@@ -90,27 +90,33 @@ bool MatchesWildcardTuple(const Tuple & wildcard_tuple,
   }
   return true;
 }
-GeneralizationIterator::GeneralizationIterator(const Tuple & s) {
-  max_ = 1 << s.size();
-  s_ = generalized_ = s;
+GeneralizationIterator::GeneralizationIterator(const Tuple & t) {
+  my_tuple_ = generalized_ = t;
+  for (int i=0; i<my_tuple_.size(); i++) {
+    if (IsConstant(my_tuple_[i])) {
+      constant_positions_.push_back(i);
+    }
+  }
+  max_ = 1 << constant_positions_.size();
   variable_mask_ = 0;
 }
 void GeneralizationIterator::operator++(){
-  int change = variable_mask_ ^ (variable_mask_ + 1);
-  variable_mask_++;
-  if (variable_mask_ >= max_) return;
+  int change = generalize_mask_ ^ (generalize_mask_ + 1);
+  generalize_mask_++;
+  if (generalize_mask_ >= max_) return;
   for (uint i=0; change != 0; i++) {
-    if (variable_mask_ & (1 << i)) generalized_.terms_[i] = WILDCARD;
-    else generalized_.terms_[i] = s_.terms_[i];
+    if (generalize_mask_ & (1 << i)) generalized_.terms_[constant_positions_[i]] = WILDCARD;
+    else generalized_.terms_[constant_positions_[i]] 
+	   = my_tuple_.terms_[constant_positions_[i]];
     change >>=1;
   }
 }
-bool GeneralizationIterator::done() const{ return (variable_mask_ >= max_); }
+bool GeneralizationIterator::done() const{ return (generalize_mask_ >= max_); }
 const Tuple & GeneralizationIterator::Current() const { 
   return generalized_; 
 }
-int GeneralizationIterator::VariableMask() const{ 
-  return variable_mask_; 
+int GeneralizationIterator::GeneralizeMask() const{ 
+  return generalize_mask_;
 }
 
 

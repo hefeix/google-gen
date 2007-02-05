@@ -268,6 +268,8 @@ TrueTuple * Optimizer::GetRandomTrueTuple(){
   return ret;
 }
 
+
+
 // This assumes the truetuple currently happens at some time
 double Optimizer::GuessBenefit(const TrueTuple * tp) {
   // Get all causes
@@ -332,6 +334,15 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
   VLOG(1) <<   "Tuple " << tp->GetTuple().ToString()
 	  << " Diff: " << final_diff << endl;
   return final_diff;
+}
+
+Tuple Optimizer::GetRandomSurprisingTuple() {
+  while (true) {
+    TrueTuple * tt = GetRandomTrueTuple();
+    double bits = GuessBenefit(tt);
+    if (RandomFraction() < bits/10)
+      return tt->GetTuple();
+  }
 }
 
 int64 Optimizer::StandardMaxWork(){
@@ -467,6 +478,165 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
   return VetteCandidateRule(r, ret, StandardMaxWork(), comments);
 }
 
+bool Optimizer::PatternBuilder::TryInitializeFromSurprisingTuple() {
+
+  for (int trials = 0; trials < 100; trials++) {
+
+    // We may want to suck in more tuples from this example
+    Tuple t = opt->GetRandomSurprisingTuple();
+  
+    // Get the second example
+  
+    // Set a random set of positions to variables and try again
+    Tuple vartuple = t;
+    for (uint c=0; c<vartuple.size(); c++) {
+      double varprob = 0.5;
+      if (c == 0) varprob = 0.1; // Don't variablize the relation as much
+      if (RandomFraction() < varprob) vartuple[c] = WILDCARD;
+    }
+    
+    // Look for a random tuple matching the pattern
+    Tuple t2;
+    bool result = optimizer_->model_->GetTupleIndex()->GetRandomTupleMatching(vartuple, &t2);
+
+    // Couldn't find a second tuple
+    if (!result) continue;
+
+    // Not much of a surprise if we pick the same thing twice
+    if (t == t2) continue;
+
+    Tuple onlytuple = vartuple.WildcardsToVariables();
+    Substitution s1, s2;
+    CHECK(ComputeSubstitution(onlytuple, t, &s1));
+    CHECK(ComputeSubstitution(onlytuple, t2, &s2));
+    subs_.push_back(s1);
+    subs_.push_back(s2);
+    pattern_.push_back(onlytuple);
+    return true;
+  }
+  return false;
+}
+
+bool Optimizer::PatternBuilder::ExpandFully(int size) {
+  for (int trials = 0; trials < 100 + 10 * size; trials++) {
+    if (pattern_.size() < size) TryExpandOnce();
+  }
+  if (pattern_.size() < size) return false;
+  return true;
+}
+
+bool Optimizer::PatternBuilder::TryExpandOnce(int size) {
+
+  // Pick a number of anchors
+  uint num_anchors = 1;
+  while (RandomFraction() < 0.5) num_anchors++;
+
+  // Pick that size of subset of anchors
+  set<int> anchors;
+  if (num_anchors > subs_[0].size()) num_anchors = subs_[0].size();
+  while (anchors.size() < num_anchors) {
+    RandomElement(variter, subs_[0].sub_);
+    anchors.insert(variter->first);
+  }
+
+  // Find the objects corresponding to those variables in the first example
+  set<int> object_anchors;
+  forall(run, anchors) {
+    object_anchors.insert(subs_[0].Lookup(*run));
+  }
+  vector<int> v_object_anchors(object_anchors.begin(), object_anchors.end());
+
+  // Get a random tuple with all the anchors
+  // HERE make sure this tuple isnt the same as our pattern substituted with subs_[0]
+  TupleIndex * ti = optimizer_->model_->GetTupleIndex();
+  Tuple expansion_tuple;
+  bool found = ti->GetRandomTupleContaining(&expansion_tuple, v_object_anchors, true);
+  if (!found) return false;
+
+
+  // Turn some of the constants into varialbes based on subs_[0]
+  subs_[0].Reverse().Substitute(&expansion_tuple);  
+
+  // Run through all generalizations
+  Tuple good_generalization;
+  bool any_good_generalization = false;
+  vector<Tuple> expansion_tuples(subs.size());
+  for (GeneralizationIterator gen(expansion_tuple); !gen.done(); ++gen) {
+    bool works = true;
+    Tuple generalized = gen.Current();
+    for(int i=0; i<subs_.size(); i++) {
+      Tuple specified = generalized;
+      subs_[i].Substitute(&specified);
+      int num_results = ti->Lookup(specified, NULL);
+      if (num_results != 1) {
+	works = false;
+	break;
+      }
+      vector<Tuple> results;
+      ti->Lookup(specified, &results);
+      CHECK(results.size()==1);
+      expansion_tuples[i] = results[0];
+    }
+    if (works) {
+      any_good_generalization = true;
+      good_generalization = generalized;
+      break;
+    }
+  }
+  if (!any_good_generalization) return false;
+  for (int i=0; i<good_generalization.size(); i++) {
+    if (good_generalization[i] == WILDCARD) {
+      int var = Variable(sub_[0].FirstUnusedVariable());
+      for (int sub_num=0; sub_num<subs_.size(); sub_num++){ 
+	sub_[sub_num].Add(var, expansion_tuples[sub_num][i]);
+      }
+      good_generalization[i] = var;
+    }
+  }
+  pattern_.push_back(good_generalization);
+  return true;
+}
+
+void Optimizer::PatternBuilder::CollapseEquivalentVariables() {
+  // the assignment of a variable is the mapping from substitution to constant.
+  // this maps the assigment to the set of variables with that assignment. 
+  map<vector<int>, set<int> > assingments_to_variables;
+  forall(run_var, subs_[0].sub_){
+    int var = run_var->first;
+    vector<int> assignment;
+    for(int i=0; i<subs_.size(); i++) {
+      assignment.push_back(subs_[i].Lookup(var));
+    }
+    assingments_to_variables[assignment].insert(var);
+  }
+  Substitution pattern_tweak;
+  forall(run_a, assingments_to_variables) if (run->second.size() > 1) {
+    int canonical_var = *(run->second.begin());
+    forall(run_var, run->second) {
+      int var = *run_var;
+      if (var == canonical_var) continue;
+      for (int i=0; i<subs_.size(); i++) subs_[i].sub_.erase(var);
+      pattern_tweak.Add(var, canonical_var);
+    }
+  }
+  pattern_tweak.Substitute(&pattern_);
+}
+
+void Optimizer::PatternBuilder::CollapseConstantVariables() {
+  Substitution pattern_tweak;
+  forall(run_var, subs_[0].sub_) {
+    int var = run_var->first;
+    set<int> values;
+    for (int i=0; i<subs_.size(); i++)
+      values.insert(subs_[i].Lookup(var));
+    if (values.size() == 1) {
+      pattern_tweak.Add(var, *values.begin());
+      for (int i=0; i<subs_.size(); i++)
+	subs_[i].sub_.erase(var);
+    }
+  }
+}
+
 void Optimizer::RuleInfo::Canonicalize(){
   r_ = CanonicalizeRule(r_, NULL);
 }
@@ -502,7 +672,7 @@ const Tuple & Optimizer::RuleInfo::GetSampledTuple(){
     (sample_postcondition_?r_.second[sample_clause_]:r_.first[sample_clause_]);
 }
 void Optimizer::RuleInfo::CheckForMultipleValuesOfSampledTuple(){
-  // Here we will require also that there be at least two values of the
+  // We will require also that there be at least two values of the
   // sampled tuple.  
   if (sampled_) {
     set<int> sampled_tuple_variables 
@@ -1179,7 +1349,7 @@ struct RuleSatTimeNode{
       VLOG(1) << "NONSTANDARD TIMECHANGE Rule:" << rule_->GetID() << " nonstandard delay:" << fast_enough.ToSortableString() << endl;
       return true;
     }
-    cerr << "all efforts failed to speed up negative rulesat" << endl;
+    // cerr << "all efforts failed to speed up negative rulesat" << endl;
     return false;
   }
 };

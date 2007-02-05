@@ -98,6 +98,7 @@ class TupleIndex{
 				bool funky_distribution);
   
   Tuple RandomTuple() const;
+  bool  GetRandomTupleMatching(Tuple wildcard_tuple, Tuple * result);
 
   // for testing.
   void Shell();  
@@ -108,14 +109,13 @@ class TupleIndex{
     // maps first term to number of tuples starting with that term
     // present if first term is variable
     map<int, int> *first_term_counts_; 
-    Tuple GetRandomTuple();
+    Tuple GetRandomTuple() const;
     void GetRange(const SamplingInfo & s, 
 		  set<pair<uint32, Tuple> >::iterator * start,
 		  set<pair<uint32, Tuple> >::iterator * end);
   };
   map<Tuple, Node*> nodes_;
   set<Tuple> tuples_;
-
 
   uint64 total_tuples_;
   map<uint64, uint64> lengths_; // number of stored tuples with these lengths

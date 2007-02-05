@@ -419,7 +419,7 @@ bool Model::FixTimes() {
       }
     }
     if (queue.size() > (uint)2*qsize) {
-      VLOG(0) << "queue.size() : " << queue.size() << endl;
+      // VLOG(0) << "queue.size() : " << queue.size() << endl;
       qsize = queue.size();
     }
     // GEORGES-WTF?
