@@ -103,9 +103,9 @@ bool TupleIndex::GetRandomTupleMatching(Tuple wildcard_tuple, Tuple * result) {
 
   // Get rid of constants first
   if (wildcard_tuple.IsConstantTuple()) {
-    bool found = tuples_ % t;
+    bool found = tuples_ % wildcard_tuple;
     if (!found) return false;
-    *result = *wildcard_tuple;
+    *result = wildcard_tuple;
     return true;
   }
 
@@ -210,7 +210,7 @@ void TupleIndex::Add(Tuple t) {
   // Run through generalizations and modify underspecified nodes
   for (GeneralizationIterator iter(t); !iter.done(); ++iter) {
     // don't use the actual tuple.
-    if (iter.VariableMask()==0) continue;
+    if (iter.GeneralizeMask()==0) continue;
 
     // Get the generalized tuple, and its node
     const Tuple & g = iter.Current();
@@ -246,7 +246,7 @@ void TupleIndex::Remove(Tuple t) {
   for (GeneralizationIterator iter(t); !iter.done(); ++iter) {
 
     // ignore the original constant tuple
-    if (iter.VariableMask()==0) continue;
+    if (iter.GeneralizeMask()==0) continue;
 
     // Find the underspecified node, make sure it exists
     const Tuple & g = iter.Current();

@@ -370,6 +370,7 @@ string ModelShell::Handle(string command) {
  	string comments;
  	if (!optimizer_->FindRandomCandidateRule(&cand, (Tactic)tactic,
  						 10, &comments)) break;
+        cout<< "Candidate" << endl;
  	cout << CandidateRuleToString(cand) << endl;
        }
      }

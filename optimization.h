@@ -25,6 +25,7 @@ class Optimizer;
 
 enum Tactic {
   NEW_RULE,
+  NEW_MANY_EXAMPLES_RULE,
   SPECIFY_ONE,
   GENERALIZE_ONE,
 };
@@ -110,15 +111,13 @@ struct Optimizer{
     Pattern pattern_;
     vector<Substitution> subs_;
     Optimizer * optimizer_;
-    PatternBuilder(Pattern p, const vector<Substitution>& vs, Optimizer * opt) {
-      pattern_ = p;
-      subs_ = vs;
+    PatternBuilder(Optimizer * opt) {
       optimizer_ = opt;
     }
 
     bool TryInitializeFromSurprisingTuple();
 
-    bool ExpandFully(int size);
+    bool ExpandFully(uint size);
     bool TryExpandOnce();
 
     void CollapseEquivalentVariables();
@@ -174,6 +173,7 @@ struct Optimizer{
 			  int64 max_work, string *comments);
   
   bool MaybeFindRandomNewRule(CandidateRule * ret, string *comments);
+  bool MaybeFindManyExamplesRule(CandidateRule * ret, string *comments);
   bool MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic, 
 				  string *comments);
   
