@@ -300,12 +300,12 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
   bool can_keep_firing_lose_arbitrary = false;
   if (rule_sat->NumFirings() == 1) {
     can_keep_firing_lose_arbitrary = true;
-    VLOG(1) << "Can use negative rule" << endl;
+    VLOG(2) << "Can use negative rule" << endl;
   }
 
   // How much could we save getting rid of the firing
   double firing_diff = log(1 - strength) - log(strength);
-  VLOG(1) << "Remove firing Savings:" << firing_diff << endl;
+  VLOG(2) << "Remove firing Savings:" << firing_diff << endl;
     
   // How much could we save in naming?
   // We don't want to count things that have ArbitraryTermCount 1
@@ -327,7 +327,7 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
     }
     arbitrary_diff = model_->GetUtility() - old_utility;
   }
-  VLOG(1) << "Arbitrary diff: " << arbitrary_diff << endl;
+  VLOG(2) << "Arbitrary diff: " << arbitrary_diff << endl;
 
   // Choices (do nothing, lose both, lose arbitrary only)
   double final_diff = 0.0;
@@ -335,7 +335,7 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
   if (can_keep_firing_lose_arbitrary)
     final_diff = max(final_diff, arbitrary_diff);
 
-  VLOG(1) <<   "Tuple " << tp->GetTuple().ToString()
+  VLOG(2) <<   "Tuple " << tp->GetTuple().ToString()
 	  << " Diff: " << final_diff << endl;
   return final_diff;
 }
@@ -416,6 +416,12 @@ bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
 bool Optimizer::MaybeFindManyExamplesRule(CandidateRule *ret, string *comments){
   PatternBuilder pb(this);
   if (!pb.TryInitializeFromSurprisingTuple()) return false;
+  
+  // Log things here
+  if (GetVerbosity() >= 1) {
+    VLOG(1) << "Initialized " << pb.ToString() << endl;
+  }
+
   uint num_clauses = 1; while (RandomFraction() < 0.7) num_clauses++;  
   if (!pb.ExpandFully(num_clauses)) return false;
 
@@ -619,6 +625,8 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
     }
   }
   pattern_.push_back(good_generalization);
+  CollapseEquivalentVariables();
+  CollapseConstantVariables();
   return true;
 }
 
@@ -662,6 +670,16 @@ void Optimizer::PatternBuilder::CollapseConstantVariables() {
 	subs_[i].sub_.erase(var);
     }
   }
+}
+
+string Optimizer::PatternBuilder::ToString() {
+  stringstream ret;
+  ret << "Patternbuilder" << endl;
+  ret << TupleVectorToString(pattern_) << endl;
+  for (uint c=0; c<subs_.size(); c++) {
+    ret << subs_[c].ToString() << endl;
+  }
+  return ret.str();
 }
 
 void Optimizer::RuleInfo::Canonicalize(){
