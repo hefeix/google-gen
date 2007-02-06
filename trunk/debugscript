@@ -1,14 +1,2 @@
-spec count6k
-addrule { lhs="[ S a b ]",rhs="[ S b c ]" }
-addrule { lhs="[ S a b ]",rhs="[ C a c ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a e ]",rhs="[ C d e ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a '0' ]",rhs="[ C d '1' ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a '1' ]",rhs="[ C d '2' ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a '2' ]",rhs="[ C d '3' ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a '3' ]",rhs="[ C d '4' ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a '4' ]",rhs="[ C d '5' ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a '5' ]",rhs="[ C d '6' ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a '6' ]",rhs="[ C d '7' ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a '7' ]",rhs="[ C d '8' ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a '8' ]",rhs="[ C d '9' ]" }
-addrule { lhs="[ S a b ],[ S b c ],[ S c d ],[ C a '9' ]",rhs="[ C d '0' ]" }
+spec count3k
+i 1 10

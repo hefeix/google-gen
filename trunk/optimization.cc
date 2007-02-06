@@ -250,11 +250,15 @@ bool Optimizer::FindRandomCandidateRule(CandidateRule *ret, Tactic tactic,
   recently_checked_[*ret] = model_->GetUtility();
   return true;
 }
+
 bool Optimizer::MaybeFindRandomCandidateRule(CandidateRule *ret, 
 					     Tactic tactic, string *comments){
   switch (tactic) {
   case NEW_RULE:
     return MaybeFindRandomNewRule(ret, comments);
+    break;
+  case NEW_MANY_EXAMPLES_RULE:
+    return MaybeFindManyExamplesRule(ret, comments);
     break;
   default:
     return MaybeFindRandomVariantRule(ret, tactic, comments);
@@ -409,6 +413,18 @@ bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
   return false;
 }
 
+bool Optimizer::MaybeFindManyExamplesRule(CandidateRule *ret, string *comments){
+  PatternBuilder pb(this);
+  if (!pb.TryInitializeFromSurprisingTuple()) return false;
+  uint num_clauses = 1; while (RandomFraction() < 0.7) num_clauses++;  
+  if (!pb.ExpandFully(num_clauses)) return false;
+
+  Pattern &p = pb.pattern_;
+  Tuple dummy = p[0]; p[0] = p[p.size()-1];  p[p.size()-1] = dummy;
+  CandidateRule r = SplitOffLast(p);
+  *comments = "ManyExamplesRule";
+  return VetteCandidateRule(r, ret, StandardMaxWork(), comments);
+}
 
 bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
   uint num_clauses = 1;
@@ -483,7 +499,7 @@ bool Optimizer::PatternBuilder::TryInitializeFromSurprisingTuple() {
   for (int trials = 0; trials < 100; trials++) {
 
     // We may want to suck in more tuples from this example
-    Tuple t = opt->GetRandomSurprisingTuple();
+    Tuple t = optimizer_->GetRandomSurprisingTuple();
   
     // Get the second example
   
@@ -512,20 +528,22 @@ bool Optimizer::PatternBuilder::TryInitializeFromSurprisingTuple() {
     subs_.push_back(s1);
     subs_.push_back(s2);
     pattern_.push_back(onlytuple);
+    CollapseEquivalentVariables();
+    CollapseConstantVariables();
     return true;
   }
   return false;
 }
 
-bool Optimizer::PatternBuilder::ExpandFully(int size) {
-  for (int trials = 0; trials < 100 + 10 * size; trials++) {
+bool Optimizer::PatternBuilder::ExpandFully(uint size) {
+  for (uint trials = 0; trials < 100 + 10 * size; trials++) {
     if (pattern_.size() < size) TryExpandOnce();
   }
   if (pattern_.size() < size) return false;
   return true;
 }
 
-bool Optimizer::PatternBuilder::TryExpandOnce(int size) {
+bool Optimizer::PatternBuilder::TryExpandOnce() {
 
   // Pick a number of anchors
   uint num_anchors = 1;
@@ -552,7 +570,14 @@ bool Optimizer::PatternBuilder::TryExpandOnce(int size) {
   Tuple expansion_tuple;
   bool found = ti->GetRandomTupleContaining(&expansion_tuple, v_object_anchors, true);
   if (!found) return false;
-
+  
+  // Can amortize this work but for now ...
+  Pattern sub_0_pattern = pattern_;
+  set<Tuple> pattern0_tuples;
+  subs_[0].Substitute(&sub_0_pattern);
+  for (uint c=0; c<sub_0_pattern.size(); c++)
+    if (sub_0_pattern[c] == expansion_tuple)
+      return false;
 
   // Turn some of the constants into varialbes based on subs_[0]
   subs_[0].Reverse().Substitute(&expansion_tuple);  
@@ -560,11 +585,11 @@ bool Optimizer::PatternBuilder::TryExpandOnce(int size) {
   // Run through all generalizations
   Tuple good_generalization;
   bool any_good_generalization = false;
-  vector<Tuple> expansion_tuples(subs.size());
+  vector<Tuple> expansion_tuples(subs_.size());
   for (GeneralizationIterator gen(expansion_tuple); !gen.done(); ++gen) {
     bool works = true;
     Tuple generalized = gen.Current();
-    for(int i=0; i<subs_.size(); i++) {
+    for(uint i=0; i<subs_.size(); i++) {
       Tuple specified = generalized;
       subs_[i].Substitute(&specified);
       int num_results = ti->Lookup(specified, NULL);
@@ -584,11 +609,11 @@ bool Optimizer::PatternBuilder::TryExpandOnce(int size) {
     }
   }
   if (!any_good_generalization) return false;
-  for (int i=0; i<good_generalization.size(); i++) {
+  for (uint i=0; i<good_generalization.size(); i++) {
     if (good_generalization[i] == WILDCARD) {
-      int var = Variable(sub_[0].FirstUnusedVariable());
-      for (int sub_num=0; sub_num<subs_.size(); sub_num++){ 
-	sub_[sub_num].Add(var, expansion_tuples[sub_num][i]);
+      int var = Variable(subs_[0].FirstUnusedVariable());
+      for (uint sub_num=0; sub_num<subs_.size(); sub_num++){ 
+	subs_[sub_num].Add(var, expansion_tuples[sub_num][i]);
       }
       good_generalization[i] = var;
     }
@@ -604,18 +629,18 @@ void Optimizer::PatternBuilder::CollapseEquivalentVariables() {
   forall(run_var, subs_[0].sub_){
     int var = run_var->first;
     vector<int> assignment;
-    for(int i=0; i<subs_.size(); i++) {
+    for(uint i=0; i<subs_.size(); i++) {
       assignment.push_back(subs_[i].Lookup(var));
     }
     assingments_to_variables[assignment].insert(var);
   }
   Substitution pattern_tweak;
-  forall(run_a, assingments_to_variables) if (run->second.size() > 1) {
-    int canonical_var = *(run->second.begin());
-    forall(run_var, run->second) {
+  forall(run_a, assingments_to_variables) if (run_a->second.size() > 1) {
+    int canonical_var = *(run_a->second.begin());
+    forall(run_var, run_a->second) {
       int var = *run_var;
       if (var == canonical_var) continue;
-      for (int i=0; i<subs_.size(); i++) subs_[i].sub_.erase(var);
+      for (uint i=0; i<subs_.size(); i++) subs_[i].sub_.erase(var);
       pattern_tweak.Add(var, canonical_var);
     }
   }
@@ -624,14 +649,16 @@ void Optimizer::PatternBuilder::CollapseEquivalentVariables() {
 
 void Optimizer::PatternBuilder::CollapseConstantVariables() {
   Substitution pattern_tweak;
-  forall(run_var, subs_[0].sub_) {
+  CHECK(subs_.size() > 0);
+  Substitution example = subs_[0];
+  forall(run_var, example.sub_) {
     int var = run_var->first;
     set<int> values;
-    for (int i=0; i<subs_.size(); i++)
+    for (uint i=0; i<subs_.size(); i++)
       values.insert(subs_[i].Lookup(var));
     if (values.size() == 1) {
       pattern_tweak.Add(var, *values.begin());
-      for (int i=0; i<subs_.size(); i++)
+      for (uint i=0; i<subs_.size(); i++)
 	subs_[i].sub_.erase(var);
     }
   }

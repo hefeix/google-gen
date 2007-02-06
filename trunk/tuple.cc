@@ -92,13 +92,13 @@ bool MatchesWildcardTuple(const Tuple & wildcard_tuple,
 }
 GeneralizationIterator::GeneralizationIterator(const Tuple & t) {
   my_tuple_ = generalized_ = t;
-  for (int i=0; i<my_tuple_.size(); i++) {
+  for (uint i=0; i<my_tuple_.size(); i++) {
     if (IsConstant(my_tuple_[i])) {
       constant_positions_.push_back(i);
     }
   }
   max_ = 1 << constant_positions_.size();
-  variable_mask_ = 0;
+  generalize_mask_ = 0;
 }
 void GeneralizationIterator::operator++(){
   int change = generalize_mask_ ^ (generalize_mask_ + 1);
