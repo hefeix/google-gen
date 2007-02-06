@@ -122,6 +122,7 @@ struct Optimizer{
 
     void CollapseEquivalentVariables();
     void CollapseConstantVariables();
+    string ToString();
   };
 
   // used for accumulating information about a candidate rule in deciding
