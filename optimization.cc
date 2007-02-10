@@ -272,72 +272,45 @@ TrueTuple * Optimizer::GetRandomTrueTuple(){
   return ret;
 }
 
-
-
 // This assumes the truetuple currently happens at some time
 double Optimizer::GuessBenefit(const TrueTuple * tp) {
-  // Get all causes
-  const set<Firing*> & causes = tp->GetCauses();
-  CHECK(causes.size());			    
 
-  // Find the earliest cause...
-  Time earliest = Time::Never();
-  Firing * first_cause = NULL;
-  forall (run, causes)
-    if ((*run)->GetTime() < earliest) {
-      earliest = ((*run)->GetTime());
-      first_cause = (*run);
-    }
+  // Get the first cause
+  Firing * first_cause = tp->GetFirstCause();
+  CHECK(first_cause);
 
-  // Get some info on the rule and rulesat
-  RuleSat * rule_sat = first_cause->GetRuleSat();
+  // Get the firing cost
   Rule * rule = first_cause->GetRule();
+  RuleSat * rule_sat = first_cause->GetRuleSat();
   double strength = rule->GetStrengthD();
-  if (rule_sat->NumFirings() > 1)
-    strength = rule->GetStrength2D();
+  if (rule_sat->NumFirings() > 1) strength = rule->GetStrength2D();
+  double firing_cost = - log (strength);
+  VLOG(2) << "Firing cost " << firing_cost << endl;
 
-  // See if functional negative rule could be used
-  bool can_keep_firing_lose_arbitrary = false;
-  if (rule_sat->NumFirings() == 1) {
-    can_keep_firing_lose_arbitrary = true;
-    VLOG(2) << "Can use negative rule" << endl;
-  }
-
-  // How much could we save getting rid of the firing
-  double firing_diff = log(1 - strength) - log(strength);
-  VLOG(2) << "Remove firing Savings:" << firing_diff << endl;
-    
-  // How much could we save in naming?
-  // We don't want to count things that have ArbitraryTermCount 1
-  double arbitrary_diff = 0.0;
-
+  // Get the naming cost
+  double naming_cost = 0;
   {
-    DestructibleCheckpoint checkp(model_->GetChangelist());    
+    DestructibleCheckpoint checkp(model_->GetChangelist());
     double old_utility = model_->GetUtility();
     Substitution sub = first_cause->GetRightSubstitution();
     forall(run, sub.sub_) {
       int term = run->second;
-      // int count = model_->ArbitraryTermCount(term);
-      // if (count != 1) 
-      // model_->L1_SubtractArbitraryTerm(term);
       int var = run->first;
       Chooser * ch = (*rule->GetChoosers())[var];
       CHECK(ch);
+      // We can get rid of naming but not if parent count is 1
+      // Revisit this when you have transient objects
+      Chooser * original_parent = ch->parent_;
+      if (ch->parent_->GetCount(term) == 1)
+	ch->parent_ = NULL;
       ch->L1_ChangeObjectCount(term, -1);
+      ch->parent_ = original_parent;
     }
-    arbitrary_diff = model_->GetUtility() - old_utility;
+    naming_cost = model_->GetUtility() - old_utility;
   }
-  VLOG(2) << "Arbitrary diff: " << arbitrary_diff << endl;
+  VLOG(2) << "Naming cost " << naming_cost << endl;
 
-  // Choices (do nothing, lose both, lose arbitrary only)
-  double final_diff = 0.0;
-  final_diff = max(final_diff, firing_diff + arbitrary_diff);
-  if (can_keep_firing_lose_arbitrary)
-    final_diff = max(final_diff, arbitrary_diff);
-
-  VLOG(2) <<   "Tuple " << tp->GetTuple().ToString()
-	  << " Diff: " << final_diff << endl;
-  return final_diff;
+  return firing_cost + naming_cost;
 }
 
 Tuple Optimizer::GetRandomSurprisingTuple() {
@@ -627,6 +600,10 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
   pattern_.push_back(good_generalization);
   CollapseEquivalentVariables();
   CollapseConstantVariables();
+  if (GetVerbosity() >= 1) {
+    VLOG(1) << "Expanded to " << ToString() << endl;
+  }
+
   return true;
 }
 
@@ -697,7 +674,6 @@ void Optimizer::RuleInfo::FindCandidateFirings(){
   if (!success) {
     hopeless_ = true;
     hopeless_cause_ = 1;
-    //needs_bigger_sample_ = true;
     return;
   }
   if (sampled_num_firings_ < 2) {
@@ -739,6 +715,7 @@ void Optimizer::RuleInfo::CheckForMultipleValuesOfSampledTuple(){
     };
   }
 }
+
 void Optimizer::RuleInfo::BailIfRecentlyChecked(){
   if ((optimizer_->recently_checked_ % r_) 
       && (optimizer_->recently_checked_[r_] 
@@ -746,6 +723,7 @@ void Optimizer::RuleInfo::BailIfRecentlyChecked(){
     hopeless_ = true;
   }
 }
+
 void Optimizer::RuleInfo::FindNumSatisfactions(){
   // check that the preconditions aren't too much work to searh for.
   int64 max_work_now = max_work_/denominator_ * 2 +10;
@@ -758,17 +736,9 @@ void Optimizer::RuleInfo::FindNumSatisfactions(){
   if (!success) {
     hopeless_ = true;
     hopeless_cause_ = 1;
-    // needs_bigger_sample_ = true;
     return;
   }
-  estimated_satisfactions_ 
-    = sampled_num_satisfactions_ * (sample_postcondition_?1:denominator_);
-  
-  /*if (max_work_ >=0 && estimated_satisfactions_ > (uint64)max_work_){
-    hopeless_ = true;
-    hopeless_cause_ = 2;
-    return;
-    }*/
+  estimated_satisfactions_ = sampled_num_satisfactions_ * (sample_postcondition_?1:denominator_);
 }
 
 void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
@@ -778,13 +748,18 @@ void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
     any_removed = false;
     for (uint i=0; i<r_.first.size(); i++) {
       vector<Tuple> simplified_preconditions = RemoveFromVector(r_.first, i);
+      // Test for disconnectedness
+      if (!IsConnectedPattern(simplified_preconditions)) {
+	VLOG(2) << "Not considering disconnected pattern" << endl;
+	continue;
+      }
       SamplingInfo simplified_sampling = precondition_sampling_;
       if (sampled_) {
 	// TODO: We probably won't be able to remove the sampled precondition
 	// do something about this.
-	if ((int)i < sample_clause_) {
+	if (i < sample_clause_) {
 	  simplified_sampling.position_--;	  
-	} else if ((int)i == sample_clause_){
+	} else if (i == sample_clause_){
 	  simplified_sampling = SamplingInfo();
 	}
       }
@@ -805,11 +780,11 @@ void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
 	  // adjust the samplinginfo object
 	  CHECK (!sample_postcondition_);
 	  if (sampled_) {
-	    if ((int)i < sample_clause_) {
+	    if (i < sample_clause_) {
 	      sample_clause_--;
 	      precondition_sampling_.position_--;
 	      combined_sampling_.position_--;
-	    } else if ((int)i==sample_clause_){
+	    } else if (i==sample_clause_){
 	      precondition_sampling_ = SamplingInfo::Unsampled();
 	      sampled_ = false;
 	    }
@@ -856,53 +831,45 @@ void Optimizer::RuleInfo::RemoveBoringVariables(){
   r_.second = RemoveVariableFreeTuples(r_.second);
 }
 
-bool Optimizer::RuleInfo::Vette(){
-  hopeless_ = false;
-  needs_bigger_sample_ = false;
-  if (Intersection(GetVariables(r_.first), 
-		   GetVariables(r_.second)).size()==0) {
-    hopeless_ = true;
-    return false;
-  }
-  comments_ += " Raw=" + CandidateRuleToString(r_);
+bool Optimizer::RuleInfo::Vette() {
+
   VLOG(0) << "Raw=" << CandidateRuleToString(r_) << endl;
-  Canonicalize();
-  BailIfRecentlyChecked();
-  if (hopeless_) {
-    VLOG(0) << "Hopeless checked recently" << endl;
-    return false;
+  comments_ += " Raw=" + CandidateRuleToString(r_);
+
+  // Make sure existing preconditions limit results
+  if ( (GetVariables(r_.first).size() != 0) &&
+       (Intersection(GetVariables(r_.first), 
+		     GetVariables(r_.second)).size()==0) ) {
+    hopeless_ = true; return false;
   }
+
+  // Canonicalize and start looking for a good sampling
+  Canonicalize();
 
   // since things within the loops can change r_, we revert it every time
-  // to make sure nothing weird is going on.  
   CandidateRule revert_to_rule = r_;
 
-  // Sample more aggressively at first, then less agressively if that doesn't 
-  // work.
+  // Sample more aggressively at first, then less agressively
   for (denominator_ = 1024; denominator_>0; denominator_ >>=1 ) {
     r_ = revert_to_rule;
-    // Try sampling each clause in the precondition to see if one works, 
-    // or each clause in the postcondition if the precondition is empty.
+    // Try sampling each clause to see if one works. If precondition is empty try postcondition
     sample_postcondition_ = (r_.first.size()==0);
-    const Pattern & sample_pattern 
-      = sample_postcondition_?r_.second:r_.first;
-    for (uint sample_clause = 0; sample_clause<sample_pattern.size(); 
-	 sample_clause++) {
+    const Pattern & sample_pattern = sample_postcondition_ ? r_.second:r_.first;
+
+    for (uint sample_clause = 0; sample_clause<sample_pattern.size(); sample_clause++) {
       // (since sample_clause_ can be changed in the loop)
       sample_clause_ = sample_clause; 
       r_ = revert_to_rule;
       needs_bigger_sample_ = false;
       sampled_ = (denominator_ > 1);
+
       //  see if sampling this clause by this denominator works.  
       precondition_sampling_ = combined_sampling_ = SamplingInfo();
       if (sampled_) {
-	combined_sampling_ = 
-	  SamplingInfo::RandomRange(sample_clause_, denominator_);
-	CHECK(sample_postcondition_ 
-	      == ((uint)sample_clause_ >= r_.first.size()));
-	if (!sample_postcondition_)
-	  precondition_sampling_ = combined_sampling_;
+	combined_sampling_ = SamplingInfo::RandomRange(sample_clause_, denominator_);
+	if (!sample_postcondition_) precondition_sampling_ = combined_sampling_;
       }
+
       // first find satisfactions of the whole thing.
       FindCandidateFirings();
       if (needs_bigger_sample_) continue; 
@@ -938,15 +905,6 @@ bool Optimizer::RuleInfo::Vette(){
       if (needs_bigger_sample_) continue; if (hopeless_) return false;
 
       Canonicalize();
-      if (needs_bigger_sample_) continue; if (hopeless_) return false;
-
-      BailIfRecentlyChecked();
-      if (needs_bigger_sample_) continue; 
-      if (hopeless_) {
-	VLOG(0) << "Quit after RecentlyChecked(2) denom:" << denominator_ << endl;
-	return false;
-      }
-      
       return true;
     }
   }
