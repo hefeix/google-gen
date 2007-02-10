@@ -134,12 +134,12 @@ struct Optimizer{
     int64 max_work_;
     bool sampled_;
     bool sample_postcondition_;
-    int denominator_;
-    int sample_clause_;
+    uint denominator_;
+    uint sample_clause_;
     SamplingInfo precondition_sampling_;
     SamplingInfo combined_sampling_;
     bool hopeless_;
-    int  hopeless_cause_;
+    uint  hopeless_cause_;
     bool needs_bigger_sample_;
     uint64 sampled_num_firings_;
     uint64 sampled_num_satisfactions_;
@@ -152,6 +152,7 @@ struct Optimizer{
       r_ = r;
       max_work_ = max_work;
       hopeless_ = false;
+      needs_bigger_sample_ = false;
     }
     bool Vette(); // returns true if it is promising
     void Canonicalize();

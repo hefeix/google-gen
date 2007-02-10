@@ -119,6 +119,7 @@ struct Chooser {
   //  update the ln likelihood of this object and of the model.
   void L1_AddToLnLikelihood(double delta); 
   double ComputeLnLikelihood() const; // from scratch for verification.
+  int GetCount(int object) const;
   Record ChooserInfo(bool include_objects);
 };
 

@@ -188,9 +188,9 @@ Substitution Union(const Substitution & s1, const Substitution & s2);
 set<int> GetVariables(const Tuple & t);
 set<int> GetVariables(const Pattern & v);
 
-// find ths connecnted components of the pattern.  
-// connectivity means shared variables.
-// Returns the number of connected components. 
+// find ths connected components of the pattern.  
+// Two tuples are connected if they share variables
+// Returns the number of connected components.
 // components is optional and is set to a vector aligned with p, represnenting
 // a mapping from tuples to densely numbered component ids.
 int GetConnectedComponents(const Pattern & p, vector<int> *components);

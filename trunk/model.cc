@@ -325,6 +325,12 @@ Record Chooser::ChooserInfo(bool include_objects) {
   return r;
 }
 
+int Chooser::GetCount(int object) const {
+  const int * find = counts_ % object;
+  if (!find) return 0;
+  return *find;
+}
+
 // postcondition: no times dirty.
 bool Model::FixTimes() {
   // VLOG(0) << "FT";
