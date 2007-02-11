@@ -246,7 +246,14 @@ template <class C> int CountRange(C start, C end){
   return ret;
 }
 
-
+template<class A, class B> pair<A,B> operator +(const pair<A,B>& p1,
+						const pair<A,B>& p2){
+  return make_pair(p1.first+p2.first, p1.second+p2.second);
+}
+template<class A, class B> pair<A,B> operator -(const pair<A,B>& p1,
+						const pair<A,B>& p2){
+  return make_pair(p1.first-p2.first, p1.second-p2.second);
+}
 
 inline int atoi(const string & s){return atoi(s.c_str());}
 // strips whitespace from the ends of a string

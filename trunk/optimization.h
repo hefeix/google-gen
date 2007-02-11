@@ -66,7 +66,7 @@ struct Optimizer{
   void PushTimesThroughRuleSats(TrueTuple *tt);
 
   // Propagates the time change after we change the delay of a rule
-  // through the true tuples it causes and the negative rule sats in which
+  // through the true tuples it causes and the feature rule sats in which
   // they participate.
   // This is to avoid fixing all of the times in the model.
   void PushTimesAfterChangeDelay(Rule *rule);
@@ -88,9 +88,9 @@ struct Optimizer{
 			 const Pattern & result, 
 			 int max_recursion);
   
-  Rule * TryMakeFunctionalNegativeRule(Rule *r);
+  Rule * TryMakeFunctionalFeatureRule(Rule *r);
   // HERE
-  void MakeNegativeRuleSatsHappenInTime(const set<RuleSat *> rule_sats);
+  void MakeFeatureRuleSatsHappenInTime(const set<RuleSat *> rule_sats);
   void OptimizeRuleStrengths(set<Rule *> rules);
   
   // Combining rules

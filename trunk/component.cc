@@ -51,7 +51,7 @@ string ComponentTypeToString(ComponentType t) {
 char * RuleTypeName [] = {
   "INVALID_RULE",
   "SIMPLE_RULE",
-  "NEGATIVE_RULE",
+  "FEATURE_RULE",
   "CREATIVE_RULE",
 };
 RuleType StringToRuleType(const string & s) {
@@ -149,7 +149,6 @@ Precondition::Precondition(Model * model,
 			   const vector<Tuple> & tuples)
   : Component(model){
   pattern_ = tuples;
-  ln_likelihood_per_sat_ = 0.0;
   num_satisfactions_ = 0;
 
   for (uint i=0; i<tuples.size(); i++) {
@@ -171,7 +170,7 @@ Precondition::Precondition(Model * model,
   num_satisfactions_ = 0;
   search_tree_ = new SearchTree(pattern_, NULL, this, SamplingInfo::Unsampled());
   search_tree_->L1_Search(NULL);
-  ComputeSetLnLikelihood();
+  F2_ComputeSetLnLikelihood();
   model_->A1_InsertIntoComponentsByType(this);
 }
 
@@ -200,7 +199,7 @@ void Precondition::L1_MakeDirectlyEncoded(){
   for (uint i=0; i<arbitrary_terms.size(); i++)
     model_->L1_AddArbitraryWord(arbitrary_terms[i]);
   A1_SetTupleEncoded(false);
-  ComputeSetLnLikelihood();
+  F2_ComputeSetLnLikelihood();
 }
 void Precondition::L1_MakeNotDirectlyEncoded(){
   vector<int> arbitrary_terms;
@@ -224,25 +223,25 @@ void Precondition::A1_AddRule(Rule *r){
 void Precondition::A1_RemoveRule(Rule *r){
   model_->changelist_.Make(new SetRemoveChange<Rule *>(&rules_, r));
 }
-void Precondition::A1_AddNegativeRule(Rule *r){
-  model_->changelist_.Make(new SetInsertChange<Rule *>(&negative_rules_, r));
+void Precondition::A1_AddFeatureRule(Rule *r){
+  model_->changelist_.Make(new SetInsertChange<Rule *>(&feature_rules_, r));
 }
-void Precondition::A1_RemoveNegativeRule(Rule *r){
-  model_->changelist_.Make(new SetRemoveChange<Rule *>(&negative_rules_, r));
+void Precondition::A1_RemoveFeatureRule(Rule *r){
+  model_->changelist_.Make(new SetRemoveChange<Rule *>(&feature_rules_, r));
 }
-void Precondition::A1_AddToNegativeRuleIndex(Rule * target_rule,
-					     Rule * negative_rule) {
+void Precondition::A1_AddToFeatureRuleIndex(Rule * target_rule,
+					     Rule * feature_rule) {
   model_->changelist_.Make(new MapOfSetsInsertChange<Rule*, Rule*>
-			   (&negative_rule_index_,
+			   (&feature_rule_index_,
 			    target_rule,
-			    negative_rule));
+			    feature_rule));
 }
-void Precondition::A1_RemoveFromNegativeRuleIndex(Rule * target_rule,
-						  Rule * negative_rule) {
+void Precondition::A1_RemoveFromFeatureRuleIndex(Rule * target_rule,
+						  Rule * feature_rule) {
   model_->changelist_.Make(new MapOfSetsRemoveChange<Rule*, Rule*>
-			   (&negative_rule_index_,
+			   (&feature_rule_index_,
 			    target_rule,
-			    negative_rule));
+			    feature_rule));
 }
 void Precondition::A1_AddToPositiveRuleIndex(const Pattern & result,
 					     Rule * rule) {
@@ -269,14 +268,15 @@ void Precondition::A1_RemoveSatisfaction(Satisfaction *sat){
     Make(new MapRemoveChange<Substitution, Satisfaction *>
 	 (&satisfactions_, sat->substitution_));
 }
-void Precondition::A1_SetLnLikelihoodPerSat(double val){
-  model_->changelist_.
-    Make(new ValueChange<double>(&ln_likelihood_per_sat_,val));
-}
 
-void Precondition::A1_AddToNumSatisfactions(int delta){
+void Precondition::L1_AddToNumSatisfactions(int delta){
   model_->changelist_.
     Make(new ValueChange<int>(&num_satisfactions_, num_satisfactions_+delta));
+  forall(run, rules_) {
+    Rule * r= *run;
+    if (r->type_ == FEATURE_RULE) continue;
+    r->L1_AddSatisfactionsAndFirstFirings(set<Rule *>(), make_pair(delta, 0));
+  }
 }
 Satisfaction * Precondition::FindSatisfaction(const Substitution &sub) const{
   Satisfaction * const * sp = satisfactions_ % sub;
@@ -294,8 +294,8 @@ set<Rule *> Precondition::FindPositiveRules(const vector<Tuple> & result) const 
   if (!s) return set<Rule*>();
   return *s;
 }
-Rule * Precondition::FindNegativeRule(Rule * target_rule) const{
-  const set<Rule *> * s = negative_rule_index_ % target_rule;
+Rule * Precondition::FindFeatureRule(Rule * target_rule) const{
+  const set<Rule *> * s = feature_rule_index_ % target_rule;
   if (!s) return NULL;
   CHECK(s->size() > 0);
   return *(s->begin());
@@ -416,32 +416,35 @@ bool Rule::IsUniversalRule() const {
     if (result_[0][i] != Variable(i)) return false;
   return true;
 }
+double Rule::FirstFiringLikelihoodEstimate(const set<Rule *> & features){
+  pair<int, int> * p = first_firing_counts_ % features;
+  pair<int, int> counts = p?(*p):make_pair(0,0);
+  return (counts.second+1.0)/(counts.first+2.0);
+}
+double Rule::AdditionalFiringLikelihoodEstimate(){
+  return (num_additional_firings_+1.0)
+    /(num_first_firings_+num_additional_firings_+2.0);
+}
+
 
 Rule::Rule(Precondition * precondition, EncodedNumber delay, 
 	   RuleType type, Rule * target_rule,
-	   vector<Tuple> result, EncodedNumber strength,
-	   EncodedNumber strength2)
+	   vector<Tuple> result)
   : Component(precondition->model_){
   precondition_ = precondition;
   delay_ = delay;
   type_ = type;
   result_ = result;
   target_rule_ = target_rule;
-  strength_ = strength;
-  strength_d_ = strength.ToOpenInterval();
-  strength2_ = strength2;
-  strength2_d_ = strength2.ToOpenInterval();
   precondition_->A1_AddRule(this);
-  CHECK(!((type == NEGATIVE_RULE) == (target_rule_==NULL)));
-  if (type == NEGATIVE_RULE) {
-    precondition_->A1_AddNegativeRule(this);
-    precondition_->A1_AddToNegativeRuleIndex(target_rule_, this);
-    target_rule_->A1_AddInhibitor(this);
+  CHECK(!((type == FEATURE_RULE) == (target_rule_==NULL)));
+  if (type == FEATURE_RULE) {
+    precondition_->A1_AddFeatureRule(this);
+    precondition_->A1_AddToFeatureRuleIndex(target_rule_, this);
+    target_rule_->A1_AddFeature(this);
   } else {
     precondition_->A1_AddToPositiveRuleIndex(result_, this);
-    precondition_->A1_SetLnLikelihoodPerSat
-      (precondition_->ln_likelihood_per_sat_ + log(1-strength_d_));
-    precondition_->ComputeSetLnLikelihood();
+    precondition_->F2_ComputeSetLnLikelihood(); // TODO: still need this line?
   }
   for (uint i=0; i<result_.size(); i++){
     model_->A1_InsertIntoWildcardTupleToResult
@@ -449,7 +452,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   }
   
   // Look at all the subsets of tuples of the rule
-  if (type_ != NEGATIVE_RULE) {
+  if (type_ != FEATURE_RULE) {
     Pattern combined = precondition_->pattern_;
     combined.insert(combined.end(), result_.begin(), result_.end());
     int max = 1 << combined.size();
@@ -495,30 +498,41 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   //  causing_tuples_.push_back(p);
   //  p->A1_AddToRulesCaused(this);
   // }
+  firings_ln_likelihood_ = 0.0;
+  num_additional_firings_ = 0;
+  num_first_firings_ = 0;
+
+  if (type_ != FEATURE_RULE) {
+    L1_AddSatisfactionsAndFirstFirings
+      (set<Rule *>(), make_pair(precondition_->GetNumSatisfactions(), 0));
+  }
 
   ComputeSetTime();  
-  if (type == NEGATIVE_RULE) {  // Make all the RuleSats exist.
+  if (type == FEATURE_RULE) {  // Make all the RuleSats exist.
     vector<Substitution> substitutions;
     precondition_->search_tree_->GetSubstitutions(&substitutions);
     for (uint i=0; i<substitutions.size(); i++) {
       new RuleSat(this, substitutions[i]);
     }
   }
-  ComputeSetLnLikelihood();
+  F2_ComputeSetLnLikelihood();
   model_->A1_InsertIntoComponentsByType(this);
 }
  
 void Rule::L1_EraseSubclass(){  
+  if (type_ != FEATURE_RULE) {
+    L1_AddSatisfactionsAndFirstFirings
+      (set<Rule *>(), make_pair(-precondition_->GetNumSatisfactions(), 0));
+  }
+  CHECK(first_firing_counts_.size()==0);
   precondition_->A1_RemoveRule(this);
-  if (type_ == NEGATIVE_RULE) {
-    precondition_->A1_RemoveNegativeRule(this);
-    precondition_->A1_RemoveFromNegativeRuleIndex(target_rule_, this);
-    target_rule_->A1_RemoveInhibitor(this);
+  if (type_ == FEATURE_RULE) {
+    precondition_->A1_RemoveFeatureRule(this);
+    precondition_->A1_RemoveFromFeatureRuleIndex(target_rule_, this);
+    target_rule_->A1_RemoveFeature(this);
   } else {
     precondition_->A1_RemoveFromPositiveRuleIndex(result_, this);
-    precondition_->A1_SetLnLikelihoodPerSat
-      (precondition_->ln_likelihood_per_sat_ - log(1-strength_d_));
-    precondition_->ComputeSetLnLikelihood();
+    precondition_->F2_ComputeSetLnLikelihood(); // TODO: still need this line?
     for (uint i=0; i<result_.size(); i++){
       model_->A1_RemoveFromWildcardTupleToResult
 	(result_[i].VariablesToWildcards(), this, i);
@@ -528,7 +542,7 @@ void Rule::L1_EraseSubclass(){
   // Remove from SubrulePatternToRule
   // Maybe we want to pull this out into a separate function
   // That determines the pair <Pattern, SubRuleInfo> based on a rule
-  if (type_ != NEGATIVE_RULE) {
+  if (type_ != FEATURE_RULE) {
     Pattern combined = precondition_->pattern_;
     combined.insert(combined.end(), result_.begin(), result_.end());
     int max = 1 << combined.size();
@@ -572,8 +586,8 @@ vector<Tuple> Rule::ComputeTupleCauses() const{
   Tuple s;
   s.push_back(LEXICON.GetAddID("IS_RULE"));
   s.push_back(LEXICON.GetAddID("RULE_"+itoa(id_)));
-  if (type_==NEGATIVE_RULE) {
-    s.push_back(LEXICON.GetAddID("NEGATIVE"));
+  if (type_==FEATURE_RULE) {
+    s.push_back(LEXICON.GetAddID("FEATURE"));
     s.push_back(LEXICON.GetAddID("RULE_"+itoa(target_rule_->id_)));
   } else {
     s.push_back(LEXICON.GetAddID("POSITIVE"));
@@ -581,7 +595,7 @@ vector<Tuple> Rule::ComputeTupleCauses() const{
   ret.push_back(s);
   const vector<Tuple> & pre = precondition_->pattern_;
   bool contains_result = false;
-  if (type_ == NEGATIVE_RULE) {
+  if (type_ == FEATURE_RULE) {
     contains_result = true;
     for (uint i=0; i<target_rule_->result_.size(); i++) {
       if (!(pre % target_rule_->result_[i])) contains_result = false;
@@ -593,7 +607,7 @@ vector<Tuple> Rule::ComputeTupleCauses() const{
     }
   }
   for (uint i=0; i<pre.size(); i++) {
-    if (type_==NEGATIVE_RULE) {
+    if (type_==FEATURE_RULE) {
       if (target_rule_->precondition_->clauses_ % pre[i]) continue;
       if (contains_result && (target_rule_->result_ % pre[i])) continue;
     }
@@ -626,30 +640,10 @@ bool Rule::HasFiring() const{
   return false;
 }
 
-void Rule::ChangeStrength(EncodedNumber new_strength,
-			  EncodedNumber new_strength2) {
-  double old_strength_d_ = strength_d_;
-  A1_SetStrength(new_strength);
-  A1_SetStrength2(new_strength2);
-  A1_SetStrengthD(strength_.ToOpenInterval());
-  A1_SetStrength2D(strength2_.ToOpenInterval());
-  if (type_ != NEGATIVE_RULE) {
-    precondition_->A1_SetLnLikelihoodPerSat
-      (precondition_->ln_likelihood_per_sat_ + 
-       log(1-strength_d_) - log(1-old_strength_d_));
-    precondition_->ComputeSetLnLikelihood();
-  }
-  ComputeSetLnLikelihood();
-  forall(run, rule_sats_)  run->second->ComputeSetLnLikelihood();
-  if (type_ == NEGATIVE_RULE) {
-    forall(run, rule_sats_) 
-      run->second->target_rule_sat_->ComputeSetLnLikelihood();
-  }
-}
 void Rule::ChangeDelay(EncodedNumber new_delay) {
   A1_SetDelay(new_delay);
   forall(run, rule_sats_) run->second->ComputeSetTime();
-  ComputeSetLnLikelihood();
+  F2_ComputeSetLnLikelihood();
 }
 int Rule::NumFirings() const {
   int ret = 0;
@@ -658,13 +652,8 @@ int Rule::NumFirings() const {
   }
   return ret;
 }
-int Rule::NumFirstFirings() const {
-  // TODO: track this instead of computing it. (for time's sake)
-  int ret = 0;
-  forall(run, rule_sats_){
-    if (run->second->firings_.size() > 0) ret++;
-  }
-  return ret;
+int Rule::NumFirstFirings(bool include_non_decisions) const {
+  return num_first_firings_;
 }
 vector<Firing *> Rule::Firings() const{
   vector<Firing *> ret;
@@ -684,18 +673,6 @@ string Rule::ImplicationString() const {
 void Rule::A1_SetDelay(EncodedNumber value){
   model_->changelist_.Make(new ValueChange<EncodedNumber>(&delay_, value));
 }
-void Rule::A1_SetStrength(EncodedNumber value){
-  model_->changelist_.Make(new ValueChange<EncodedNumber>(&strength_, value));
-}
-void Rule::A1_SetStrength2(EncodedNumber value){
-  model_->changelist_.Make(new ValueChange<EncodedNumber>(&strength2_, value));
-}
-void Rule::A1_SetStrengthD(double value){
-  model_->changelist_.Make(new ValueChange<double>(&strength_d_, value));
-}
-void Rule::A1_SetStrength2D(double value){
-  model_->changelist_.Make(new ValueChange<double>(&strength2_d_, value));
-}
 void Rule::A1_AddRuleSat(Satisfaction * s, RuleSat * rs){
   model_->changelist_.Make(new MapInsertChange<Satisfaction *, RuleSat *>
 			   (&rule_sats_, s, rs));
@@ -704,13 +681,13 @@ void Rule::A1_RemoveRuleSat(Satisfaction * s){
   model_->changelist_.Make(new MapRemoveChange<Satisfaction *, RuleSat *>
 			   (&rule_sats_, s));
 }
-void Rule::A1_AddInhibitor(Rule * inhibitor){
+void Rule::A1_AddFeature(Rule * feature){
   model_->changelist_.Make
-    (new SetInsertChange<Rule *>(&inhibitors_, inhibitor));
+    (new SetInsertChange<Rule *>(&features_, feature));
 }
-void Rule::A1_RemoveInhibitor(Rule * inhibitor){
+void Rule::A1_RemoveFeature(Rule * feature){
   model_->changelist_.Make
-    (new SetRemoveChange<Rule *>(&inhibitors_, inhibitor));
+    (new SetRemoveChange<Rule *>(&features_, feature));
 }
 
 
@@ -722,43 +699,109 @@ RuleSat::RuleSat(Rule * rule, const Substitution & sub)
   satisfaction_ = rule_->precondition_->L1_GetAddSatisfaction(sub);
   satisfaction_->A1_AddRuleSat(this);
   target_rule_sat_ = NULL;
+  state_ = RS_BABY;
   rule_->A1_AddRuleSat(satisfaction_, this);
-  if (rule->type_ == NEGATIVE_RULE) {
+  if (rule_->type_ != FEATURE_RULE) 
+    L1_SetState(RS_NO_FIRING);
+  if (rule->type_ == FEATURE_RULE) {
     Rule * target_rule = rule_->target_rule_;
     Precondition * target_precondition = target_rule->precondition_;
     Substitution restricted_sub
       = sub.Restrict(GetVariables(target_precondition->pattern_));
     target_rule_sat_ = rule_->target_rule_->L1_GetAddRuleSat(restricted_sub);
-    target_rule_sat_->A1_AddInhibitor(this);
+    target_rule_sat_->L1_AddFeature(this);
   }
   ComputeSetTime();
-  if (rule->type_ == NEGATIVE_RULE) target_rule_sat_->ComputeSetLnLikelihood();
-  ComputeSetLnLikelihood();
-  model_->A1_InsertIntoComponentsByType(this);
+  model_->A1_InsertIntoComponentsByType(this);  
 }
 void RuleSat::L1_EraseSubclass(){
   satisfaction_->A1_RemoveRuleSat(this);
   rule_->A1_RemoveRuleSat(satisfaction_);
-  if (rule_->type_ == NEGATIVE_RULE) {
-    target_rule_sat_->A1_RemoveInhibitor(this);
-    target_rule_sat_->ComputeSetLnLikelihood();
+  if (rule_->type_ != FEATURE_RULE) 
+    L1_SetState(RS_BABY);
+  if (rule_->type_ == FEATURE_RULE) {
+    target_rule_sat_->L1_RemoveFeature(this);
   }
 }
-void RuleSat::A1_AddFiring(const Substitution & sub, Firing *f){
+pair<int, int> RuleSat::SatsAndFirstFirings() const { 
+  if (state_ == RS_NO_FIRING) return make_pair(1,0);
+  if (state_ == RS_FIRST_FIRING) return make_pair(1,1);
+  return make_pair(0,0);
+}
+void RuleSat::L1_SetState(RuleSatState new_state) {
+  if (new_state == state_) return;
+  if (state_ == RS_BABY) 
+    rule_->L1_AddSatisfactionsAndFirstFirings(set<Rule *>(), make_pair(-1, 0));
+  pair<int, int> delta = make_pair(0,0)-SatsAndFirstFirings();
+  if (delta != make_pair(0,0)) 
+    rule_->L1_AddSatisfactionsAndFirstFirings(timely_features_, delta);
+  model_->changelist_.ChangeValue(&state_, new_state);
+  delta = SatsAndFirstFirings();
+  if (delta != make_pair(0,0)) 
+    rule_->L1_AddSatisfactionsAndFirstFirings(timely_features_, delta);
+  if (state_ == RS_BABY) 
+    rule_->L1_AddSatisfactionsAndFirstFirings(set<Rule *>(), make_pair(1, 0));
+}
+void RuleSat::F2_ComputeSetState() {
+  CHECK(rule_->type_ != FEATURE_RULE);
+  RuleSatState new_state = RS_NO_FIRING;
+  if (firings_.size() > 0) new_state = RS_FIRST_FIRING;
+  /* uncomment for an optimization
+    if (rule_->type_ == SIMPLE_RULE) {
+      bool has_no_effect = true;
+      CHECK(firings_.size() == 1);
+      Firing * f = firings_.begin()->second;
+      forall(run_tt, f->true_tuples_) {
+      if (!((*run_tt)->GetTime() < f->GetTime()))
+	  has_no_effect= false;
+      }      
+    }
+    if (has_no_effect) new_state = RS_NO_DECISION;
+  */
+  L1_SetState(new_state);
+}
+void RuleSat::L1_SetTimelyFeatures(const set<Rule *> &
+				   new_timely_features) {
+  if (new_timely_features == timely_features_) return;
+  if (SatsAndFirstFirings() != make_pair(0,0) )
+    rule_->L1_AddSatisfactionsAndFirstFirings
+      (timely_features_, 
+       make_pair(0,0)-SatsAndFirstFirings()); 
+  model_->changelist_.ChangeValue(&timely_features_, 
+				  new_timely_features);
+  if (SatsAndFirstFirings() != make_pair(0,0) )
+    rule_->L1_AddSatisfactionsAndFirstFirings
+      (timely_features_,
+       SatsAndFirstFirings());
+}
+void RuleSat::F2_ComputeSetTimelyFeatures() {
+  set<Rule *> tf;
+  forall(run, features_){
+    if ((*run)->time_ < time_) tf.insert((*run)->rule_);
+  }
+  L1_SetTimelyFeatures(tf);
+}
+void RuleSat::L1_AddFiring(const Substitution & sub, Firing *f){
   model_->changelist_.Make
     (new MapInsertChange<Substitution, Firing *>(&firings_, sub, f));
+  if (firings_.size() > 1) rule_->L1_AddAdditionalFirings(1);
+  else F2_ComputeSetState();
 }
-void RuleSat::A1_RemoveFiring(const Substitution & sub){
+void RuleSat::L1_RemoveFiring(const Substitution & sub){
   model_->changelist_.Make
     (new MapRemoveChange<Substitution, Firing *>(&firings_, sub));
+  if (firings_.size() > 0) rule_->L1_AddAdditionalFirings(-1);
+  else F2_ComputeSetState();
 }
-void RuleSat::A1_AddInhibitor(RuleSat *rs){
+void RuleSat::L1_AddFeature(RuleSat *rs){
   model_->changelist_.Make
-    (new SetInsertChange<RuleSat *>(&inhibitors_, rs));
+    (new SetInsertChange<RuleSat *>(&features_, rs));
+  F2_ComputeSetTimelyFeatures();
 }
-void RuleSat::A1_RemoveInhibitor(RuleSat *rs){
+void RuleSat::L1_RemoveFeature(RuleSat *rs){
   model_->changelist_.Make
-    (new SetRemoveChange<RuleSat *>(&inhibitors_, rs));
+    (new SetRemoveChange<RuleSat *>(&features_, rs));
+  F2_ComputeSetTimelyFeatures();
 }
 
 
@@ -824,9 +867,8 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
   rule_sat_ = rule_sat;
   right_substitution_ = right_substitution;
   CHECK(!(rule_sat_->FindFiring(right_substitution_)));
-  rule_sat_->A1_AddFiring(right_substitution_, this);
-  rule_sat_->ComputeSetLnLikelihood();
-
+  rule_sat_->L1_AddFiring(right_substitution_, this);
+  
   // perform the substitution to find the TrueTuples.
   vector<Tuple> results = rule_sat->rule_->result_;
   GetFullSubstitution().Substitute(&results);
@@ -848,7 +890,7 @@ Firing::Firing(RuleSat * rule_sat, Substitution right_substitution)
     // TODO make this reference the local chooser
 
   ComputeSetTime();
-  ComputeSetLnLikelihood();
+  F2_ComputeSetLnLikelihood();
   model_->A1_InsertIntoComponentsByType(this);
 }
 
@@ -857,8 +899,7 @@ void Firing::L1_EraseSubclass() {
     (*run)->A1_RemoveCause(this);
     (*run)->ComputeSetTime();
   }
-  rule_sat_->A1_RemoveFiring(right_substitution_);
-  rule_sat_->ComputeSetLnLikelihood();
+  rule_sat_->L1_RemoveFiring(right_substitution_);
   forall (run, right_substitution_.sub_)
     GetRule()->choosers_[run->first]->L1_ChangeObjectCount(run->second, -1);
 }
@@ -896,7 +937,7 @@ TrueTuple::TrueTuple(Model * model, Tuple tuple)
       (*run_p)->L1_CheckAddViolation(this);
     }
   }
-  ComputeSetLnLikelihood();
+  F2_ComputeSetLnLikelihood();
   model_->A1_InsertIntoComponentsByType(this);
 }
 
@@ -1005,9 +1046,7 @@ Record Rule::RecordForStorageSubclass() const{
   r["delay"] = delay_.ToSortableString();
   r["rule_type"] = RuleTypeToString(type_);
   r["result"] = TupleVectorToString(result_);
-  r["strength"] = strength_.ToSortableString();
-  r["strength2"] = strength2_.ToSortableString();
-  if (type_==NEGATIVE_RULE) {
+  if (type_==FEATURE_RULE) {
     r["target_id"] = itoa(target_rule_->id_);
   }
   return r;
@@ -1063,18 +1102,19 @@ Record Rule::RecordForDisplaySubclass(bool verbose) const{
       RecordToHTMLTable(run->second->ChooserInfo(verbose))
       + "<br>";
   }
-  r["f/ff/s"] = "f " + itoa(NumFirings()) + "<br>ff " + itoa(NumFirstFirings())
+  r["f/ff/s"] = 
+    "f " + itoa(NumFirings()) 
+    + "<br>ff " + itoa(NumFirstFirings())
+    + "<br>af " + itoa(num_additional_firings_) 
     + "<br>s " + itoa(precondition_->num_satisfactions_); 
   r["dpe LL"] = dtoa(direct_pattern_encoding_ln_likelihood_);
   r["prec."] = delay_.ToSortableString();
-  r["str."] = strength_.ToSortableString();
-  r["str2."] = strength2_.ToSortableString();
   r["pat."] = precondition_->HTMLLink(itoa(precondition_->id_));
-  forall(run, inhibitors_){
-    r["inhibitors"] += "Inhibitor: " + (*run)->HTMLLink(itoa((*run)->id_))
+  forall(run, features_){
+    r["features"] += "feature: " + (*run)->HTMLLink(itoa((*run)->id_))
       + "<br>";
   }
-  if(type_==NEGATIVE_RULE) 
+  if(type_==FEATURE_RULE) 
     r["target"] = target_rule_->HTMLLink(itoa(target_rule_->id_));
   if (!verbose)  return r;
   vector<Firing *> f = Firings();
@@ -1100,9 +1140,9 @@ Record RuleSat::RecordForDisplaySubclass(bool verbose) const{
   //r["substitution"] = satisfaction_->substitution_.ToString();
   if(target_rule_sat_) 
     r["target"] = target_rule_sat_->HTMLLink(itoa(target_rule_sat_->id_));
-  if (inhibitors_.size()) {			
-    forall (run, inhibitors_) 
-      r["inhibitors"] += (*run)->HTMLLink(itoa((*run)->id_)) + ", ";
+  if (features_.size()) {			
+    forall (run, features_) 
+      r["features"] += (*run)->HTMLLink(itoa((*run)->id_)) + ", ";
   }
   return r;
 }
@@ -1142,7 +1182,7 @@ vector<Component *> Satisfaction::TemporalDependents() const {
 vector<Component *> Rule::TemporalDependents() const{
   vector<RuleSat*> v = VectorOfValues(rule_sats_);
   vector<Component *> ret(v.begin(), v.end());
-  ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
+  ret.insert(ret.end(), features_.begin(), features_.end());
   return ret;
 }
 vector<Component *> RuleSat::TemporalDependents() const{
@@ -1178,14 +1218,14 @@ vector<Component *> Satisfaction::StructuralDependents() const {
 vector<Component *> Rule::StructuralDependents() const{
   vector<RuleSat*> v = VectorOfValues(rule_sats_);
   vector<Component *> ret(v.begin(), v.end());
-  ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
+  ret.insert(ret.end(), features_.begin(), features_.end());
   return ret;
 }
 
 vector<Component *> RuleSat::StructuralDependents() const{
   vector<Firing*> v = VectorOfValues(firings_);
   vector<Component*> ret(v.begin(), v.end());
-  ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
+  ret.insert(ret.end(), features_.begin(), features_.end());
   return ret;
 }
 
@@ -1211,7 +1251,7 @@ vector<vector<Component *> > Satisfaction::TemporalCodependents() const {
 vector<vector<Component *> > Rule::TemporalCodependents() const{
   vector<vector<Component *> > ret;
   ret.push_back(vector<Component *>(1, precondition_));
-  if (type_==NEGATIVE_RULE) ret.push_back(vector<Component *>(1, target_rule_));
+  if (type_==FEATURE_RULE) ret.push_back(vector<Component *>(1, target_rule_));
   //for (uint i=0; i<encoding_.size(); i++) 
   //  ret.push_back(vector<Component *>(1, encoding_[i]));
   return ret;
@@ -1254,11 +1294,11 @@ bool Satisfaction::HasPurpose() const { return rule_sats_.size(); }
 vector<Component *> RuleSat::Purposes() const{
   vector<Firing*> v = VectorOfValues(firings_);
   vector<Component*> ret(v.begin(), v.end());
-  ret.insert(ret.end(), inhibitors_.begin(), inhibitors_.end());
+  ret.insert(ret.end(), features_.begin(), features_.end());
   return ret;
 }
 
-bool RuleSat::HasPurpose() const {return firings_.size()||inhibitors_.size();}
+bool RuleSat::HasPurpose() const {return firings_.size()||features_.size();}
 
 vector<Component *> Component::Copurposes() const{
   return vector<Component *>();
@@ -1284,7 +1324,7 @@ bool Component::NeedsPurpose() const{ return false; }
 bool Precondition::NeedsPurpose() const { return true; }
 bool Satisfaction::NeedsPurpose() const { return true; }
 bool RuleSat::NeedsPurpose() const {
-  if (rule_->type_ == NEGATIVE_RULE) return false;
+  if (rule_->type_ == FEATURE_RULE) return false;
   return true;
 }
 
@@ -1349,21 +1389,23 @@ void Component::L1_MakeTimeDirty(){
 }
 void Component::F2_AdjustLnLikelihoodForNewTime(){}
 void RuleSat::F2_AdjustLnLikelihoodForNewTime(){
-  if (rule_->type_ == NEGATIVE_RULE){
+  if (rule_->type_ == FEATURE_RULE){
     CHECK(target_rule_sat_); // if this fails, maybe we are in the constructor?
-    target_rule_sat_->ComputeSetLnLikelihood();
+    target_rule_sat_->F2_ComputeSetTimelyFeatures();
   }
-  if (inhibitors_.size()) ComputeSetLnLikelihood();
+  if (features_.size()) F2_ComputeSetTimelyFeatures();
 }
 void Firing::F2_AdjustLnLikelihoodForNewTime(){
+  // If we are not counting the cost of later firings that cause
+  // the same tuple, we need to do something about it here.
   if (GetRule()->GetRuleType() == SIMPLE_RULE) {
-    GetRuleSat()->ComputeSetLnLikelihood();
+     GetRuleSat()->F2_ComputeSetState();
   }
 }
 void TrueTuple::F2_AdjustLnLikelihoodForNewTime(){
   forall(run, causes_) {
     if ((*run)->GetRule()->GetRuleType() == SIMPLE_RULE) {
-      (*run)->GetRuleSat()->ComputeSetLnLikelihood();
+      (*run)->GetRuleSat()->F2_ComputeSetState();
     }
   }
 }
@@ -1372,58 +1414,76 @@ double Component::LnLikelihood() const {
 }
 double Precondition::LnLikelihood() const {
   double ret = direct_pattern_encoding_ln_likelihood_;
-  ret += num_satisfactions_ * ln_likelihood_per_sat_;
   return ret;
 }
 double Rule::LnLikelihood() const {  
-  double ret = EncodedNumberLnLikelihood(strength_);
+  double ret = 0;
   ret += direct_pattern_encoding_ln_likelihood_;
-  if (type_ == CREATIVE_RULE) ret += EncodedNumberLnLikelihood(strength2_);
-  if (type_ != NEGATIVE_RULE)  ret += EncodedNumberLnLikelihood(delay_);
+  if (type_ != FEATURE_RULE)  ret += EncodedNumberLnLikelihood(delay_);
+  ret += firings_ln_likelihood_;
   return ret;
 }
 
-double RuleSat::LnLikelihood() const {
-  if (rule_->type_ == NEGATIVE_RULE) return 0;
-
-  // this is what was counted implicitly by the precondition.
-  double cancelled_ln_likelihood = log(1-rule_->strength_d_);
-
-  // the multiplier on the prior due to inhibiting rulesats
-  double inhibition = 1.0;
-  forall(run, inhibitors_){
-    bool in_time = ((*run)->time_ < time_);
-    if (in_time) inhibition *= (1-(*run)->rule_->strength_d_);
-  }
-  double prob = rule_->strength_d_;
-  prob *= inhibition;
-  double new_ln_likelihood = 0;
-  int num_firings = firings_.size();
-  if (num_firings >= 1) {
-    // we can get firing for free if it has no effect.
-    bool has_no_effect = false;
-    if (rule_->type_ == SIMPLE_RULE) {
-      has_no_effect = true;
-      CHECK(firings_.size() == 1);
-      Firing * f = firings_.begin()->second;
-      forall(run_tt, f->true_tuples_) {
-	if (!((*run_tt)->GetTime() < f->GetTime()))
-	  has_no_effect= false;
-      }      
-    }
-    // if (!has_no_effect) UNCOMMENT THIS FOR THIS OPTIMIZATION
-    new_ln_likelihood += log(prob);
-  }
-  else new_ln_likelihood += log(1-prob);
-  if (num_firings >= 1 && rule_->type_ == CREATIVE_RULE) {
-    double prob2 = rule_->strength2_d_;
-    // prob2 *= inhibition; // not sure if this is the right thing to do.
-    new_ln_likelihood += log(prob2) * (num_firings-1) + log(1-prob2);
-  }
-  return new_ln_likelihood - cancelled_ln_likelihood;
+// Hack to make MapOfCountsAddChange work on pairs.
+bool operator==(const pair<int, int> & p, int zero){
+  CHECK(zero==0);
+  return (p.first==0 && p.second==0);
 }
 
-void Component::ComputeSetLnLikelihood() {
+void Rule::L1_AddSatisfactionsAndFirstFirings(const set<Rule *> & features,
+					      pair<int, int> delta) {
+  L1_AddFirstFirings(delta.second);
+  pair<int, int> *old_val_p = first_firing_counts_ % features;
+  pair<int, int> old_val = old_val_p?(*old_val_p):make_pair(0,0);
+  pair<int, int> new_val = old_val + delta;
+  double ll_delta = BinaryChoiceLnLikelihood(new_val) - 
+    BinaryChoiceLnLikelihood(old_val);
+  model_->changelist_.Make
+    (new MapOfCountsAddChange<set<Rule *>, pair<int, int> >
+     (&first_firing_counts_, features, delta));
+  model_->changelist_.ChangeValue(&firings_ln_likelihood_, 
+				  firings_ln_likelihood_ + ll_delta);
+  L1_AddToLnLikelihood(ll_delta);
+}
+double Rule::AdditionalFiringsLnLikelihood() const {
+  return BinaryChoiceLnLikelihood(num_first_firings_ + num_additional_firings_,
+				  num_additional_firings_);
+}
+void Rule::F2_ComputeSetFiringsLnLikelihood(){
+  double result = 0;
+  forall(run, first_firing_counts_){
+    result += BinaryChoiceLnLikelihood(run->second);
+  }
+  result += AdditionalFiringsLnLikelihood();
+  model_->changelist_.ChangeValue(&firings_ln_likelihood_, result);
+  F2_ComputeSetLnLikelihood();
+}
+void Rule::L1_AddAdditionalFirings(int delta){  
+  if (delta==0) return;  
+  double ll_delta = -AdditionalFiringsLnLikelihood();
+  model_->changelist_.ChangeValue(&num_additional_firings_, 
+				   num_additional_firings_+delta);  
+  ll_delta += AdditionalFiringsLnLikelihood();
+  model_->changelist_.ChangeValue(&firings_ln_likelihood_, 
+				  firings_ln_likelihood_ + ll_delta);
+  L1_AddToLnLikelihood(ll_delta);
+}
+void Rule::L1_AddFirstFirings(int delta){  
+  if (delta==0) return;  
+  double ll_delta = -AdditionalFiringsLnLikelihood();
+  model_->changelist_.ChangeValue(&num_first_firings_, 
+				  num_first_firings_+delta);  
+  ll_delta += AdditionalFiringsLnLikelihood();
+  model_->changelist_.ChangeValue(&firings_ln_likelihood_, 
+				  firings_ln_likelihood_ + ll_delta);
+  L1_AddToLnLikelihood(ll_delta);
+}
+
+double RuleSat::LnLikelihood() const {
+  return 0;
+}
+
+void Component::F2_ComputeSetLnLikelihood() {
   if (!exists_) return;
 
   CHECK(!really_dead_);
@@ -1433,6 +1493,13 @@ void Component::ComputeSetLnLikelihood() {
   CHECK(finite(new_val));
   A1_SetLnLikelihood(new_val);
   model_->A1_AddToLnLikelihood(new_val - old_val);
+}
+void Component::L1_AddToLnLikelihood(double delta){
+  if (!exists_) return;
+  CHECK(!really_dead_);
+  CHECK(finite(delta));
+  A1_SetLnLikelihood(ln_likelihood_+delta);
+  model_->A1_AddToLnLikelihood(delta);
 }
 
 void Component::VerifyLayer2() const {
@@ -1460,7 +1527,7 @@ void Precondition::VerifyLayer2Subclass() const{
   CHECK(num_sat == (uint64)num_satisfactions_);
 }
 void Rule::VerifyLayer2Subclass() const{
-  if (type_ == NEGATIVE_RULE) {  // Make all the RuleSats exist.
+  if (type_ == FEATURE_RULE) {  // Make all the RuleSats exist.
     vector<Substitution> substitutions;
     precondition_->search_tree_->GetSubstitutions(&substitutions);
     for (uint i=0; i<substitutions.size(); i++) {

@@ -427,9 +427,8 @@ void SearchNode::L1_SetNumSatisfactions(uint64 new_num_satisfactions){
   } else {
     // we're the root
     if (LinkedToModel()) {
-      GetPrecondition()->A1_AddToNumSatisfactions
+      GetPrecondition()->L1_AddToNumSatisfactions
 	((int64)new_num_satisfactions - (int64)old_num_satisfactions);
-      GetPrecondition()->ComputeSetLnLikelihood();
     }
   }
 }
