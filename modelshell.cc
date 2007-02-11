@@ -213,11 +213,6 @@ string ModelShell::Handle(string command) {
       optimizer_->FixTimesFixCircularDependencies();
       model_->VerifyLayer2();
     }
-    else if (command == "strength") {
-      int id;
-      command_stream >> id;
-      optimizer_->OptimizeStrength(model_->GetComponent<Rule>(id));
-    }
     /*else if (command == "o") {
       m.OptimizeRound();
       }*/

@@ -35,9 +35,10 @@ double uintQuadraticLnProb(uint n);
 // Returns uintQuadraticLnProb(n)-n*log(2)
 double EncodedNumberLnLikelihood(const EncodedNumber & n);
 
-// picks the strength of a rule to maximize the probability of the
-// observations multiplied by the probability of the strength according to the
-// above function.
-EncodedNumber PickOptimalRuleStrength(uint total_instances, 
-				      uint positive_instances);
+// ln( 1 / ((num_total CHOOSE num_positive) (num_total+1)))
+double BinaryChoiceLnLikelihood(uint num_total, uint num_positive);
+inline double BinaryChoiceLnLikelihood(pair<int, int> p){
+  return BinaryChoiceLnLikelihood(p.first, p.second);
+}
+
 #endif

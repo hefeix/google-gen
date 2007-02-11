@@ -102,7 +102,7 @@ void Optimizer::TryCombineRules(Pattern lhs,
 
   for (uint c=0; c<info.size(); c++) {
     const SubRuleInfo & sri = info[c];
-    CHECK(sri.rule_->GetRuleType() != NEGATIVE_RULE);
+    CHECK(sri.rule_->GetRuleType() != FEATURE_RULE);
     
     // Figure out which post variables this rule needs
     // Figure out which tuples will be removed by factoring
@@ -156,9 +156,8 @@ void Optimizer::TryCombineRules(Pattern lhs,
   // Make the new rule and make all its satisfactions true
   Rule * new_rule = model_->MakeNewRule
     (lhs, minimum_delay, SIMPLE_RULE, NULL,
-     rhs, EncodedNumber("e"), EncodedNumber("e"));
+     rhs);
   new_rule->AddAllSatisfactionsAsFirings();
-  OptimizeStrength(new_rule);
   VLOG(0) << "Made the new rule and added all its satisfactions" << endl;
   
   // Delete the old rules and for each one make a replacement rule
@@ -228,13 +227,12 @@ void Optimizer::TryCombineRules(Pattern lhs,
     Rule * instead_rule = 
       model_->MakeNewRule
       (instead.first, sri.rule_->GetDelay(), sri.rule_->GetRuleType(), NULL, 
-       instead.second, sri.rule_->GetStrength(), sri.rule_->GetStrength2());
+       instead.second);
     
     // Now add firings for this modified rule
     for (uint c2=0; c2<new_substitutions.size(); c2++) {
       instead_rule->AddFiring(new_substitutions[c2]);
     }
-    OptimizeStrength(instead_rule);
   }
   
   // TADA
@@ -282,11 +280,24 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
   // Get the firing cost
   Rule * rule = first_cause->GetRule();
   RuleSat * rule_sat = first_cause->GetRuleSat();
-  double strength = rule->GetStrengthD();
-  if (rule_sat->NumFirings() > 1) strength = rule->GetStrength2D();
-  double firing_cost = - log (strength);
+  double likelihood
+    = rule->FirstFiringLikelihoodEstimate(rule_sat->GetTimelyFeatures());
+  if (rule_sat->NumFirings() > 1)
+    likelihood = rule->AdditionalFiringLikelihoodEstimate();
+  double firing_cost = - log (likelihood);
   VLOG(2) << "Firing cost " << firing_cost << endl;
 
+  // See if functional feature rule could be used
+  bool can_keep_firing_lose_arbitrary = false;
+  if (rule_sat->NumFirings() == 1) {
+    can_keep_firing_lose_arbitrary = true;
+    VLOG(2) << "Can use feature rule" << endl;
+  }
+
+  // How much could we save getting rid of the firing
+  double firing_diff = log(1 - likelihood) - log(likelihood);
+  VLOG(2) << "Remove firing Savings:" << firing_diff << endl;
+    
   // Get the naming cost
   double naming_cost = 0;
   {
@@ -955,7 +966,6 @@ void Optimizer::TryRemoveFiring(Firing *f){
   // if (f->IsEssential(10, 0) == RESULT_TRUE) return false;
   Rule * r = f->GetRule();
   f->Erase();
-  OptimizeStrength(r);
   if (!r->HasFiring() && !r->IsUniversalRule()) {
     OptimizationCheckpoint cp(this, false);
     r->Erase();
@@ -1020,7 +1030,6 @@ void Optimizer::TryAddFirings
       }
     }
   }
-  OptimizeStrength(rule);
   VLOG(1) << "Added " << subs.size() << " firings " 
 	  << " utility_=" << model_->GetUtility() << endl;
 
@@ -1037,7 +1046,7 @@ void Optimizer::TryAddFirings
     bool is_creative = alt_r->GetRuleType() == CREATIVE_RULE;
     if (!alt_r->Exists()) continue;
     CHECK(alt_r->Exists());
-    bool may_want_to_add_negative_rule = false;
+    bool may_want_to_add_feature_rule = false;
     // let's see how many of the first firings for this rule can be cut
     int num_satisfactions = alt_r->GetPrecondition()->GetNumSatisfactions();
     int num_first_firings = alt_r->NumFirstFirings();
@@ -1053,7 +1062,7 @@ void Optimizer::TryAddFirings
     CHECK(new_num_first_firings >= 0);
     if (new_num_first_firings < num_first_firings &&
 	new_num_first_firings > 0) {
-      may_want_to_add_negative_rule = true;
+      may_want_to_add_feature_rule = true;
     }
     VLOG(1) << "alt_r_id=" << alt_r->GetID()
 	    << " is_creative=" << (is_creative?"t":"f")
@@ -1071,7 +1080,6 @@ void Optimizer::TryAddFirings
 	forall(run, results) PushTimesThroughRuleSats(*run);
       }
     }
-    OptimizeStrength(alt_r);
     VLOG(1) << "Removed " << firings.size() 
 	    << " firings for rule " << alt_r->GetID()
 	    << " utility_=" << model_->GetUtility() << endl;
@@ -1111,16 +1119,16 @@ void Optimizer::TryAddFirings
       variants.insert(make_pair(lhs, rhs));
       if (!alt_r->Exists()) continue;
     }
-    if (may_want_to_add_negative_rule) {
-      OptimizationCheckpoint cp_negative_rule(this, false);
+    if (may_want_to_add_feature_rule) {
+      OptimizationCheckpoint cp_feature_rule(this, false);
 
-      Rule * negative_rule = TryMakeFunctionalNegativeRule(alt_r);
-      set<RuleSat *> negative_rule_sats;
+      Rule * feature_rule = TryMakeFunctionalFeatureRule(alt_r);
+      set<RuleSat *> feature_rule_sats;
       for (uint i=0; i<subs_for_removed_firings.size(); i++) {
-	RuleSat * rs = negative_rule->FindRuleSat(subs_for_removed_firings[i]);
-	if (rs) negative_rule_sats.insert(rs);
+	RuleSat * rs = feature_rule->FindRuleSat(subs_for_removed_firings[i]);
+	if (rs) feature_rule_sats.insert(rs);
       }
-      VLOG(1) << "added functional negative rule. "
+      VLOG(1) << "added functional feature rule. "
 	      << " utility_=" << model_->GetUtility() << endl;      
       
       bool done_iterating = false;
@@ -1132,7 +1140,7 @@ void Optimizer::TryAddFirings
       do {
 	OptimizationCheckpoint speedupthings(this, false);
 	VLOG(1) << "utility pass A " << utility_pass << " utility " << model_->GetUtility() << endl;
-	MakeNegativeRuleSatsHappenInTime(negative_rule_sats);
+	MakeFeatureRuleSatsHappenInTime(feature_rule_sats);
 	VLOG(1) << "utility pass B " << utility_pass << " utility " << model_->GetUtility() << endl;
 	FixTimesFixCircularDependencies();
 	VLOG(1) << "utility pass C " << utility_pass << " utility " << model_->GetUtility() << endl;
@@ -1141,15 +1149,7 @@ void Optimizer::TryAddFirings
 	if (GetVerbosity() >= 1) model_->ToHTML("html.ra" + itoa(alt_r->GetID()));
       } while (!done_iterating);
 
-      VLOG(1) << "after MakeNegativeRuleSatsHappenInTime "
-	      << " utility_=" << model_->GetUtility() << endl;      
-
-      set<Rule *> to_optimize; 
-      to_optimize.insert(negative_rule);
-      to_optimize.insert(alt_r);
-      OptimizeRuleStrengths(to_optimize);
-
-      VLOG(1) << "after OptimizeRuleStrengths "
+      VLOG(1) << "after MakeFeatureRuleSatsHappenInTime "
 	      << " utility_=" << model_->GetUtility() << endl;      
     }
   }
@@ -1246,7 +1246,7 @@ struct RuleSatTimeNode{
   void ComputeTime(){
     forall(run, children_) (*run)->ComputeTime();
     time_ = MaxChildTime();
-    if (rule_->GetRuleType() != NEGATIVE_RULE) 
+    if (rule_->GetRuleType() != FEATURE_RULE) 
       time_.Increment(delay_map_->GetDelay(rulesat_), 1);
   }
   RuleSatTimeNode * AddChild(RuleSat *rs){
@@ -1352,22 +1352,22 @@ struct RuleSatTimeNode{
       VLOG(1) << "NONSTANDARD TIMECHANGE Rule:" << rule_->GetID() << " nonstandard delay:" << fast_enough.ToSortableString() << endl;
       return true;
     }
-    // cerr << "all efforts failed to speed up negative rulesat" << endl;
+    // cerr << "all efforts failed to speed up feature rulesat" << endl;
     return false;
   }
 };
 
-void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *> 
+void Optimizer::MakeFeatureRuleSatsHappenInTime(const set<RuleSat *> 
 						 rule_sats) {
 
-  VLOG(1) << "MakeNegativeRuleSatsHappenInTime #rule_sats=" << rule_sats.size() << endl;
+  VLOG(1) << "MakeFeatureRuleSatsHappenInTime #rule_sats=" << rule_sats.size() << endl;
 
   // Get a suggestion from each rulesat
   map< map<Rule *, pair<EncodedNumber, EncodedNumber> >, pair<int, set<RuleSat*> > > proposals;
   forall(run_rs, rule_sats) {
     // Compute all the RuleSatTimeNodes
     DelayMap delay_map;
-    // Get the positive and negative rulesats
+    // Get the positive and feature rulesats
     RuleSat * neg_rs = *run_rs;
     RuleSat * pos_rs = neg_rs->GetTarget();
     
@@ -1436,7 +1436,7 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
 
   // make alternate rules where we need to change the delay per rulesat
   // to a non-standard value.
-  // TODO: may want to add a functional negative rule here?
+  // TODO: may want to add a functional feature rule here?
   map<Rule *, set<RuleSat *> > by_rule;
   forall(run, best->second.second) { // runs through the nonstandard rulesats
     by_rule[(*run)->GetRule()].insert(*run);    
@@ -1497,7 +1497,7 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
     }
     if (!new_rule)
       new_rule = model_->MakeNewRule(precondition, delay_guess, type, 
-				     NULL, result, r->GetStrength(), r->GetStrength2());
+				     NULL, result);
     
     forall(run_f, old_firings){
       Firing *f = *run_f;
@@ -1507,40 +1507,25 @@ void Optimizer::MakeNegativeRuleSatsHappenInTime(const set<RuleSat *>
       new_rule->AddFiring(new_sub);
       f->Erase();
     }
-    set<Rule *> to_optimize;
     FixTimesFixCircularDependencies();
-    to_optimize.insert(new_rule);
-    to_optimize.insert(r);
-    OptimizeRuleStrengths(to_optimize);
   }
 }
 
-void Optimizer::OptimizeRuleStrengths(set<Rule *>rules){
-  double improvement = 0;
-  do {
-    double old_utility = model_->GetUtility();
-    forall(run, rules) OptimizeStrength(*run);
-    improvement = model_->GetUtility() - old_utility;
-  } while (improvement > 0.1);
-}
-  
-Rule *  Optimizer::TryMakeFunctionalNegativeRule(Rule *r){
+Rule *  Optimizer::TryMakeFunctionalFeatureRule(Rule *r){
   // TODO: maybe play with the delay.
   Pattern precondition 
     = Concat(r->GetPrecondition()->GetPattern(), r->GetResult());
-  Rule * negative_rule = model_->FindNegativeRule(precondition, r);
-  if (negative_rule) {
-    VLOG(1) << "used existing negative rule" << endl;
-    return negative_rule;
+  Rule * feature_rule = model_->FindFeatureRule(precondition, r);
+  if (feature_rule) {
+    VLOG(1) << "used existing feature rule" << endl;
+    return feature_rule;
   }
-  VLOG(1) << "making a new negative rule" << endl;
+  VLOG(1) << "making a new feature rule" << endl;
   return 
     model_->MakeNewRule(precondition, 
 			EncodedNumber(),
-			NEGATIVE_RULE, r,
-			vector<Tuple>(),
-			EncodedNumber(),
-			EncodedNumber());
+			FEATURE_RULE, r,
+			vector<Tuple>());
 }
 
 void Optimizer::TryRuleVariations(const Pattern & preconditions, 
@@ -1601,7 +1586,7 @@ void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
 	  << model_->GetUtility() << endl;
   double added_arbitrary_term_ll = -model_->GetChooserLnLikelihood();
   Rule * r = model_->MakeNewRule(preconditions, EncodedNumber(), 
-			    type, 0, result, EncodedNumber(), EncodedNumber());
+				 type, 0, result);
   r->AddComments(comments);
   added_arbitrary_term_ll += model_->GetChooserLnLikelihood();
   VLOG(1) << "Rule encoding costs: "
@@ -1617,8 +1602,6 @@ void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
   TryAddFirings(r, subs, max_recursion);
   if (!r->Exists()) return;
   VLOG(1) << "after TryAddFirings: utility=" << model_->GetUtility() << endl;
-  OptimizeStrength(r);
-  VLOG(1) << "after OptimizeStrength: utility=" << model_->GetUtility() << endl;
   // ToHTML("html");
 }
 
@@ -1646,7 +1629,7 @@ void Model::TrySpecifyCreativeRule(Rule *r){
       additional_sub.Substitute(&new_result);
       Rule * nr = MakeNewRule(r->GetPrecondition()->GetPattern(),
 			      r->GetDelay(), CREATIVE_RULE, 0, 
-			      new_result, r->GetStrength(), r->GetStrength2());
+			      new_result);
       //nr->ExplainEncoding();
       forall(run_f, firings){
 	Firing * f = *run_f;
@@ -1656,8 +1639,6 @@ void Model::TrySpecifyCreativeRule(Rule *r){
 	nr->AddFiring(sub);
 	f->erase();
       }
-      nr->OptimizeStrength();
-      r->OptimizeStrength();
       if (!r->HasFiring()) {
 	r->Erase();
 	break;
@@ -1743,9 +1724,9 @@ OptimizationCheckpoint::~OptimizationCheckpoint() {
   }
 }
 bool OptimizationCheckpoint::Better() {
-  return (model_->MayBeTimeFixable()
-	  && (model_->GetUtility() > old_utility_ + 0.01 + 
-	      (1+fabs(model_->GetUtility())) * 1e-14));
+  return (// model_->MayBeTimeFixable() &&
+	  (model_->GetUtility() > old_utility_ + 0.01 + 
+	   (1+fabs(model_->GetUtility())) * 1e-14));
 }
 bool OptimizationCheckpoint::KeepChanges() {
   if (!Better()) return false;
@@ -1758,49 +1739,6 @@ bool OptimizationCheckpoint::KeepChanges() {
 
 double OptimizationCheckpoint::Gain() {
   return model_->GetUtility() - old_utility_;
-}
-
-void Optimizer::OptimizeStrength(Rule *r){
-  // TODO, make this better and more principled
-  EncodedNumber strength = r->GetStrength();
-  EncodedNumber strength2 = r->GetStrength2();
-  for (int which=0; which<2; which++) {
-    EncodedNumber * to_alter = &strength;
-    if (which==1) {
-      if (r->GetRuleType() != CREATIVE_RULE) continue;
-      to_alter = &strength2;
-    }
-    bool any_improvement = true;
-    while(any_improvement) {
-      any_improvement = false;
-      int avoid_trying = -1;
-      for (int trial=0; trial<3; trial++) {
-	if (avoid_trying == trial) continue;
-	EncodedNumber old_val = *to_alter;
-	VLOG(2) << "trial=" << trial 
-		<< " to_alter=" << to_alter->ToSortableString()
-		<< " utility_=" << model_->GetUtility() << endl;
-	if (trial==0) { // drop last bit
-	  if (to_alter->bits_.size()==0) continue;
-	  to_alter->bits_.pop_back();	  
-	} else {
-	  to_alter->bits_.push_back(trial==2);
-	}
-	OptimizationCheckpoint cp(this, false);
-	r->ChangeStrength(strength, strength2);
-	VLOG(2) << "   new_val=" << to_alter->ToSortableString()
-		<< " new_utility=" << model_->GetUtility() << endl;
-	if (cp.KeepChanges()) {
-	  any_improvement = true;
-	  if (trial==0) avoid_trying = old_val.bits_.back()?2:1;
-	  else avoid_trying = 0;
-	  break;
-	} else {
-	  *to_alter = old_val;
-	}
-      }
-    }
-  }
 }
 
 void Optimizer::Explain(TrueTuple *p, 
@@ -1825,7 +1763,6 @@ void Optimizer::Explain(TrueTuple *p,
   for (uint i=0; i<explanations.size(); i++){
     Checkpoint cp = model_->GetChangelist()->GetCheckpoint();
     explanations[i].first->AddFiring(explanations[i].second);
-    OptimizeStrength(explanations[i].first);
     if (i==0 || model_->GetUtility() > best) {
       which=i;
       best = model_->GetUtility();
@@ -1833,7 +1770,6 @@ void Optimizer::Explain(TrueTuple *p,
     model_->GetChangelist()->Rollback(cp);
   }
   explanations[which].first->AddFiring(explanations[which].second);
-  OptimizeStrength(explanations[which].first);
 }
 
 // Returns false if fails to finish in time

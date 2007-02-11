@@ -165,11 +165,10 @@ class Model {
   // This is how new rules are created.
   Rule * MakeNewRule(vector<Tuple> precondition, EncodedNumber delay,
 		     RuleType type, Rule * target_rule,
-		     vector<Tuple> result, 
-		     EncodedNumber strength, EncodedNumber strength2){
+		     vector<Tuple> result){
     return
       new Rule(L1_GetAddPrecondition(precondition),
-	       delay, type, target_rule, result, strength, strength2);
+	       delay, type, target_rule, result);
   }
   
   // Inserts or retrieves a creative rule with no preconditions and one 
@@ -244,8 +243,8 @@ class Model {
     const;
   set<Rule *> FindPositiveRules(Pattern precondition, Pattern result) const;
 
-  // Finds a negative rule
-  Rule * FindNegativeRule(vector<Tuple> precondition, Rule * target_rule) const;
+  // Finds a feature rule
+  Rule * FindFeatureRule(vector<Tuple> precondition, Rule * target_rule) const;
 
   // Do any prohibitions forbid this tuple
   bool IsForbidden(const Tuple & t) const;

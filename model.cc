@@ -497,7 +497,7 @@ void Model::Store(string filename) const {
   for (int pass=0; pass<2; pass++) 
     forall(run, GetComponentsOfType(RULE)) {
       Rule * rule = dynamic_cast<Rule *>(*run);
-      if ((rule->GetRuleType()==NEGATIVE_RULE) == (pass==1))
+      if ((rule->GetRuleType()==FEATURE_RULE) == (pass==1))
 	output << RecordToString(rule->RecordForStorge())<< endl;
     }
 
@@ -533,11 +533,9 @@ void Model::Load(string filename) {
 	  MakeNewRule(StringToTupleVector(r["precondition"]),
 		      EncodedNumber(r["delay"]),
 		      type,
-		      (type==NEGATIVE_RULE)?
+		      (type==FEATURE_RULE)?
 		      GetComponent<Rule>(atoi(r["target_id"])):NULL,
-		      StringToTupleVector(r["result"]),
-		      EncodedNumber(r["strength"]),
-		      EncodedNumber(r["strength2"]) );
+		      StringToTupleVector(r["result"]));
 	ChangeID(rule, atoi(r["id"]));
 	ChangeID(rule->precondition_, atoi(r["precondition_id"]));
       } else if (ct==FIRING){
@@ -835,10 +833,10 @@ set<Rule *> Model::FindPositiveRules(vector<Tuple> precondition, vector<Tuple> r
   return p->FindPositiveRules(result);
 }
 
-Rule * Model::FindNegativeRule(vector<Tuple> precondition, Rule * target_rule) const{
+Rule * Model::FindFeatureRule(vector<Tuple> precondition, Rule * target_rule) const{
   Precondition *p = FindPrecondition(precondition);
   if (!p) return NULL;
-  return p->FindNegativeRule(target_rule);
+  return p->FindFeatureRule(target_rule);
 }
 
 vector<Tuple> GetTupleVector(istream * input) {
@@ -861,7 +859,7 @@ Rule * Model::GetAddUniversalRule(uint length) {
   Rule * r = FindPositiveRule(precondition, result);
   if (r) return r;
   return MakeNewRule(precondition, EncodedNumber(), CREATIVE_RULE, NULL,
-		     result, EncodedNumber(), EncodedNumber());
+		     result);
 }
 
 // Simple L1 modifiers

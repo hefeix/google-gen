@@ -38,7 +38,7 @@
 //           d. All of the indices kept by the model are up to date.
 //               TODO( include list of indices )
 //           e. Components that need a purpose have a purpose.
-//           f. All satisfactions of negative rules have their rulesats
+//           f. All satisfactions of feature rules have their rulesats
 //              represented explicitly.
 //           g. The preconditions' satisfaction counts are correct.
 //
@@ -95,12 +95,21 @@ string ComponentTypeToString(ComponentType t);
 enum RuleType {
   INVALID_RULE, // not used
   SIMPLE_RULE,  // no new variables on RHS.  Can fire only once per rule_sat
-  NEGATIVE_RULE, // Inhibits another rule. 
+  FEATURE_RULE, // Conditions another rule.
   CREATIVE_RULE, // New variables on RHS.  Can have multiple firings.
   NUM_RULE_TYPES,
 };
 RuleType StringToRuleType(const string & s);
 string RuleTypeToString(RuleType t);
+
+// This is the current state of a rulesat.  
+enum RuleSatState{
+  RS_BABY, // the state upon creation and destruction (or a feature rulesat)
+  RS_NO_DECISION, // no decision is required - simple rule and something
+          // already causes the result before this rulesat (commented out now)
+  RS_NO_FIRING, // no firings
+  RS_FIRST_FIRING, // at least one firing
+};
 
 class Component{
  public:
@@ -112,7 +121,7 @@ class Component{
   // StructuralDependents, and its Copurposes that no loner have a purpose.  
   // You can call Erase() on anything but Satisfaction and RuleSat objects.
   // Those can't be removed in a Layer 2 manner (since all rule_sats of 
-  // a negative rule must be represented), so call L1_Erase.
+  // a feature rule must be represented), so call L1_Erase.
   void Erase(); // but don't delete.
   // The time_ field is set lazily to save time.  Sometimes it is locally 
   // correct (clean) and sometimes it might be localy incorrect (dirty).  
@@ -126,7 +135,7 @@ class Component{
   bool ComputeSetTime(); 
   // Computes and sets the ln_likelihood_ for this component, and adjusts
   // the total ln likelihood of the model. 
-  void ComputeSetLnLikelihood();
+  void F2_ComputeSetLnLikelihood();
   // If the time of a component changes, we call this function, which 
   // adjusts the ln_likelihood_ of this and other components if necessary.
   virtual void F2_AdjustLnLikelihoodForNewTime();
@@ -236,7 +245,7 @@ class Component{
 
   // Erase any object, and recursively erase its structural dependents, and
   // anything that becomes purposeless. 
-  // This function is layer 2, except on Satisfaction and negative RuleSat 
+  // This function is layer 2, except on Satisfaction and feature RuleSat 
   // objects.
   void L1_Erase();
   // the subclass-specific parts of the erase function.
@@ -246,6 +255,10 @@ class Component{
   void L1_MakeTimeDirty();
   // flips the dirty bit off, and removes from global set of dirty components.
   void L1_MakeTimeClean();
+
+  // Adds to the ln_likelihood of this component, and adjusts the total ln 
+  // likelihood of the model.
+  void L1_AddToLnLikelihood(double delta);
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS -----
 
@@ -321,7 +334,7 @@ class Precondition : public Component {
   // If there are multiple such rules, returns an arbitrary one.
   Rule * FindPositiveRule(const vector<Tuple> & result) const;
   set<Rule *> FindPositiveRules(const vector<Tuple> & result) const;
-  Rule * FindNegativeRule(Rule * target_rule) const;
+  Rule * FindFeatureRule(Rule * target_rule) const;
   int GetNumSatisfactions() const { return num_satisfactions_;}
   const Pattern & GetPattern() const { return pattern_;}
   double GetDirectPatternEncodingLnLikelihood() const {
@@ -359,17 +372,16 @@ class Precondition : public Component {
 
   void A1_AddRule(Rule *r);
   void A1_RemoveRule(Rule *r);
-  void A1_AddNegativeRule(Rule *r);
-  void A1_RemoveNegativeRule(Rule *r);
-  void A1_AddToNegativeRuleIndex(Rule * target_rule, Rule * negative_rule);
-  void A1_RemoveFromNegativeRuleIndex(Rule * target_rule, Rule * negative_rule);
+  void A1_AddFeatureRule(Rule *r);
+  void A1_RemoveFeatureRule(Rule *r);
+  void A1_AddToFeatureRuleIndex(Rule * target_rule, Rule * feature_rule);
+  void A1_RemoveFromFeatureRuleIndex(Rule * target_rule, Rule * feature_rule);
   void A1_AddToPositiveRuleIndex(const Pattern& result, Rule * rule);
   void A1_RemoveFromPositiveRuleIndex(const Pattern& result, Rule * rule);
   void A1_AddSatisfaction(Satisfaction * sat);
   void A1_RemoveSatisfaction(Satisfaction *sat);
-  void A1_SetLnLikelihoodPerSat(double val);
   // Changes the total number of satisfactions (including ones not represented)
-  void A1_AddToNumSatisfactions(int delta);
+  void L1_AddToNumSatisfactions(int delta);
 
   // ----- DATA ----- Precondition
 
@@ -378,16 +390,17 @@ class Precondition : public Component {
     
   // computed data
   set<Rule *> rules_; // the rules that have this precondition.
-  set<Rule *> negative_rules_; // the negative ones (a subset of the above)
+  set<Rule *> feature_rules_; // the feature ones (a subset of the above)
   // The following two indices are for finding rules based on a description:
   // positive rules are indexed by their result
   map<Pattern, set<Rule *> > positive_rule_index_;
-  // negative rules are indexed on the target rule. 
-  // Given a Precondition of a negative rule, and the rule it inhibits
-  // Find all negative rules applying
-  // This is a bit odd, do we really want multiple rules that inhibit the same
-  // rule, and with the same set of preconditions, maybe with tuple encoding...
-  map<Rule *, set<Rule *> > negative_rule_index_;
+  // feature rules are indexed on the target rule. 
+  // Given a Precondition of a feature rule, and the rule it features
+  // Find all feature rules applying
+  // This is a bit odd, as I can't think of a good reason for having multiple
+  // feature rules with the same preconditions affecting the same rule.
+  // Maybe with tuple encoding...
+  map<Rule *, set<Rule *> > feature_rule_index_;
   // The total number of substitutions that satisfy the precondition.
   int num_satisfactions_;
   // maps substitution to satisfaction object
@@ -396,10 +409,6 @@ class Precondition : public Component {
   // Under direct encoding, the encoding cost of the tuples, excluding for
   // universal naming costs accounted for elsewhere.
   double direct_pattern_encoding_ln_likelihood_;
-
-  // The additional ln likelihood added to the model for each satisfaction
-  // of the precondition for which none of the associated rules are satisfied.
-  double ln_likelihood_per_sat_;
 
   SearchTree * search_tree_;
 
@@ -501,9 +510,6 @@ class Rule : public Component{
   // preconditions as firings. This must be applied to a simple rule
   void AddAllSatisfactionsAsFirings();
 
-  // Changes the strength of the rule, keeping the model likelihood updated
-  void ChangeStrength(EncodedNumber new_strength, 
-		      EncodedNumber new_strength2);
   // Changes the delay on the rule.
   // may leave some times dirty.
   void ChangeDelay(EncodedNumber new_delay);
@@ -536,7 +542,7 @@ class Rule : public Component{
   // How many times does this rule fire?
   int NumFirings() const;
   // Number of satisfactions for which this rule fires at least once.
-  int NumFirstFirings() const;
+  int NumFirstFirings(bool include_non_decisions = true) const;
   // Returns all firings for this rule
   vector<Firing *> Firings() const;
   // Displays this rule for the HTML browser
@@ -548,10 +554,6 @@ class Rule : public Component{
   void VerifyLayer2Subclass() const;
   Precondition * GetPrecondition() const { return precondition_;}
   EncodedNumber GetDelay() const { return delay_;}
-  EncodedNumber GetStrength() const { return strength_;}
-  EncodedNumber GetStrength2() const { return strength2_;}
-  double GetStrengthD() const { return strength_d_;}
-  double GetStrength2D() const { return strength2_d_;}
   const map<Satisfaction *, RuleSat *> & GetRuleSats() const 
     { return rule_sats_;}
   RuleType GetRuleType() const { return type_;}
@@ -560,9 +562,12 @@ class Rule : public Component{
   double GetDirectPatternEncodingLnLikelihood() const {
     return direct_pattern_encoding_ln_likelihood_;
   }
-  const set<Rule *> & GetInhibitors() const {
-    return inhibitors_;
+  const set<Rule *> & GetFeatures() const {
+    return features_;
   }
+  double FirstFiringLikelihoodEstimate(const set<Rule *> & features);
+  double AdditionalFiringLikelihoodEstimate();
+
 
   // TODO: THIS IS A HACK.  SHOULD BE PRIVATE
   map<int, Chooser *> * GetChoosers() { return &choosers_;}
@@ -573,8 +578,7 @@ class Rule : public Component{
   // Create a new rule and add it to the model.
   Rule(Precondition * precondition, EncodedNumber delay,
        RuleType type, Rule * target_rule,
-       vector<Tuple> result, 
-       EncodedNumber strength, EncodedNumber strength2);
+       vector<Tuple> result);
   
 
   // ----- COMPLICATED LAYER 1 FUNCTIONS ----- Rule
@@ -597,14 +601,10 @@ class Rule : public Component{
 
   // Simple L1 Accessors
   void A1_SetDelay(EncodedNumber value);
-  void A1_SetStrength(EncodedNumber value);
-  void A1_SetStrength2(EncodedNumber value);
-  void A1_SetStrengthD(double value);
-  void A1_SetStrength2D(double value);
   void A1_AddRuleSat(Satisfaction * s, RuleSat * rs);
   void A1_RemoveRuleSat(Satisfaction * s);
-  void A1_AddInhibitor(Rule * inhibitor);
-  void A1_RemoveInhibitor(Rule * inhibitor);
+  void A1_AddFeature(Rule * feature);
+  void A1_RemoveFeature(Rule * feature);
 
   // ----- Data ----- Rule
 
@@ -619,28 +619,34 @@ class Rule : public Component{
   RuleType type_;
   // postconditions
   vector<Tuple> result_;
-  // If the rule is simple or creative, strength_ is the probability for each
-  // satisfaction that the rule fires at least once.
-  // If the rule is negative, 1-strength_ is a multiplier on the prior of the
-  // target rule_sat having at least one firing. 
-  EncodedNumber strength_;
-  // If the rule is creative, then it fires a number of times given by 
-  // a geometric distribution with parameter (1-strength2_), i.e. if it has 
-  // fired at least once, it has a probability of strength2_ of firing again.
-  // Otherwise, this value is not used.
-  EncodedNumber strength2_;
-  // in the case of a negative rule, the rule that is inhibited
+  // in the case of a feature rule, the rule that is conditioned
   Rule * target_rule_; 
 
   // computed
-  set<Rule *> inhibitors_; // negative rules affecting this one.
-  // floating point representation of the rule strength
-  double strength_d_; 
-  double strength2_d_;
+  set<Rule *> features_; // feature rules affecting this one.
   // the RuleSats that are explicitly represented.
-  // These are the ones with firings or that are inhibited, or all RuleSats
-  // for a negative rule.
+  // These are the ones with firings or that have feature rulesats 
+  // applying to them, or all RuleSats for a feature rule.
   map<Satisfaction *, RuleSat *> rule_sats_;
+
+  // Maps from set of features affecting a rulesat to number of satisfactions
+  // and number of first firings.   
+  // These should be uints, but that makes the code too hairy.
+  map<set<Rule *>, pair<int, int> > first_firing_counts_;
+  uint num_first_firings_;
+  uint num_additional_firings_;
+
+  double AdditionalFiringsLnLikelihood() const;
+  void L1_AddSatisfactionsAndFirstFirings(const set<Rule *> & features,
+					  pair<int, int> delta);
+  void L1_AddAdditionalFirings(int delta);
+  void L1_AddFirstFirings(int delta);
+
+  // computes and sets firings_ln_likelihood_ from scratch and updates
+  // ln_likelihood_.
+  void F2_ComputeSetFiringsLnLikelihood();
+  
+  double firings_ln_likelihood_;
 
   // Under direct encoding, the encoding cost of the tuples, excluding
   // universal naming costs accounted for elsewhere.
@@ -689,17 +695,24 @@ class RuleSat : public Component{ // an instance of a rule coming true
   vector<vector<Component *> > TemporalCodependents() const;
   vector<Component *> Purposes() const;
   vector<Component *> Copurposes() const;
-  inline bool HasTimeDelay() const { return (rule_->type_!=NEGATIVE_RULE);}
+  inline bool HasTimeDelay() const { return (rule_->type_!=FEATURE_RULE);}
   inline EncodedNumber GetTimeDelay() const { return rule_->delay_;}
   double LnLikelihood() const;
   bool HasPurpose() const;
   const map<Substitution, Firing *> & GetFirings() const { return firings_;}
   Rule * GetRule() const { return rule_;}
   const Satisfaction * GetSatisfaction() { return satisfaction_;}
-  const set<RuleSat *> & GetInhibitors() const {
-    return inhibitors_;
+  const set<RuleSat *> & GetFeatures() const {
+    return features_;
   }
   RuleSat * GetTarget() const { return target_rule_sat_;}
+  // Returns the numbers of satisfactions and first firings associated with 
+  // this rulesat, for likelihood computation purposes.  The number of 
+  // satisfactions is 1, unless it is in the RS_NO_DECISION or the RS_BABY 
+  // state.  The number of first firings is 1 if the state is RS_FIRST_FIRING 
+  // (at least one firing.
+  pair<int, int> SatsAndFirstFirings() const;
+  const set<Rule *> & GetTimelyFeatures() const { return timely_features_;}
  private:
 
 
@@ -711,13 +724,19 @@ class RuleSat : public Component{ // an instance of a rule coming true
 
   void L1_EraseSubclass();
   void F2_AdjustLnLikelihoodForNewTime();
+  void F2_ComputeSetTimelyFeatures();
+  void F2_ComputeSetState();
+  void L1_SetState(RuleSatState new_state);
+  void L1_SetTimelyFeatures(const set<Rule *> 
+				  & new_timely_features);
+
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS ----- RuleSat
 
-  void A1_AddFiring(const Substitution & sub, Firing *f);
-  void A1_RemoveFiring(const Substitution & sub);
-  void A1_AddInhibitor(RuleSat *rs);
-  void A1_RemoveInhibitor(RuleSat *rs);
+  void L1_AddFiring(const Substitution & sub, Firing *f);
+  void L1_RemoveFiring(const Substitution & sub);
+  void L1_AddFeature(RuleSat *rs);
+  void L1_RemoveFeature(RuleSat *rs);
 
   // ----- DATA ----- RuleSat
   // fundamental
@@ -730,8 +749,10 @@ class RuleSat : public Component{ // an instance of a rule coming true
 
   // computed
   map<Substitution, Firing *> firings_;     // The effects  
-  RuleSat * target_rule_sat_; // the inhibited RuleSat if it's a negative rule
-  set<RuleSat *> inhibitors_; // Negative rule sats inhibiting this one
+  RuleSat * target_rule_sat_; //the conditioned RuleSat if it's a feature rule
+  set<RuleSat *> features_; // Feature rule sats inhibiting this one
+  set<Rule *> timely_features_; 
+  RuleSatState state_;
 };
 
 // An instane of a rule firing

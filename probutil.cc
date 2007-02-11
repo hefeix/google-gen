@@ -49,26 +49,8 @@ double EncodedNumberLnLikelihood(const EncodedNumber & n){
     - n.bits_.size() * log(2.0);
 }
 
-EncodedNumber PickOptimalRuleStrength(uint total_instances, 
-				      uint positive_instances){
-  double negative_instances = total_instances - positive_instances;
-  if (total_instances == 0) return EncodedNumber();
-  int max_bits = 1 >? (int)(2 * log ((double)total_instances)); // TODO: Check this
-  double p_ideal = (double(positive_instances)) / total_instances;
-  EncodedNumber current;
-  EncodedNumber best;
-  double max_combined_lob_prob = 0.0;
-  for (int i=0; i<max_bits; i++) {
-    double p = current.ToOpenInterval();
-    double combined_log_prob = EncodedNumberLnLikelihood(current)
-      + positive_instances*log(p) + negative_instances * log(1-p)
-      - i * LN2;
-    if (i==0 || combined_log_prob > max_combined_lob_prob) {
-      best = current;
-      max_combined_lob_prob = combined_log_prob;
-    }
-    current.bits_.push_back(p_ideal > p);
-  }
-  return best;
+double BinaryChoiceLnLikelihood(uint num_total, uint num_positive){
+  return -log(num_total+1) - LnCombinations(num_total, num_positive);
 }
+
 
