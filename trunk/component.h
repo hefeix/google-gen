@@ -103,8 +103,10 @@ RuleType StringToRuleType(const string & s);
 string RuleTypeToString(RuleType t);
 
 // This is the current state of a rulesat.  
+// We keep the state in line with the data that is tracked at the rule,
+// in order to avoid bugs.  
 enum RuleSatState{
-  RS_BABY, // the state upon creation and destruction (or a feature rulesat)
+  RS_FEATURE, // it's a feature rule
   RS_NO_DECISION, // no decision is required - simple rule and something
           // already causes the result before this rulesat (commented out now)
   RS_NO_FIRING, // no firings
@@ -150,6 +152,8 @@ class Component{
   string TypeName() const;
 
   void VerifyLayer2() const;
+  void VerifyLnLikelihood() const;
+  void ProbabilisticallyVerifyLnLikelihood() const;
   virtual void VerifyLayer2Subclass() const;
   
   // A link to this component in the HTML viewer.
@@ -258,7 +262,7 @@ class Component{
 
   // Adds to the ln_likelihood of this component, and adjusts the total ln 
   // likelihood of the model.
-  void L1_AddToLnLikelihood(double delta);
+  void L1_AddToLnLikelihoodAndVerify(double delta);
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS -----
 
@@ -540,9 +544,11 @@ class Rule : public Component{
   // Does this rule ever fire?
   bool HasFiring() const;
   // How many times does this rule fire?
+  // Does not incude the firings where no decision was necessary
   int NumFirings() const;
   // Number of satisfactions for which this rule fires at least once.
-  int NumFirstFirings(bool include_non_decisions = true) const;
+  // Does not incude firings where no decision was necessary.
+  int NumFirstFirings() const;
   // Returns all firings for this rule
   vector<Firing *> Firings() const;
   // Displays this rule for the HTML browser
@@ -565,8 +571,12 @@ class Rule : public Component{
   const set<Rule *> & GetFeatures() const {
     return features_;
   }
-  double FirstFiringLikelihoodEstimate(const set<Rule *> & features);
-  double AdditionalFiringLikelihoodEstimate();
+  double FirstFiringLikelihoodEstimate(const set<Rule *> & features) const;
+  double AdditionalFiringLikelihoodEstimate() const;
+
+  // Computes ln likelihood of the choices of where to have additional firings.
+  double AdditionalFiringsLnLikelihood() const;
+  
 
 
   // TODO: THIS IS A HACK.  SHOULD BE PRIVATE
@@ -588,6 +598,16 @@ class Rule : public Component{
   //  Convenience
   RuleSat * L1_GetAddRuleSat(const Substitution & sub);
   void L1_EraseSubclass();
+
+  // adds to firings_ln_likelihood_ and ln_likelihood_, and model ln likelihood
+  void L1_AddToFiringsLnLikelihoodAndVerify(double delta);
+  void L1_AddSatisfactionsAndFirstFirings(const set<Rule *> & features,
+					  pair<int, int> delta);
+  void L1_AddAdditionalFirings(int delta);
+  void L1_AddFirstFirings(int delta);
+
+  // computes firings_ln_likelihood_ from scratch.  Doesn't set it. 
+  double ComputeFiringsLnLikelihood() const;
 
   // TUPLE ENCODING STUFF
   //  These functions add and remove the global costs associated with the
@@ -633,19 +653,12 @@ class Rule : public Component{
   // and number of first firings.   
   // These should be uints, but that makes the code too hairy.
   map<set<Rule *>, pair<int, int> > first_firing_counts_;
+  // Sum of the number of first firings in the above map.
   uint num_first_firings_;
+  // Number of additional firings (after the first ones per rulesat).
   uint num_additional_firings_;
-
-  double AdditionalFiringsLnLikelihood() const;
-  void L1_AddSatisfactionsAndFirstFirings(const set<Rule *> & features,
-					  pair<int, int> delta);
-  void L1_AddAdditionalFirings(int delta);
-  void L1_AddFirstFirings(int delta);
-
-  // computes and sets firings_ln_likelihood_ from scratch and updates
-  // ln_likelihood_.
-  void F2_ComputeSetFiringsLnLikelihood();
-  
+  // The sum of the ln likelihood for all firings (and non-firings) for this 
+  // rule.
   double firings_ln_likelihood_;
 
   // Under direct encoding, the encoding cost of the tuples, excluding
@@ -713,6 +726,7 @@ class RuleSat : public Component{ // an instance of a rule coming true
   // (at least one firing.
   pair<int, int> SatsAndFirstFirings() const;
   const set<Rule *> & GetTimelyFeatures() const { return timely_features_;}
+  const RuleSatState GetState() const { return state_;}
  private:
 
 

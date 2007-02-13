@@ -172,6 +172,8 @@ Model::Model(){
   work_penalty_ = 0.001;
   old_style_display_ = false;
   chooser_ = new Chooser(this, NULL);
+  verify_counter_ = 0;
+  verify_interval_ = 1000;
 
   // Load up the words
   ifstream input("words");
