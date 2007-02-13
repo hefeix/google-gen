@@ -416,12 +416,12 @@ bool Rule::IsUniversalRule() const {
     if (result_[0][i] != Variable(i)) return false;
   return true;
 }
-double Rule::FirstFiringLikelihoodEstimate(const set<Rule *> & features){
-  pair<int, int> * p = first_firing_counts_ % features;
+double Rule::FirstFiringLikelihoodEstimate(const set<Rule *> & features) const{
+  const pair<int, int> * p = first_firing_counts_ % features;
   pair<int, int> counts = p?(*p):make_pair(0,0);
   return (counts.second+1.0)/(counts.first+2.0);
 }
-double Rule::AdditionalFiringLikelihoodEstimate(){
+double Rule::AdditionalFiringLikelihoodEstimate() const{
   return (num_additional_firings_+1.0)
     /(num_first_firings_+num_additional_firings_+2.0);
 }
@@ -501,6 +501,8 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   firings_ln_likelihood_ = 0.0;
   num_additional_firings_ = 0;
   num_first_firings_ = 0;
+
+  F2_ComputeSetLnLikelihood();
 
   if (type_ != FEATURE_RULE) {
     L1_AddSatisfactionsAndFirstFirings
@@ -646,13 +648,9 @@ void Rule::ChangeDelay(EncodedNumber new_delay) {
   F2_ComputeSetLnLikelihood();
 }
 int Rule::NumFirings() const {
-  int ret = 0;
-  forall(run, rule_sats_){
-    ret += run->second->firings_.size();
-  }
-  return ret;
+  return num_first_firings_ + num_additional_firings_;
 }
-int Rule::NumFirstFirings(bool include_non_decisions) const {
+int Rule::NumFirstFirings() const {
   return num_first_firings_;
 }
 vector<Firing *> Rule::Firings() const{
@@ -699,11 +697,10 @@ RuleSat::RuleSat(Rule * rule, const Substitution & sub)
   satisfaction_ = rule_->precondition_->L1_GetAddSatisfaction(sub);
   satisfaction_->A1_AddRuleSat(this);
   target_rule_sat_ = NULL;
-  state_ = RS_BABY;
   rule_->A1_AddRuleSat(satisfaction_, this);
-  if (rule_->type_ != FEATURE_RULE) 
-    L1_SetState(RS_NO_FIRING);
+  state_ = RS_NO_FIRING;
   if (rule->type_ == FEATURE_RULE) {
+    state_ = RS_FEATURE;
     Rule * target_rule = rule_->target_rule_;
     Precondition * target_precondition = target_rule->precondition_;
     Substitution restricted_sub
@@ -717,47 +714,50 @@ RuleSat::RuleSat(Rule * rule, const Substitution & sub)
 void RuleSat::L1_EraseSubclass(){
   satisfaction_->A1_RemoveRuleSat(this);
   rule_->A1_RemoveRuleSat(satisfaction_);
-  if (rule_->type_ != FEATURE_RULE) 
-    L1_SetState(RS_BABY);
+  if (rule_->type_ != FEATURE_RULE) {
+    CHECK(state_ == RS_NO_FIRING);
+    CHECK(timely_features_.size()==0);
+  }
   if (rule_->type_ == FEATURE_RULE) {
     target_rule_sat_->L1_RemoveFeature(this);
   }
 }
+// number of satisfactions and first firings 
 pair<int, int> RuleSat::SatsAndFirstFirings() const { 
   if (state_ == RS_NO_FIRING) return make_pair(1,0);
   if (state_ == RS_FIRST_FIRING) return make_pair(1,1);
+  if (state_ == RS_NO_DECISION) return make_pair(0,0);
+  CHECK(false);
   return make_pair(0,0);
 }
 void RuleSat::L1_SetState(RuleSatState new_state) {
   if (new_state == state_) return;
-  if (state_ == RS_BABY) 
-    rule_->L1_AddSatisfactionsAndFirstFirings(set<Rule *>(), make_pair(-1, 0));
-  pair<int, int> delta = make_pair(0,0)-SatsAndFirstFirings();
-  if (delta != make_pair(0,0)) 
-    rule_->L1_AddSatisfactionsAndFirstFirings(timely_features_, delta);
+  CHECK(state_ != RS_FEATURE && new_state != RS_FEATURE);
+  
+  pair<int, int> old = SatsAndFirstFirings();
   model_->changelist_.ChangeValue(&state_, new_state);
-  delta = SatsAndFirstFirings();
-  if (delta != make_pair(0,0)) 
-    rule_->L1_AddSatisfactionsAndFirstFirings(timely_features_, delta);
-  if (state_ == RS_BABY) 
-    rule_->L1_AddSatisfactionsAndFirstFirings(set<Rule *>(), make_pair(1, 0));
+  pair<int, int> delta = SatsAndFirstFirings()-old;
+  CHECK (delta != make_pair(0,0));
+  rule_->L1_AddSatisfactionsAndFirstFirings(timely_features_, delta);
 }
 void RuleSat::F2_ComputeSetState() {
   CHECK(rule_->type_ != FEATURE_RULE);
   RuleSatState new_state = RS_NO_FIRING;
-  if (firings_.size() > 0) new_state = RS_FIRST_FIRING;
-  /* uncomment for an optimization
+  if (firings_.size() > 0) {
+    new_state = RS_FIRST_FIRING;
+    // here's the optimization where we don't count the cost of rulesats
+    // of simple rules that cause something that happened already. 
     if (rule_->type_ == SIMPLE_RULE) {
       bool has_no_effect = true;
       CHECK(firings_.size() == 1);
       Firing * f = firings_.begin()->second;
       forall(run_tt, f->true_tuples_) {
-      if (!((*run_tt)->GetTime() < f->GetTime()))
+	if (!((*run_tt)->GetTime() < f->GetTime()))
 	  has_no_effect= false;
-      }      
+      }
+      if (has_no_effect) new_state = RS_NO_DECISION;
     }
-    if (has_no_effect) new_state = RS_NO_DECISION;
-  */
+  }
   L1_SetState(new_state);
 }
 void RuleSat::L1_SetTimelyFeatures(const set<Rule *> &
@@ -1102,7 +1102,7 @@ Record Rule::RecordForDisplaySubclass(bool verbose) const{
       RecordToHTMLTable(run->second->ChooserInfo(verbose))
       + "<br>";
   }
-  r["f/ff/s"] = 
+  r["f/ff/af/s"] = 
     "f " + itoa(NumFirings()) 
     + "<br>ff " + itoa(NumFirstFirings())
     + "<br>af " + itoa(num_additional_firings_) 
@@ -1396,8 +1396,6 @@ void RuleSat::F2_AdjustLnLikelihoodForNewTime(){
   if (features_.size()) F2_ComputeSetTimelyFeatures();
 }
 void Firing::F2_AdjustLnLikelihoodForNewTime(){
-  // If we are not counting the cost of later firings that cause
-  // the same tuple, we need to do something about it here.
   if (GetRule()->GetRuleType() == SIMPLE_RULE) {
      GetRuleSat()->F2_ComputeSetState();
   }
@@ -1420,6 +1418,8 @@ double Rule::LnLikelihood() const {
   double ret = 0;
   ret += direct_pattern_encoding_ln_likelihood_;
   if (type_ != FEATURE_RULE)  ret += EncodedNumberLnLikelihood(delay_);
+  double computed_firings_ln_likelihood = ComputeFiringsLnLikelihood();
+  CHECK(fabs(computed_firings_ln_likelihood - firings_ln_likelihood_ < 1e-6));
   ret += firings_ln_likelihood_;
   return ret;
 }
@@ -1430,6 +1430,13 @@ bool operator==(const pair<int, int> & p, int zero){
   return (p.first==0 && p.second==0);
 }
 
+void Rule::L1_AddToFiringsLnLikelihoodAndVerify(double delta) {
+  CHECK(finite(delta));
+  model_->changelist_.ChangeValue(&firings_ln_likelihood_, 
+				  firings_ln_likelihood_ + delta);
+  CHECK(finite(firings_ln_likelihood_));
+  L1_AddToLnLikelihoodAndVerify(delta);
+}
 void Rule::L1_AddSatisfactionsAndFirstFirings(const set<Rule *> & features,
 					      pair<int, int> delta) {
   L1_AddFirstFirings(delta.second);
@@ -1441,22 +1448,19 @@ void Rule::L1_AddSatisfactionsAndFirstFirings(const set<Rule *> & features,
   model_->changelist_.Make
     (new MapOfCountsAddChange<set<Rule *>, pair<int, int> >
      (&first_firing_counts_, features, delta));
-  model_->changelist_.ChangeValue(&firings_ln_likelihood_, 
-				  firings_ln_likelihood_ + ll_delta);
-  L1_AddToLnLikelihood(ll_delta);
+  L1_AddToFiringsLnLikelihoodAndVerify(ll_delta);
 }
 double Rule::AdditionalFiringsLnLikelihood() const {
   return BinaryChoiceLnLikelihood(num_first_firings_ + num_additional_firings_,
 				  num_additional_firings_);
 }
-void Rule::F2_ComputeSetFiringsLnLikelihood(){
+double Rule::ComputeFiringsLnLikelihood() const{
   double result = 0;
   forall(run, first_firing_counts_){
     result += BinaryChoiceLnLikelihood(run->second);
   }
   result += AdditionalFiringsLnLikelihood();
-  model_->changelist_.ChangeValue(&firings_ln_likelihood_, result);
-  F2_ComputeSetLnLikelihood();
+  return result;
 }
 void Rule::L1_AddAdditionalFirings(int delta){  
   if (delta==0) return;  
@@ -1464,9 +1468,7 @@ void Rule::L1_AddAdditionalFirings(int delta){
   model_->changelist_.ChangeValue(&num_additional_firings_, 
 				   num_additional_firings_+delta);  
   ll_delta += AdditionalFiringsLnLikelihood();
-  model_->changelist_.ChangeValue(&firings_ln_likelihood_, 
-				  firings_ln_likelihood_ + ll_delta);
-  L1_AddToLnLikelihood(ll_delta);
+  L1_AddToFiringsLnLikelihoodAndVerify(ll_delta);
 }
 void Rule::L1_AddFirstFirings(int delta){  
   if (delta==0) return;  
@@ -1474,9 +1476,7 @@ void Rule::L1_AddFirstFirings(int delta){
   model_->changelist_.ChangeValue(&num_first_firings_, 
 				  num_first_firings_+delta);  
   ll_delta += AdditionalFiringsLnLikelihood();
-  model_->changelist_.ChangeValue(&firings_ln_likelihood_, 
-				  firings_ln_likelihood_ + ll_delta);
-  L1_AddToLnLikelihood(ll_delta);
+  L1_AddToFiringsLnLikelihoodAndVerify(ll_delta);
 }
 
 double RuleSat::LnLikelihood() const {
@@ -1494,16 +1494,23 @@ void Component::F2_ComputeSetLnLikelihood() {
   A1_SetLnLikelihood(new_val);
   model_->A1_AddToLnLikelihood(new_val - old_val);
 }
-void Component::L1_AddToLnLikelihood(double delta){
+void Component::L1_AddToLnLikelihoodAndVerify(double delta){
   if (!exists_) return;
   CHECK(!really_dead_);
   CHECK(finite(delta));
   A1_SetLnLikelihood(ln_likelihood_+delta);
   model_->A1_AddToLnLikelihood(delta);
+  ProbabilisticallyVerifyLnLikelihood();
+}
+void Component::ProbabilisticallyVerifyLnLikelihood() const {
+  if (model_->verify_counter_<=0) {
+    VerifyLnLikelihood();
+    model_->verify_counter_ = model_->verify_interval_;
+  }
+  model_->verify_counter_--;
 }
 
-void Component::VerifyLayer2() const {
-  CHECK(exists_);
+void Component::VerifyLnLikelihood() const{
   // Check that the likelihood is up to date.
   if (fabs(LnLikelihood() - ln_likelihood_) > 1e-6){
     cerr << "likelihood for component " << id_ << " out of date"
@@ -1513,6 +1520,10 @@ void Component::VerifyLayer2() const {
     model_->ToHTML("html");
     CHECK(false);
   }
+}
+void Component::VerifyLayer2() const {
+  CHECK(exists_);
+  VerifyLnLikelihood();
   // Check that the time is up to date or that time_dirty_ is set
   CHECK(time_dirty_ || ComputeTime(NULL) == time_);
   // Check that the component has a purpose if it needs one.

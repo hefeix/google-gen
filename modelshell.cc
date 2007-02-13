@@ -351,6 +351,12 @@ string ModelShell::Handle(string command) {
        command_stream >> v;
        SetVerbosity(v);
      }
+     else if (command=="vi"){
+       int v;
+       command_stream >> v;
+       model_->verify_interval_ = v;
+       model_->verify_counter_ = 0;
+     }
      else if (command=="r"){
        int r;
        command_stream >> r;

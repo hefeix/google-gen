@@ -1056,7 +1056,8 @@ void Optimizer::TryAddFirings
       by_rule_sat[(*run)->GetRuleSat()].push_back(*run);
     }
     forall(run, by_rule_sat) {
-      if (run->first->GetFirings().size() == run->second.size())
+      if (run->first->GetFirings().size() == run->second.size()
+	  && run->first->GetState() == RS_FIRST_FIRING)
 	new_num_first_firings--;
     }
     CHECK(new_num_first_firings >= 0);

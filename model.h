@@ -411,6 +411,9 @@ class Model {
   bool old_style_display_;
 
   vector<string> words_; // This is for randomly generating words
+ public:
+  int verify_counter_;
+  int verify_interval_;
 };
 
 #endif
