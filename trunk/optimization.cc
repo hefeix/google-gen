@@ -646,6 +646,7 @@ void Optimizer::PatternBuilder::CollapseConstantVariables() {
 	subs_[i].sub_.erase(var);
     }
   }
+  pattern_tweak.Substitute(&pattern_);
 }
 
 string Optimizer::PatternBuilder::ToString() {
@@ -767,7 +768,7 @@ void Optimizer::RuleInfo::RemoveUnrestrictivePreconditions(){
       if ((Intersection(GetVariables(r_.first[i]), GetVariables(r_.second))
 	   - GetVariables(simplified_preconditions)).size()) continue;
       uint64 simplified_num_satisfactions = 0;
-      int64 max_work_now = max_work_;
+      int64 max_work_now = max_work_ / denominator_ + 10;
       if (optimizer_->model_->GetTupleIndex()->FindSatisfactions
 	  (simplified_preconditions, 
 	   simplified_sampling, 
@@ -873,7 +874,7 @@ bool Optimizer::RuleInfo::Vette() {
       FindCandidateFirings();
       if (needs_bigger_sample_) continue; 
       if (hopeless_) {
-	VLOG(0) << "Quit after FindCandidateFirings denom:" << denominator_ 
+	VLOG(1) << "Quit after FindCandidateFirings denom:" << denominator_ 
 		<< " cause:" << hopeless_cause_ << endl;
 	return false;
       }
@@ -882,7 +883,7 @@ bool Optimizer::RuleInfo::Vette() {
       FindNumSatisfactions();
       if (needs_bigger_sample_) continue; 
       if (hopeless_) {
-	VLOG(0) << "Quit after FindNumSatisfactions denom:" << denominator_
+	VLOG(1) << "Quit after FindNumSatisfactions denom:" << denominator_
 		<< " cause:" << hopeless_cause_ << endl;
 	return false;
       }
@@ -894,7 +895,7 @@ bool Optimizer::RuleInfo::Vette() {
       RemoveBoringVariables();
       if (needs_bigger_sample_) continue; 
       if (hopeless_) {
-	VLOG(0) << "Quit after RemoveBoringVariables denom:" << denominator_
+	VLOG(1) << "Quit after RemoveBoringVariables denom:" << denominator_
 		<< endl;
 	return false;
       }
@@ -909,7 +910,7 @@ bool Optimizer::RuleInfo::Vette() {
   }
 
   hopeless_ = true;
-  VLOG(0) << "Quit because no sample worked well" << endl;
+  VLOG(1) << "Quit because no sample worked well" << endl;
   return false;
 } 
 
