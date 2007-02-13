@@ -74,7 +74,7 @@ Component::Component(Model * model){
   time_dirty_ = true;
   model_->A1_InsertIntoTimesDirty(this);
   model_->L1_AssignNewID(this);
-  ln_likelihood_ = 0.0;
+  ln_likelihood_ = LLZero();
   A1_SetExists(true);
   A1_SetReallyDead(false);
 }
@@ -100,9 +100,9 @@ void Component::A1_SetTimeDirty(bool new_val){
   CHECK(time_dirty_ != new_val);
   model_->changelist_.Make(new ValueChange<bool>(&time_dirty_, new_val));
 }
-void Component::A1_SetLnLikelihood(double new_ln_likelihood){
+void Component::A1_SetLnLikelihood(LL new_ln_likelihood){
   if (new_ln_likelihood == ln_likelihood_) return;
-  model_->changelist_.Make(new ValueChange<double>(&ln_likelihood_, new_ln_likelihood));
+  model_->changelist_.Make(new ValueChange<LL>(&ln_likelihood_, new_ln_likelihood));
 }
 void Component::AddComments(string new_comments){
   model_->changelist_.Make(new ValueChange<string>(&comments_, 
@@ -416,6 +416,7 @@ bool Rule::IsUniversalRule() const {
     if (result_[0][i] != Variable(i)) return false;
   return true;
 }
+
 double Rule::FirstFiringLikelihoodEstimate(const set<Rule *> & features) const{
   const pair<int, int> * p = first_firing_counts_ % features;
   pair<int, int> counts = p?(*p):make_pair(0,0);
@@ -482,7 +483,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   vector<int> arbitrary_terms;
   direct_pattern_encoding_ln_likelihood_ = 
     PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);
-  if (IsUniversalRule()) direct_pattern_encoding_ln_likelihood_ = 0;
+  if (IsUniversalRule()) direct_pattern_encoding_ln_likelihood_ = LLZero();
   for (uint i=0; i<arbitrary_terms.size(); i++)
     model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], 1);
 
@@ -498,7 +499,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   //  causing_tuples_.push_back(p);
   //  p->A1_AddToRulesCaused(this);
   // }
-  firings_ln_likelihood_ = 0.0;
+  firings_ln_likelihood_ = LLZero();
   num_additional_firings_ = 0;
   num_first_firings_ = 0;
 
@@ -1075,15 +1076,15 @@ Record Component::RecordForDisplay(bool verbose) const{
   if (time_dirty_) r["D"] = "DIRTY";
   r["ID"] = itoa(id_) + "<a name=\"" + itoa(id_) + "\">";
   r["TIME"] = time_.ToSortableString();
-  r["LL"] = dtoa(ln_likelihood_);
+  r["LL"] = ln_likelihood_.ToString();
   if (ln_likelihood_!= LnLikelihood()) 
-    r["LL"] += " (" + dtoa(LnLikelihood()) + ")";
+    r["LL"] += " (" + LnLikelihood().ToString() + ")";
   return r;
 }
 Record Precondition::RecordForDisplaySubclass(bool verbose) const{
   Record r;
   r["precondition"] = TupleVectorToString(pattern_);
-  r["dpe LL"] = dtoa(direct_pattern_encoding_ln_likelihood_);
+  r["dpe LL"] = direct_pattern_encoding_ln_likelihood_.ToString();
   forall(run, rules_){
     r["rules"] 
       += (*run)->HTMLLink(TupleVectorToString((*run)->result_)) + "<br>";
@@ -1107,7 +1108,7 @@ Record Rule::RecordForDisplaySubclass(bool verbose) const{
     + "<br>ff " + itoa(NumFirstFirings())
     + "<br>af " + itoa(num_additional_firings_) 
     + "<br>s " + itoa(precondition_->num_satisfactions_); 
-  r["dpe LL"] = dtoa(direct_pattern_encoding_ln_likelihood_);
+  r["dpe LL"] = direct_pattern_encoding_ln_likelihood_.ToString();
   r["prec."] = delay_.ToSortableString();
   r["pat."] = precondition_->HTMLLink(itoa(precondition_->id_));
   forall(run, features_){
@@ -1407,19 +1408,18 @@ void TrueTuple::F2_AdjustLnLikelihoodForNewTime(){
     }
   }
 }
-double Component::LnLikelihood() const {
-  return 0.0;
+LL Component::LnLikelihood() const {
+  return LLZero();
 }
-double Precondition::LnLikelihood() const {
-  double ret = direct_pattern_encoding_ln_likelihood_;
+LL Precondition::LnLikelihood() const {
+  LL ret = direct_pattern_encoding_ln_likelihood_;
   return ret;
 }
-double Rule::LnLikelihood() const {  
-  double ret = 0;
-  ret += direct_pattern_encoding_ln_likelihood_;
+LL Rule::LnLikelihood() const {  
+  LL ret = direct_pattern_encoding_ln_likelihood_;
   if (type_ != FEATURE_RULE)  ret += EncodedNumberLnLikelihood(delay_);
-  double computed_firings_ln_likelihood = ComputeFiringsLnLikelihood();
-  CHECK(fabs(computed_firings_ln_likelihood - firings_ln_likelihood_ < 1e-6));
+  LL computed_firings_ln_likelihood = ComputeFiringsLnLikelihood();
+  CHECK(computed_firings_ln_likelihood == firings_ln_likelihood_ );
   ret += firings_ln_likelihood_;
   return ret;
 }
@@ -1430,11 +1430,9 @@ bool operator==(const pair<int, int> & p, int zero){
   return (p.first==0 && p.second==0);
 }
 
-void Rule::L1_AddToFiringsLnLikelihoodAndVerify(double delta) {
-  CHECK(finite(delta));
+void Rule::L1_AddToFiringsLnLikelihoodAndVerify(LL delta) {
   model_->changelist_.ChangeValue(&firings_ln_likelihood_, 
 				  firings_ln_likelihood_ + delta);
-  CHECK(finite(firings_ln_likelihood_));
   L1_AddToLnLikelihoodAndVerify(delta);
 }
 void Rule::L1_AddSatisfactionsAndFirstFirings(const set<Rule *> & features,
@@ -1443,28 +1441,27 @@ void Rule::L1_AddSatisfactionsAndFirstFirings(const set<Rule *> & features,
   pair<int, int> *old_val_p = first_firing_counts_ % features;
   pair<int, int> old_val = old_val_p?(*old_val_p):make_pair(0,0);
   pair<int, int> new_val = old_val + delta;
-  double ll_delta = BinaryChoiceLnLikelihood(new_val) - 
+  LL ll_delta = BinaryChoiceLnLikelihood(new_val) - 
     BinaryChoiceLnLikelihood(old_val);
   model_->changelist_.Make
     (new MapOfCountsAddChange<set<Rule *>, pair<int, int> >
      (&first_firing_counts_, features, delta));
   L1_AddToFiringsLnLikelihoodAndVerify(ll_delta);
 }
-double Rule::AdditionalFiringsLnLikelihood() const {
+LL Rule::AdditionalFiringsLnLikelihood() const {
   return BinaryChoiceLnLikelihood(num_first_firings_ + num_additional_firings_,
 				  num_additional_firings_);
 }
-double Rule::ComputeFiringsLnLikelihood() const{
-  double result = 0;
+LL Rule::ComputeFiringsLnLikelihood() const{
+  LL result = AdditionalFiringsLnLikelihood();
   forall(run, first_firing_counts_){
     result += BinaryChoiceLnLikelihood(run->second);
   }
-  result += AdditionalFiringsLnLikelihood();
   return result;
 }
 void Rule::L1_AddAdditionalFirings(int delta){  
   if (delta==0) return;  
-  double ll_delta = -AdditionalFiringsLnLikelihood();
+  LL ll_delta = -AdditionalFiringsLnLikelihood();
   model_->changelist_.ChangeValue(&num_additional_firings_, 
 				   num_additional_firings_+delta);  
   ll_delta += AdditionalFiringsLnLikelihood();
@@ -1472,32 +1469,25 @@ void Rule::L1_AddAdditionalFirings(int delta){
 }
 void Rule::L1_AddFirstFirings(int delta){  
   if (delta==0) return;  
-  double ll_delta = -AdditionalFiringsLnLikelihood();
+  LL ll_delta = -AdditionalFiringsLnLikelihood();
   model_->changelist_.ChangeValue(&num_first_firings_, 
 				  num_first_firings_+delta);  
   ll_delta += AdditionalFiringsLnLikelihood();
   L1_AddToFiringsLnLikelihoodAndVerify(ll_delta);
 }
 
-double RuleSat::LnLikelihood() const {
-  return 0;
-}
-
 void Component::F2_ComputeSetLnLikelihood() {
   if (!exists_) return;
 
   CHECK(!really_dead_);
-  double old_val = ln_likelihood_;
-  double new_val = LnLikelihood();
-  CHECK(finite(old_val));
-  CHECK(finite(new_val));
+  LL old_val = ln_likelihood_;
+  LL new_val = LnLikelihood();
   A1_SetLnLikelihood(new_val);
   model_->A1_AddToLnLikelihood(new_val - old_val);
 }
-void Component::L1_AddToLnLikelihoodAndVerify(double delta){
+void Component::L1_AddToLnLikelihoodAndVerify(LL delta){
   if (!exists_) return;
   CHECK(!really_dead_);
-  CHECK(finite(delta));
   A1_SetLnLikelihood(ln_likelihood_+delta);
   model_->A1_AddToLnLikelihood(delta);
   ProbabilisticallyVerifyLnLikelihood();
@@ -1512,7 +1502,7 @@ void Component::ProbabilisticallyVerifyLnLikelihood() const {
 
 void Component::VerifyLnLikelihood() const{
   // Check that the likelihood is up to date.
-  if (fabs(LnLikelihood() - ln_likelihood_) > 1e-6){
+  if (LnLikelihood() != ln_likelihood_){
     cerr << "likelihood for component " << id_ << " out of date"
 	 << " stored=" << ln_likelihood_
 	 << " computed=" << LnLikelihood()

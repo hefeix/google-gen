@@ -21,6 +21,7 @@
 
 #include <map>
 #include "util.h"
+#include "probutil.h"
 
 // We encode terms as integers, non-negative integers representing literals, 
 // -1 representing a wildcard, and negative integers representing variables.  
@@ -218,9 +219,9 @@ string ToString(const Tuple & s, const Substitution & sub);
 // given another vector of tuples has already been encoded as context.
 // The user is responsible for adding in the ln likelihood of the terms passed
 // back in arbitrary_terms, which get encoded globally.
-double PatternLnLikelihood(const Pattern &context, 
-			   const Pattern &to_encode, 
-			   vector<int> * arbitrary_terms);
+LL PatternLnLikelihood(const Pattern &context, 
+		       const Pattern &to_encode, 
+		       vector<int> * arbitrary_terms);
 
 // Given a vector of tuples, with variables, we rename the variables
 // so that the first variable to occur in the vector of tuples is 

@@ -109,7 +109,7 @@ inline ostream& operator<<(ostream& o, const SubRuleInfo& sri) {
 struct Chooser {
   Model * model_;
   Chooser *parent_;
-  double ln_likelihood_;
+  LL ln_likelihood_;
   map<int, int> counts_;
   int num_ones_; // nuber of objects with count 1.
   int64 total_;
@@ -117,8 +117,8 @@ struct Chooser {
   void L1_Erase();
   void L1_ChangeObjectCount(int object, int delta);
   //  update the ln likelihood of this object and of the model.
-  void L1_AddToLnLikelihood(double delta); 
-  double ComputeLnLikelihood() const; // from scratch for verification.
+  void L1_AddToLnLikelihood(LL delta); 
+  LL ComputeLnLikelihood() const; // from scratch for verification.
   int GetCount(int object) const;
   Record ChooserInfo(bool include_objects);
 };
@@ -255,11 +255,11 @@ class Model {
   // FixTime may be able to make the model Layer 3
   bool MayBeTimeFixable() const;
 
-  double GetLnLikelihood() const { return ln_likelihood_;}
-  double GetChooserLnLikelihood() const { return chooser_->ln_likelihood_;}
+  LL GetLnLikelihood() const { return ln_likelihood_;}
+  LL GetChooserLnLikelihood() const { return chooser_->ln_likelihood_;}
 
   uint64 GetSearchWork() const { return search_work_;}
-  double GetUtility() const { return ln_likelihood_ 
+  LL GetUtility() const { return ln_likelihood_ 
       - search_work_ * work_penalty_; } 
   
   Precondition * FindPrecondition(const vector<Tuple> & tuples) const;
@@ -325,7 +325,7 @@ class Model {
  private:    
 
   // Simple A1 modifiers
-  void A1_SetLnLikelihood(double new_val);
+  void A1_SetLnLikelihood(LL new_val);
   void A1_InsertIntoIDToComponent(int id, Component *c);
   void A1_RemoveFromIDToComponent(int id);
   void A1_InsertIntoComponentsByType(Component *c);
@@ -354,7 +354,7 @@ class Model {
   void A1_RemoveFromSpecRequirements(TrueTuple *t);
   void A1_InsertIntoSpecProhibitions(Prohibition *p);
   void A1_RemoveFromSpecProhibitions(Prohibition *p);
-  void A1_AddToLnLikelihood(double delta);
+  void A1_AddToLnLikelihood(LL delta);
   void A1_AddToSearchWork(int64 delta);
   void A1_InsertIntoViolatedProhibitions(Prohibition *p);
   void A1_RemoveFromViolatedProhibitions(Prohibition *p);
@@ -403,9 +403,9 @@ class Model {
   // units of search work is multiplied by this number and subtracted from the
   // ln_likelihood_ of the model (in nats).  Guess: make this number about 
   // 1/1000
-  double work_penalty_;
+  LL work_penalty_;
   
-  double ln_likelihood_;
+  LL ln_likelihood_;
 
   Changelist changelist_;
   bool old_style_display_;

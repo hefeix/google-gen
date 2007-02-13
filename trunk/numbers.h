@@ -36,8 +36,6 @@ struct EncodedNumber {
     const char * p = s.c_str(); 
     FromSortableString(&p);
   }
-  double ToOpenInterval();
-  void FromOpenInterval(double d);
 };
 bool OPERATORLESS(const EncodedNumber & a, const EncodedNumber & b);
 bool OPERATOREQ(const EncodedNumber & a, const EncodedNumber & b);

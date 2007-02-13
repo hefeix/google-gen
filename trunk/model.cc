@@ -168,8 +168,8 @@ TrueTuple::GetCauseTrueTuples() const{
 
 Model::Model(){
   next_id_ = 0;
-  ln_likelihood_ = 0.0;
-  work_penalty_ = 0.001;
+  ln_likelihood_ = LLZero();
+  work_penalty_ = Micronats(1000);
   old_style_display_ = false;
   chooser_ = new Chooser(this, NULL);
   verify_counter_ = 0;
@@ -219,8 +219,8 @@ void Model::L1_ReleaseID(int id) {
         Where L is a probility distribution over non-negative integers.  
   (note that the count.size()! cancels.).
 */
-double Chooser::ComputeLnLikelihood() const {
-  double ret = 0;
+LL Chooser::ComputeLnLikelihood() const {
+  LL ret = LLZero();
   int total = 0;
   int num_ones = 0;
   forall(run, counts_) {
@@ -237,12 +237,12 @@ double Chooser::ComputeLnLikelihood() const {
   CHECK(num_ones == num_ones_);
   CHECK(total == total_);
   ret -= LnFactorial(total_);
-  ret -= log(counts_.size()+1);
+  ret -= Log(counts_.size()+1);
   ret += LnFactorial(num_ones_) + LnFactorial(counts_.size()-num_ones_);
   return ret;
 }
 
-void Chooser::L1_AddToLnLikelihood(double delta) {
+void Chooser::L1_AddToLnLikelihood(LL delta) {
   model_->GetChangelist()->ChangeValue(&ln_likelihood_, 
 				       ln_likelihood_ +  delta);
   model_->A1_AddToLnLikelihood(delta);
@@ -270,21 +270,15 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
   int new_num_ones = num_ones_;
   int64 new_total = total_;
 
-  double ll_delta = 0;
-  ll_delta -= LnFactorial(old_count); ll_delta += LnFactorial(new_count);
-  CHECK(finite(ll_delta));
+  LL ll_delta = LnFactorial(new_count) - LnFactorial(old_count); 
   if (old_count > 1) ll_delta -= uintQuadraticLnProb(old_count - 2);
   if (new_count > 1) ll_delta += uintQuadraticLnProb(new_count - 2);
-  CHECK(finite(ll_delta));
   
   ll_delta += LnFactorial(old_total); ll_delta -= LnFactorial(new_total);
-  ll_delta += log(old_num_objects + 1); ll_delta -= log(new_num_objects + 1);
-  CHECK(finite(ll_delta));
+  ll_delta += Log(old_num_objects + 1); ll_delta -= Log(new_num_objects + 1);
   ll_delta -= LnFactorial(old_num_ones); ll_delta += LnFactorial(new_num_ones);
-  CHECK(finite(ll_delta));
   ll_delta -= LnFactorial(old_num_objects - old_num_ones);
   ll_delta += LnFactorial(new_num_objects - new_num_ones);
-  CHECK(finite(ll_delta));
 
   L1_AddToLnLikelihood(ll_delta);
 
@@ -299,21 +293,21 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
 Chooser::Chooser(Model *model, Chooser *parent){
   parent_ = parent;
   model_ = model;
-  ln_likelihood_ = 0;
+  ln_likelihood_ = LLZero();
   total_ = 0;
   num_ones_ = 0;
   model_->GetChangelist()->Creating(this);
 }
 void Chooser::L1_Erase(){
   CHECK(counts_.size()==0);
-  CHECK(fabs(ln_likelihood_) < .0001);
+  CHECK(ln_likelihood_ == LLZero());
   CHECK(total_ ==0);
   model_->GetChangelist()->Destroying(this);
 }
 
 Record Chooser::ChooserInfo(bool include_objects) {
   Record r;
-  r["Ln Likelihood"] = dtoa(ln_likelihood_);
+  r["Ln Likelihood"] = ln_likelihood_.ToString();
   r["Num Ones"] = itoa(num_ones_);
   r["Total"] = itoa(total_);
   r["Num Objects"] = itoa(counts_.size());
@@ -568,10 +562,10 @@ void Model::Load(string filename) {
 
 Record Model::ModelInfo() const{ 
   Record r;
-  r["Ln Likelihood"] = dtoa(ln_likelihood_);
-  r["Ln likelihood(global chooser)"] = dtoa(GetChooserLnLikelihood());
+  r["Ln Likelihood"] = ln_likelihood_.ToString();
+  r["Ln likelihood(global chooser)"] = GetChooserLnLikelihood().ToString();
   r["Work"] = itoa(GetSearchWork());
-  r["Utility"] = dtoa(GetUtility());
+  r["Utility"] = GetUtility().ToString();
   r["required never happen"] = itoa(required_never_happen_.size());
   r["violated prohibitions"] = itoa(violated_prohibitions_.size());
   r["chooser"] = RecordToHTMLTable(chooser_->ChooserInfo(true));
@@ -651,7 +645,7 @@ void Model::ToHTML(string dirname) const {
 }
 
 void Model::VerifyLikelihood() const{
-  double total = GetChooserLnLikelihood();
+  LL total = GetChooserLnLikelihood();
   set<Rule *> rules = GetAllRules();
   forall(run, rules) forall(run_c, (*run)->choosers_) {
     Chooser * c = run_c->second;
@@ -663,7 +657,7 @@ void Model::VerifyLikelihood() const{
   }
   VLOG(0) << "total=" << total << " ln_likelihood_ = " << ln_likelihood_ 
 	  << endl;
-  if (fabs(total-ln_likelihood_) > 1e-6) {
+  if (total != ln_likelihood_) {
     cerr << " total likelihood out of date " 
 	 << " store=" << ln_likelihood_ << " computed=" << total << endl;
     CHECK(false);
@@ -865,8 +859,8 @@ Rule * Model::GetAddUniversalRule(uint length) {
 }
 
 // Simple L1 modifiers
-void Model::A1_SetLnLikelihood(double new_val) {
-  changelist_.Make(new ValueChange<double>(&ln_likelihood_, new_val));
+void Model::A1_SetLnLikelihood(LL new_val) {
+  changelist_.Make(new ValueChange<LL>(&ln_likelihood_, new_val));
 }
 void Model::A1_InsertIntoIDToComponent(int id, Component *c) {
   changelist_.Make
@@ -984,9 +978,9 @@ void Model::A1_RemoveFromSpecProhibitions(Prohibition *p) {
   changelist_.Make
     (new SetRemoveChange<Prohibition *>(&spec_prohibitions_, p));
 }
-void Model::A1_AddToLnLikelihood(double delta) {
+void Model::A1_AddToLnLikelihood(LL delta) {
   changelist_.Make
-    (new ValueChange<double>(&ln_likelihood_, ln_likelihood_+delta));
+    (new ValueChange<LL>(&ln_likelihood_, ln_likelihood_+delta));
 }
 void Model::A1_AddToSearchWork(int64 delta) {
   changelist_.Make
