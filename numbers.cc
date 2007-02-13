@@ -33,30 +33,6 @@ void  EncodedNumber::FromSortableString(const char ** p) {
   }
   (*p)++;
 }
-double EncodedNumber::ToOpenInterval() {
-  double ret = 0;
-  double x = 0.5;
-  for (uint i=0; i<bits_.size(); i++) {
-    ret += bits_[i]?x:0;
-    x*=0.5;
-  }
-  ret += x;
-  return ret;
-}
-void EncodedNumber::FromOpenInterval(double d) {
-  bits_.clear();
-  CHECK (d>0.0 && d<1.0);
-  while (d!=0.5) {
-    if (d<0.5) {
-      bits_.push_back(false);
-      d *= 2.0;
-    } else {
-      bits_.push_back(true);
-      d -= 0.5;
-      d *= 2.0;
-    }
-  }
-}
 
 bool (operator==)(const EncodedNumber & a, const EncodedNumber & b) {
   if (a.bits_.size() != b.bits_.size()) return false;
@@ -161,17 +137,7 @@ void TestNumbersShell(){
   EncodedNumber n;
   Time t;
   while (cin >> command) {
-    if (command=="toopen"){
-      string nstring;
-      cin >> nstring;
-      n.FromSortableString(nstring);
-      cout << n.ToOpenInterval() << endl;
-    } else if (command == "fromopen") {
-      double d;
-      cin >> d;
-      n.FromOpenInterval(d);
-      cout << n.ToSortableString() << endl;
-    } else if (command == "set") {
+    if (command == "set") {
       string tstring;
       cin >> tstring;
       t.FromSortableString(tstring);

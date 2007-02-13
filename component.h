@@ -58,6 +58,7 @@
 #include "record.h"
 #include "tuple.h"
 #include "numbers.h"
+#include "probutil.h"
 
 class Model;
 class Chooser;
@@ -217,7 +218,7 @@ class Component{
   
   // Computes the local contribution of this component to the ln likelihood 
   // of the model.
-  virtual double LnLikelihood() const;
+  virtual LL LnLikelihood() const;
   // Some simple sanity checks on the connection structure.
   void CheckConnections() const; // checks that Co<X>() is the iverse of <X>()
   int GetID() const { return id_;}
@@ -262,7 +263,7 @@ class Component{
 
   // Adds to the ln_likelihood of this component, and adjusts the total ln 
   // likelihood of the model.
-  void L1_AddToLnLikelihoodAndVerify(double delta);
+  void L1_AddToLnLikelihoodAndVerify(LL delta);
 
   // ----- LAYER 1 ACCESSOR FUNCTIONS -----
 
@@ -271,7 +272,7 @@ class Component{
   void A1_SetReallyDead(bool val);
   void A1_SetTime(const Time & new_time);
   void A1_SetTimeDirty(bool val); // Use the L1 functions above instead!
-  void A1_SetLnLikelihood(double new_ln_likelihood); 
+  void A1_SetLnLikelihood(LL new_ln_likelihood); 
 
   // ----- DATA -----
 
@@ -288,7 +289,7 @@ class Component{
   int id_;
   Model * model_;
   // contribution of this component to the ln_likelihood_ of the model
-  double ln_likelihood_;
+  LL ln_likelihood_;
   Time time_;
   // time_dirty_ is set to true unless the time is set correctly based on the 
   // codependents of this component (though not necessarily globally).
@@ -331,7 +332,7 @@ class Precondition : public Component {
   vector<Component *> TemporalDependents() const; // Rules, Satisfactions
   vector<Component *> StructuralDependents() const;
   bool NeedsPurpose() const; // yes
-  double LnLikelihood() const;
+  LL LnLikelihood() const;
   // returns pointer to a satisfaction object if one exists.
   Satisfaction * FindSatisfaction(const Substitution &sub) const;
   void VerifyLayer2Subclass() const;
@@ -341,7 +342,7 @@ class Precondition : public Component {
   Rule * FindFeatureRule(Rule * target_rule) const;
   int GetNumSatisfactions() const { return num_satisfactions_;}
   const Pattern & GetPattern() const { return pattern_;}
-  double GetDirectPatternEncodingLnLikelihood() const {
+  LL GetDirectPatternEncodingLnLikelihood() const {
     return direct_pattern_encoding_ln_likelihood_;
   }
 
@@ -412,14 +413,14 @@ class Precondition : public Component {
   map<Substitution, Satisfaction *> satisfactions_; 
   // Under direct encoding, the encoding cost of the tuples, excluding for
   // universal naming costs accounted for elsewhere.
-  double direct_pattern_encoding_ln_likelihood_;
+  LL direct_pattern_encoding_ln_likelihood_;
 
   SearchTree * search_tree_;
 
   // TUPLE ENCODING STUFF
   // Under direct encoding, the encoding cost of the tuples, excluding
   // universal naming costs accounted for elsewhere.
-  //double direct_pattern_encoding_ln_likelihood_;
+  //LL direct_pattern_encoding_ln_likelihood_;
   // used if the rule is tuple encoded.
   // The rule only comes into the model once the TrueTuples that describe
   // its causes come true.  These are the TrueTuples that describe the
@@ -536,7 +537,7 @@ class Rule : public Component{
   vector<Component *> StructuralDependents() const;
   vector<vector<Component *> > TemporalCodependents() const;
   vector<Component *> Copurposes() const;
-  double LnLikelihood() const;
+  LL LnLikelihood() const;
   // Variables in the precondition
   set<int> LeftVariables() const;
   // Variables in the result which are not in the precondition.
@@ -565,7 +566,7 @@ class Rule : public Component{
   RuleType GetRuleType() const { return type_;}
   const Pattern & GetResult() const { return result_;}
   bool IsUniversalRule() const;
-  double GetDirectPatternEncodingLnLikelihood() const {
+  LL GetDirectPatternEncodingLnLikelihood() const {
     return direct_pattern_encoding_ln_likelihood_;
   }
   const set<Rule *> & GetFeatures() const {
@@ -575,7 +576,7 @@ class Rule : public Component{
   double AdditionalFiringLikelihoodEstimate() const;
 
   // Computes ln likelihood of the choices of where to have additional firings.
-  double AdditionalFiringsLnLikelihood() const;
+  LL AdditionalFiringsLnLikelihood() const;
   
 
 
@@ -600,14 +601,14 @@ class Rule : public Component{
   void L1_EraseSubclass();
 
   // adds to firings_ln_likelihood_ and ln_likelihood_, and model ln likelihood
-  void L1_AddToFiringsLnLikelihoodAndVerify(double delta);
+  void L1_AddToFiringsLnLikelihoodAndVerify(LL delta);
   void L1_AddSatisfactionsAndFirstFirings(const set<Rule *> & features,
 					  pair<int, int> delta);
   void L1_AddAdditionalFirings(int delta);
   void L1_AddFirstFirings(int delta);
 
   // computes firings_ln_likelihood_ from scratch.  Doesn't set it. 
-  double ComputeFiringsLnLikelihood() const;
+  LL ComputeFiringsLnLikelihood() const;
 
   // TUPLE ENCODING STUFF
   //  These functions add and remove the global costs associated with the
@@ -659,11 +660,11 @@ class Rule : public Component{
   uint num_additional_firings_;
   // The sum of the ln likelihood for all firings (and non-firings) for this 
   // rule.
-  double firings_ln_likelihood_;
+  LL firings_ln_likelihood_;
 
   // Under direct encoding, the encoding cost of the tuples, excluding
   // universal naming costs accounted for elsewhere.
-  double direct_pattern_encoding_ln_likelihood_;
+  LL direct_pattern_encoding_ln_likelihood_;
   
   // One chooser for each creative variable.
   map<int, Chooser *> choosers_;
@@ -710,7 +711,6 @@ class RuleSat : public Component{ // an instance of a rule coming true
   vector<Component *> Copurposes() const;
   inline bool HasTimeDelay() const { return (rule_->type_!=FEATURE_RULE);}
   inline EncodedNumber GetTimeDelay() const { return rule_->delay_;}
-  double LnLikelihood() const;
   bool HasPurpose() const;
   const map<Substitution, Firing *> & GetFirings() const { return firings_;}
   Rule * GetRule() const { return rule_;}

@@ -37,7 +37,7 @@ struct OptimizationCheckpoint {
   Model * model_;
   Optimizer * optimizer_;
   Checkpoint cp_;
-  double old_utility_;
+  LL old_utility_;
   // should we make sure all of the times are correct in the model
   // before deciding whether to roll back 
   bool fix_times_;  
@@ -47,7 +47,7 @@ struct OptimizationCheckpoint {
   // Should we keep the changes
   bool KeepChanges();
   // The increase in model utility since creation.
-  double Gain();
+  LL Gain();
   private:
   // Do we think that the model has gotten better since creation.
   bool Better();
@@ -166,7 +166,7 @@ struct Optimizer{
   };
 
   // How useful is it to generate this another way
-  double GuessBenefit(const TrueTuple * tp);
+  LL GuessBenefit(const TrueTuple * tp);
   Tuple  GetRandomSurprisingTuple();
 
   int64 StandardMaxWork();
@@ -222,7 +222,7 @@ struct Optimizer{
   Model *model_;
   // maps a condidate rule to the utility of the model the last time
   // we tried to add the rule.
-  map<CandidateRule, double> recently_checked_;
+  map<CandidateRule, LL> recently_checked_;
 };
 // Makes sure all of the propositions in the encoding of this rule
 // are explained in the model.

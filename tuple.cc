@@ -270,13 +270,13 @@ string ToString(const Tuple & s, const Substitution & sub){
   return ret;
 }
 
-double PatternLnLikelihood(const Pattern &context, 
-			   const Pattern &to_encode, 
-			   vector<int> * arbitrary_terms){
+LL PatternLnLikelihood(const Pattern &context, 
+		       const Pattern &to_encode, 
+		       vector<int> * arbitrary_terms){
   CHECK(arbitrary_terms);
   arbitrary_terms->clear();
   set<int> terms_seen;
-  double ret = 0.0;
+  LL ret = LLZero();
   bool encoding = false;
 
   // encode the number of tuples in the pattern
@@ -291,9 +291,9 @@ double PatternLnLikelihood(const Pattern &context,
     for (uint j=0; j<s.size(); j++) {
       int t = s[j];
       // specify whether it's a back-reference or not.
-      if (encoding) ret += log(0.5);
+      if (encoding) ret -= Log(2);
       if (terms_seen % t) {
-	if (encoding) ret -= log((double)terms_seen.size());
+	if (encoding) ret -= Log(terms_seen.size());
       } else {
 	// if it's a new variable, we don't care its identity, so we 
 	// encode a wildcard meaning new variable.

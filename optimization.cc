@@ -271,7 +271,7 @@ TrueTuple * Optimizer::GetRandomTrueTuple(){
 }
 
 // This assumes the truetuple currently happens at some time
-double Optimizer::GuessBenefit(const TrueTuple * tp) {
+LL Optimizer::GuessBenefit(const TrueTuple * tp) {
 
   // Get the first cause
   Firing * first_cause = tp->GetFirstCause();
@@ -284,25 +284,14 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
     = rule->FirstFiringLikelihoodEstimate(rule_sat->GetTimelyFeatures());
   if (rule_sat->NumFirings() > 1)
     likelihood = rule->AdditionalFiringLikelihoodEstimate();
-  double firing_cost = - log (likelihood);
+  LL firing_cost = ToLL(-log (likelihood));
   VLOG(2) << "Firing cost " << firing_cost << endl;
-
-  // See if functional feature rule could be used
-  bool can_keep_firing_lose_arbitrary = false;
-  if (rule_sat->NumFirings() == 1) {
-    can_keep_firing_lose_arbitrary = true;
-    VLOG(2) << "Can use feature rule" << endl;
-  }
-
-  // How much could we save getting rid of the firing
-  double firing_diff = log(1 - likelihood) - log(likelihood);
-  VLOG(2) << "Remove firing Savings:" << firing_diff << endl;
     
   // Get the naming cost
-  double naming_cost = 0;
+  LL naming_cost = LLZero();
   {
     DestructibleCheckpoint checkp(model_->GetChangelist());
-    double old_utility = model_->GetUtility();
+    LL old_utility = model_->GetUtility();
     Substitution sub = first_cause->GetRightSubstitution();
     forall(run, sub.sub_) {
       int term = run->second;
@@ -320,21 +309,20 @@ double Optimizer::GuessBenefit(const TrueTuple * tp) {
     naming_cost = model_->GetUtility() - old_utility;
   }
   VLOG(2) << "Naming cost " << naming_cost << endl;
-
   return firing_cost + naming_cost;
 }
 
 Tuple Optimizer::GetRandomSurprisingTuple() {
   while (true) {
     TrueTuple * tt = GetRandomTrueTuple();
-    double bits = GuessBenefit(tt);
-    if (RandomFraction() < bits/10)
+    double nats = GuessBenefit(tt).ToDouble();
+    if (RandomFraction() < nats/10)
       return tt->GetTuple();
   }
 }
 
 int64 Optimizer::StandardMaxWork(){
- return 5  * (int64)model_->GetNumTrueTuples();
+  return 5  * (int64)model_->GetNumTrueTuples();
 }
 
 bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
@@ -424,11 +412,11 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
   int next_var = 0;
   set<Tuple> used_tuples;
 
-  double best_guess = 0;
+  LL best_guess = LLZero();
   Tuple s1;
   for (uint c=0; c<5; c++) {
     TrueTuple * tt = GetRandomTrueTuple();
-    double bits = GuessBenefit(tt);
+    LL bits = GuessBenefit(tt);
     if ( (c==0) || (bits > best_guess) ) {
       s1 = tt->GetTuple();
       best_guess = bits;
@@ -730,7 +718,7 @@ void Optimizer::RuleInfo::CheckForMultipleValuesOfSampledTuple(){
 void Optimizer::RuleInfo::BailIfRecentlyChecked(){
   if ((optimizer_->recently_checked_ % r_) 
       && (optimizer_->recently_checked_[r_] 
-	  >= optimizer_->model_->GetUtility()-1.0)) {
+	  >= optimizer_->model_->GetUtility())) {
     hopeless_ = true;
   }
 }
@@ -1585,7 +1573,7 @@ void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
   
   VLOG(1) << "before adding rule utility=" 
 	  << model_->GetUtility() << endl;
-  double added_arbitrary_term_ll = -model_->GetChooserLnLikelihood();
+  LL added_arbitrary_term_ll = -model_->GetChooserLnLikelihood();
   Rule * r = model_->MakeNewRule(preconditions, EncodedNumber(), 
 				 type, 0, result);
   r->AddComments(comments);
@@ -1725,9 +1713,7 @@ OptimizationCheckpoint::~OptimizationCheckpoint() {
   }
 }
 bool OptimizationCheckpoint::Better() {
-  return (// model_->MayBeTimeFixable() &&
-	  (model_->GetUtility() > old_utility_ + 0.01 + 
-	   (1+fabs(model_->GetUtility())) * 1e-14));
+  return (model_->GetUtility() > old_utility_);
 }
 bool OptimizationCheckpoint::KeepChanges() {
   if (!Better()) return false;
@@ -1738,7 +1724,7 @@ bool OptimizationCheckpoint::KeepChanges() {
   return Better();
 }
 
-double OptimizationCheckpoint::Gain() {
+LL OptimizationCheckpoint::Gain() {
   return model_->GetUtility() - old_utility_;
 }
 
@@ -1760,7 +1746,7 @@ void Optimizer::Explain(TrueTuple *p,
     }
     explanations.push_back(make_pair(r, right_sub));
   }
-  int which = 0; double best = 0;
+  int which = 0; LL best = LLZero();
   for (uint i=0; i<explanations.size(); i++){
     Checkpoint cp = model_->GetChangelist()->GetCheckpoint();
     explanations[i].first->AddFiring(explanations[i].second);
