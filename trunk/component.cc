@@ -645,8 +645,8 @@ bool Rule::HasFiring() const{
 
 void Rule::ChangeDelay(EncodedNumber new_delay) {
   A1_SetDelay(new_delay);
-  forall(run, rule_sats_) run->second->ComputeSetTime();
   F2_ComputeSetLnLikelihood();
+  forall(run, rule_sats_) run->second->ComputeSetTime();
 }
 int Rule::NumFirings() const {
   return num_first_firings_ + num_additional_firings_;
@@ -766,8 +766,8 @@ void RuleSat::L1_SetTimelyFeatures(const set<Rule *> &
   if (new_timely_features == timely_features_) return;
   if (SatsAndFirstFirings() != make_pair(0,0) )
     rule_->L1_AddSatisfactionsAndFirstFirings
-      (timely_features_, 
-       make_pair(0,0)-SatsAndFirstFirings()); 
+      (timely_features_, make_pair(0,0)
+       - SatsAndFirstFirings()); 
   model_->changelist_.ChangeValue(&timely_features_, 
 				  new_timely_features);
   if (SatsAndFirstFirings() != make_pair(0,0) )

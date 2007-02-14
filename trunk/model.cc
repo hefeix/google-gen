@@ -169,11 +169,11 @@ TrueTuple::GetCauseTrueTuples() const{
 Model::Model(){
   next_id_ = 0;
   ln_likelihood_ = LLZero();
-  work_penalty_ = Micronats(1000);
+  work_penalty_ = ToLL(0.001);
   old_style_display_ = false;
   chooser_ = new Chooser(this, NULL);
   verify_counter_ = 0;
-  verify_interval_ = 1000;
+  verify_interval_ = 1;
 
   // Load up the words
   ifstream input("words");
