@@ -665,7 +665,7 @@ void Optimizer::RuleInfo::Canonicalize(){
 
 void Optimizer::RuleInfo::FindCandidateFirings(){
   vector<Substitution> subs;
-  int64 max_work_now = max_work_/denominator_ + 10;
+  int64 max_work_now = max_work_/denominator_ * 2 + 10;
   bool success = 
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
     (Concat(r_),
@@ -673,7 +673,6 @@ void Optimizer::RuleInfo::FindCandidateFirings(){
      &subs_, &sampled_num_firings_, &max_work_now);
   if (!success) {
     hopeless_ = true;
-    hopeless_cause_ = 1;
     return;
   }
   if (sampled_num_firings_ < 2) {
@@ -694,7 +693,8 @@ const Tuple & Optimizer::RuleInfo::GetSampledTuple(){
 }
 void Optimizer::RuleInfo::CheckForMultipleValuesOfSampledTuple(){
   // We will require also that there be at least two values of the
-  // sampled tuple.  
+  // sampled tuple.
+  if (subs_.size()==0) return;
   if (sampled_) {
     set<int> sampled_tuple_variables 
       = GetVariables(GetSampledTuple());
@@ -727,6 +727,7 @@ void Optimizer::RuleInfo::BailIfRecentlyChecked(){
 void Optimizer::RuleInfo::FindNumSatisfactions(){
   // check that the preconditions aren't too much work to searh for.
   int64 max_work_now = max_work_/denominator_ * 2 +10;
+  int64 original_max_work_now = max_work_now;
   bool success = 
     optimizer_->model_->GetTupleIndex()->FindSatisfactions
     (r_.first, precondition_sampling_, 
@@ -735,9 +736,16 @@ void Optimizer::RuleInfo::FindNumSatisfactions(){
      &max_work_now);
   if (!success) {
     hopeless_ = true;
-    hopeless_cause_ = 1;
     return;
   }
+  VLOG(1) << "Pattern=" << TupleVectorToString(r_.first)
+	  << " sample clause=" << precondition_sampling_.position_
+	  << " denominator=" << denominator_
+	  << " max_work_=" << max_work_
+	  << " max_work_now=" << max_work_now
+	  << " sampled_num_satisfactions_=" << sampled_num_satisfactions_
+	  << " actual_work=" << original_max_work_now-max_work_now
+	  << endl;
   estimated_satisfactions_ = sampled_num_satisfactions_ * (sample_postcondition_?1:denominator_);
 }
 
@@ -810,7 +818,7 @@ void Optimizer::RuleInfo::RemoveBoringVariables(){
     if (run->second.size()==1) {
       boring_variables.Add(run->first, *run->second.begin());
     }
-      }
+  }
   if (GetVerbosity() >= 2) {
     VLOG(2) << "subs=" << endl;
     for (uint i=0; i<subs_.size(); i++) 
@@ -832,7 +840,6 @@ void Optimizer::RuleInfo::RemoveBoringVariables(){
 }
 
 bool Optimizer::RuleInfo::Vette() {
-
   VLOG(0) << "Raw=" << CandidateRuleToString(r_) << endl;
   comments_ += " Raw=" + CandidateRuleToString(r_);
 
@@ -849,6 +856,7 @@ bool Optimizer::RuleInfo::Vette() {
   // since things within the loops can change r_, we revert it every time
   CandidateRule revert_to_rule = r_;
 
+  bool successful = false;
   // Sample more aggressively at first, then less agressively
   for (denominator_ = 1024; denominator_>0; denominator_ >>=1 ) {
     r_ = revert_to_rule;
@@ -872,21 +880,30 @@ bool Optimizer::RuleInfo::Vette() {
 
       // first find satisfactions of the whole thing.
       FindCandidateFirings();
-      if (needs_bigger_sample_) continue; 
       if (hopeless_) {
 	VLOG(1) << "Quit after FindCandidateFirings denom:" << denominator_ 
 		<< " cause:" << hopeless_cause_ << endl;
 	return false;
       }
+      if (needs_bigger_sample_) continue; 
+
+      CheckForMultipleValuesOfSampledTuple();
+      if (hopeless_) {
+	VLOG(1) << "Quit after CheckForMultipleValuesOfSampledTuple denom:" 
+		<< denominator_ 
+		<< " cause:" << hopeless_cause_ << endl;
+	return false;
+      }
+      if (needs_bigger_sample_) continue; 
       
       // count the number of satisfactions of the preconditions
       FindNumSatisfactions();
-      if (needs_bigger_sample_) continue; 
       if (hopeless_) {
 	VLOG(1) << "Quit after FindNumSatisfactions denom:" << denominator_
 		<< " cause:" << hopeless_cause_ << endl;
 	return false;
       }
+      if (needs_bigger_sample_) continue; 
 
       // TODO: Make estimates of the complexity savings and possibly fail
 
@@ -899,19 +916,20 @@ bool Optimizer::RuleInfo::Vette() {
 		<< endl;
 	return false;
       }
-
-      // Try to remove preconditions that are not very restrictive.
-      RemoveUnrestrictivePreconditions();
-      if (needs_bigger_sample_) continue; if (hopeless_) return false;
-
-      Canonicalize();
-      return true;
+      successful = true;
+      break;
     }
+    if (successful) break;
   }
-
-  hopeless_ = true;
-  VLOG(1) << "Quit because no sample worked well" << endl;
-  return false;
+  if (!successful) {
+    hopeless_ = true;
+    VLOG(1) << "Quit because no sample worked well" << endl;
+    return false;
+  }
+  // Try to remove preconditions that are not very restrictive.
+  RemoveUnrestrictivePreconditions();
+  Canonicalize();
+  return true;
 } 
 
 bool Optimizer::VetteCandidateRule(CandidateRule r, 
@@ -1531,7 +1549,17 @@ void Optimizer::TryRuleVariations(const Pattern & preconditions,
     OptimizationCheckpoint cp(this, false);
     string comments = "recursively added as a variation of "
       + CandidateRuleToString(make_pair(preconditions, result));
-    TryAddPositiveRule(cr.first, cr.second, max_recursion,
+    CandidateRule simplified_rule;
+    string junk_comments;
+    // TODO: may want to replace StandardMaxWork() by something proportional to
+    // the number of firings being replaced.
+    if (!VetteCandidateRule(cr, &simplified_rule, StandardMaxWork(), 
+			    &junk_comments)) {
+      VLOG(0) << "Vette failed on rule variation" << endl;
+      continue;
+    }
+    TryAddPositiveRule(simplified_rule.first, simplified_rule.second, 
+		       max_recursion,
 		       comments);
     if (cp.KeepChanges()) break;
   }
