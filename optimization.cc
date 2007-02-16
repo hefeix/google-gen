@@ -706,6 +706,7 @@ FindSampling(const Pattern & p, SamplingInfo * result,
 	  *estimated_num_results = num_results;
 	if (actual_num_results)
 	  *actual_num_results = num_results;
+	VLOG(1) << "Unsampled" << endl;
 	return true;
       }
       if (num_results < 2) continue;
@@ -731,10 +732,16 @@ FindSampling(const Pattern & p, SamplingInfo * result,
 	*estimated_num_results = num_results * denominator;
       if (actual_num_results)
 	*actual_num_results = num_results;
+      VLOG(1) << "Sampling clause " << p[sampling.position_].ToString() 
+	      << " d:" << denominator << endl;
       return true;
     }
-    if (all_take_too_long) return false;
+    if (all_take_too_long) {
+      VLOG(1) << "Sampling failed at denom:" << denominator << endl;
+      return false;
+    }
   }
+  VLOG(1) << "Sampling failed" << endl;
   return false;
 }
 
@@ -749,29 +756,32 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   // Make sure existing preconditions limit results
   if ( (GetVariables(r.first).size() != 0) &&
        (Intersection(GetVariables(r.first), 
-		     GetVariables(r.second)).size()==0) ) return false;
+		     GetVariables(r.second)).size()==0) ) {
+    VLOG(1) << "Precondition and result disconnected" << endl;
+    return false;
+  }
 
   // Canonicalize 
   r = CanonicalizeRule(r, NULL);
+  VLOG(1) << "Canonicalized=" << CandidateRuleToString(r) << endl;
 
   // look for a good sampling
   SamplingInfo combined_sampling;
   vector<Substitution> full_subs;
   uint64 estimated_num_firings;
   if (!FindSampling(Concat(r), &combined_sampling, max_work, &full_subs, 
-		    &estimated_num_firings, NULL, NULL, NULL)) return false;
-  if (estimated_num_firings > 5 * model_->GetNumTrueTuples()) return false;
-  
-
-  SamplingInfo precondition_sampling;
-  uint64 estimated_num_satisfactions;
-  uint64 actual_num_satisfactions;
-  if (!FindSampling(r.first, &precondition_sampling, max_work, NULL,
-		    &estimated_num_satisfactions, 
-		    &actual_num_satisfactions, NULL, NULL)) return false;
+		    &estimated_num_firings, NULL, NULL, NULL)) {
+    VLOG(1) << "Couldn't find sampling for rule" << endl;
+    return false;
+  }
+  if (estimated_num_firings > 5 * model_->GetNumTrueTuples()) {
+    VLOG(1) << "Too many firings" << endl;
+    return false;
+  }  
 
   // remove boring variables, collapse equal variables, and remove 
   // variable free tuples.
+  CandidateRule old_r = r;
   PatternBuilder pb(this, Concat(r), full_subs);
   pb.CollapseEquivalentVariables();
   pb.CollapseConstantVariables();
@@ -779,11 +789,26 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   r.second = Pattern(pb.pattern_.begin()+r.first.size(), pb.pattern_.end());
   r.first = RemoveVariableFreeTuples(r.first);
   r.second = RemoveVariableFreeTuples(r.second);
+  if (old_r != r) {
+    // Note estimated num firings may be wrong here, may want to recalculate if using numbers
+    r = CanonicalizeRule(r, NULL);
+    VLOG(1) << "Collapsed rule " << CandidateRuleToString(r) << endl;
+  }
 
-  VLOG(1) << "old precondition=" << TupleVectorToString(r.first) << endl;
-  VLOG(1) << "actual #sat=" << actual_num_satisfactions << endl;
-  VLOG(1) << "sampling=" << precondition_sampling.ToString() << endl;
+  SamplingInfo precondition_sampling;
+  uint64 estimated_num_satisfactions;
+  uint64 actual_num_satisfactions;
+  if (!FindSampling(r.first, &precondition_sampling, max_work, NULL,
+		    &estimated_num_satisfactions, 
+		    &actual_num_satisfactions, NULL, NULL)) {
+    VLOG(1) << "Couldn't find sampling for precondition" << endl;
+    return false;
+  }
+  VLOG(1) << "Set precondition sampling actual_num_sat:" 
+	  << actual_num_satisfactions << endl;
+
   // Try to remove preconditions that are not very restrictive.
+  // TODO what if the precondition is unsampled?
   int since_last_improvement = 0;
   uint remove_clause = 0;
   for (;since_last_improvement < int(r.first.size()); since_last_improvement++){
@@ -794,41 +819,44 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
       if (remove_clause == precondition_sampling.position_)
 	remove_clause = (remove_clause + 1) % r.first.size();
     }
-    VLOG(1) << "since_last_improvement=" << since_last_improvement
-	    << "  Considering removing " << r.first[remove_clause].ToString()
-	    << endl;
+
+    VLOG(1) << "Considering removing " << remove_clause << " " << r.first[remove_clause].ToString() << endl;
+    VLOG(1) << "since_last_improvement=" << since_last_improvement << endl;
     vector<Tuple> simplified_preconditions 
       = RemoveFromVector(r.first, remove_clause);
-    // if a variable is in the result and occurs only in this clause
-    // of the precondition, then this clause is necessary.
+
+    // if a variable is in the result and occurs only in this clause the clause is necessary
     if ((Intersection(GetVariables(r.first[remove_clause]), 
 		      GetVariables(r.second))
 	 - GetVariables(simplified_preconditions)).size()) {
-      VLOG(1) << "would orphan result variable" << endl;
+      VLOG(1) << "Test failed - necessary variable" << endl;
       continue;
     }
+
+    // Don't disconnect the pattern if it's not already disconnected 
+    // TODO: maybe later check the #disconnected components of both are the same
     if (IsConnectedPattern(r.first) 
 	&& !IsConnectedPattern(simplified_preconditions)) {
-      VLOG(1) << "would disconnect pattern" << endl;
+      VLOG(1) << "Test failed - disconnects preconditions" << endl;
       continue;
     }
     
     if (remove_clause == precondition_sampling.position_) {      
       // pick a new sampling clause.
-      set<uint> bad_clauses; bad_clauses.insert(remove_clause);
+      set<uint> bad_clauses; 
+      bad_clauses.insert(remove_clause);
       if (!FindSampling(r.first, &precondition_sampling, max_work, NULL,
 			&estimated_num_satisfactions, 
-			&actual_num_satisfactions, &bad_clauses, NULL)) {
-	VLOG(1) << "failed to pick a new sampling" << endl;
+			&actual_num_satisfactions, &bad_clauses, NULL)) 
 	break;
-      }
-      VLOG(1) << "Picked a new sampling " << precondition_sampling.ToString()
-	      << " #sat=" << actual_num_satisfactions
-	      << endl;
+      VLOG(1) << "Changed precondition sampling actual_num_satifactions:" 
+	      << actual_num_satisfactions << endl;
     }
+  
     uint64 simplified_num_satisfactions = 0;
     int64 max_work_now = max_work;
-    SamplingInfo simplified_sampling = precondition_sampling;
+    SamplingInfo simplified_sampling;
+    simplified_sampling = precondition_sampling;
     simplified_sampling.RemovePosition(remove_clause);
     if (!model_->GetTupleIndex()->FindSatisfactions
 	(simplified_preconditions, 
@@ -836,15 +864,16 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
 	 NULL, // substitutions
 	 &simplified_num_satisfactions,
 	 &max_work_now)) {
-      VLOG(1) << "Find satisfactions failed" << endl;
-      continue;
-    }
-    VLOG(1) << "simplified #sat=" << simplified_num_satisfactions << endl;
-    if (simplified_num_satisfactions  > actual_num_satisfactions * 1.1) {
+      VLOG(1) << "Test failed ... I can't get no satisfaction" << endl;
       continue;
     }
 
+    VLOG(1) << "simplified #sat=" << simplified_num_satisfactions << endl;
+    if (simplified_num_satisfactions  > actual_num_satisfactions * 1.1)
+      continue;
+
     // adjust the samplinginfo object
+    VLOG(1) << "Removing clause " << r.first[remove_clause].ToString() << endl;
     precondition_sampling = simplified_sampling;
     r.first = RemoveFromVector(r.first, remove_clause);
     actual_num_satisfactions = simplified_num_satisfactions;
@@ -857,8 +886,11 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   r = CanonicalizeRule(r, NULL);
   if ((recently_checked_ % r) 
       && (recently_checked_[r] 
-	  == model_->GetUtility())) return false;
-  
+	  >= model_->GetUtility())) {
+    VLOG(1) << "Recently checked" << endl;
+    return false;
+  }
+
   CHECK(simplified_rule);
   *simplified_rule = r;
 

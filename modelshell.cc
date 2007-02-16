@@ -295,15 +295,15 @@ string ModelShell::Handle(string command) {
 	VLOG(0) << "Tuple:" << tt->GetTuple().ToString() << endl;
 	VLOG(0) << "guess: " << optimizer_->GuessBenefit(tt) << endl;
        }
-     }
-     else if (command == "addrule"){
-       string pat;
-       Record r;
-       command_stream >> r;
-       CandidateRule original = make_pair(
+    }
+    else if (command == "addrule"){
+      string pat;
+      Record r;
+      command_stream >> r;
+      CandidateRule original = make_pair(
  					 StringToTupleVector(r["lhs"]),
  					 StringToTupleVector(r["rhs"]));
-       {
+      {
  	OptimizationCheckpoint cp(optimizer_, true);
  	string comments;
  	CandidateRule simplified;
@@ -361,6 +361,23 @@ string ModelShell::Handle(string command) {
        int r;
        command_stream >> r;
        max_recursion_ = r;
+     }
+     else if (command=="vette") {
+       Record r;
+       command_stream >> r;
+       CandidateRule original = make_pair(
+ 					 StringToTupleVector(r["lhs"]),
+ 					 StringToTupleVector(r["rhs"]));
+       CandidateRule simplified;
+       string comments;
+       bool result = optimizer_->VetteCandidateRule(original, &simplified,
+						    optimizer_->ConstantExpectationMaxWork(),
+						    &comments);
+       if (result) {
+	 cout << "Simplified " << CandidateRuleToString(simplified) << endl;
+       } else {
+	 cout << "Failed" << endl;
+       }
      }
      else if (command=="candidates"){
        uint num;
