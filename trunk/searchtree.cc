@@ -166,7 +166,7 @@ bool SearchNode::L1_MakePartition(int64 * max_work_now) {
     (*partition_)[i] = new_components[comp[i]];
   }
   L1_SetWork(1);
-  L1_SetNumSatisfactions(1);
+  L1_SetNumSatisfactions(0);
   A1_SetType(PARTITION);
   return true;
 }
@@ -484,6 +484,7 @@ void SearchNode::GetSubstitutions(vector<Substitution> *substitutions) const{
   GetPatternAndSampling(&pattern, &sampling);
   if (type_ == NO_TUPLES) {
     substitutions->push_back(Substitution());
+    VerifyNumSatisfactions(substitutions->size());
     return;
   } 
   if (type_ == ONE_TUPLE) {
@@ -494,6 +495,7 @@ void SearchNode::GetSubstitutions(vector<Substitution> *substitutions) const{
       if (!ComputeSubstitution(pattern[0], matches[i], &sub)) continue;
       substitutions->push_back(sub);
     }
+    VerifyNumSatisfactions(substitutions->size());
     return;
   } 
   if (type_ == SPLIT) {
@@ -508,6 +510,7 @@ void SearchNode::GetSubstitutions(vector<Substitution> *substitutions) const{
 	substitutions->push_back(partial_subs[i]);
       }	
     }
+    VerifyNumSatisfactions(substitutions->size());
     return;
   }
   if (type_ == PARTITION) {
@@ -529,7 +532,21 @@ void SearchNode::GetSubstitutions(vector<Substitution> *substitutions) const{
       }
       substitutions->push_back(sub);
     }
+    VerifyNumSatisfactions(substitutions->size());
     return;
   }
   CHECK(false);  
+}
+
+void SearchNode::VerifyNumSatisfactions(uint64 ns) const{
+  if (num_satisfactions_ == ns) return;
+  Pattern p;
+  GetPatternAndSampling(&p, NULL);
+  cerr << "Wrong number of satisfactions " 
+       << "num_satisfactions_ = " << num_satisfactions_
+       << " ns=" << ns
+       << " pattern=" << TupleVectorToString(p)
+       << " Node type: " << type_
+       << endl;
+  CHECK(false);
 }

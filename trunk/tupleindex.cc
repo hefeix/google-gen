@@ -333,6 +333,13 @@ bool TupleIndex::FindSatisfactions(const vector<Tuple> & pattern,
    if (substitutions) {
      MOREWORK(num_sat);
      tree.GetSubstitutions(substitutions);
+     if(substitutions->size() != num_sat){
+       cerr << "Wrong number of substitutions for " 
+	    << TupleVectorToString(pattern)
+	    << " #sat=" << num_sat << " #subs=" << substitutions->size()
+	    << endl;
+       CHECK(false);
+     }
    }
   return true;
 }
