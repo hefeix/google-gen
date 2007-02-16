@@ -326,7 +326,9 @@ int64 Optimizer::StandardMaxWork(){
 }
 
 int64 Optimizer::ConstantExpectationMaxWork(){
-  return min((int64)(100.0/RandomFraction()), StandardMaxWork());
+  int64 ret = min((int64)(30.0/RandomFraction()), StandardMaxWork());
+  VLOG(2) << "ConstantExpectationMaxWork returns " << ret << endl;
+  return ret;
 }
 
 bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
@@ -406,7 +408,7 @@ bool Optimizer::MaybeFindManyExamplesRule(CandidateRule *ret, string *comments){
   Tuple dummy = p[0]; p[0] = p[p.size()-1];  p[p.size()-1] = dummy;
   CandidateRule r = SplitOffLast(p);
   *comments = "ManyExamplesRule";
-  return VetteCandidateRule(r, ret, StandardMaxWork(), comments);
+  return VetteCandidateRule(r, ret, ConstantExpectationMaxWork(), comments);
 }
 
 bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
@@ -474,7 +476,7 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
   Tuple dummy = p[0]; p[0] = p[p.size()-1];  p[p.size()-1] = dummy;
   CandidateRule r = SplitOffLast(p);
   *comments = "NewRule";
-  return VetteCandidateRule(r, ret, StandardMaxWork(), comments);
+  return VetteCandidateRule(r, ret, ConstantExpectationMaxWork(), comments);
 }
 
 bool Optimizer::PatternBuilder::TryInitializeFromSurprisingTuple() {
@@ -665,8 +667,7 @@ string Optimizer::PatternBuilder::ToString() {
 }
 
 bool Optimizer::
-FindSampling(
-	     const Pattern & p, SamplingInfo * result, 
+FindSampling(const Pattern & p, SamplingInfo * result, 
 	     int64 max_work,
 	     vector<Substitution> * subs, 
 	     uint64 * estimated_num_results,
@@ -675,7 +676,8 @@ FindSampling(
 	     SamplingInfo *hint){
   CHECK(estimated_num_results);
   // TODO: use the hint
-  VLOG(1) << "Finding sampling for " << TupleVectorToString(p) << endl;
+  VLOG(1) << "Finding sampling for " << TupleVectorToString(p) 
+	  << " max_work=" << max_work << endl;
 
   // Sample more aggressively at first, then less agressively
   for (int denominator = 1024; denominator>0; denominator >>=1 ) {
@@ -741,7 +743,7 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
 				   CandidateRule *simplified_rule,
 				   int64 max_work, 
 				   string *comments){
-  VLOG(0) << "Raw=" << CandidateRuleToString(r) << endl;
+  VLOG(1) << "Raw=" << CandidateRuleToString(r) << endl;
   if (comments) *comments += " Raw=" + CandidateRuleToString(r);
   
   // Make sure existing preconditions limit results
@@ -778,6 +780,9 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   r.first = RemoveVariableFreeTuples(r.first);
   r.second = RemoveVariableFreeTuples(r.second);
 
+  VLOG(1) << "old precondition=" << TupleVectorToString(r.first) << endl;
+  VLOG(1) << "actual #sat=" << actual_num_satisfactions << endl;
+  VLOG(1) << "sampling=" << precondition_sampling.ToString() << endl;
   // Try to remove preconditions that are not very restrictive.
   int since_last_improvement = 0;
   uint remove_clause = 0;
@@ -789,50 +794,75 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
       if (remove_clause == precondition_sampling.position_)
 	remove_clause = (remove_clause + 1) % r.first.size();
     }
+    VLOG(1) << "since_last_improvement=" << since_last_improvement
+	    << "  Considering removing " << r.first[remove_clause].ToString()
+	    << endl;
     vector<Tuple> simplified_preconditions 
       = RemoveFromVector(r.first, remove_clause);
     // if a variable is in the result and occurs only in this clause
     // of the precondition, then this clause is necessary.
     if ((Intersection(GetVariables(r.first[remove_clause]), 
 		      GetVariables(r.second))
-	 - GetVariables(simplified_preconditions)).size()) continue;
+	 - GetVariables(simplified_preconditions)).size()) {
+      VLOG(1) << "would orphan result variable" << endl;
+      continue;
+    }
     if (IsConnectedPattern(r.first) 
-	&& !IsConnectedPattern(simplified_preconditions)) continue;
+	&& !IsConnectedPattern(simplified_preconditions)) {
+      VLOG(1) << "would disconnect pattern" << endl;
+      continue;
+    }
     
-    if (remove_clause == precondition_sampling.position_) {
+    if (remove_clause == precondition_sampling.position_) {      
       // pick a new sampling clause.
       set<uint> bad_clauses; bad_clauses.insert(remove_clause);
       if (!FindSampling(r.first, &precondition_sampling, max_work, NULL,
 			&estimated_num_satisfactions, 
-			&actual_num_satisfactions, &bad_clauses, NULL)) 
+			&actual_num_satisfactions, &bad_clauses, NULL)) {
+	VLOG(1) << "failed to pick a new sampling" << endl;
 	break;
+      }
+      VLOG(1) << "Picked a new sampling " << precondition_sampling.ToString()
+	      << " #sat=" << actual_num_satisfactions
+	      << endl;
     }
     uint64 simplified_num_satisfactions = 0;
     int64 max_work_now = max_work;
+    SamplingInfo simplified_sampling = precondition_sampling;
+    simplified_sampling.RemovePosition(remove_clause);
     if (!model_->GetTupleIndex()->FindSatisfactions
 	(simplified_preconditions, 
-	 precondition_sampling, 
+	 simplified_sampling, 
 	 NULL, // substitutions
 	 &simplified_num_satisfactions,
-	 &max_work_now)) continue;
-
-    if (simplified_num_satisfactions  > actual_num_satisfactions * 1.1) 
+	 &max_work_now)) {
+      VLOG(1) << "Find satisfactions failed" << endl;
       continue;
+    }
+    VLOG(1) << "simplified #sat=" << simplified_num_satisfactions << endl;
+    if (simplified_num_satisfactions  > actual_num_satisfactions * 1.1) {
+      continue;
+    }
 
     // adjust the samplinginfo object
-    precondition_sampling.RemovePosition(remove_clause);
+    precondition_sampling = simplified_sampling;
     r.first = RemoveFromVector(r.first, remove_clause);
+    actual_num_satisfactions = simplified_num_satisfactions;
     since_last_improvement = -1; // start back at zero.
+    VLOG(1) << "removed clause pattern=" << TupleVectorToString(r.first)
+	    << endl;
+    VLOG(1) << "sampling=" << simplified_sampling.ToString() << endl;
   }
 
   r = CanonicalizeRule(r, NULL);
   if ((recently_checked_ % r) 
       && (recently_checked_[r] 
-	  >= model_->GetUtility())) return false;
-
+	  == model_->GetUtility())) return false;
+  
   CHECK(simplified_rule);
   *simplified_rule = r;
 
+  VLOG(1) << "Candidate=" << CandidateRuleToString(r) << endl;
   return true;
 } 
 

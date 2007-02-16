@@ -307,10 +307,10 @@ string ModelShell::Handle(string command) {
  	OptimizationCheckpoint cp(optimizer_, true);
  	string comments;
  	CandidateRule simplified;
- 	bool success 
- 	  = optimizer_->VetteCandidateRule(original, &simplified, 
- 					   optimizer_->StandardMaxWork(), 
- 					   &comments);
+ 	bool success = optimizer_->VetteCandidateRule
+	  (original, &simplified, 
+	   optimizer_->ConstantExpectationMaxWork(), 
+	   &comments);
  	comments += " added by hand ";
  	cerr << "Vette " << (success?"succeeded":"failed") << endl;
  	if (!success) return "Vette failed";
@@ -370,9 +370,8 @@ string ModelShell::Handle(string command) {
  	CandidateRule cand;
  	string comments;
  	if (!optimizer_->FindRandomCandidateRule(&cand, (Tactic)tactic,
- 						 10, &comments)) break;
-        cout<< "Candidate" << endl;
- 	cout << CandidateRuleToString(cand) << endl;
+ 						 100000, &comments)) break;
+        cout << "Found Candidate" <<  CandidateRuleToString(cand) << endl;
        }
      }
      else if (command=="h"){

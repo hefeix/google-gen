@@ -174,8 +174,8 @@ bool SearchNode::L1_MakeSplit(int split_tuple, int64 * max_work_now){
   CHECK(type_==BABY);
   A1_SetType(SPLIT);
   Pattern pattern;
-  SamplingInfo sampling;
-  GetPatternAndSampling(&pattern, &sampling);
+  SamplingInfo pattern_sampling;
+  GetPatternAndSampling(&pattern, &pattern_sampling);
   CHECK(pattern.size()>1);
   VLOG(2) << "Make Split pattern=" << TupleVectorToString(pattern)
 	  << " max_work_now=" << (max_work_now?itoa(*max_work_now):"UNLIMITED")
@@ -189,12 +189,16 @@ bool SearchNode::L1_MakeSplit(int split_tuple, int64 * max_work_now){
 
   Tuple tuple = pattern[split_tuple];
   L1_SetSplitTuple(split_tuple);
+  
+  SamplingInfo tuple_sampling;
+  if (split_tuple == (int)pattern_sampling.position_) 
+    tuple_sampling = pattern_sampling;
 
   uint64 num_matches = 
-    GetNumWildcardMatches(tuple, sampling);
+    GetNumWildcardMatches(tuple, tuple_sampling);
   MOREWORK(num_matches);
   vector<Tuple> matches;
-  GetWildcardMatches(tuple, sampling, &matches);
+  GetWildcardMatches(tuple, tuple_sampling, &matches);
   for (uint i=0; i<matches.size(); i++) {
     Substitution sub;
     if (!ComputeSubstitution(tuple, matches[i], &sub)) continue;

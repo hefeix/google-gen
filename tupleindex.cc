@@ -64,6 +64,11 @@ SamplingInfo SamplingInfo::StringToSamplingInfo(const string& s) {
   return RandomRange(position, denominator);
 }
 
+string SamplingInfo::ToString() const {
+  if (!sampled_) return "Unsampled";
+  return "{pos=" + itoa(position_) + " 1/" 
+    + dtoa(pow(2,32)/(end_hash_-start_hash_+1.0)) + "}";
+}
 TupleIndex::TupleIndex() {
   total_tuples_ = 0;
 }

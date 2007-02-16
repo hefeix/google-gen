@@ -38,6 +38,7 @@ struct SamplingInfo{
   bool Matches(const Tuple& t) const;
   static SamplingInfo RandomRange(int position, int denominator);
   static SamplingInfo StringToSamplingInfo(const string& s);
+  string ToString() const; //  not the inverse of the above.
   static SamplingInfo Unsampled() { return SamplingInfo();}
 };
 
