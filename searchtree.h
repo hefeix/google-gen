@@ -58,6 +58,7 @@ struct SearchNode{
   void GetWildcardMatches(Tuple t, SamplingInfo sampling, 
 			  vector<Tuple> *ret) const;
   void BabyCheck() const; // Checks that the node is in a baby state.
+  void VerifyNumSatisfactions(uint64 ns) const;
 
 
   void A1_SetType(NodeType t);

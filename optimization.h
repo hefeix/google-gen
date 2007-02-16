@@ -114,6 +114,12 @@ struct Optimizer{
     PatternBuilder(Optimizer * opt) {
       optimizer_ = opt;
     }
+    PatternBuilder(Optimizer * opt, Pattern pattern,
+		   const vector<Substitution>& subs) {
+      optimizer_ = opt;
+      pattern_ = pattern;
+      subs_ = subs;
+    }
 
     bool TryInitializeFromSurprisingTuple();
 
@@ -125,51 +131,20 @@ struct Optimizer{
     string ToString();
   };
 
-  // used for accumulating information about a candidate rule in deciding
-  // whether to try adding it.
-  struct RuleInfo {
-    CandidateRule r_;
-    Optimizer *optimizer_;
-    vector<Substitution> subs_;
-    int64 max_work_;
-    bool sampled_;
-    bool sample_postcondition_;
-    uint denominator_;
-    uint sample_clause_;
-    SamplingInfo precondition_sampling_;
-    SamplingInfo combined_sampling_;
-    bool hopeless_;
-    uint  hopeless_cause_;
-    bool needs_bigger_sample_;
-    uint64 sampled_num_firings_;
-    uint64 sampled_num_satisfactions_;
-    uint64 estimated_satisfactions_;
-    uint64 estimated_firings_;
-    string comments_;
-
-    RuleInfo(Optimizer *optimizer, CandidateRule r, int64 max_work){
-      optimizer_ = optimizer;
-      r_ = r;
-      max_work_ = max_work;
-      hopeless_ = false;
-      needs_bigger_sample_ = false;
-    }
-    bool Vette(); // returns true if it is promising
-    void Canonicalize();
-    void FindCandidateFirings();
-    void CheckForMultipleValuesOfSampledTuple();
-    void BailIfRecentlyChecked();
-    void FindNumSatisfactions();
-    void RemoveUnrestrictivePreconditions();
-    void RemoveBoringVariables();
-    const Tuple & GetSampledTuple();
-  };
+  bool FindSampling(const Pattern & p, SamplingInfo * result, 
+		    int64 max_work,
+		    vector<Substitution> * subs,
+		    uint64 * estimated_num_results,
+		    uint64 * actual_num_results,
+		    set<uint> * bad_clauses, // don't sample these
+		    SamplingInfo *hint);
 
   // How useful is it to generate this another way
   LL GuessBenefit(const TrueTuple * tp);
   Tuple  GetRandomSurprisingTuple();
 
   int64 StandardMaxWork();
+  int64 ConstantExpectationMaxWork();
   bool VetteCandidateRule(CandidateRule r, 
 			  CandidateRule * simplified_rule, 
 			  int64 max_work, string *comments);
