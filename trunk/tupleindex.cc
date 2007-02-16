@@ -31,8 +31,8 @@ SamplingInfo::SamplingInfo(int position, uint32 start_hash, uint32 end_hash){
   end_hash_ = end_hash;
 }
 
-SamplingInfo SamplingInfo::RandomRange(int position, int denominator){
-  int part = rand() % denominator;
+SamplingInfo SamplingInfo::RandomRange(int position, int denominator, int part){
+  if (part < 0) part = rand() % denominator;
   uint32 start = (0xFFFFFFFF / denominator) * part;
   uint32 end = (0xFFFFFFFF / denominator) * (part+1);
   return SamplingInfo(position, start, end);
@@ -59,9 +59,9 @@ bool SamplingInfo::Matches(const Tuple& t) const {
 
 SamplingInfo SamplingInfo::StringToSamplingInfo(const string& s) {
   istringstream istr(s);
-  int position, denominator;
-  istr >> position >> denominator;
-  return RandomRange(position, denominator);
+  int position, denominator, part;
+  istr >> position >> denominator >> part;
+  return RandomRange(position, denominator, part);
 }
 
 string SamplingInfo::ToString() const {
