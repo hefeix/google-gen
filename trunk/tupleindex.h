@@ -35,6 +35,7 @@ struct SamplingInfo{
   SamplingInfo(); // creates an unsampled SamplingInfo
   SamplingInfo(int position, uint32 start_hash, uint32 end_hash);
   bool RemovePosition(uint32 position);
+  SamplingInfo LimitToPosition(uint32 position) const;
   bool Matches(const Tuple& t) const;
   static SamplingInfo RandomRange(int position, int denominator, int part=-1);
   static SamplingInfo StringToSamplingInfo(const string& s);

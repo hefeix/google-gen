@@ -38,6 +38,11 @@ SamplingInfo SamplingInfo::RandomRange(int position, int denominator, int part){
   return SamplingInfo(position, start, end);
 }
 
+SamplingInfo SamplingInfo::LimitToPosition(uint32 position) const{
+  if (!sampled_ || (position != position_)) return SamplingInfo();
+  return SamplingInfo(0, start_hash_, end_hash_);
+}
+
 bool SamplingInfo::RemovePosition(uint32 position) {
   if (!sampled_) return false;
   if (position < position_) {

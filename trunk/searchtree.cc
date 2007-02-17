@@ -302,8 +302,10 @@ bool SearchNode::L1_Search(int64 * max_work_now) {
   if (pattern.size()==1) return L1_MakeOneTuple(max_work_now);
   
   vector<uint64> num_matches;
+  //HERE
   for (uint i=0; i<pattern.size(); i++) 
-    num_matches.push_back(GetNumWildcardMatches(pattern[i], sampling));
+    num_matches.push_back
+      (GetNumWildcardMatches(pattern[i], sampling.LimitToPosition(i)));
   int best_tuple 
     = min_element(num_matches.begin(), num_matches.end())-num_matches.begin();
   uint64 least_matches = num_matches[best_tuple];

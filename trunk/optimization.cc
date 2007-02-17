@@ -173,7 +173,7 @@ void Optimizer::TryCombineRules(Pattern lhs,
     Pattern new_lhs = lhs;
     sri.sub_.Reverse().Substitute(&new_lhs);    
     remove_set.insert(new_lhs.begin(), new_lhs.end());
-    if (GetVerbosity() >= 0) {
+    if (VERBOSITY >= 0) {
       forall(run, remove_set)
 	VLOG(0) << "Must remove " << run->ToString() << endl;
     }
@@ -397,7 +397,7 @@ bool Optimizer::MaybeFindManyExamplesRule(CandidateRule *ret, string *comments){
   if (!pb.TryInitializeFromSurprisingTuple()) return false;
   
   // Log things here
-  if (GetVerbosity() >= 1) {
+  if (VERBOSITY >= 1) {
     VLOG(1) << "Initialized " << pb.ToString() << endl;
   }
 
@@ -606,7 +606,7 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
   pattern_.push_back(good_generalization);
   CollapseEquivalentVariables();
   CollapseConstantVariables();
-  if (GetVerbosity() >= 1) {
+  if (VERBOSITY >= 1) {
     VLOG(1) << "Expanded to " << ToString() << endl;
   }
 
@@ -1067,7 +1067,7 @@ void Optimizer::TryAddFirings
       Pattern rhs = alt_r->GetResult();
 
       alt_r->Erase();
-      if (GetVerbosity() >= 2) {
+      if (VERBOSITY >= 2) {
 	model_->VerifyLayer2();
       }
 
@@ -1099,7 +1099,7 @@ void Optimizer::TryAddFirings
       int utility_pass = 0;
       FixTimesFixCircularDependencies();
       VLOG(1) << "before utility pass utility " << model_->GetUtility() << endl;
-      if (GetVerbosity() >= 1) model_->ToHTML("html.rb" + itoa(alt_r->GetID()));
+      if (VERBOSITY >= 1) model_->ToHTML("html.rb" + itoa(alt_r->GetID()));
 
       do {
 	OptimizationCheckpoint speedupthings(this, false);
@@ -1110,7 +1110,7 @@ void Optimizer::TryAddFirings
 	VLOG(1) << "utility pass C " << utility_pass << " utility " << model_->GetUtility() << endl;
 	done_iterating = !speedupthings.KeepChanges();
 	utility_pass++;
-	if (GetVerbosity() >= 1) model_->ToHTML("html.ra" + itoa(alt_r->GetID()));
+	if (VERBOSITY >= 1) model_->ToHTML("html.ra" + itoa(alt_r->GetID()));
       } while (!done_iterating);
 
       VLOG(1) << "after MakeFeatureRuleSatsHappenInTime "
@@ -1231,7 +1231,7 @@ struct RuleSatTimeNode{
 	return false;
       }
       RuleSat * rs = f->GetRuleSat();
-      if (GetVerbosity() >= 1) {
+      if (VERBOSITY >= 1) {
 	VLOG(2) << "rulesat " << rs->GetID() 
 		<< " time:" << rs->GetTime().ToSortableString() << endl;
       }
@@ -1302,7 +1302,7 @@ struct RuleSatTimeNode{
       ComputeTime();
       to_beat->ComputeTime();
       if (time_ < to_beat->time_) {
-	VLOG(1) << "TIMECHANGE Rule:" << rule_->GetID() << " new delay:" << fast_enough.ToSortableString() << endl;
+	VLOG(2) << "TIMECHANGE Rule:" << rule_->GetID() << " new delay:" << fast_enough.ToSortableString() << endl;
 	return true;
       }
       delay_map_->SetStandardDelay(rule_, old_delay);      
@@ -1324,7 +1324,7 @@ struct RuleSatTimeNode{
 void Optimizer::MakeFeatureRuleSatsHappenInTime(const set<RuleSat *> 
 						 rule_sats) {
 
-  VLOG(1) << "MakeFeatureRuleSatsHappenInTime #rule_sats=" << rule_sats.size() << endl;
+  VLOG(1) << "#rule_sats=" << rule_sats.size() << endl;
 
   // Get a suggestion from each rulesat
   map< map<Rule *, pair<EncodedNumber, EncodedNumber> >, pair<int, set<RuleSat*> > > proposals;
@@ -1343,7 +1343,7 @@ void Optimizer::MakeFeatureRuleSatsHappenInTime(const set<RuleSat *>
     int max_nodes = 10;
     bool expand_result = ntree.ExpandBackTo(ptree.time_, &max_nodes);
     if (!expand_result) {
-      VLOG(1) << "Expansion failed" << endl; 
+      VLOG(2) << "Expansion failed" << endl; 
       continue;
     }
     ntree.ComputeTime();
@@ -1352,17 +1352,17 @@ void Optimizer::MakeFeatureRuleSatsHappenInTime(const set<RuleSat *>
     if (ntree.time_ < ptree.time_) continue;
 
     // Log the trees
-    if (GetVerbosity() >= 1) {
-      VLOG(0) << "neg_tree="<< endl; ntree.Display(0);
-      VLOG(0) << "pos_tree=" << endl; ptree.Display(0);
+    if (VERBOSITY >= 2) {
+      VLOG(2) << "neg_tree="<< endl; ntree.Display(0);
+      VLOG(2) << "pos_tree=" << endl; ptree.Display(0);
     }
 
     // See if we can beat the positive tree
     if (!ntree.SpeedUpToHappenBefore(&ptree)) continue;
-    if (GetVerbosity() >= 1) {
-	VLOG(0) << "SPED UP VERSION" << endl;
-	VLOG(0) << "neg_tree="<< endl; ntree.Display(0);
-	VLOG(0) << "pos_tree=" << endl; ptree.Display(0);
+    if (VERBOSITY >= 2) {
+	VLOG(2) << "SPED UP VERSION" << endl;
+	VLOG(2) << "neg_tree="<< endl; ntree.Display(0);
+	VLOG(2) << "pos_tree=" << endl; ptree.Display(0);
     }
     // Save this result
     (proposals[delay_map.delays_].first)++;
@@ -1373,7 +1373,7 @@ void Optimizer::MakeFeatureRuleSatsHappenInTime(const set<RuleSat *>
 
   // Find the best looking proposal
   if (proposals.size() == 0) {
-    VLOG(1) << "Can't think of anything. No proposals" << endl;
+    VLOG(2) << "Can't think of anything. No proposals" << endl;
     return;
   }
   typeof(proposals.begin()) best = proposals.begin();
@@ -1381,11 +1381,8 @@ void Optimizer::MakeFeatureRuleSatsHappenInTime(const set<RuleSat *>
     if (run->second.first > best->second.first) best = run;
   }
 
-  // Let's see the proposal
-  if (GetVerbosity() >= 1) {
-    VLOG(0) << "Propoposal addresses " << best->second.first << " examples\n";
-  }
-
+  VLOG(2) << "Propoposal addresses " << best->second.first << " examples\n";
+  
   // Change the standard timing on all rules
   forall (run, best->first) {
     Rule * r = run->first;
@@ -1525,7 +1522,7 @@ void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
 				   const Pattern & result,
 				   int max_recursion,
 				   string comments){  
-  if (GetVerbosity() >= 2) {
+  if (VERBOSITY >= 2) {
     model_->VerifyLayer2();
   }
 
@@ -1762,7 +1759,7 @@ bool Optimizer::FixTimesFixCircularDependencies(int time_limit) {
 	= (TrueTuple *)(*(model_->GetRequiredNeverHappen().begin()));
       Explain(p, &model_->GetNeverHappen(), false);
       VLOG(1) << "   explained " << p->GetID() << endl;
-      if (GetVerbosity() >= 1) model_->ToHTML("html");
+      if (VERBOSITY >= 1) model_->ToHTML("html");
     }
     if (time(NULL) >= end_time) {
       VLOG(0) << "FixTimesFixCircularDependencies failed!!!" << endl;
