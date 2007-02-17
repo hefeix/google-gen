@@ -82,7 +82,9 @@ struct Optimizer{
   // TODO, document this
   void TryAddPositiveRule(const vector<Tuple> & preconditions, 
 			  const vector<Tuple> & result,
-			  int max_recursion, string comments);
+			  int max_recursion, 
+			  string comments,
+			  bool add_to_recently_checked);
   
   void TryRuleVariations(const Pattern & preconditions, 
 			 const Pattern & result, 
@@ -109,8 +111,10 @@ struct Optimizer{
   
   struct PatternBuilder {
     Pattern pattern_;
+    Time    target_time_;
     vector<Substitution> subs_;
     Optimizer * optimizer_;
+    map<set<int>, int> anchor_sets_tried_;
     PatternBuilder(Optimizer * opt) {
       optimizer_ = opt;
     }

@@ -245,7 +245,6 @@ bool Optimizer::FindRandomCandidateRule(CandidateRule *ret, Tactic tactic,
   while (!MaybeFindRandomCandidateRule(ret, tactic, comments)){
     if (time(NULL) >= end_time) return false;
   }
-  recently_checked_[*ret] = model_->GetUtility();
   return true;
 }
 
@@ -485,6 +484,10 @@ bool Optimizer::PatternBuilder::TryInitializeFromSurprisingTuple() {
 
     // We may want to suck in more tuples from this example
     Tuple t = optimizer_->GetRandomSurprisingTuple();
+
+    // Record times to prefer going backwards in time
+    const TrueTuple * tt = optimizer_->model_->GetTrueTuple(t); CHECK(tt);
+    target_time_ = tt->GetTime();
   
     // Get the second example
   
@@ -521,10 +524,14 @@ bool Optimizer::PatternBuilder::TryInitializeFromSurprisingTuple() {
 }
 
 bool Optimizer::PatternBuilder::ExpandFully(uint size) {
-  for (uint trials = 0; trials < 100 + 10 * size; trials++) {
+  for (uint trials = 0; trials < 100 + 100 * size; trials++) {
     if (pattern_.size() < size) TryExpandOnce();
   }
-  if (pattern_.size() < size) return false;
+  if (pattern_.size() < size) {
+    VLOG(0) << "ExpandFully failed at size:" << size
+	    << " Pattern " << TupleVectorToString(pattern_) << endl;
+    return false;
+  }
   return true;
 }
 
@@ -536,12 +543,23 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
 
   // Pick that size of subset of anchors
   set<int> anchors;
-  if (num_anchors > subs_[0].size()) num_anchors = subs_[0].size();
-  while (anchors.size() < num_anchors) {
-    RandomElement(variter, subs_[0].sub_);
-    anchors.insert(variter->first);
+  while(1) {
+    anchors.clear();
+    if (num_anchors > subs_[0].size()) num_anchors = subs_[0].size();
+    while (anchors.size() < num_anchors) {
+      RandomElement(variter, subs_[0].sub_);
+      anchors.insert(variter->first);
+    }
+    int times_used = anchor_sets_tried_[anchors];
+    if (RandomFraction() < (1.0/(1+times_used))) break;
+  } 
+  if (VERBOSITY >= 2) {
+    string anchorstring;
+    forall(run, anchors) anchorstring += LEXICON.GetString(*run);
+    VLOG(2) << "anchors " << anchorstring << endl;
   }
-
+  anchor_sets_tried_[anchors]++;
+  
   // Find the objects corresponding to those variables in the first example
   set<int> object_anchors;
   forall(run, anchors) {
@@ -550,13 +568,20 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
   vector<int> v_object_anchors(object_anchors.begin(), object_anchors.end());
 
   // Get a random tuple with all the anchors
-  // HERE make sure this tuple isnt the same as our pattern substituted with subs_[0]
   TupleIndex * ti = optimizer_->model_->GetTupleIndex();
   Tuple expansion_tuple;
   bool found = ti->GetRandomTupleContaining(&expansion_tuple, v_object_anchors, true);
   if (!found) return false;
   
+  // Make sure expansion tuple is earlier than the rule condition
+  const TrueTuple * expansion_tt = optimizer_->model_->GetTrueTuple(expansion_tuple);
+  CHECK(expansion_tt);
+  if (expansion_tt->GetTime() > target_time_) {
+    if (RandomFraction() < 1.0) return false;
+  }
+    
   // Can amortize this work but for now ...
+  // make sure this tuple isnt the same as our pattern substituted with subs_[0]
   Pattern sub_0_pattern = pattern_;
   set<Tuple> pattern0_tuples;
   subs_[0].Substitute(&sub_0_pattern);
@@ -610,6 +635,7 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
     VLOG(1) << "Expanded to " << ToString() << endl;
   }
 
+  anchor_sets_tried_[anchors] = 0;
   return true;
 }
 
@@ -682,9 +708,12 @@ FindSampling(const Pattern & p, SamplingInfo * result,
   // Sample more aggressively at first, then less agressively
   for (int denominator = 1024; denominator>0; denominator >>=1 ) {
     bool all_take_too_long = true;
+
     for (uint sample_clause=0; 
 	 sample_clause<((denominator==1)?1:p.size()); 
 	 sample_clause++) {
+
+      VLOG(2) << "Trying sample_clause:" << sample_clause << endl;
       
       if (bad_clauses && ((*bad_clauses) % sample_clause)) continue;
       SamplingInfo sampling;
@@ -697,6 +726,8 @@ FindSampling(const Pattern & p, SamplingInfo * result,
       bool success = 
 	model_->GetTupleIndex()->FindSatisfactions
 	(p, sampling, subs, &num_results, &max_work_now);
+
+      VLOG(2) << "Sample_clause: " << sample_clause << (success ? " GOOD" : " BAD") << endl;
       
       if (!success) continue;
       all_take_too_long = false;
@@ -736,6 +767,7 @@ FindSampling(const Pattern & p, SamplingInfo * result,
 	      << " d:" << denominator << endl;
       return true;
     }
+
     if (all_take_too_long) {
       VLOG(1) << "Sampling failed at denom:" << denominator << endl;
       return false;
@@ -821,7 +853,7 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
     }
 
     VLOG(1) << "Considering removing " << remove_clause << " " << r.first[remove_clause].ToString() << endl;
-    VLOG(1) << "since_last_improvement=" << since_last_improvement << endl;
+    VLOG(2) << "since_last_improvement=" << since_last_improvement << endl;
     vector<Tuple> simplified_preconditions 
       = RemoveFromVector(r.first, remove_clause);
 
@@ -868,7 +900,8 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
       continue;
     }
 
-    VLOG(1) << "simplified #sat=" << simplified_num_satisfactions << endl;
+    VLOG(1) << "test #sat:" << simplified_num_satisfactions 
+	    << " <=? #original_sat (*1.1):" << actual_num_satisfactions * 1.1 << endl;
     if (simplified_num_satisfactions  > actual_num_satisfactions * 1.1)
       continue;
 
@@ -1513,7 +1546,8 @@ void Optimizer::TryRuleVariations(const Pattern & preconditions,
     }
     TryAddPositiveRule(simplified_rule.first, simplified_rule.second, 
 		       max_recursion,
-		       comments);
+		       comments,
+		       false);
     if (cp.KeepChanges()) break;
   }
 }
@@ -1521,10 +1555,15 @@ void Optimizer::TryRuleVariations(const Pattern & preconditions,
 void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
 				   const Pattern & result,
 				   int max_recursion,
-				   string comments){  
+				   string comments,
+				   bool add_to_recently_checked) {  
+
   if (VERBOSITY >= 2) {
     model_->VerifyLayer2();
   }
+
+  if (add_to_recently_checked)
+    recently_checked_[make_pair(preconditions, result)] = model_->GetUtility();
 
   vector<Substitution> subs;
   vector<Tuple> combined = preconditions;
