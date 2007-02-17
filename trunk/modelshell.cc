@@ -241,7 +241,7 @@ string ModelShell::Handle(string command) {
 				    end_time-time(0), &comments)) break;
 	OptimizationCheckpoint cp(optimizer_, true);
 	optimizer_->TryAddPositiveRule(cand.first, cand.second, 
-				       max_recursion_, comments);	
+				       max_recursion_, comments, true);
 	if (cp.KeepChanges()) {
 	  VLOG(0) << " Created rule "
 		  << CandidateRuleToString(cand)
@@ -316,7 +316,7 @@ string ModelShell::Handle(string command) {
  	if (!success) return "Vette failed";
  	if (success) original = simplified;
  	optimizer_->TryAddPositiveRule(original.first, original.second, 
- 				       max_recursion_, comments);
+ 				       max_recursion_, comments, false);
  	if (cp.KeepChanges()) {
  	  VLOG(0) << " Created rule "
  		  << CandidateRuleToString(original)

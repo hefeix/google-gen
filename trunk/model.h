@@ -204,6 +204,12 @@ class Model {
     return tuple_to_true_tuple_;
   }
 
+  inline const TrueTuple * GetTrueTuple(const Tuple& t) {
+    TrueTuple ** ttpp =  tuple_to_true_tuple_ % t;
+    if (!ttpp) return NULL;
+    return *ttpp;	    
+  }
+
   inline const map<Pattern, set<SubRuleInfo> >& GetSubrulePatternToRule() {
     return subrule_pattern_to_rule_;
   }
