@@ -22,12 +22,18 @@
 #include <math.h>
 #include <sstream>
 
-int VERBOSITY = 0;
-int GetVerbosity(){
-  return VERBOSITY;
+
+int global_verbosity = 0;
+map<string, int> global_verbosity_map;
+
+int GetVerbosity(string function){
+  return max(global_verbosity, global_verbosity_map[function]);
 }
 void SetVerbosity(int v){
-  VERBOSITY = v;
+  global_verbosity = v;
+}
+void SetVerbosity(string function, int v){
+  global_verbosity_map[function] = v;
 }
 
 bool GetLine(istream & input, string * ret) {

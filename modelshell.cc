@@ -351,6 +351,12 @@ string ModelShell::Handle(string command) {
        command_stream >> v;
        SetVerbosity(v);
      }
+     else if (command=="fv") {
+       int v;
+       string f;
+       command_stream >> f >> v;
+       SetVerbosity(f, v);
+     }
      else if (command=="vi"){
        int v;
        command_stream >> v;

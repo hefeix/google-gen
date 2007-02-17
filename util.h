@@ -43,10 +43,12 @@
 #define OPERATORGE operator >=
 
 // For logging
-int GetVerbosity();
+int GetVerbosity(string function);
 void SetVerbosity(int v);
+void SetVerbosity(string function_name, int v);
 
-#define VLOG(N) if (GetVerbosity() >=N) cerr << __FUNCTION__ << ":" << __LINE__ << " "
+#define VERBOSITY (GetVerbosity(__FUNCTION__))
+#define VLOG(N) if (VERBOSITY >=N) cerr << __FUNCTION__ << ":" << __LINE__ << " "
 #define CHECK(cond) if(!(cond)) {cerr << "Check Failed" << endl; int *x=0; *x=0; }
 
 #define forall(A, B) for ( typeof((B).begin()) A = (B).begin(); A!=(B).end(); ++A )
