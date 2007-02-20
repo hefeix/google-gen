@@ -578,10 +578,11 @@ class Rule : public Component{
   // Computes ln likelihood of the choices of where to have additional firings.
   LL AdditionalFiringsLnLikelihood() const;
   
-
-
   // TODO: THIS IS A HACK.  SHOULD BE PRIVATE
   map<int, Chooser *> * GetChoosers() { return &choosers_;}
+
+  // Another way to return all choosers, without knowing its variables
+  set<Chooser *> GetAllChoosers() const;
 
  private:
   // ----- CONSTRUCTOR(S) ----- Rule

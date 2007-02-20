@@ -1536,3 +1536,11 @@ void Rule::VerifyLayer2Subclass() const{
     }
   }  
 }
+
+set<Chooser *> Rule::GetAllChoosers() const {
+  set<Chooser *> ret;
+  forall(run, choosers_) {
+    ret.insert(run->second);
+  }
+  return ret;
+}

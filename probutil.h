@@ -26,6 +26,7 @@
 
 struct LL{
   int64 mcn_;
+  LL() { mcn_ = 0; }
   double ToDouble() const { return mcn_/1e6;}
   int64 ToMicronats() const { return mcn_;}
   void operator+=(const LL & o){mcn_ += o.mcn_;}
