@@ -272,6 +272,12 @@ class Model {
 
   set<Rule *> GetAllRules() const;
 
+  Chooser * GetGlobalChooser() const {
+    return chooser_;
+  }
+
+  set<Chooser *> GetAllChoosers() const;
+
   TupleIndex * GetTupleIndex() { return &tuple_index_;}
   const TupleIndex * GetTupleIndex() const { return &tuple_index_;}
 

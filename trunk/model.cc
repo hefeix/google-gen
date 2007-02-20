@@ -784,6 +784,19 @@ set<Rule *> Model::GetAllRules() const {
   return ret;
 }
 
+// Add the global chooser and the choosers from all rules
+set<Chooser *> Model::GetAllChoosers() const {
+  set<Chooser *> ret;
+  ret.insert(chooser_);
+  set<Rule *> rules = GetAllRules();
+  forall(run, rules) {
+    Rule * rule = *run;
+    set<Chooser *> r_choosers = rule->GetAllChoosers();
+    ret.insert(r_choosers.begin(), r_choosers.end());
+  }
+  return ret;
+}
+
 Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
   Precondition * p = FindPrecondition(tuples);
   if (p) { return p; }
@@ -1004,7 +1017,7 @@ void Model::L1_UpdateSearchTreesAfterAddTuple(Tuple t){
   // tricky, as it is possible that the search trees reorganize as we are doing
   // this.  It works to call SearchNode::L1_AddTuple once for each pre-existing
   // matching entry in wildcard_tuple_to_search_node_ which still exists at the
-  // time of the call.  Here's why:
+  // time of the call.  Why:
   // New searchnodes already know about the new tuple.
   // ONE_TUPLE searchnodes don't change type, so if they still exist, they
   // haven't been touched and need to be updated once. 

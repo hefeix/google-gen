@@ -295,13 +295,14 @@ LL Optimizer::GuessBenefit(const TrueTuple * tp) {
     forall(run, sub.sub_) {
       int term = run->second;
       int var = run->first;
+      
       Chooser * ch = (*rule->GetChoosers())[var];
       CHECK(ch);
       // We can get rid of naming but not if parent count is 1
       // Revisit this when you have transient objects
       Chooser * original_parent = ch->parent_;
-      if (ch->parent_->GetCount(term) == 1)
-	ch->parent_ = NULL;
+      //if (ch->parent_->GetCount(term) == 1)
+      //ch->parent_ = NULL;
       ch->L1_ChangeObjectCount(term, -1);
       ch->parent_ = original_parent;
     }
@@ -324,8 +325,9 @@ int64 Optimizer::StandardMaxWork(){
   return 5  * (int64)model_->GetNumTrueTuples();
 }
 
-int64 Optimizer::ConstantExpectationMaxWork(){
-  int64 ret = min((int64)(30.0/RandomFraction()), StandardMaxWork());
+int64 Optimizer::ConstantExpectationMaxWork() {
+  double guess = pow(100.0 / RandomFraction(), 0.7);
+  int64 ret = min (int64(guess), StandardMaxWork());
   VLOG(2) << "ConstantExpectationMaxWork returns " << ret << endl;
   return ret;
 }
@@ -574,6 +576,7 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
   if (!found) return false;
   
   // Make sure expansion tuple is earlier than the rule condition
+  // TODO: maybe at top level sometimes skip this and try to reverse time
   const TrueTuple * expansion_tt = optimizer_->model_->GetTrueTuple(expansion_tuple);
   CHECK(expansion_tt);
   if (expansion_tt->GetTime() > target_time_) {
@@ -631,8 +634,8 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
   pattern_.push_back(good_generalization);
   CollapseEquivalentVariables();
   CollapseConstantVariables();
-  if (VERBOSITY >= 1) {
-    VLOG(1) << "Expanded to " << ToString() << endl;
+  if (VERBOSITY >= 2) {
+    VLOG(2) << "Expanded to " << ToString() << endl;
   }
 
   anchor_sets_tried_[anchors] = 0;
@@ -740,7 +743,8 @@ FindSampling(const Pattern & p, SamplingInfo * result,
 	VLOG(1) << "Unsampled" << endl;
 	return true;
       }
-      if (num_results < 2) continue;
+      // If sampled, don't accept too few results
+      if (num_results < 10) continue;
       if (subs) {
 	CHECK(subs->size() == num_results);
 	set<int> sampled_tuple_variables 
@@ -801,8 +805,9 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   SamplingInfo combined_sampling;
   vector<Substitution> full_subs;
   uint64 estimated_num_firings;
+  uint64 actual_num_firings;
   if (!FindSampling(Concat(r), &combined_sampling, max_work, &full_subs, 
-		    &estimated_num_firings, NULL, NULL, NULL)) {
+		    &estimated_num_firings, &actual_num_firings, NULL, NULL)) {
     VLOG(1) << "Couldn't find sampling for rule" << endl;
     return false;
   }
@@ -810,7 +815,120 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
     VLOG(1) << "Too many firings" << endl;
     return false;
   }  
+  VLOG(1) << "Set total sampling actual_num_firings:" 
+	  << actual_num_firings << endl;
 
+  SamplingInfo precondition_sampling;
+  uint64 estimated_num_satisfactions;
+  uint64 actual_num_satisfactions;
+  if (!FindSampling(r.first, &precondition_sampling, max_work, NULL,
+		    &estimated_num_satisfactions, 
+		    &actual_num_satisfactions, NULL, NULL)) {
+    VLOG(1) << "Couldn't find sampling for precondition" << endl;
+    return false;
+  }
+  if (estimated_num_satisfactions > 2000000) {
+    VLOG(1) << "Too many satisfactions" << endl;
+    return false;
+  }
+  VLOG(1) << "Set precondition sampling actual_num_sat:" 
+	  << actual_num_satisfactions << endl;
+
+  // Test whether the rule makes any sense or not
+
+  // First get the firing cost (TODO get the first firings instead)
+  LL firing_ll;
+  VLOG(1) << "(EST) #sat:" << estimated_num_satisfactions
+	  << " (EST) #fir:" << estimated_num_firings << endl;
+  if (estimated_num_satisfactions > estimated_num_firings) {
+    firing_ll += BinaryChoiceLnLikelihood
+      (estimated_num_satisfactions, estimated_num_firings);
+  }
+
+  // Now from the examples, try to get the per firing naming cost
+  LL naming_ll;
+  set<int> creative_vars = GetVariables(r.second) - GetVariables(r.first);
+  set<Chooser *> all_choosers = model_->GetAllChoosers();
+  forall(run_var, creative_vars) {
+    vector<int> objects;
+    for (int c=0; c<(int)full_subs.size(); c++) {
+      CHECK (full_subs[c].Contains(*run_var));
+      int object = full_subs[c].Lookup(*run_var);
+	objects.push_back(object);
+    }
+    // Pick the best chooser for this variable
+    // TODO: move this into model as FindBestChooserForChoices(vector<int>);
+    LL best_chooser_ll;
+    Chooser * best_chooser = NULL;
+    forall(run_chooser, all_choosers) {
+      bool good_chooser = true;
+      Chooser * this_chooser = *run_chooser;
+      LL this_chooser_ll;
+      for (int c=0; c<(int)objects.size(); c++) {
+	int object_count = this_chooser->GetCount(objects[c]);
+	if (object_count == 0) {
+	  good_chooser = false;
+	  break;
+	}
+	LL local_ll;
+	local_ll += Log(object_count + 1);
+	local_ll -= Log(this_chooser->total_ + 1);
+	if (this_chooser == model_->GetGlobalChooser()) {
+	  VLOG(1) << "Globalcount:" << object_count
+		  << " Globaltotal:" << this_chooser->total_ 
+		  << " LL:" << local_ll.ToString() << endl;
+	}
+	this_chooser_ll += local_ll;
+      }
+      if (good_chooser) {
+	if ((best_chooser == NULL) ||
+	    (this_chooser_ll > best_chooser_ll)) {
+	  best_chooser = this_chooser;
+	  best_chooser_ll = this_chooser_ll;
+	}
+      }
+    }
+    CHECK(best_chooser);
+    if (best_chooser != model_->GetGlobalChooser()) {
+      VLOG(1) << "Found a better chooser!" << endl;
+      if (VERBOSITY >= 1) {
+	for (int c=0; c<(int)objects.size(); c++) {
+	  int object_count = best_chooser->GetCount(objects[c]);
+	  VLOG(1) << "count:" << object_count
+		  << " total:" << best_chooser->total_ << endl;
+	}
+      }
+    }
+    naming_ll += best_chooser_ll;
+  }
+  VLOG(1) << "naming firing multiplier:" 
+	  << int(estimated_num_firings/actual_num_firings) << endl;
+  naming_ll = naming_ll * int(estimated_num_firings / actual_num_firings);
+  
+  // Now guess the benefit of the rule
+  LL benefits;
+  for (int c=0; c<(int)full_subs.size(); c++) {
+    Pattern rhs = r.second;
+    full_subs[c].Substitute(&rhs);
+    for (int c2=0; c2<(int)rhs.size(); c2++) {
+      Tuple t = rhs[c2];
+      CHECK(t.IsConstantTuple());
+      const TrueTuple * tt = model_->GetTrueTuple(t);
+      CHECK(tt);
+      benefits += GuessBenefit(tt);
+    }
+  }
+  benefits = benefits * int(estimated_num_firings / actual_num_firings);
+  VLOG(1) << "firing_ll:" << firing_ll.ToString() << endl;
+  VLOG(1) << "naming_ll:" << naming_ll.ToString() << endl;
+  VLOG(1) << "benefits:" << benefits.ToString() << endl;
+
+  LL total_ll = benefits + firing_ll + naming_ll;
+  /*  if (total_ll < LLZero()) {
+    VLOG(1) << "Too useless, rejected" << endl;
+    return false;
+    }*/
+  
   // remove boring variables, collapse equal variables, and remove 
   // variable free tuples.
   CandidateRule old_r = r;
@@ -826,18 +944,6 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
     r = CanonicalizeRule(r, NULL);
     VLOG(1) << "Collapsed rule " << CandidateRuleToString(r) << endl;
   }
-
-  SamplingInfo precondition_sampling;
-  uint64 estimated_num_satisfactions;
-  uint64 actual_num_satisfactions;
-  if (!FindSampling(r.first, &precondition_sampling, max_work, NULL,
-		    &estimated_num_satisfactions, 
-		    &actual_num_satisfactions, NULL, NULL)) {
-    VLOG(1) << "Couldn't find sampling for precondition" << endl;
-    return false;
-  }
-  VLOG(1) << "Set precondition sampling actual_num_sat:" 
-	  << actual_num_satisfactions << endl;
 
   // Try to remove preconditions that are not very restrictive.
   // TODO what if the precondition is unsampled?
@@ -930,7 +1036,6 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   VLOG(1) << "Candidate=" << CandidateRuleToString(r) << endl;
   return true;
 } 
-
 
 ComputationResult Optimizer::DependsOn(Component * dependent, 
 				       Component * dependee, int64 max_work){
