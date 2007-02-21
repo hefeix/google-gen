@@ -72,7 +72,11 @@ SamplingInfo SamplingInfo::StringToSamplingInfo(const string& s) {
 string SamplingInfo::ToString() const {
   if (!sampled_) return "Unsampled";
   return "{pos=" + itoa(position_) + " 1/" 
-    + dtoa(pow(2,32)/(end_hash_-start_hash_+1.0)) + "}";
+    + dtoa(1.0/GetFraction()) + "}";
+}
+double SamplingInfo::GetFraction() const {
+  if (!sampled_) return 1.0;
+  return (end_hash_-start_hash_+1.0)/pow(2,32);
 }
 TupleIndex::TupleIndex() {
   total_tuples_ = 0;

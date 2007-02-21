@@ -32,6 +32,7 @@ struct SamplingInfo{
   uint32 position_;
   uint32 start_hash_; // inclusive
   uint32 end_hash_; // inclusive
+  double GetFraction() const;
   SamplingInfo(); // creates an unsampled SamplingInfo
   SamplingInfo(int position, uint32 start_hash, uint32 end_hash);
   bool RemovePosition(uint32 position);
