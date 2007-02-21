@@ -291,20 +291,28 @@ LL Optimizer::GuessBenefit(const TrueTuple * tp) {
   {
     DestructibleCheckpoint checkp(model_->GetChangelist());
     LL old_utility = model_->GetUtility();
+    VLOG(2) << "old_utility:" << old_utility.ToString() << endl;
     Substitution sub = first_cause->GetRightSubstitution();
     forall(run, sub.sub_) {
       int term = run->second;
       int var = run->first;
-      
       Chooser * ch = (*rule->GetChoosers())[var];
       CHECK(ch);
       // We can get rid of naming but not if parent count is 1
       // Revisit this when you have transient objects
       Chooser * original_parent = ch->parent_;
+
+      VLOG(2) << "before Term:" << term << " var:" << var 
+	      << " count:" << ch->GetCount(term)
+	      << " parentcount:" << ch->parent_->GetCount(term) << endl;
       //if (ch->parent_->GetCount(term) == 1)
       //ch->parent_ = NULL;
       ch->L1_ChangeObjectCount(term, -1);
       ch->parent_ = original_parent;
+      VLOG(2) << "after Term:" << term << " var:" << var 
+	      << " count:" << ch->GetCount(term)
+	      << " parentcount:" << ch->parent_->GetCount(term)
+	      << " utility:" << model_->GetUtility().ToString() << endl;
     }
     naming_cost = model_->GetUtility() - old_utility;
   }
@@ -326,7 +334,7 @@ int64 Optimizer::StandardMaxWork(){
 }
 
 int64 Optimizer::ConstantExpectationMaxWork() {
-  double guess = pow(100.0 / RandomFraction(), 0.7);
+  double guess = 100 * pow(1 / RandomFraction(), 0.8);
   int64 ret = min (int64(guess), StandardMaxWork());
   VLOG(2) << "ConstantExpectationMaxWork returns " << ret << endl;
   return ret;
@@ -924,10 +932,10 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   VLOG(1) << "benefits:" << benefits.ToString() << endl;
 
   LL total_ll = benefits + firing_ll + naming_ll;
-  /*  if (total_ll < LL(0)) {
+  if (total_ll < LL(0)) {
     VLOG(1) << "Too useless, rejected" << endl;
     return false;
-    }*/
+  }
   
   // remove boring variables, collapse equal variables, and remove 
   // variable free tuples.
