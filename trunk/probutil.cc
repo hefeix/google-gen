@@ -47,27 +47,23 @@ LL LnCombinations(uint n, uint k){
   return LnFactorial(n) - LnFactorial(k) - LnFactorial(n-k);
 }
 
+// exact product of Log() if n<max_factorial_cache_size.  Otherwise an estimate.
+
+const uint max_factorial_cache_size = 10000;
 LL LnFactorial(uint n){
-  CHECK(n<10000000);
   static vector<LL> cache;
-  while (cache.size()<=n) {
+  while (cache.size()<=(min(n, max_factorial_cache_size)) ) {
     if (cache.size()==0) cache.push_back(Micronats(0));
     cache.push_back(cache[cache.size()-1] + Log(cache.size()));
   }
-  return cache[n];
-  /*
-    // this can be used for estimations if n gets too big.
-  static bool init = false;
-  if (!init) {
-    init = true;
-    cache[0] = 0;
-    for (int i=1; i<1001; i++) cache[i] = cache[i-1] + Log(i);    
-  }
-  if (n<=1000) return cache[n];
-  double lower = 1000.5;
+  if (n < max_factorial_cache_size)
+    return cache[n];
+  double lower = max_factorial_cache_size-0.5;
   double upper = n+0.5;
-  return cache[1000] + (upper * log(upper)-upper) - (lower * log(lower)-lower);
-  */
+  return LL( cache[max_factorial_cache_size-1].ToDouble() 
+	     + (upper * log(upper) - upper )
+	     - (lower * log(lower) - lower )
+	     );
 }
 
 LL uintQuadraticLnProb(uint n){

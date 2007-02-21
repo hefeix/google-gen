@@ -74,7 +74,7 @@ Component::Component(Model * model){
   time_dirty_ = true;
   model_->A1_InsertIntoTimesDirty(this);
   model_->L1_AssignNewID(this);
-  ln_likelihood_ = LLZero();
+  ln_likelihood_ = 0;
   A1_SetExists(true);
   A1_SetReallyDead(false);
 }
@@ -483,7 +483,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   vector<int> arbitrary_terms;
   direct_pattern_encoding_ln_likelihood_ = 
     PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);
-  if (IsUniversalRule()) direct_pattern_encoding_ln_likelihood_ = LLZero();
+  if (IsUniversalRule()) direct_pattern_encoding_ln_likelihood_ = 0;
   for (uint i=0; i<arbitrary_terms.size(); i++)
     model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], 1);
 
@@ -499,7 +499,7 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
   //  causing_tuples_.push_back(p);
   //  p->A1_AddToRulesCaused(this);
   // }
-  firings_ln_likelihood_ = LLZero();
+  firings_ln_likelihood_ = 0;
   num_additional_firings_ = 0;
   num_first_firings_ = 0;
 
@@ -1409,7 +1409,7 @@ void TrueTuple::F2_AdjustLnLikelihoodForNewTime(){
   }
 }
 LL Component::LnLikelihood() const {
-  return LLZero();
+  return LL(0);
 }
 LL Precondition::LnLikelihood() const {
   LL ret = direct_pattern_encoding_ln_likelihood_;

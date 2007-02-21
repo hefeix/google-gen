@@ -111,7 +111,6 @@ struct Chooser {
   Chooser *parent_;
   LL ln_likelihood_;
   map<int, int> counts_;
-  int num_ones_; // nuber of objects with count 1.
   int64 total_;
   Chooser(Model *model, Chooser *parent);
   void L1_Erase();
