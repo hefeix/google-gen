@@ -357,7 +357,8 @@ bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
     *comments = "Specialization of " + CandidateRuleToString(cand);
     little_sub.Add(assignment->first, assignment->second);
     little_sub.Substitute(&cand);
-    return VetteCandidateRule(cand, ret, ConstantExpectationMaxWork(), 
+    return VetteCandidateRule(cand, ret,
+			      ConstantExpectationMaxWork(), 
 			      comments);
   }
   case GENERALIZE_ONE: {
@@ -390,7 +391,7 @@ bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
     *comments = "Generalization of " + CandidateRuleToString(cand);
     little_sub.Add(literal, variable);
     little_sub.Substitute(&cand);
-    return VetteCandidateRule(cand, ret, 
+    return VetteCandidateRule(cand, ret,
 			      ConstantExpectationMaxWork(), comments);    
     break;
   }
@@ -417,7 +418,10 @@ bool Optimizer::MaybeFindManyExamplesRule(CandidateRule *ret, string *comments){
   Tuple dummy = p[0]; p[0] = p[p.size()-1];  p[p.size()-1] = dummy;
   CandidateRule r = SplitOffLast(p);
   *comments = "ManyExamplesRule";
-  return VetteCandidateRule(r, ret, ConstantExpectationMaxWork(), comments);
+  bool result = VetteCandidateRule(r, ret, ConstantExpectationMaxWork(), comments);
+  if (!result) 
+    VLOG(1) << "Vette failed for many examples" << endl;
+  return result;
 }
 
 bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
@@ -752,7 +756,7 @@ FindSampling(const Pattern & p, SamplingInfo * result,
 	return true;
       }
       // If sampled, don't accept too few results
-      if (num_results < 10) continue;
+      if (num_results < 5) continue;
       if (subs) {
 	CHECK(subs->size() == num_results);
 	set<int> sampled_tuple_variables 
@@ -875,8 +879,11 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
       for (int c=0; c<(int)objects.size(); c++) {
 	int object_count = this_chooser->GetCount(objects[c]);
 	if (object_count == 0) {
-	  good_chooser = false;
-	  break;
+	  // The global chooser is always a good chooser
+	  if (this_chooser != model_->GetGlobalChooser()) {
+	    good_chooser = false;
+	    break;
+	  }
 	}
 	LL local_ll;
 	local_ll += Log(object_count + 1);
@@ -896,7 +903,14 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
 	}
       }
     }
-    CHECK(best_chooser);
+    if (best_chooser == NULL) {
+      VLOG(0) << "CandidateRule:" << CandidateRuleToString(r) << endl;
+      VLOG(0) << "CreativeVars size:" << creative_vars.size() << endl;
+      forall(run_var_debug, creative_vars) {
+	VLOG(0) << "var:" << *run_var_debug << endl;
+      }
+      CHECK(best_chooser);
+    }
     if (best_chooser != model_->GetGlobalChooser()) {
       VLOG(1) << "Found a better chooser!" << endl;
       if (VERBOSITY >= 1) {
@@ -912,6 +926,9 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   VLOG(1) << "naming firing multiplier:" 
 	  << int(estimated_num_firings/actual_num_firings) << endl;
   naming_ll = naming_ll * int(estimated_num_firings / actual_num_firings);
+
+  // Here maybe we shouldn't charge for the preconditions if they already exist
+  LL rule_encoding_ll = model_->RuleEncodingCost(r);
   
   // Now guess the benefit of the rule
   LL benefits;
@@ -927,11 +944,13 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
     }
   }
   benefits = benefits * int(estimated_num_firings / actual_num_firings);
+
   VLOG(1) << "firing_ll:" << firing_ll.ToString() << endl;
   VLOG(1) << "naming_ll:" << naming_ll.ToString() << endl;
+  VLOG(1) << "rule_encoding_ll:" << rule_encoding_ll << endl;
   VLOG(1) << "benefits:" << benefits.ToString() << endl;
 
-  LL total_ll = benefits + firing_ll + naming_ll;
+  LL total_ll = benefits + rule_encoding_ll + firing_ll + naming_ll;
   if (total_ll < LL(0)) {
     VLOG(1) << "Too useless, rejected" << endl;
     return false;
@@ -1459,7 +1478,7 @@ struct RuleSatTimeNode{
     ComputeTime();
     to_beat->ComputeTime();
     if (time_ < to_beat->time_) {
-      VLOG(1) << "NONSTANDARD TIMECHANGE Rule:" << rule_->GetID() << " nonstandard delay:" << fast_enough.ToSortableString() << endl;
+      VLOG(2) << "NONSTANDARD TIMECHANGE Rule:" << rule_->GetID() << " nonstandard delay:" << fast_enough.ToSortableString() << endl;
       return true;
     }
     // cerr << "all efforts failed to speed up feature rulesat" << endl;

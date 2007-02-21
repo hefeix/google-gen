@@ -825,6 +825,22 @@ set<Chooser *> Model::GetAllObjectChoosers() const {
   return ret;
 }
 
+// Predict the cost of encoding a rule
+// TODO: see if the precondition exists
+LL Model::RuleEncodingCost(CandidateRule r) const {
+  Model * c_this = const_cast<Model *>(this);
+  DestructibleCheckpoint checkp(c_this->GetChangelist());
+  LL old_utility = GetUtility();
+  LL d1 = c_this->L1_ComputePatternLnLikelihoodUpdateChoosers
+    (Pattern(), r.first, false, 1);
+  LL d2 = c_this->L1_ComputePatternLnLikelihoodUpdateChoosers
+    (r.first, r.second, true, 1);
+  LL ret = GetUtility() - old_utility;
+  ret += d1;
+  ret += d2;
+  return ret;
+}
+
 Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
   Precondition * p = FindPrecondition(tuples);
   if (p) { return p; }
@@ -835,6 +851,8 @@ LL Model::L1_ComputePatternLnLikelihoodUpdateChoosers(const Pattern &context,
 						      const Pattern &to_encode, 
 						      bool is_result,
 						      int multiplier){
+  CHECK(multiplier != 0);
+
   set<int> terms_seen;
   LL ret = 0;
   bool encoding = false;
@@ -867,7 +885,7 @@ LL Model::L1_ComputePatternLnLikelihoodUpdateChoosers(const Pattern &context,
 	  if (encoding) chooser_->L1_ChangeObjectCount(t, multiplier);
 	}
       }
-      if (encoding) 
+      if (encoding)
 	term_type_chooser_->L1_ChangeObjectCount(term_type, multiplier);
     }
   }
