@@ -640,7 +640,6 @@ void Model::ToHTMLByComponentType
 }
 
 void Model::ToHTML(string dirname) const {
-
   Model * cthis = const_cast<Model*>(this);
   cthis->old_style_display_ = true;
 
@@ -654,8 +653,9 @@ void Model::ToHTML(string dirname) const {
   for (int pass=0; pass<2; pass++) { 
     map<ComponentType, vector<Record> > m;
     bool verbose = pass;
-    forall(run, id_to_component_) {
+    forall(run, id_to_component_) {      
       Component * c = run->second;
+      if (verbose && c->Type() != RULE) continue;
       m[c->Type()].push_back(c->RecordForDisplay(verbose));
     }
     forall(run, m) {

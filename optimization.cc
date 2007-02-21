@@ -707,6 +707,8 @@ string Optimizer::PatternBuilder::ToString() {
   return ret.str();
 }
 
+
+
 bool Optimizer::
 FindSampling(const Pattern & p, SamplingInfo * result, 
 	     int64 max_work,
@@ -720,21 +722,28 @@ FindSampling(const Pattern & p, SamplingInfo * result,
   VLOG(1) << "Finding sampling for " << TupleVectorToString(p) 
 	  << " max_work=" << max_work << endl;
 
+  const int first_denominator = 1024;
   // Sample more aggressively at first, then less agressively
-  for (int denominator = 1024; denominator>0; denominator >>=1 ) {
+  for (int denominator = first_denominator; denominator>0; denominator >>=1 ) {
     bool all_take_too_long = true;
-
-    for (uint sample_clause=0; 
-	 sample_clause<((denominator==1)?1:p.size()); 
-	 sample_clause++) {
+    
+    for (int sample_clause_i=(denominator==first_denominator && hint)?-1:0; 
+	 sample_clause_i<((denominator==1)?1:(int)p.size()); 
+	 sample_clause_i++) {
+      uint sample_clause = sample_clause_i;
+      
 
       VLOG(2) << "Trying sample_clause:" << sample_clause << endl;
       
-      if (bad_clauses && ((*bad_clauses) % sample_clause)) continue;
       SamplingInfo sampling;
       bool sampled = (denominator > 1);
-      if (sampled) 
+      if (sample_clause_i == -1) {
+	sampling = *hint;
+      } else if (sampled) {
 	sampling = SamplingInfo::RandomRange(sample_clause, denominator);
+      }
+      if (bad_clauses && ((*bad_clauses) % (uint)sampling.position_) 
+	  && sampling.sampled_) continue;
 
       int64 max_work_now = max_work;
       uint64 num_results;
@@ -742,7 +751,8 @@ FindSampling(const Pattern & p, SamplingInfo * result,
 	model_->GetTupleIndex()->FindSatisfactions
 	(p, sampling, subs, &num_results, &max_work_now);
 
-      VLOG(2) << "Sample_clause: " << sample_clause << (success ? " GOOD" : " BAD") << endl;
+      VLOG(2) << "Sample_clause: " 
+	      << sample_clause << (success ? " GOOD" : " BAD") << endl;
       
       if (!success) continue;
       all_take_too_long = false;
@@ -776,7 +786,7 @@ FindSampling(const Pattern & p, SamplingInfo * result,
       }
       *result = sampling;
       if (estimated_num_results)
-	*estimated_num_results = num_results * denominator;
+	*estimated_num_results = (uint64)(num_results / sampling.GetFraction());
       if (actual_num_results)
 	*actual_num_results = num_results;
       VLOG(1) << "Sampling clause " << p[sampling.position_].ToString() 
