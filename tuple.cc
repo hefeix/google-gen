@@ -276,7 +276,7 @@ LL PatternLnLikelihood(const Pattern &context,
   CHECK(arbitrary_terms);
   arbitrary_terms->clear();
   set<int> terms_seen;
-  LL ret = LLZero();
+  LL ret(0);
   bool encoding = false;
 
   // encode the number of tuples in the pattern

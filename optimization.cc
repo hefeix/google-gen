@@ -283,11 +283,11 @@ LL Optimizer::GuessBenefit(const TrueTuple * tp) {
     = rule->FirstFiringLikelihoodEstimate(rule_sat->GetTimelyFeatures());
   if (rule_sat->NumFirings() > 1)
     likelihood = rule->AdditionalFiringLikelihoodEstimate();
-  LL firing_cost = ToLL(-log (likelihood));
+  LL firing_cost = LL(-log (likelihood));
   VLOG(2) << "Firing cost " << firing_cost << endl;
     
   // Get the naming cost
-  LL naming_cost = LLZero();
+  LL naming_cost(0);
   {
     DestructibleCheckpoint checkp(model_->GetChangelist());
     LL old_utility = model_->GetUtility();
@@ -420,7 +420,7 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
   int next_var = 0;
   set<Tuple> used_tuples;
 
-  LL best_guess = LLZero();
+  LL best_guess(0);
   Tuple s1;
   for (uint c=0; c<5; c++) {
     TrueTuple * tt = GetRandomTrueTuple();
@@ -924,7 +924,7 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   VLOG(1) << "benefits:" << benefits.ToString() << endl;
 
   LL total_ll = benefits + firing_ll + naming_ll;
-  /*  if (total_ll < LLZero()) {
+  /*  if (total_ll < LL(0)) {
     VLOG(1) << "Too useless, rejected" << endl;
     return false;
     }*/
@@ -1872,7 +1872,7 @@ void Optimizer::Explain(TrueTuple *p,
     }
     explanations.push_back(make_pair(r, right_sub));
   }
-  int which = 0; LL best = LLZero();
+  int which = 0; LL best(0);
   for (uint i=0; i<explanations.size(); i++){
     Checkpoint cp = model_->GetChangelist()->GetCheckpoint();
     explanations[i].first->AddFiring(explanations[i].second);

@@ -168,8 +168,8 @@ TrueTuple::GetCauseTrueTuples() const{
 
 Model::Model(){
   next_id_ = 0;
-  ln_likelihood_ = LLZero();
-  work_penalty_ = ToLL(0.001);
+  ln_likelihood_ = 0;
+  work_penalty_ = LL(0.001);
   old_style_display_ = false;
   chooser_ = new Chooser(this, NULL);
   verify_counter_ = 0;
@@ -209,36 +209,38 @@ void Model::L1_ReleaseID(int id) {
 
 /*
   To compute the likelihood, we multiply the following:
-  1.  The likelihood of the ordering : Prod(count_i!)/(total!) 
+  1.  The likelihood of the ordering : Prod(count[i]!)/(total!) 
   2.  The number of ways we could have picked these objects
        from the parent distribution: (count.size()!)
   3.  The sequence of object counts:
-    a.  The number of counts which are ones: 1/(count.size()+1)
-    b.  Which ones are ones (num_ones_!*(count.size()-num_ones_)!/count.size()!)
-    c.  The other counts: Prod(L(count_i-2))
-        Where L is a probility distribution over non-negative integers.  
-  (note that the count.size()! cancels.).
+    since each object occurs at least once, we are allocating 
+    (total-count.size()) extra objects among the count.size() objects.
+    This can be done using the stars and bars argument with 
+    (total - count.size()) objects and (count.size()-1) dividers
+    So the number of possibilities is (total-1) choose (count.size()-1).
+    a. likelihood = (count.size()-1)! * (total-count.size())! / (total-1)!
+
+  Multiplying it all together, we get:
+   Prod(count[i]!) * count.size()! * (count.size()-1)! * (total-count.size())!
+    / [ total! * (total-1)! ]
+
 */
 LL Chooser::ComputeLnLikelihood() const {
-  LL ret = LLZero();
+  LL ret(0);
+  if (counts_.size()==0) return ret;
   int total = 0;
-  int num_ones = 0;
   forall(run, counts_) {
     int count = run->second;
     total += count;
     ret += LnFactorial(count);
-    if (count > 1) {
-      ret += uintQuadraticLnProb(count-2);    
-    } else {
-      CHECK(count > 0);
-      num_ones++;
-    }
   }
-  CHECK(num_ones == num_ones_);
+  CHECK(total>0);
   CHECK(total == total_);
+  ret += LnFactorial(counts_.size());
+  ret += LnFactorial(counts_.size()-1);
+  ret += LnFactorial(total_-counts_.size());
   ret -= LnFactorial(total_);
-  ret -= Log(counts_.size()+1);
-  ret += LnFactorial(num_ones_) + LnFactorial(counts_.size()-num_ones_);
+  ret -= LnFactorial(total_-1);
   return ret;
 }
 
@@ -258,29 +260,25 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
   
   Changelist * cl = model_->GetChangelist();
   int old_num_objects = counts_.size();
-  int old_num_ones = num_ones_;
   int64 old_total = total_;
   
   cl->Make(new MapOfCountsAddChange<int, int>(&counts_, object, delta));
   cl->ChangeValue(&total_, delta + old_total);
-  if (old_count == 1) cl->ChangeValue(&num_ones_, num_ones_ - 1);
-  if (new_count == 1) cl->ChangeValue(&num_ones_, num_ones_ + 1);
   
   int new_num_objects = counts_.size();
-  int new_num_ones = num_ones_;
   int64 new_total = total_;
 
-  LL ll_delta = LnFactorial(new_count) - LnFactorial(old_count); 
-  if (old_count > 1) ll_delta -= uintQuadraticLnProb(old_count - 2);
-  if (new_count > 1) ll_delta += uintQuadraticLnProb(new_count - 2);
-  
-  ll_delta += LnFactorial(old_total); ll_delta -= LnFactorial(new_total);
-  ll_delta += Log(old_num_objects + 1); ll_delta -= Log(new_num_objects + 1);
-  ll_delta -= LnFactorial(old_num_ones); ll_delta += LnFactorial(new_num_ones);
-  ll_delta -= LnFactorial(old_num_objects - old_num_ones);
-  ll_delta += LnFactorial(new_num_objects - new_num_ones);
-
-  L1_AddToLnLikelihood(ll_delta);
+  if (old_total==0 || new_total==0);
+  else {
+    LL ll_delta = LnFactorial(new_count) - LnFactorial(old_count); 
+    ll_delta += LnFactorial(new_num_objects) - LnFactorial(old_num_objects);
+    ll_delta += LnFactorial(new_num_objects-1) - LnFactorial(old_num_objects-1);
+    ll_delta += LnFactorial(new_total-new_num_objects) 
+      - LnFactorial(old_total - old_num_objects);
+    ll_delta -= LnFactorial(new_total) - LnFactorial(old_total);
+    ll_delta -= LnFactorial(new_total-1) - LnFactorial(old_total-1);
+    L1_AddToLnLikelihood(ll_delta);
+  }
 
   // Propagate to parent
   if (!parent_) return;
@@ -293,14 +291,13 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
 Chooser::Chooser(Model *model, Chooser *parent){
   parent_ = parent;
   model_ = model;
-  ln_likelihood_ = LLZero();
+  ln_likelihood_ = 0;
   total_ = 0;
-  num_ones_ = 0;
   model_->GetChangelist()->Creating(this);
 }
 void Chooser::L1_Erase(){
   CHECK(counts_.size()==0);
-  CHECK(ln_likelihood_ == LLZero());
+  CHECK(ln_likelihood_ == 0);
   CHECK(total_ ==0);
   model_->GetChangelist()->Destroying(this);
 }
@@ -308,7 +305,6 @@ void Chooser::L1_Erase(){
 Record Chooser::ChooserInfo(bool include_objects) {
   Record r;
   r["Ln Likelihood"] = ln_likelihood_.ToString();
-  r["Num Ones"] = itoa(num_ones_);
   r["Total"] = itoa(total_);
   r["Num Objects"] = itoa(counts_.size());
   if (!include_objects) return r;

@@ -27,6 +27,8 @@
 struct LL{
   int64 mcn_;
   LL() { mcn_ = 0; }
+  explicit LL(double d){ mcn_ = int64(d*1e6);}
+  LL(int n){ mcn_ = n * 1000000ll;}
   double ToDouble() const { return mcn_/1e6;}
   int64 ToMicronats() const { return mcn_;}
   void operator+=(const LL & o){mcn_ += o.mcn_;}
@@ -34,8 +36,6 @@ struct LL{
   string ToString() const { return dtoa(ToDouble());}
 };
 inline LL Micronats(int64 mcn){ LL ret; ret.mcn_=mcn; return ret;}
-inline LL ToLL(double n){ return Micronats(int64(n*1e6));}
-inline LL LLZero(){ return Micronats(0);}
 LL operator +(const LL & a, const LL & b);
 LL operator -(const LL & a, const LL & b);
 LL operator *(const LL & a, int b);
