@@ -790,7 +790,7 @@ FindSampling(const Pattern & p, SamplingInfo * result,
       if (actual_num_results)
 	*actual_num_results = num_results;
       VLOG(1) << "Sampling clause " << p[sampling.position_].ToString() 
-	      << " d:" << denominator << endl;
+	      << " d:" << (1/sampling.GetFraction()) << endl;
       return true;
     }
 
@@ -843,9 +843,13 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   SamplingInfo precondition_sampling;
   uint64 estimated_num_satisfactions;
   uint64 actual_num_satisfactions;
+  SamplingInfo * hint = &combined_sampling;
+  if (combined_sampling.sampled_ 
+      && combined_sampling.position_ >= r.first.size()) hint = NULL;
+
   if (!FindSampling(r.first, &precondition_sampling, max_work, NULL,
 		    &estimated_num_satisfactions, 
-		    &actual_num_satisfactions, NULL, NULL)) {
+		    &actual_num_satisfactions, NULL, hint)) {
     VLOG(1) << "Couldn't find sampling for precondition" << endl;
     return false;
   }
