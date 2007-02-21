@@ -172,6 +172,11 @@ Model::Model(){
   work_penalty_ = LL(0.001);
   old_style_display_ = false;
   chooser_ = new Chooser(this, NULL);
+  uint_quadratic_chooser_ = new UintChooser(this);
+  tuple_length_chooser_ = new Chooser(this, uint_quadratic_chooser_);
+  precondition_length_chooser_ = new Chooser(this, uint_quadratic_chooser_);
+  result_length_chooser_ = new Chooser(this, uint_quadratic_chooser_);
+  term_type_chooser_ = new Chooser(this, NULL);
   verify_counter_ = 0;
   verify_interval_ = 1;
 
@@ -244,10 +249,42 @@ LL Chooser::ComputeLnLikelihood() const {
   return ret;
 }
 
+LL UintChooser::ComputeLnLikelihood() const{
+  LL total = 0;
+  forall(run, counts_) {
+    int object = run->first;
+    int count = run->second;
+    total += count * uintQuadraticLnProb(object);
+  }
+  return total;  
+}
+
 void Chooser::L1_AddToLnLikelihood(LL delta) {
   model_->GetChangelist()->ChangeValue(&ln_likelihood_, 
 				       ln_likelihood_ +  delta);
   model_->A1_AddToLnLikelihood(delta);
+}
+
+LL Chooser::ComputeLLDelta(int object,
+			   int old_count, int new_count, 
+			   int old_num_objects, int new_num_objects, 
+			   int old_total, int new_total) {
+  if (old_total==0 || new_total==0) return 0;
+  LL ll_delta = LnFactorial(new_count) - LnFactorial(old_count); 
+  ll_delta += LnFactorial(new_num_objects) - LnFactorial(old_num_objects);
+  ll_delta += LnFactorial(new_num_objects-1) - LnFactorial(old_num_objects-1);
+  ll_delta += LnFactorial(new_total-new_num_objects) 
+    - LnFactorial(old_total - old_num_objects);
+  ll_delta -= LnFactorial(new_total) - LnFactorial(old_total);
+  ll_delta -= LnFactorial(new_total-1) - LnFactorial(old_total-1);
+  return ll_delta;
+}
+
+LL UintChooser::ComputeLLDelta(int object, 
+			       int old_count, int new_count,
+			       int old_num_objects, int new_num_objects,
+			       int old_total, int new_total){
+  return (new_count-old_count) * uintQuadraticLnProb(object);
 }
 
 void Chooser::L1_ChangeObjectCount(int object, int delta) {
@@ -268,17 +305,10 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
   int new_num_objects = counts_.size();
   int64 new_total = total_;
 
-  if (old_total==0 || new_total==0);
-  else {
-    LL ll_delta = LnFactorial(new_count) - LnFactorial(old_count); 
-    ll_delta += LnFactorial(new_num_objects) - LnFactorial(old_num_objects);
-    ll_delta += LnFactorial(new_num_objects-1) - LnFactorial(old_num_objects-1);
-    ll_delta += LnFactorial(new_total-new_num_objects) 
-      - LnFactorial(old_total - old_num_objects);
-    ll_delta -= LnFactorial(new_total) - LnFactorial(old_total);
-    ll_delta -= LnFactorial(new_total-1) - LnFactorial(old_total-1);
-    L1_AddToLnLikelihood(ll_delta);
-  }
+  LL ll_delta = ComputeLLDelta(object, 
+			       old_count, new_count, old_num_objects, 
+			       new_num_objects, old_total, new_total);
+  L1_AddToLnLikelihood(ll_delta);
 
   // Propagate to parent
   if (!parent_) return;
@@ -295,6 +325,7 @@ Chooser::Chooser(Model *model, Chooser *parent){
   total_ = 0;
   model_->GetChangelist()->Creating(this);
 }
+
 void Chooser::L1_Erase(){
   CHECK(counts_.size()==0);
   CHECK(ln_likelihood_ == 0);
@@ -559,7 +590,7 @@ void Model::Load(string filename) {
 Record Model::ModelInfo() const{ 
   Record r;
   r["Ln Likelihood"] = ln_likelihood_.ToString();
-  r["Ln likelihood(global chooser)"] = GetChooserLnLikelihood().ToString();
+  r["Ln likelihood(global choosers)"] = GetChoosersLnLikelihood().ToString();
   r["Work"] = itoa(GetSearchWork());
   r["Utility"] = GetUtility().ToString();
   r["required never happen"] = itoa(required_never_happen_.size());
@@ -641,7 +672,8 @@ void Model::ToHTML(string dirname) const {
 }
 
 void Model::VerifyLikelihood() const{
-  LL total = GetChooserLnLikelihood();
+  LL total = GetChoosersLnLikelihood();
+  
   set<Rule *> rules = GetAllRules();
   forall(run, rules) forall(run_c, (*run)->choosers_) {
     Chooser * c = run_c->second;
@@ -781,7 +813,7 @@ set<Rule *> Model::GetAllRules() const {
 }
 
 // Add the global chooser and the choosers from all rules
-set<Chooser *> Model::GetAllChoosers() const {
+set<Chooser *> Model::GetAllObjectChoosers() const {
   set<Chooser *> ret;
   ret.insert(chooser_);
   set<Rule *> rules = GetAllRules();
@@ -797,6 +829,49 @@ Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
   Precondition * p = FindPrecondition(tuples);
   if (p) { return p; }
   else return new Precondition(this, tuples);
+}
+
+LL Model::L1_ComputePatternLnLikelihoodUpdateChoosers(const Pattern &context, 
+						      const Pattern &to_encode, 
+						      bool is_result,
+						      int multiplier){
+  set<int> terms_seen;
+  LL ret = 0;
+  bool encoding = false;
+
+  // encode the number of tuples in the pattern
+  Chooser * length_chooser 
+    = is_result?result_length_chooser_:precondition_length_chooser_;
+  length_chooser->L1_ChangeObjectCount(to_encode.size(), multiplier);
+  for (uint i=0; i<context.size()+to_encode.size(); i++) {
+    if (i == context.size()) encoding = true;
+    const Tuple &s = (encoding ? to_encode[i-context.size()] : context[i]);
+    CHECK(s.size() > 0);
+ 
+   // encode the length of the tuple.
+    if (encoding) 
+      tuple_length_chooser_->L1_ChangeObjectCount(s.size(), multiplier);
+    for (uint j=0; j<s.size(); j++) {
+      int t = s[j];
+      // specify whether it's a new constant, a new variable, or a previously
+      // named term.
+      int term_type;
+      if (terms_seen % t) {
+	term_type = Variable(2); // previously named term
+	if (encoding) ret -= Log(terms_seen.size());
+      } else {
+	terms_seen.insert(t);
+	if (IsVariable(t)) term_type = Variable(1);
+	else {
+	  term_type = Variable(0);
+	  if (encoding) chooser_->L1_ChangeObjectCount(t, multiplier);
+	}
+      }
+      if (encoding) 
+	term_type_chooser_->L1_ChangeObjectCount(term_type, multiplier);
+    }
+  }
+  return ret;  
 }
 
 // Pick a random word and go with it! (or 2 after 10 tries)
