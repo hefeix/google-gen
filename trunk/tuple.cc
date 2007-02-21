@@ -270,41 +270,6 @@ string ToString(const Tuple & s, const Substitution & sub){
   return ret;
 }
 
-LL PatternLnLikelihood(const Pattern &context, 
-		       const Pattern &to_encode, 
-		       vector<int> * arbitrary_terms){
-  CHECK(arbitrary_terms);
-  arbitrary_terms->clear();
-  set<int> terms_seen;
-  LL ret(0);
-  bool encoding = false;
-
-  // encode the number of tuples in the pattern
-  ret += uintQuadraticLnProb(to_encode.size()); 
-  for (uint i=0; i<context.size()+to_encode.size(); i++) {
-    if (i == context.size()) encoding = true;
-    const Tuple &s = (encoding ? to_encode[i-context.size()] : context[i]);
-    CHECK(s.size() > 0);
- 
-   // encode the length of the tuple.
-    if (encoding) ret += uintQuadraticLnProb(s.size()-1);
-    for (uint j=0; j<s.size(); j++) {
-      int t = s[j];
-      // specify whether it's a back-reference or not.
-      if (encoding) ret -= Log(2);
-      if (terms_seen % t) {
-	if (encoding) ret -= Log(terms_seen.size());
-      } else {
-	// if it's a new variable, we don't care its identity, so we 
-	// encode a wildcard meaning new variable.
-	if (encoding) arbitrary_terms->push_back((t<0)?WILDCARD:t);
-	terms_seen.insert(t);
-      }
-    }    
-  }
-  return ret;  
-}
-
 void RenameVariablesInOrder(Pattern * v, Substitution *s){
   int next_var = 0;
   Substitution sub;

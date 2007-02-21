@@ -158,12 +158,9 @@ Precondition::Precondition(Model * model,
        i);
   }
 
-  vector<int> arbitrary_terms;
   direct_pattern_encoding_ln_likelihood_ = 
-    PatternLnLikelihood(Pattern(), pattern_, &arbitrary_terms);  
-
-  for (uint i=0; i<arbitrary_terms.size(); i++)
-    model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], 1);
+    model_->
+    L1_ComputePatternLnLikelihoodUpdateChoosers(Pattern(), pattern_, false, 1);
 
   model_->A1_InsertIntoPreconditionIndex(pattern_, this);
   ComputeSetTime();
@@ -184,10 +181,8 @@ void Precondition::L1_EraseSubclass(){
        i);
   }
 
-  vector<int> arbitrary_terms;
-  PatternLnLikelihood(Pattern(), pattern_, &arbitrary_terms);  
-  for (uint i=0; i<arbitrary_terms.size(); i++)
-    model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], -1);
+  model_->
+    L1_ComputePatternLnLikelihoodUpdateChoosers(Pattern(), pattern_, false, -1);
   search_tree_->L1_Erase();
 }
 
@@ -480,12 +475,11 @@ Rule::Rule(Precondition * precondition, EncodedNumber delay,
     }
   }
 
-  vector<int> arbitrary_terms;
   direct_pattern_encoding_ln_likelihood_ = 
-    PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);
+    model_->
+    L1_ComputePatternLnLikelihoodUpdateChoosers(precondition_->pattern_, 
+						result_, true, 1);
   if (IsUniversalRule()) direct_pattern_encoding_ln_likelihood_ = 0;
-  for (uint i=0; i<arbitrary_terms.size(); i++)
-    model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], 1);
 
   set<int> creative_vars = CreativeVariables();
   forall(run, creative_vars) {
@@ -568,10 +562,9 @@ void Rule::L1_EraseSubclass(){
     } 
   }
 
-  vector<int> arbitrary_terms;
-  PatternLnLikelihood(precondition_->pattern_, result_, &arbitrary_terms);  
-  for (uint i=0; i<arbitrary_terms.size(); i++)
-    model_->chooser_->L1_ChangeObjectCount(arbitrary_terms[i], -1);
+  model_->L1_ComputePatternLnLikelihoodUpdateChoosers(precondition_->pattern_, 
+						      result_, true, -1);
+
   //forall(run, causing_tuples_) (*run)->A1_RemoveFromRulesCaused(this);
 }
 

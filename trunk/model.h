@@ -113,14 +113,28 @@ struct Chooser {
   map<int, int> counts_;
   int64 total_;
   Chooser(Model *model, Chooser *parent);
+  virtual ~Chooser() {}
   void L1_Erase();
+  virtual LL ComputeLLDelta(int object,
+			    int old_count, int new_count, 
+			    int old_num_objects,  int new_num_objects, 
+			    int old_total, int new_total);
   void L1_ChangeObjectCount(int object, int delta);
   //  update the ln likelihood of this object and of the model.
   void L1_AddToLnLikelihood(LL delta); 
-  LL ComputeLnLikelihood() const; // from scratch for verification.
+  virtual LL ComputeLnLikelihood() const; // from scratch for verification.
   int GetCount(int object) const;
   Record ChooserInfo(bool include_objects);
 };
+struct UintChooser : public Chooser {
+  UintChooser(Model *model) : Chooser(model, NULL) {}
+  virtual LL ComputeLLDelta(int object,
+			    int old_count, int new_count, 
+			    int old_num_objects,  int new_num_objects, 
+			    int old_total, int new_total);
+  virtual LL ComputeLnLikelihood() const; // from scratch for verification.
+};
+
 
 class Model {
  public:
@@ -261,7 +275,14 @@ class Model {
   bool MayBeTimeFixable() const;
 
   LL GetLnLikelihood() const { return ln_likelihood_;}
-  LL GetChooserLnLikelihood() const { return chooser_->ln_likelihood_;}
+  LL GetChoosersLnLikelihood() const { 
+    return chooser_->ln_likelihood_
+      + uint_quadratic_chooser_->ln_likelihood_
+      + tuple_length_chooser_->ln_likelihood_
+      + precondition_length_chooser_->ln_likelihood_
+      + result_length_chooser_->ln_likelihood_
+      + term_type_chooser_->ln_likelihood_;
+  }
 
   uint64 GetSearchWork() const { return search_work_;}
   LL GetUtility() const { return ln_likelihood_ 
@@ -275,7 +296,7 @@ class Model {
     return chooser_;
   }
 
-  set<Chooser *> GetAllChoosers() const;
+  set<Chooser *> GetAllObjectChoosers() const;
 
   TupleIndex * GetTupleIndex() { return &tuple_index_;}
   const TupleIndex * GetTupleIndex() const { return &tuple_index_;}
@@ -305,6 +326,14 @@ class Model {
 
   // Finds or adds a Precondition
   Precondition * L1_GetAddPrecondition(const vector<Tuple> & tuples);
+
+  // Computes a ln likelihood for the pattern, and updates the necessary
+  // choosers for encoding the pattern.  Set multiplier to 1 if creating
+  // the pattern, -1 if removing it, or 0 if just messing around.
+  LL L1_ComputePatternLnLikelihoodUpdateChoosers(const Pattern & context, 
+						 const Pattern & to_encode,
+						 bool is_result,
+						 int multiplier);
 
   // misc.
   string FindName(string base);
@@ -403,7 +432,20 @@ class Model {
   // Which prohibitions are currently violated
   set<Prohibition *> violated_prohibitions_;
 
+  // global chooser for constants
   Chooser * chooser_;
+  // Parent chooser for picking numbers
+  UintChooser * uint_quadratic_chooser_;
+  // chooses tuple lengths in specifying patterns
+  Chooser * tuple_length_chooser_;
+  // chooses pattern lengths in specifying patterns
+  Chooser * precondition_length_chooser_;
+  Chooser * result_length_chooser_;
+  // In specifying patterns, this chooser chooses whether a term will be
+  // a) a new constant
+  // b) a new variable
+  // c) a previously named term
+  Chooser * term_type_chooser_;
 
   map<Tuple, set<SearchNode *> > wildcard_tuple_to_search_node_;
 

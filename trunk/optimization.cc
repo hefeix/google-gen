@@ -856,7 +856,7 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   // Now from the examples, try to get the per firing naming cost
   LL naming_ll;
   set<int> creative_vars = GetVariables(r.second) - GetVariables(r.first);
-  set<Chooser *> all_choosers = model_->GetAllChoosers();
+  set<Chooser *> all_choosers = model_->GetAllObjectChoosers();
   forall(run_var, creative_vars) {
     vector<int> objects;
     for (int c=0; c<(int)full_subs.size(); c++) {
@@ -1707,11 +1707,11 @@ void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
   
   VLOG(1) << "before adding rule utility=" 
 	  << model_->GetUtility() << endl;
-  LL added_arbitrary_term_ll = -model_->GetChooserLnLikelihood();
+  LL added_arbitrary_term_ll = -model_->GetChoosersLnLikelihood();
   Rule * r = model_->MakeNewRule(preconditions, EncodedNumber(), 
 				 type, 0, result);
   r->AddComments(comments);
-  added_arbitrary_term_ll += model_->GetChooserLnLikelihood();
+  added_arbitrary_term_ll += model_->GetChoosersLnLikelihood();
   VLOG(1) << "Rule encoding costs: "
 	  << r->GetPrecondition()->GetDirectPatternEncodingLnLikelihood()
 	  << " + " 

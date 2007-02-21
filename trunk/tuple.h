@@ -215,14 +215,6 @@ Pattern StringToTupleVector(const string & s);
 // shows both unsubstituted and substituted variables (for display)
 string ToString(const Tuple & s, const Substitution & sub); 
 
-// The likelihood according to a particular encoding of a vector of tuples,
-// given another vector of tuples has already been encoded as context.
-// The user is responsible for adding in the ln likelihood of the terms passed
-// back in arbitrary_terms, which get encoded globally.
-LL PatternLnLikelihood(const Pattern &context, 
-		       const Pattern &to_encode, 
-		       vector<int> * arbitrary_terms);
-
 // Given a vector of tuples, with variables, we rename the variables
 // so that the first variable to occur in the vector of tuples is 
 // Variable(0), the next is Variable(1), etc.
