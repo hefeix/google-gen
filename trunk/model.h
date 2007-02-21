@@ -312,6 +312,9 @@ class Model {
     return components_by_type_[t];
   }
 
+  // Figure out the encoding cost of a candidate rule
+  LL RuleEncodingCost(CandidateRule r) const;
+
   // ----- COMPLICATED LAYER 1 FUNCTIONS -----
 
     // Assigns a fresh new ID to a component. 
