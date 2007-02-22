@@ -987,15 +987,16 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   }
 
   // Try to remove preconditions that are not very restrictive.
-  // TODO what if the precondition is unsampled?
   int since_last_improvement = 0;
   uint remove_clause = 0;
   for (;since_last_improvement < int(r.first.size()); since_last_improvement++){
-    if (since_last_improvement == int(r.first.size()-1)) {
+    if (precondition_sampling.sampled_ &&
+	since_last_improvement == int(r.first.size()-1)) {
       remove_clause = precondition_sampling.position_;
     } else {
       remove_clause = (remove_clause + 1) % r.first.size();
-      if (remove_clause == precondition_sampling.position_)
+      if (precondition_sampling.sampled_ &&
+	  remove_clause == precondition_sampling.position_)
 	remove_clause = (remove_clause + 1) % r.first.size();
     }
 
@@ -1020,7 +1021,8 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
       continue;
     }
     
-    if (remove_clause == precondition_sampling.position_) {      
+    if (precondition_sampling.sampled_ && 
+	remove_clause == precondition_sampling.position_) {      
       // pick a new sampling clause.
       set<uint> bad_clauses; 
       bad_clauses.insert(remove_clause);
