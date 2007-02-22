@@ -173,10 +173,20 @@ Model::Model(){
   old_style_display_ = false;
   chooser_ = new Chooser(this, NULL);
   uint_quadratic_chooser_ = new UintChooser(this);
-  tuple_length_chooser_ = new Chooser(this, uint_quadratic_chooser_);
+
   precondition_length_chooser_ = new Chooser(this, uint_quadratic_chooser_);
   result_length_chooser_ = new Chooser(this, uint_quadratic_chooser_);
+  tuple_length_chooser_ = new Chooser(this, uint_quadratic_chooser_);
   term_type_chooser_ = new Chooser(this, NULL);
+  relation_term_type_chooser_ = new Chooser(this, NULL);
+  variable_novelty_chooser_ = new Chooser(this, NULL);
+  constant_novelty_chooser_ = new Chooser(this, NULL);
+  rule_constant_chooser_= new Chooser(this, chooser_);
+  rule_relation_constant_chooser_ = new Chooser(this, chooser_);
+  variable_backreference_chooser_ = new Chooser(this, NULL);
+  constant_backreference_chooser_ = new Chooser(this, NULL);
+  
+
   verify_counter_ = 0;
   verify_interval_ = 1;
 
@@ -847,46 +857,71 @@ Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
   else return new Precondition(this, tuples);
 }
 
+// encoing of a pattern:
+/* 
+choose the number of tuples from precondition_length_chooser_ or 
+  result_length_chooser_
+Choose tuple lengths from tuple_length_chooser_
+For each term in a tuple:
+  Choose the type (variable/constant) from term_type_chooser_ or 
+     relation_term_type_chooser_, depending on whether it is the first term 
+     in the tuple. (boolean)
+  If there are already objects of that type, 
+     choose whether it's new from variable_novelty_chooser_ or
+     constant_novelty_chooser_ (boolean)
+  If it's a new constant, pick it from rule_constant_chooser_ or 
+     rule_relation_constant_chooser_, depending on whether it's the first item.
+  It it's not new, encode it as n, where n is the number of distinct terms
+     of this type strictly between the last instance of the term and this one.  
+     Choose this from variable_backreference_chooser_ or 
+     constant_backreference_chooser_.
+*/
 LL Model::L1_ComputePatternLnLikelihoodUpdateChoosers(const Pattern &context, 
 						      const Pattern &to_encode, 
 						      bool is_result,
 						      int multiplier){
   CHECK(multiplier != 0);
 
-  set<int> terms_seen;
   LL ret = 0;
   bool encoding = false;
 
+  vector<int> constants_seen;
+  vector<int> variables_seen;
   // encode the number of tuples in the pattern
-  Chooser * length_chooser 
-    = is_result?result_length_chooser_:precondition_length_chooser_;
-  length_chooser->L1_ChangeObjectCount(to_encode.size(), multiplier);
+  (is_result?result_length_chooser_:precondition_length_chooser_)
+    ->L1_ChangeObjectCount(to_encode.size(), multiplier);
   for (uint i=0; i<context.size()+to_encode.size(); i++) {
     if (i == context.size()) encoding = true;
     const Tuple &s = (encoding ? to_encode[i-context.size()] : context[i]);
     CHECK(s.size() > 0);
  
-   // encode the length of the tuple.
+    // encode the length of the tuple.
     if (encoding) 
       tuple_length_chooser_->L1_ChangeObjectCount(s.size(), multiplier);
     for (uint j=0; j<s.size(); j++) {
       int t = s[j];
-      // specify whether it's a new constant, a new variable, or a previously
-      // named term.
-      int term_type;
-      if (terms_seen % t) {
-	term_type = Variable(2); // previously named term
-	if (encoding) ret -= Log(terms_seen.size());
-      } else {
-	terms_seen.insert(t);
-	if (IsVariable(t)) term_type = Variable(1);
-	else {
-	  term_type = Variable(0);
-	  if (encoding) chooser_->L1_ChangeObjectCount(t, multiplier);
-	}
-      }
-      if (encoding)
-	term_type_chooser_->L1_ChangeObjectCount(term_type, multiplier);
+      bool is_var = IsVariable(t);
+      vector<int> & seen_ref = is_var?variables_seen:constants_seen;
+      int last_seen_pos = -1;
+      for (uint k=0; k<seen_ref.size(); k++) 
+	if (seen_ref[k]==t) last_seen_pos=k;
+      bool seen = (last_seen_pos>=0);
+      if (encoding) {
+	((j==0)?relation_term_type_chooser_:term_type_chooser_)
+	  ->L1_ChangeObjectCount(is_var?1:0, multiplier);
+	if (seen_ref.size() > 0)
+	  ((is_var)?variable_novelty_chooser_:constant_novelty_chooser_)
+	    ->L1_ChangeObjectCount(seen?0:1, multiplier);
+	if (!seen && !is_var)
+	  ((j==0)?rule_relation_constant_chooser_:rule_constant_chooser_)
+	    ->L1_ChangeObjectCount(t, multiplier);
+	if (seen) {
+	  (is_var?variable_backreference_chooser_:
+	   constant_backreference_chooser_)
+	    ->L1_ChangeObjectCount(seen_ref.size()-last_seen_pos, multiplier);
+	}	
+      }  
+      seen_ref.push_back(t);
     }
   }
   return ret;  

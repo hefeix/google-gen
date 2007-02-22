@@ -439,16 +439,23 @@ class Model {
   Chooser * chooser_;
   // Parent chooser for picking numbers
   UintChooser * uint_quadratic_chooser_;
-  // chooses tuple lengths in specifying patterns
-  Chooser * tuple_length_chooser_;
-  // chooses pattern lengths in specifying patterns
+
+  // All these choosers are used in specifying patterns
+  // (preconditions and rule results)
+  // See the comment in model.cc over 
+  // L1_ComputePatternLnLikelihoodUpdateChoosers for details.
+
   Chooser * precondition_length_chooser_;
   Chooser * result_length_chooser_;
-  // In specifying patterns, this chooser chooses whether a term will be
-  // a) a new constant
-  // b) a new variable
-  // c) a previously named term
+  Chooser * tuple_length_chooser_;
   Chooser * term_type_chooser_;
+  Chooser * relation_term_type_chooser_;
+  Chooser * variable_novelty_chooser_;
+  Chooser * constant_novelty_chooser_;
+  Chooser * rule_constant_chooser_;
+  Chooser * rule_relation_constant_chooser_;
+  Chooser * variable_backreference_chooser_;
+  Chooser * constant_backreference_chooser_;
 
   map<Tuple, set<SearchNode *> > wildcard_tuple_to_search_node_;
 
