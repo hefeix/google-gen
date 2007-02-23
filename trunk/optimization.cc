@@ -1748,9 +1748,9 @@ void Optimizer::TryAddPositiveRule(const Pattern & preconditions,
   r->AddComments(comments);
   added_arbitrary_term_ll += model_->GetChoosersLnLikelihood();
   VLOG(1) << "Rule encoding costs: "
-	  << r->GetPrecondition()->GetDirectPatternEncodingLnLikelihood()
+	  << r->GetPrecondition()->EncodingLnLikelihood()
 	  << " + " 
-	  << r->GetDirectPatternEncodingLnLikelihood() 
+	  << r->ResultEncodingLnLikelihood()
 	  << " + " 
 	  << added_arbitrary_term_ll
 	  << endl;
