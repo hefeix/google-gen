@@ -111,6 +111,12 @@ bool Model::MayBeTimeFixable() const{
   return true;
 }
 
+LL Model::GetChoosersLnLikelihood() const { 
+  LL ret;
+  forall(run, all_choosers_) ret += (*run)->ln_likelihood_;
+  return ret;
+}
+
 string TermEscape(string s){
   if (s[0]=='*' || s[0]=='_') return '_'+s;
   return s;
@@ -331,8 +337,10 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
 Chooser::Chooser(Model *model, Chooser *parent){
   parent_ = parent;
   model_ = model;
+  CHECK(model_);
   ln_likelihood_ = 0;
   total_ = 0;
+  model_->A1_InsertIntoChoosers(this);
   model_->GetChangelist()->Creating(this);
 }
 
@@ -340,6 +348,7 @@ void Chooser::L1_Erase(){
   CHECK(counts_.size()==0);
   CHECK(ln_likelihood_ == 0);
   CHECK(total_ ==0);
+  model_->A1_RemoveFromChoosers(this);
   model_->GetChangelist()->Destroying(this);
 }
 
@@ -684,12 +693,7 @@ void Model::ToHTML(string dirname) const {
 void Model::VerifyLikelihood() const{
   LL total = GetChoosersLnLikelihood();
   
-  set<Rule *> rules = GetAllRules();
-  forall(run, rules) forall(run_c, (*run)->choosers_) {
-    Chooser * c = run_c->second;
-    total += c->ln_likelihood_;
-  }
-    // TODO add in the likelihoods from all choosers
+  // TODO add in the likelihoods from all choosers
   forall(run, id_to_component_){
     total += run->second->ln_likelihood_;
   }
@@ -857,7 +861,7 @@ Precondition * Model::L1_GetAddPrecondition(const vector<Tuple> & tuples) {
   else return new Precondition(this, tuples);
 }
 
-// encoing of a pattern:
+// encoding of a pattern:
 /* 
 choose the number of tuples from precondition_length_chooser_ or 
   result_length_chooser_
@@ -1007,6 +1011,16 @@ void Model::A1_RemoveFromIDToComponent(int id) {
   changelist_.Make
     (new MapRemoveChange<int, Component *>(&id_to_component_,id));
 }
+void Model::A1_InsertIntoChoosers(Chooser *c) {
+  changelist_.Make
+    (new SetInsertChange<Chooser *>(&all_choosers_, c));		   
+}
+void Model::A1_RemoveFromChoosers(Chooser *c) {
+  changelist_.Make
+    (new SetRemoveChange<Chooser *>(&all_choosers_, c));		   
+}
+
+
 void Model::A1_InsertIntoComponentsByType(Component *c){
   changelist_.Make
     (new SetInsertChange<Component *>(&(components_by_type_[c->Type()]), c));

@@ -295,6 +295,21 @@ Rule * Precondition::FindFeatureRule(Rule * target_rule) const{
   CHECK(s->size() > 0);
   return *(s->begin());
 }
+LL Precondition::EncodingLnLikelihood() const {
+  DestructibleCheckpoint checkp(model_->GetChangelist());
+  LL old_utility = model_->GetUtility();
+  LL d = model_->L1_ComputePatternLnLikelihoodUpdateChoosers
+    (Pattern(), pattern_, false, -1);
+  return old_utility - model_->GetUtility() + d;
+}
+
+LL Rule::ResultEncodingLnLikelihood() const {
+  DestructibleCheckpoint checkp(model_->GetChangelist());
+  LL old_utility = model_->GetUtility();
+  LL d = model_->L1_ComputePatternLnLikelihoodUpdateChoosers
+    (precondition_->pattern_, result_, true, -1);
+  return old_utility - model_->GetUtility() + d;
+}
 
 Satisfaction * Precondition::L1_GetAddSatisfaction(const Substitution & sub){
   Satisfaction * s = FindSatisfaction(sub);
@@ -1077,7 +1092,7 @@ Record Component::RecordForDisplay(bool verbose) const{
 Record Precondition::RecordForDisplaySubclass(bool verbose) const{
   Record r;
   r["precondition"] = TupleVectorToString(pattern_);
-  r["dpe LL"] = direct_pattern_encoding_ln_likelihood_.ToString();
+  r["dpe LL"] = EncodingLnLikelihood().ToString();
   forall(run, rules_){
     r["rules"] 
       += (*run)->HTMLLink(TupleVectorToString((*run)->result_)) + "<br>";
@@ -1101,7 +1116,7 @@ Record Rule::RecordForDisplaySubclass(bool verbose) const{
     + "<br>ff " + itoa(NumFirstFirings())
     + "<br>af " + itoa(num_additional_firings_) 
     + "<br>s " + itoa(precondition_->num_satisfactions_); 
-  r["dpe LL"] = direct_pattern_encoding_ln_likelihood_.ToString();
+  r["dpe LL"] = ResultEncodingLnLikelihood().ToString();
   r["prec."] = delay_.ToSortableString();
   r["pat."] = precondition_->HTMLLink(itoa(precondition_->id_));
   forall(run, features_){

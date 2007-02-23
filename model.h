@@ -275,14 +275,7 @@ class Model {
   bool MayBeTimeFixable() const;
 
   LL GetLnLikelihood() const { return ln_likelihood_;}
-  LL GetChoosersLnLikelihood() const { 
-    return chooser_->ln_likelihood_
-      + uint_quadratic_chooser_->ln_likelihood_
-      + tuple_length_chooser_->ln_likelihood_
-      + precondition_length_chooser_->ln_likelihood_
-      + result_length_chooser_->ln_likelihood_
-      + term_type_chooser_->ln_likelihood_;
-  }
+  LL GetChoosersLnLikelihood() const;
 
   uint64 GetSearchWork() const { return search_work_;}
   LL GetUtility() const { return ln_likelihood_ 
@@ -402,6 +395,8 @@ class Model {
   void A1_InsertIntoViolatedProhibitions(Prohibition *p);
   void A1_RemoveFromViolatedProhibitions(Prohibition *p);
   void A1_IncrementNextID();
+  void A1_InsertIntoChoosers(Chooser * c);
+  void A1_RemoveFromChoosers(Chooser * c);
 
   // data
   // When components are added to the model, they get sequential ids.
@@ -435,6 +430,7 @@ class Model {
   // Which prohibitions are currently violated
   set<Prohibition *> violated_prohibitions_;
 
+  set<Chooser *> all_choosers_;
   // global chooser for constants
   Chooser * chooser_;
   // Parent chooser for picking numbers

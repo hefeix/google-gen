@@ -342,9 +342,11 @@ class Precondition : public Component {
   Rule * FindFeatureRule(Rule * target_rule) const;
   int GetNumSatisfactions() const { return num_satisfactions_;}
   const Pattern & GetPattern() const { return pattern_;}
-  LL GetDirectPatternEncodingLnLikelihood() const {
+  /*LL GetDirectPatternEncodingLnLikelihood() const {
     return direct_pattern_encoding_ln_likelihood_;
-  }
+    }*/
+  // The cost (including to the choosers) of encoding precondition. 
+  LL EncodingLnLikelihood() const;
 
   // TUPLE ENCODING STUFF
   // figures out what tuples cause the precondition under the tuple encoding.
@@ -566,9 +568,12 @@ class Rule : public Component{
   RuleType GetRuleType() const { return type_;}
   const Pattern & GetResult() const { return result_;}
   bool IsUniversalRule() const;
-  LL GetDirectPatternEncodingLnLikelihood() const {
+  /*LL GetDirectPatternEncodingLnLikelihood() const {
     return direct_pattern_encoding_ln_likelihood_;
-  }
+    }*/
+  // The likelihood of encoding the result of the rule (including choosers).
+  LL ResultEncodingLnLikelihood() const;
+
   const set<Rule *> & GetFeatures() const {
     return features_;
   }
