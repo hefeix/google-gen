@@ -56,6 +56,22 @@ void SetVerbosity(string function_name, int v);
 #define MOREWORK(x) if (max_work_now) {(*max_work_now)-=(x); \
     if (*max_work_now<0) return false;}
 
+#define RETURN_TRACK(x) { typeof(x) y = x; AddReturnValue(__FUNCTION__, __LINE__, ReturnValueToString(y)); return y; }
+
+template <class T>
+string ReturnValueToString(T t) {
+  stringstream s;
+  s << t;
+  return s.str();
+}
+
+template<>
+string ReturnValueToString(bool t);
+
+void AddReturnValue(string func, int line, string val);
+string FunctionReturnInfo(string func, bool verbose);
+string AllFunctionReturnInfo(bool verbose);
+
 // A simple timing class
 class Timer {
  public:
