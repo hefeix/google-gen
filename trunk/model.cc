@@ -615,6 +615,7 @@ Record Model::ModelInfo() const{
   r["required never happen"] = itoa(required_never_happen_.size());
   r["violated prohibitions"] = itoa(violated_prohibitions_.size());
   r["chooser"] = RecordToHTMLTable(chooser_->ChooserInfo(true));
+  r["return values"] = "<PRE>" + AllFunctionReturnInfo(true) + "</PRE>";
   return r;
 }
 

@@ -41,9 +41,9 @@ Optimizer::Optimizer(Model *model){
 bool Optimizer::CombineRules(int time_limit, string * comments) {
   time_t end_time = time(NULL) + time_limit;
   while (!MaybeCombineRules(comments)) {
-    if (time(NULL) >= end_time) return false;
+    if (time(NULL) >= end_time) RETURN_TRACK(false);
   }
-  return true;
+  RETURN_TRACK(true);
 }
 
 bool Optimizer::MaybeCombineRules(string * comments) {
@@ -57,7 +57,7 @@ bool Optimizer::MaybeCombineRules(string * comments) {
     ++p;
     if (p == index.end()) p = index.begin();
   }
-  if (p->second.size() < 2) return false;
+  if (p->second.size() < 2) RETURN_TRACK(false);
 
   // get rid of the postcondition ones, and pick one out of every rule represented more than once
   vector<SubRuleInfo> filtered;
@@ -75,7 +75,7 @@ bool Optimizer::MaybeCombineRules(string * comments) {
     }
   }
   
-  if (filtered.size() <2) return false;
+  if (filtered.size() <2) RETURN_TRACK(false);
   
   VLOG(0) << "Picked For Combination " << endl
 	  << TupleVectorToString(p->first) << endl;
@@ -84,7 +84,7 @@ bool Optimizer::MaybeCombineRules(string * comments) {
 
   // Do the combination
   TryCombineRules(p->first, filtered, comments);
-  return true;
+  RETURN_TRACK(true);
 }
 
 void Optimizer::TryCombineRules(Pattern lhs, 
@@ -243,25 +243,28 @@ bool Optimizer::FindRandomCandidateRule(CandidateRule *ret, Tactic tactic,
 					int time_limit, string * comments){
   time_t end_time = time(NULL) + time_limit;
   while (!MaybeFindRandomCandidateRule(ret, tactic, comments)){
-    if (time(NULL) >= end_time) return false;
+    if (time(NULL) >= end_time) RETURN_TRACK(false);
   }
-  return true;
+  RETURN_TRACK(true);
 }
 
 bool Optimizer::MaybeFindRandomCandidateRule(CandidateRule *ret, 
 					     Tactic tactic, string *comments){
   switch (tactic) {
   case NEW_RULE:
-    return MaybeFindRandomNewRule(ret, comments);
+    bool result = MaybeFindRandomNewRule(ret, comments);
+    RETURN_TRACK(result);
     break;
   case NEW_MANY_EXAMPLES_RULE:
-    return MaybeFindManyExamplesRule(ret, comments);
+    result = MaybeFindManyExamplesRule(ret, comments);
+    RETURN_TRACK(result);
     break;
   default:
-    return MaybeFindRandomVariantRule(ret, tactic, comments);
+    result = MaybeFindRandomVariantRule(ret, tactic, comments);
+    RETURN_TRACK(result);
     break;
   }
-  return false;
+  RETURN_TRACK(false);
 }
 TrueTuple * Optimizer::GetRandomTrueTuple(){
   TrueTuple *ret = model_->FindTrueTuple((model_->GetTupleIndex()->RandomTuple()));
@@ -357,9 +360,10 @@ bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
     *comments = "Specialization of " + CandidateRuleToString(cand);
     little_sub.Add(assignment->first, assignment->second);
     little_sub.Substitute(&cand);
-    return VetteCandidateRule(cand, ret,
-			      ConstantExpectationMaxWork(), 
-			      comments);
+    bool result = VetteCandidateRule(cand, ret,
+				     ConstantExpectationMaxWork(), 
+				     comments);
+    RETURN_TRACK(result);
   }
   case GENERALIZE_ONE: {
     int literal = -1;
@@ -378,7 +382,7 @@ bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
 	break;
       }
     }
-    if (literal == -1) return false; // we may have failed.
+    if (literal == -1) RETURN_TRACK(false); // we may have failed.
     set<int> variables = 
       Union(GetVariables(cand.first), GetVariables(cand.second));
     // Figure out what is the first unused variable.
@@ -391,20 +395,20 @@ bool Optimizer::MaybeFindRandomVariantRule(CandidateRule *ret, Tactic tactic,
     *comments = "Generalization of " + CandidateRuleToString(cand);
     little_sub.Add(literal, variable);
     little_sub.Substitute(&cand);
-    return VetteCandidateRule(cand, ret,
-			      ConstantExpectationMaxWork(), comments);    
+    RETURN_TRACK(VetteCandidateRule(cand, ret,
+			      ConstantExpectationMaxWork(), comments));
     break;
   }
   default:
     break;
   }
   CHECK(false);
-  return false;
+  RETURN_TRACK(false);
 }
 
 bool Optimizer::MaybeFindManyExamplesRule(CandidateRule *ret, string *comments){
   PatternBuilder pb(this);
-  if (!pb.TryInitializeFromSurprisingTuple()) return false;
+  if (!pb.TryInitializeFromSurprisingTuple()) RETURN_TRACK(false);
   
   // Log things here
   if (VERBOSITY >= 1) {
@@ -412,7 +416,7 @@ bool Optimizer::MaybeFindManyExamplesRule(CandidateRule *ret, string *comments){
   }
 
   uint num_clauses = 1; while (RandomFraction() < 0.7) num_clauses++;  
-  if (!pb.ExpandFully(num_clauses)) return false;
+  if (!pb.ExpandFully(num_clauses)) RETURN_TRACK(false);
 
   Pattern &p = pb.pattern_;
   Tuple dummy = p[0]; p[0] = p[p.size()-1];  p[p.size()-1] = dummy;
@@ -421,7 +425,7 @@ bool Optimizer::MaybeFindManyExamplesRule(CandidateRule *ret, string *comments){
   bool result = VetteCandidateRule(r, ret, ConstantExpectationMaxWork(), comments);
   if (!result) 
     VLOG(1) << "Vette failed for many examples" << endl;
-  return result;
+  RETURN_TRACK(result);
 }
 
 bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
@@ -489,7 +493,7 @@ bool Optimizer::MaybeFindRandomNewRule(CandidateRule *ret, string *comments){
   Tuple dummy = p[0]; p[0] = p[p.size()-1];  p[p.size()-1] = dummy;
   CandidateRule r = SplitOffLast(p);
   *comments = "NewRule";
-  return VetteCandidateRule(r, ret, ConstantExpectationMaxWork(), comments);
+  RETURN_TRACK(VetteCandidateRule(r, ret, ConstantExpectationMaxWork(), comments));
 }
 
 bool Optimizer::PatternBuilder::TryInitializeFromSurprisingTuple() {
@@ -532,9 +536,9 @@ bool Optimizer::PatternBuilder::TryInitializeFromSurprisingTuple() {
     pattern_.push_back(onlytuple);
     CollapseEquivalentVariables();
     CollapseConstantVariables();
-    return true;
+    RETURN_TRACK(true);
   }
-  return false;
+  RETURN_TRACK(false);
 }
 
 bool Optimizer::PatternBuilder::ExpandFully(uint size) {
@@ -544,9 +548,9 @@ bool Optimizer::PatternBuilder::ExpandFully(uint size) {
   if (pattern_.size() < size) {
     VLOG(0) << "ExpandFully failed at size:" << size
 	    << " Pattern " << TupleVectorToString(pattern_) << endl;
-    return false;
+    RETURN_TRACK(false);
   }
-  return true;
+  RETURN_TRACK(true);
 }
 
 bool Optimizer::PatternBuilder::TryExpandOnce() {
@@ -585,14 +589,14 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
   TupleIndex * ti = optimizer_->model_->GetTupleIndex();
   Tuple expansion_tuple;
   bool found = ti->GetRandomTupleContaining(&expansion_tuple, v_object_anchors, true);
-  if (!found) return false;
+  if (!found) RETURN_TRACK(false);
   
   // Make sure expansion tuple is earlier than the rule condition
   // TODO: maybe at top level sometimes skip this and try to reverse time
   const TrueTuple * expansion_tt = optimizer_->model_->GetTrueTuple(expansion_tuple);
   CHECK(expansion_tt);
   if (expansion_tt->GetTime() > target_time_) {
-    if (RandomFraction() < 1.0) return false;
+    if (RandomFraction() < 1.0) RETURN_TRACK(false);
   }
     
   // Can amortize this work but for now ...
@@ -602,7 +606,7 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
   subs_[0].Substitute(&sub_0_pattern);
   for (uint c=0; c<sub_0_pattern.size(); c++)
     if (sub_0_pattern[c] == expansion_tuple)
-      return false;
+      RETURN_TRACK(false);
 
   // Turn some of the constants into varialbes based on subs_[0]
   subs_[0].Reverse().Substitute(&expansion_tuple);  
@@ -633,7 +637,7 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
       break;
     }
   }
-  if (!any_good_generalization) return false;
+  if (!any_good_generalization) RETURN_TRACK(false);
   for (uint i=0; i<good_generalization.size(); i++) {
     if (good_generalization[i] == WILDCARD) {
       int var = Variable(subs_[0].FirstUnusedVariable());
@@ -651,7 +655,7 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
   }
 
   anchor_sets_tried_[anchors] = 0;
-  return true;
+  RETURN_TRACK(true);
 }
 
 void Optimizer::PatternBuilder::CollapseEquivalentVariables() {
@@ -763,7 +767,7 @@ FindSampling(const Pattern & p, SamplingInfo * result,
 	if (actual_num_results)
 	  *actual_num_results = num_results;
 	VLOG(1) << "Unsampled" << endl;
-	return true;
+	RETURN_TRACK(true);
       }
       // If sampled, don't accept too few results
       if (num_results < 5) continue;
@@ -791,16 +795,16 @@ FindSampling(const Pattern & p, SamplingInfo * result,
 	*actual_num_results = num_results;
       VLOG(1) << "Sampling clause " << p[sampling.position_].ToString() 
 	      << " d:" << (1/sampling.GetFraction()) << endl;
-      return true;
+      RETURN_TRACK(true);
     }
 
     if (all_take_too_long) {
       VLOG(1) << "Sampling failed at denom:" << denominator << endl;
-      return false;
+      RETURN_TRACK(false);
     }
   }
   VLOG(1) << "Sampling failed" << endl;
-  return false;
+  RETURN_TRACK(false);
 }
 
 
@@ -816,7 +820,7 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
        (Intersection(GetVariables(r.first), 
 		     GetVariables(r.second)).size()==0) ) {
     VLOG(1) << "Precondition and result disconnected" << endl;
-    return false;
+    RETURN_TRACK(false);
   }
 
   // Canonicalize 
@@ -831,11 +835,11 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   if (!FindSampling(Concat(r), &combined_sampling, max_work, &full_subs, 
 		    &estimated_num_firings, &actual_num_firings, NULL, NULL)) {
     VLOG(1) << "Couldn't find sampling for rule" << endl;
-    return false;
+    RETURN_TRACK(false);
   }
   if (estimated_num_firings > 5 * model_->GetNumTrueTuples()) {
     VLOG(1) << "Too many firings" << endl;
-    return false;
+    RETURN_TRACK(false);
   }  
   VLOG(1) << "Set total sampling actual_num_firings:" 
 	  << actual_num_firings << endl;
@@ -851,11 +855,11 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
 		    &estimated_num_satisfactions, 
 		    &actual_num_satisfactions, NULL, hint)) {
     VLOG(1) << "Couldn't find sampling for precondition" << endl;
-    return false;
+    RETURN_TRACK(false);
   }
   if (estimated_num_satisfactions > 2000000) {
     VLOG(1) << "Too many satisfactions" << endl;
-    return false;
+    RETURN_TRACK(false);
   }
   VLOG(1) << "Set precondition sampling actual_num_sat:" 
 	  << actual_num_satisfactions << endl;
@@ -967,7 +971,7 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
   LL total_ll = benefits + rule_encoding_ll + firing_ll + naming_ll;
   if (total_ll < LL(0)) {
     VLOG(1) << "Too useless, rejected" << endl;
-    return false;
+    RETURN_TRACK(false);
   }
   
   // remove boring variables, collapse equal variables, and remove 
@@ -1070,14 +1074,14 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
       && (recently_checked_[r] 
 	  >= model_->GetUtility())) {
     VLOG(1) << "Recently checked" << endl;
-    return false;
+    RETURN_TRACK(false);
   }
 
   CHECK(simplified_rule);
   *simplified_rule = r;
 
   VLOG(1) << "Candidate=" << CandidateRuleToString(r) << endl;
-  return true;
+  RETURN_TRACK(true);
 } 
 
 ComputationResult Optimizer::DependsOn(Component * dependent, 
@@ -1107,7 +1111,7 @@ ComputationResult Optimizer::DependsOn(Component * dependent,
   return RESULT_FALSE;
 }
 void Optimizer::TryRemoveFiring(Firing *f){
-  // if (f->IsEssential(10, 0) == RESULT_TRUE) return false;
+  // if (f->IsEssential(10, 0) == RESULT_TRUE) RETURN_TRACK(false);
   Rule * r = f->GetRule();
   f->Erase();
   if (!r->HasFiring() && !r->IsUniversalRule()) {
@@ -1409,7 +1413,7 @@ struct RuleSatTimeNode{
       Firing * f = (*run_t)->GetFirstCause();
       if (!f) {
 	VLOG(1) << "Didn't get first cause" << endl;
-	return false;
+	RETURN_TRACK(false);
       }
       RuleSat * rs = f->GetRuleSat();
       if (VERBOSITY >= 1) {
@@ -1423,17 +1427,17 @@ struct RuleSatTimeNode{
 	(*max_nodes)--;
 	if (*max_nodes<0) {
 	  VLOG(2) << "Maxnodes:" << *max_nodes;
-	  return false;
+	  RETURN_TRACK(false);
 	}
 	RuleSatTimeNode * child = AddChild(rs);
 	VLOG(2) << "Adding child for RuleSat " << rs->GetID() << endl;
 	if (!(child->ExpandBackTo(horizon, max_nodes))) {
 	  VLOG(2) << "Child expansion failed" << endl;
-	  return false;
+	  RETURN_TRACK(false);
 	}
       }    
     }
-    return true;
+    RETURN_TRACK(true);
   }
   void ExpandLinearly(int num_steps) {
     max_unrepresented_child_time_ = Time();
@@ -1466,13 +1470,13 @@ struct RuleSatTimeNode{
   bool SpeedUpToHappenBefore(RuleSatTimeNode * to_beat) {
     forall(run, children_){
       bool result = (*run)->SpeedUpToHappenBefore(to_beat);
-      if (!result) return false;
+      if (!result) RETURN_TRACK(false);
     }
     ComputeTime();
     to_beat->ComputeTime();
-    if (time_ < to_beat->time_) return true;
+    if (time_ < to_beat->time_) RETURN_TRACK(true);
     Time max_child_time = MaxChildTime();
-    if (max_child_time >= to_beat->time_) return false;
+    if (max_child_time >= to_beat->time_) RETURN_TRACK(false);
     // try speeding up this rule. (changing the standard delay) 
     EncodedNumber fast_enough;
     while (max_child_time + fast_enough >= to_beat->time_)
@@ -1484,7 +1488,7 @@ struct RuleSatTimeNode{
       to_beat->ComputeTime();
       if (time_ < to_beat->time_) {
 	VLOG(2) << "TIMECHANGE Rule:" << rule_->GetID() << " new delay:" << fast_enough.ToSortableString() << endl;
-	return true;
+	RETURN_TRACK(true);
       }
       delay_map_->SetStandardDelay(rule_, old_delay);      
     }
@@ -1495,10 +1499,10 @@ struct RuleSatTimeNode{
     to_beat->ComputeTime();
     if (time_ < to_beat->time_) {
       VLOG(2) << "NONSTANDARD TIMECHANGE Rule:" << rule_->GetID() << " nonstandard delay:" << fast_enough.ToSortableString() << endl;
-      return true;
+      RETURN_TRACK(true);
     }
     // cerr << "all efforts failed to speed up feature rulesat" << endl;
-    return false;
+    RETURN_TRACK(false);
   }
 };
 
@@ -1938,7 +1942,7 @@ bool Optimizer::FixTimesFixCircularDependencies(int time_limit) {
     bool result = model_->FixTimes();
     if (!result) {
       VLOG(0) << "FixTimes failed" << endl;
-      return false;
+      RETURN_TRACK(false);
     }
     if (model_->GetRequiredNeverHappen().size()) {
       VLOG(1) << "  explaining a required proposition" << endl;
@@ -1950,13 +1954,13 @@ bool Optimizer::FixTimesFixCircularDependencies(int time_limit) {
     }
     if (time(NULL) >= end_time) {
       VLOG(0) << "FixTimesFixCircularDependencies failed!!!" << endl;
-      return false;
+      RETURN_TRACK(false);
     }
   }
   model_->DeleteNeverHappeningComponents();
   CHECK(model_->GetRequiredNeverHappen().size() == 0);
   VLOG(1) << " end utility_=" << model_->GetUtility() << endl;
-  return true;
+  RETURN_TRACK(true);
   //if (absent_required_.size()){
   //  ToHTML("html");
   //  CHECK(absent_required_.size()==0);

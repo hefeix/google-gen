@@ -22,6 +22,48 @@
 #include <math.h>
 #include <sstream>
 
+// First string is function name
+// Second string is return value
+// Third int is line
+// Int is #of occurrences
+map<string, map<string, map<int, int> > > function_return_map;
+
+void AddReturnValue(string func, int line, string val) {
+  function_return_map[func][val][line]++;
+}
+
+string FunctionReturnInfo(string func, bool verbose) {
+  stringstream s;
+  forall(run_val, function_return_map[func]) {
+    int total = 0;
+    string rval = run_val->first;
+    stringstream detailed;
+    forall(run_line, run_val->second) {      
+      total += run_line->second;
+      if (verbose)
+	detailed << "   " << func << " line=" << run_line->first << " val=" << rval << " count=" << run_line->second << endl;
+    }
+    s << func << " val=" << rval << " total=" << total << endl;
+    if (verbose)
+      s << detailed.str();
+  }
+  return s.str();
+}
+
+string AllFunctionReturnInfo(bool verbose) {
+  string ret;
+  forall(run_func, function_return_map) {
+    ret += FunctionReturnInfo(run_func->first, verbose);
+    ret += "\n";
+  }
+  return ret;
+}
+
+template<> 
+string ReturnValueToString(bool t) {
+  if (t) return "true";
+  return "false";
+}
 
 int global_verbosity = 0;
 map<string, int> global_verbosity_map;
