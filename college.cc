@@ -24,9 +24,10 @@ map<int, int>        located_map;  // thing->location
 
 int sum_college_sizes = 0;
 
-// HERE
-map<int, int> c_difficulty;        // <college, difficulty>
+map<int, double> c_difficulty;     // <college, difficulty>
 map<int, int> c_size;              // <college, size>
+
+int RandomFriend(int person);
 
 uint32 Rand() {
   return (rand() / 73) + (rand() / 464 * 23431);
@@ -59,11 +60,11 @@ void MakeColleges(int num) {
     colleges.insert(next_object);
 
     // difficulty is 1-5
-    int difficulty = 1 + Rand() % 5;
+    double difficulty = RandDouble();
     c_difficulty[next_object] = difficulty;
 
-    // Size is 1-5
-    int size = 1 + Rand() % 5;
+    // Size is 0-4
+    int size = Rand() % 5;
     c_size[next_object] = size;
     sum_college_sizes += size;
 
@@ -85,6 +86,44 @@ int RandomCollegeBySize() {
       ret = *run;
       break;
     }
+  }
+  return ret;
+}
+
+int RandomCollegeByFriend(int person) {
+  int person2 = RandomFriend(person);
+  if (person2 == -1) return -1;
+  int ret = -1;
+  set<pair<int, int> >::iterator find =
+    applications.lower_bound(make_pair(person2, -1));
+  double num_seen = 0.0;
+  while ( (find != applications.end()) &&
+	  (find->first == person2) ) {
+    int college = find->second;
+    if (RandDouble() < 1/(num_seen+1)) {
+      ret = college;
+    }
+    num_seen += 1.0;
+    find++;
+  }
+  return ret;
+}
+
+int RandomStateCollegeBySize(int state) {
+  
+  // cout << "RSCBS state=" << state << endl;
+  int ret = -1;
+  set<pair<int, int> >::iterator find 
+    = located.lower_bound(make_pair(state, -1));
+  double num_seen = 0.0;
+  while ((find != located.end()) && (find->first == state)) {
+    if (colleges.find(find->second) != colleges.end()) {
+      int college_size = c_size[find->second];
+      if (RandDouble() < college_size/(num_seen+college_size))
+	ret = find->second;
+      num_seen += college_size;
+    }
+    find++;
   }
   return ret;
 }
@@ -172,8 +211,8 @@ void MakeFriends(int expected) {
       // Pick a friend of a friend
       int person2 = RandomFriend(*person);
       int person3 = RandomFriend(person2);
-      if ( (person2 > 0) && (person3 > 0) )
-	cout << "friend of friend\n";
+      // if ( (person2 > 0) && (person3 > 0) )
+      // cout << "friend of friend\n";
       AddFriend(person2, person3);
     }
   }
@@ -182,7 +221,7 @@ void MakeFriends(int expected) {
 void PickColleges(int expected) {
 
   // Every person chooses around num colleges to apply to ...
-  for (int c=0; c < expected * people.size() * 5; c++) {
+  for (int c=0; c < expected * people.size() * 3; c++) {
     if (!(c%100)) cout << "Step " << c << endl;
     RandomElement(person, people);
 
@@ -208,12 +247,15 @@ void PickColleges(int expected) {
     if (friend_choice < 0.1) {
       // Pick a random college
       college = RandomCollegeBySize();
+      if (college != -1) cout << "RANDOM COLLEGE\n";
     } else if (friend_choice < 0.4) {
       // Pick a college from state
-      //college = RandomStateCollegeBySize();
+      college = RandomStateCollegeBySize(located_map[*person]);
+      if (college != -1) cout << "STATE COLLEGE\n";
     } else {
       // Pick a friend's college
-      //college = RandomCollegeByFriend();
+      college = RandomCollegeByFriend(*person);
+      if (college != -1) cout << "FRIEND COLLEGE\n";
     }    
     if (college != -1)
       applications.insert(make_pair(*person, college));
@@ -230,7 +272,7 @@ void PickColleges(int expected) {
     }
 
     // did they get accepted
-    if (RandDouble() < (1.0/double(c_difficulty[run->second]))) {
+    if (RandDouble() < c_difficulty[run->second]) {
       acceptances.insert(make_pair(run->first, run->second));
       if (RandDouble() < 1.0/(seen+1)) {
 	attendance[run->first] = run->second;
@@ -256,20 +298,22 @@ void Output() {
     cout << "State state" << *state << endl;
   }
   
+  forall(college, colleges) {
+    cout << "College college" << *college
+	 << " sz: " << c_size[*college]
+	 << " diff: " << c_difficulty[*college] 
+	 << " state: state" << located_map[*college] << endl;
+  }
+
   forall(people, located) {
     cout << "Located state" << people->first
 	 << " person" << people->second << endl;
   }
 
   forall(friends, friendship) {
-    cout << "Friend " << friends->first << " " << friends->second << endl;
-  }
-
-  forall(college, colleges) {
-    cout << "College " << *college
-	 << " sz: " << c_size[*college]
-	 << " diff: " << c_difficulty[*college] 
-	 << " state: state" << located_map[*college] << endl;
+    cout << "Friend " 
+	 << " person" << friends->first 
+	 << " person" << friends->second << endl;
   }
 
   forall (app, applications) {
