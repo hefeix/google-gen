@@ -25,22 +25,12 @@
 
 #include <sys/time.h>
 #include "hash.h"
-#include <vector>
+#include "shorthand.h"
 #include <string>  
-#include <ext/hash_map>
-#include <ext/hash_set>
 #include <cstdio>
-#include <iostream>
 #include <cwctype>
-#include <map>
-#include <set>
 #include <sstream>
 
-#define OPERATORLESS operator <
-#define OPERATORLE operator <=
-#define OPERATOREQ operator ==
-#define OPERATORGT operator >
-#define OPERATORGE operator >=
 
 // For logging
 int GetVerbosity(string function);
@@ -49,9 +39,6 @@ void SetVerbosity(string function_name, int v);
 
 #define VERBOSITY (GetVerbosity(__FUNCTION__))
 #define VLOG(N) if (VERBOSITY >=N) cerr << __FUNCTION__ << ":" << __LINE__ << " "
-#define CHECK(cond) if(!(cond)) {cerr << "Check Failed" << endl; int *x=0; *x=0; }
-
-#define forall(A, B) for ( typeof((B).begin()) A = (B).begin(); A!=(B).end(); ++A )
 
 #define MOREWORK(x) if (max_work_now) {(*max_work_now)-=(x); \
     if (*max_work_now<0) return false;}
@@ -99,14 +86,8 @@ class Timer {
   uint64 *acc_;
 };
 
-typedef unsigned long long uint64;
-typedef unsigned long uint32;
-typedef long long int64;
-typedef long int32;
-typedef unsigned int uint;
-
-// magic to get hashing on strings to work 
 using namespace std;
+// magic to get hashing on strings to work 
 namespace __gnu_cxx{
   template <> class hash<string> {
   public:
@@ -123,7 +104,6 @@ namespace __gnu_cxx{
     }
   };
 };
-using namespace __gnu_cxx;
 
 // converting from numbers to their ascii representations.
 inline string itoa(int n) {
@@ -140,62 +120,6 @@ inline string dtoa(double d) {
 // read a line from a stream
 bool GetLine(istream & input, string * ret);
 
-/*
-The interface to sets and maps sucks rocks. Let's fix it.
-
-Old way: 
-if (m.find(foo) != m.end()){
-New way
-if (m % foo){
-
-Old way:
-map<Foo, Bar>::iterator look = m.find(foo);
-if (look != m.end()) {
-  Bar * bar = & look->second
-} else  ....
-
-New way:
-Bar * bar = m % foo;
-if (bar) { ... 
-
-*/
-
-template<class A, class B> const B * operator %(const map<A, B> & m, 
-						 const A & a){
-  typedef typeof(m.begin()) iter_type;
-  iter_type look = m.find(a);
-  if (look != m.end()) return &(look->second);
-  return 0;
-}
-template <class A, class B> const B * operator %(const hash_map<A, B> & m, 
-						 const A & a){
-  typedef typeof(m.begin()) iter_type;
-  iter_type look = m.find(a);
-  if (look != m.end()) return &(look->second);
-  return 0;
-}
-template <class A, class B> B * operator %(map<A, B> & m, const A & a){
-  typedef typeof(m.begin()) iter_type;
-  iter_type look = m.find(a);
-  if (look != m.end()) return &(look->second);
-  return 0;
-}
-template <class A, class B> B * operator %(hash_map<A, B> & m, const A & a){
-  typedef typeof(m.begin()) iter_type;
-  iter_type look = m.find(a);
-  if (look != m.end()) return &(look->second);
-  return 0;
-}
-template<class A> bool operator %(const set<A> & m, const A & a){
-  return m.find(a) != m.end();
-}
-template<class A> bool operator %(const hash_set<A> & m, const A & a){
-  return m.find(a) != m.end();
-}
-template<class A> bool operator %(const vector<A> & v, const A & a){
-  for (uint i=0; i<v.size(); i++) if (v[i]==a) return true;
-  return false;
-}
 // remove an item from a vector
 template<class A> vector<A> RemoveFromVector(const vector<A> & v, uint index){
   vector<A> ret;

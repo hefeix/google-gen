@@ -52,21 +52,34 @@ Prohibition * Model::AddProhibitionToSpec(Tuple t, vector<Tuple> exceptions){
   return p;
 }
 
+// Syntax:
+// [ Foo Bar Baz ]  - adds [ Foo Bar Baz ] as a required tuple
+// [ Foo Bar *Baz ] - adds [ Foo Bar * ] as a prohibition
+//                     and [ foo Bar Baz ] as a requirement
+// [ Foo Bar * ] - adds [ Foo Bar * ] as a prohibition.
+// Requirements are automatically added as exceptions to the prohibitions that
+// they violate, regardless of the order in which they are specified.
 void Model::ReadSpec(istream * input){
   Timer readspec_timer(__FUNCTION__, NULL);
   string w;
+  set<Tuple> all_required; // constant tuples to be added as requirements
+  set<Tuple> all_forbidden; // wildcard tuples to be added as prohibitions
   while ((*input) >> w) {
     if (w != "[") continue;
     string required = "[ ";
     string forbidden = "[ ";
-    bool any_wildcards = false;
+    bool has_required = true;
+    bool has_forbidden = false;
     while ((*input) >> w) {
       if (w == "]") break;
       if (w[0]=='*') {
-	CHECK(w.size() > 1);
-	any_wildcards = true;
-	required += w.substr(1) + " ";
+	has_forbidden = true;
 	forbidden += "* ";
+	if (w.size() > 1) {
+	  required += w.substr(1) + " ";
+	} else {
+	  has_required = false;
+	}
       } else {
 	required += w + " ";
 	forbidden += w + " ";
@@ -74,13 +87,25 @@ void Model::ReadSpec(istream * input){
     }
     required += "]";
     forbidden += "]";
-    Tuple r;
-    r.FromString(required);
-    AddRequirementToSpec(r);
-    if (any_wildcards) {
-      Tuple f;
-      f.FromString(forbidden);
-      AddProhibitionToSpec(f, vector<Tuple>(1, r));
+    if (has_required) {
+      all_required.insert(Tuple(required));
+    }
+    if (has_forbidden) {
+      all_forbidden.insert(Tuple(forbidden));
+    }
+  }
+  forall(run, all_forbidden) {
+    AddProhibitionToSpec(*run, vector<Tuple>());    
+  }
+  forall(run, all_required) {
+    Tuple tuple = *run;
+    AddRequirementToSpec(tuple);
+    for (GeneralizationIterator run_g(tuple); !run_g.done(); ++run_g) {
+      set<Prohibition *> * prohibitions 
+	= prohibition_index_ % run_g.Current();
+      if (prohibitions) forall(run_p, *prohibitions) {
+	(*run_p)->L1_AddException(tuple);
+      }
     }
   }
 }
