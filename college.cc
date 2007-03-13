@@ -274,7 +274,7 @@ void PickColleges(int expected) {
     // did they get accepted
     if ( (Rand() % 10) <= c_difficulty[run->second]) {
       acceptances.insert(make_pair(run->first, run->second));
-      if (RandDouble() < 1.0/(seen+1)) {
+      if (RandDouble() < (1.0/(seen+1.0)) ) {
 	attendance[run->first] = run->second;
 	//cout << "ACCEPTED AND ATTENDED " 
 	//     << "person " << run->first 
@@ -283,9 +283,7 @@ void PickColleges(int expected) {
 	//cout << "DECLINED" << endl;
       }
       seen += 1.0;
-    } else {
-      // cout << "REJECTED" << endl;
-    }
+    } 
   }
 }
 
@@ -304,7 +302,9 @@ void Output() {
   */
   
   cout << "[ Friend * * ]" << endl;
-  
+  cout << "[ Applied * * ]" << endl;
+  cout << "[ Accepted * * ]" << endl;
+
   forall(college, colleges) {
     cout << "[ Size college" << *college << " *" << c_size[*college] << " ]" << endl;
     cout << "[ Difficulty college" << *college << " *" << c_difficulty[*college] << " ]" << endl;
@@ -326,13 +326,14 @@ void Output() {
   }
 
   forall (app, applications) {
-    /*
-    cout << "Applied person" << app->first
-    	 << " college" << app->second;
-    if (acceptances.find(*app) != acceptances.end())
-      cout << " ACCEPTED" << endl;
-    else cout << " DENIED" << endl;
-    */
+    cout << "[ Applied person" << app->first
+    	 << " college" << app->second << " ]" << endl;
+
+    if (acceptances.find(make_pair(app->first, app->second) )
+	!= acceptances.end()) {
+      cout << "[ Accepted person" << app->first
+	   << " college" << app->second << " ]" << endl;
+    }
 
     if (attendance[app->first] == app->second) {
       cout << "[ Attended person" << app->first
@@ -348,20 +349,20 @@ int main(int argc, void ** argv) {
   // cout << RandDouble() << " " << RandDouble() << endl;
 
   // x states
-  MakeStates(4);
+  MakeStates(5);
 
   // x people
-  MakePeople(150);
+  MakePeople(200);
 
   // 1/x deleted from friends each step
-  MakeFriends(6);
+  MakeFriends(8);
 
   // x colleges
-  MakeColleges(30);
+  MakeColleges(50);
 
   // Pick a colleges for people
   // Person picks x colleges to apply to
-  PickColleges(5);
+  PickColleges(8);
 
   Output();
   return 0;
