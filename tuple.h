@@ -38,6 +38,7 @@ struct Tuple{
   vector <int> terms_;
   Tuple() {}
   Tuple(const Tuple & o) { terms_ = o.terms_; }
+  Tuple(string s) { FromString(s);}
   uint size() const { return terms_.size(); }
   // A tuple can be represented as a string for human readability and 
   // writablility.  The terms are converted by the LexiconWithVariables LEXICON
