@@ -24,7 +24,7 @@ map<int, int>        located_map;  // thing->location
 
 int sum_college_sizes = 0;
 
-map<int, double> c_difficulty;     // <college, difficulty>
+map<int, int> c_difficulty;     // <college, difficulty>
 map<int, int> c_size;              // <college, size>
 
 int RandomFriend(int person);
@@ -60,7 +60,7 @@ void MakeColleges(int num) {
     colleges.insert(next_object);
 
     // difficulty is 1-5
-    double difficulty = RandDouble();
+    int difficulty = Rand() % 10;
     c_difficulty[next_object] = difficulty;
 
     // Size is 0-4
@@ -178,7 +178,7 @@ void MakeFriends(int expected) {
   
   int num_friends = 0;
   for (int c=0; c<expected * people.size() * 2; c++) {
-    if (!(c%100)) cout << "Step " << c << endl;
+    // if (!(c%100)) cout << "Step " << c << endl;
     RandomElement(person, people);
 
     // Lose some friends
@@ -222,7 +222,7 @@ void PickColleges(int expected) {
 
   // Every person chooses around num colleges to apply to ...
   for (int c=0; c < expected * people.size() * 3; c++) {
-    if (!(c%100)) cout << "Step " << c << endl;
+    // if (!(c%100)) cout << "Step " << c << endl;
     RandomElement(person, people);
 
     // Lose some applications
@@ -247,15 +247,15 @@ void PickColleges(int expected) {
     if (friend_choice < 0.1) {
       // Pick a random college
       college = RandomCollegeBySize();
-      if (college != -1) cout << "RANDOM COLLEGE\n";
+      // if (college != -1) cout << "RANDOM COLLEGE\n";
     } else if (friend_choice < 0.4) {
       // Pick a college from state
       college = RandomStateCollegeBySize(located_map[*person]);
-      if (college != -1) cout << "STATE COLLEGE\n";
+      // if (college != -1) cout << "STATE COLLEGE\n";
     } else {
       // Pick a friend's college
       college = RandomCollegeByFriend(*person);
-      if (college != -1) cout << "FRIEND COLLEGE\n";
+      // if (college != -1) cout << "FRIEND COLLEGE\n";
     }    
     if (college != -1)
       applications.insert(make_pair(*person, college));
@@ -272,7 +272,7 @@ void PickColleges(int expected) {
     }
 
     // did they get accepted
-    if (RandDouble() < c_difficulty[run->second]) {
+    if ( (Rand() % 10) <= c_difficulty[run->second]) {
       acceptances.insert(make_pair(run->first, run->second));
       if (RandDouble() < 1.0/(seen+1)) {
 	attendance[run->first] = run->second;
@@ -290,6 +290,9 @@ void PickColleges(int expected) {
 }
 
 void Output() {
+  
+  /*
+
   forall(person, people) {
     cout << "Person person" << *person << endl;
   }
@@ -297,35 +300,43 @@ void Output() {
   forall(state, states) {
     cout << "State state" << *state << endl;
   }
+
+  */
+  
+  cout << "[ Friend * * ]" << endl;
   
   forall(college, colleges) {
-    cout << "College college" << *college
-	 << " sz: " << c_size[*college]
-	 << " diff: " << c_difficulty[*college] 
-	 << " state: state" << located_map[*college] << endl;
+    cout << "[ Size college" << *college << " *" << c_size[*college] << " ]" << endl;
+    cout << "[ Difficulty college" << *college << " *" << c_difficulty[*college] << " ]" << endl;
   }
 
-  forall(people, located) {
-    cout << "Located state" << people->first
-	 << " person" << people->second << endl;
+  forall(things, located) {
+    cout << "[ Located ";
+    if (people.find(things->second) != people.end())
+      cout << "person" << things->second;
+    else 
+      cout << "college" << things->second;
+    cout << " *state" << things->first << " ]" << endl;
   }
 
   forall(friends, friendship) {
-    cout << "Friend " 
-	 << " person" << friends->first 
-	 << " person" << friends->second << endl;
+    cout << "[ Friend " 
+	 << "person" << friends->first 
+	 << " person" << friends->second << " ]" << endl;
   }
 
   forall (app, applications) {
+    /*
     cout << "Applied person" << app->first
-	 << " college" << app->second;
+    	 << " college" << app->second;
     if (acceptances.find(*app) != acceptances.end())
       cout << " ACCEPTED" << endl;
     else cout << " DENIED" << endl;
+    */
 
     if (attendance[app->first] == app->second) {
-      cout << "Attended person" << app->first
-	   <<" college" << app->second << endl;
+      cout << "[ Attended person" << app->first
+	   <<" *college" << app->second << " ]" << endl;
     }
   }
 
@@ -334,7 +345,7 @@ void Output() {
 int main(int argc, void ** argv) {
   srand ( time(NULL) );
 
-  cout << RandDouble() << " " << RandDouble() << endl;
+  // cout << RandDouble() << " " << RandDouble() << endl;
 
   // x states
   MakeStates(4);
