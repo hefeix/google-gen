@@ -1102,6 +1102,31 @@ Record Precondition::RecordForDisplaySubclass(bool verbose) const{
   r["work"] = itoa(search_tree_->GetWork());
   return r;
 }
+string Rule::SatAndFiringTable() const {
+  string ret;
+  int total_sats = 0;
+  ret += "<table border=1><tr><td>Features</td><td>Sats</td><td>FF</td></tr>";
+  forall(run, first_firing_counts_) {
+    ret += "<tr><td>";
+    forall(run_r, run->first) {
+      Rule * feature_rule = *run_r;
+      ret += feature_rule->HTMLLink(itoa(feature_rule->id_)) + " ";      
+    }
+    ret += "</td><td>" + itoa(run->second.first) + "</td><td>"
+      + itoa(run->second.second) + "</td></tr>";
+    total_sats += run->second.first;
+  }
+  if (first_firing_counts_.size() > 1) {
+    ret += "<tr><td colspan=3> ---------- </td></tr>";
+    ret += "<tr><td></td><td>" + itoa(total_sats) + "</td><td>" 
+      + itoa(num_first_firings_) + "</td></tr>";
+  }
+
+  ret += "</table><br>AF: " + itoa(num_additional_firings_)
+    + "<br>ND: " + itoa(precondition_->num_satisfactions_-total_sats);
+  
+  return ret;
+}
 Record Rule::RecordForDisplaySubclass(bool verbose) const{
   Record r;
   r["Rule"] = ImplicationString();
@@ -1111,11 +1136,7 @@ Record Rule::RecordForDisplaySubclass(bool verbose) const{
       RecordToHTMLTable(run->second->ChooserInfo(verbose))
       + "<br>";
   }
-  r["f/ff/af/s"] = 
-    "f " + itoa(NumFirings()) 
-    + "<br>ff " + itoa(NumFirstFirings())
-    + "<br>af " + itoa(num_additional_firings_) 
-    + "<br>s " + itoa(precondition_->num_satisfactions_); 
+  r["s/f"] = SatAndFiringTable();
   r["dpe LL"] = ResultEncodingLnLikelihood().ToString();
   r["prec."] = delay_.ToSortableString();
   r["pat."] = precondition_->HTMLLink(itoa(precondition_->id_));
