@@ -535,6 +535,7 @@ class Rule : public Component{
   ComponentType Type() const;
   Record RecordForDisplaySubclass(bool verbose) const;
   Record RecordForStorageSubclass() const;
+  string SatAndFiringTable() const;
   vector<Component *> TemporalDependents() const;
   vector<Component *> StructuralDependents() const;
   vector<vector<Component *> > TemporalCodependents() const;
