@@ -23,6 +23,7 @@
 
 enum ObjectType {
   FLAKE,
+  KEYWORD,
   VARIABLE,
   TUPLE,
   BOOLEAN,
@@ -31,12 +32,31 @@ enum ObjectType {
   ESCAPE,
   ERRORTYPE,
 };
+string ObjectTypeName(ObjectType t) {
+  switch(t) {
+  case FLAKE: return "FLAKE";
+  case KEYWORD: return "KEYWORD";
+  case VARIABLE: return "VARIABLE";
+  case TUPLE: return "TUPLE";
+  case BOOLEAN: return "BOOLEAN";
+  case INTEGER: return "INTEGER";
+  case REAL: return "REAL";
+  case ESCAPE: return "ESCAPE";
+  case ERRORTYPE: return "ERRORTYPE";
+  default: CHECK(false); return "ERROR";
+  }
+}
 
 // There will exist no two identical ObjectDefinition objects.
 struct ObjectDefinition {
   virtual ObjectType type() const = 0;
   virtual string ToString() const {
     return "ERROR";
+  }
+  virtual ~ObjectDefinition(){}
+  string ToStringVerbose() const {
+    return "[" + ObjectTypeName(type()) + " rc=" 
+      + itoa(reference_count_) + "] " + ToString(); 
   }
   int reference_count_;
   ObjectDefinition() {
@@ -61,7 +81,7 @@ class Object {
     def_ = NULL;
     *this = o;
   }
-  ~Object() {
+  virtual ~Object() {
     PointTo(NULL);
   };
   ObjectType type() const { 
@@ -72,6 +92,8 @@ class Object {
   }
   string ToString() const 
   { if (def_) return def_->ToString(); return "__NULL__"; }
+  string ToStringVerbose() const 
+  { if (def_) return def_->ToStringVerbose(); return "__NULL__"; }
 
  private:
   ObjectDefinition * def_;
@@ -140,9 +162,13 @@ class SpecificObject : public Object {
       }
 };
 
+istream & operator >>(istream & input, Object & o);
 
 typedef SpecificDefinition<FLAKE, string> FlakeDefinition;
 typedef SpecificObject<FLAKE, string> Flake;
+
+typedef SpecificDefinition<KEYWORD, string> KeywordDefinition;
+typedef SpecificObject<KEYWORD, string> Keyword;
 
 typedef SpecificDefinition<VARIABLE, int> VariableDefinition;
 typedef SpecificObject<VARIABLE, int> Variable;
