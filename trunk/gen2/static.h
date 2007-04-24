@@ -26,10 +26,11 @@ struct Statement {
 };
 
 struct OnStatement : public Statement {
-  Object pattern_;
+  Pattern pattern_;
   Statement * child_;
 };
 
+struct RepeatStatement : 
 struct ParallelStatement : public Statement {
   set<Statement *> children_;
 };
@@ -77,12 +78,36 @@ struct BinaryChoice : public Expression {
   Expression * chooser_;  
 };
 
+struct FlakeChoice : public Expression { 
+  Expression * chooser_;
+};
+
 struct SubstituteExpression : public Expression {
   Expression * arg_;
 };
 
 struct ConstantExpression : public Expression { 
   Object object_;
+};
+
+struct FunctionExpression : pubic Expression {
+  Keyword function_;
+  vector<Expression *> args_;
+};
+
+// Returns the sum of var_ over all matches of pattern_
+struct SumExpression : public Expression {
+  Pattern pattern_;
+  Variable var_;
+};
+
+// Returns an integer - the number of satisfactions
+struct CountExpresison : public Expression { 
+  Pattern pattern_;
+};
+
+struct RandomBoolExpression : public Expression { 
+  Expression ln_likelihood_;
 };
 
 #endif

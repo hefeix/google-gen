@@ -1,10 +1,10 @@
 # This defines the compiler and standard ways to use it
 CXX = g++
-CXXFLAGS = -Wall -Wno-deprecated -O
+CXXFLAGS = -Wall -Wno-deprecated -g
 CXXMOSTFLAGS = -Wall -Wno-deprecated
 
 # These are the Gen sources, and computed object and header files
-SRC = objects.cc hash.cc util.cc changelist.cc 
+SRC = objects.cc hash.cc util.cc changelist.cc tuple.cc
 INC = $(addsuffix .h, $(basename $(SRC)))
 OBJ = $(addsuffix .o, $(basename $(SRC)))
 

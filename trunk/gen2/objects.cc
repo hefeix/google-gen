@@ -1,27 +1,32 @@
 #include <iostream>
 #include "objects.h"
 
+Keyword WILDCARD;
+
+void InitKeywords(){
+  WILDCARD = Keyword::Make("*");  
+};
+
+// There must be some black magic going on here, but the compiler is happy.
 template<ObjectType OT, class D>
-map<D, SpecificDefinition<OT, D> *> SpecificDefinition<OT, D>::unique_;
-
-//template<ObjectType OT, class D>
-//map<string, SpecificDefinition<FLAKE, string> *> SpecificDefinition<FLAKE, string>::unique_;
+map<D, class SpecificObject<OT, D>::Definition *> 
+SpecificObject<OT, D>::unique_;
 
 template<>
-string FlakeDefinition::ToStringSpecific(bool verbose) const { return data_; }
+string Flake::Definition::ToStringSpecific(bool verbose) const { return data_; }
 
 template<>
-string KeywordDefinition::ToStringSpecific(bool verbose) const { return data_; }
+string Keyword::Definition::ToStringSpecific(bool verbose) const { return data_; }
 
 template<>
-string VariableDefinition::ToStringSpecific(bool verbose) const { 
-  if (data_ < 26) 
+string Variable::Definition::ToStringSpecific(bool verbose) const { 
+  if (data_ < 26)
     return string() + (char('a' + data_));
   return "v" + itoa(data_);
 }
 
 template<>
-string TupleDefinition::ToStringSpecific(bool verbose) const {
+string OTuple::Definition::ToStringSpecific(bool verbose) const {
   string ret = "(";
   for (uint i=0; i<data_.size(); i++) {
     ret += data_[i].ToString(verbose);
@@ -32,17 +37,29 @@ string TupleDefinition::ToStringSpecific(bool verbose) const {
 }
 
 template<>
-string BooleanDefinition::ToStringSpecific(bool verbose) const {
+string OMap::Definition::ToStringSpecific(bool verbose) const {
+  if (data_.size()==0) return ":";
+  string ret = "[";
+  forall(run, data_) {
+    if (run != data_.begin()) ret += " ";
+    ret += run->first.ToString(verbose) + ":" + run->second.ToString(verbose);
+  }
+  ret += "]";
+  return ret;
+}
+
+template<>
+string Boolean::Definition::ToStringSpecific(bool verbose) const {
   return data_?"true":"false";
 }
 
 template<>
-string IntegerDefinition::ToStringSpecific(bool verbose) const {
+string Integer::Definition::ToStringSpecific(bool verbose) const {
   return itoa(data_);
 }
 
 template<>
-string RealDefinition::ToStringSpecific(bool verbose) const {
+string Real::Definition::ToStringSpecific(bool verbose) const {
   string ret = dtoa(data_);
   if (ret.find('.')==string::npos && ret.find('e')==string::npos) 
     ret += ".0";
@@ -50,7 +67,7 @@ string RealDefinition::ToStringSpecific(bool verbose) const {
 }
 
 template<>
-string EscapeDefinition::ToStringSpecific(bool verbose) const {
+string Escape::Definition::ToStringSpecific(bool verbose) const {
   return "\'" + data_.ToString();
 }
 
@@ -105,17 +122,38 @@ istream & operator >>(istream & input, Object & o){
   EatCommentsAndWhitespace(input);
   char firstchar;
   if (!(input >> firstchar)) return input;
-  if (IsOpenEnclosure(firstchar)) { // it's a tuple;
-    input >> ws;
+  if (firstchar == ':') {
+    o = OMap::Make(map<Object, Object>());
+    return input;
+  }
+  if (IsOpenEnclosure(firstchar)) {
+    bool ismap = false;
+    bool isfirst = true;
+    map<Object, Object> m;
     vector<Object> v;
-    Object element;
+    Object key;
+    Object value;
+    EatCommentsAndWhitespace(input);
     while (input.peek() != MatchingCloseEnclosure(firstchar)) {
-      CHECK(input >> element);
-      v.push_back(element);
+      CHECK(input >> key);
+      EatCommentsAndWhitespace(input);
+      if (input.peek()==':') {
+	if (isfirst) ismap = true;
+	else CHECK(ismap);
+	input.get();
+	EatCommentsAndWhitespace(input);
+	CHECK(input >> value);
+	m[key] = value;
+      } else {
+	CHECK(!ismap);
+	v.push_back(key);
+      }
+      isfirst = false;
       EatCommaAndCommentsAndWhitespace(input);
     }
     input.get();
-    o = Tuple::Make(v);
+    if (ismap) o = OMap::Make(m);
+    else o = OTuple::Make(v);
     return input;
   } 
   if (firstchar =='\'') { // it's an escape
@@ -124,6 +162,10 @@ istream & operator >>(istream & input, Object & o){
     o = Escape::Make(sub);
     return input;
   } 
+  if (firstchar == '*') {
+    o = WILDCARD;
+    return input;
+  }
   if (IsBeginningNumericChar(firstchar) ) {
     // it's an integer/real    
     string s;
@@ -175,13 +217,19 @@ istream & operator >>(istream & input, Object & o){
       o = Boolean::Make(false);
       return input;
     }
+    if (s=="null") {
+      o = NULL;
+      return input;
+    }
     o = Keyword::Make(s);
     return input;
   }
   CHECK(false);
+  return input;
 }
 
 int main() {
+  InitKeywords();
   Object o;
   vector<Object> v;
   while (cin >> o) {
