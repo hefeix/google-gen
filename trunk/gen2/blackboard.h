@@ -17,6 +17,8 @@
 // Author: Georges Harik and Noam Shazeer
 
 #include "objects.h"
+#include "numbers.h"
+#include "changelist.h"
 
 struct Blackboard;
 
@@ -31,7 +33,7 @@ struct Posting {
   Time time_;
   Blackboard * blackboard_;
 };
-
+/*
 struct QueryUpdate {
   int satisfaction_delta_;
   vector<Map> new_satisfactions_;
@@ -51,7 +53,7 @@ class Query {
   bool need_substitutions_;
   void callbackfunction(QueryUpdate *) *
 };
-
+*/
 
 /*bool operator <=(const Posting & p1, const Posting & p2) {
   if (p1.time_ < p2.time_) return true;
@@ -60,11 +62,14 @@ class Query {
   }*/
 
 struct TupleInfo {
-  TupleInfo(Blackboard *blackboard, Posting *first_posting);  
+  TupleInfo(Posting *first_posting, Blackboard *blackboard);  
   void L1_Erase();
   OTuple tuple_;
   set<pair<Time, Posting *> > postings_; // all postings that make it true.
-  // Time first_; // time it first comes true.
+  Time FirstTime() const;
+  void ChangeTimesInIndexRows(Time old_first_time, Time new_first_time);
+  void L1_AddPosting(Posting *p);
+  void L1_RemovePosting(Posting *p);
   Blackboard * blackboard_;
 };
 
@@ -74,13 +79,52 @@ struct WTSubscription {
   virtual void TimeChange(OTuple t, Time old_time, Time new_time) {}
   virtual void AddTuple(OTuple t, Time new_time) {}
   virtual void RemoveTuple(OTuple t, Time old_time) {}
-  virtual void TimeMatters() { return false;}
+  virtual bool TimeMatters() { return false;}
+};
+
+struct LoggingSubscription : public WTSubscription {
+  OTuple tuple_;
+  bool time_matters_;
+  LoggingSubscription(OTuple tuple, bool time_matters)
+    :tuple_(tuple), time_matters_(time_matters) {}
+  bool TimeMatters() { return time_matters_;}
+
+  OTuple WildcardTuple() { return tuple_;}
+  string ToString() {
+    return "LoggingSubscription(" + tuple_.ToString() + ")";
+  }
+  void TimeChange(OTuple t, Time old_time, Time new_time) { 
+    cout << ToString() << " TimeChange " << t << " " 
+	 << old_time.ToSortableString()
+	 << " -> " << new_time.ToSortableString() << endl;
+  }
+  void AddTuple(OTuple t, Time new_time) {
+    cout << ToString() << " AddTuple "<< t << " time=" 
+	 << new_time.ToSortableString()
+	 << endl;
+  }
+  void RemoveTuple(OTuple t, Time old_time) {
+    cout << ToString() << " RemoveTuple "<< t << " time=" 
+	 << old_time.ToSortableString()
+	 << endl;
+  }
 };
 
 struct IndexRow {
-  IndexRow(Tuple wildcard_tuple, Blackboard *blackboard);
+  IndexRow(OTuple wildcard_tuple, Blackboard *blackboard);
   void L1_Erase();
   OTuple wildcard_tuple_;
+  void ChangeTupleTime(TupleInfo *tuple_info, Time old_time,
+		       Time new_time);
+  void AddTuple(TupleInfo * tuple_info); 
+  // Must be called before deleting the posting in the tupleinfo.
+  // otherwise the time is wrong.
+  void RemoveTuple(TupleInfo * tuple_info);
+  void AddWTSubscription(WTSubscription *sub);
+  void RemoveWTSubscription(WTSubscription *sub);
+  // erases this row if there are no subscriptions or tuples.
+  void EraseIfEmpty();
+
   // contains (first time, tupleinfo *) for each tuple on the blackboard
   // that matches.
   set<pair<Time, TupleInfo *> > tuples_;
@@ -93,19 +137,31 @@ struct IndexRow {
 
 class Blackboard {
  public:
-  Blackboard() {}
-  void AddWTSubscription(WTSubscription *sub);
-  void RemoveWTSubscription(WTSubscription *sub);
+  friend class IndexRow;
+  friend class TupleInfo;
+  friend class WTSubscription;
+  friend class Posting;
 
-  void AddPosting(Posting *p);
-  void RemovePosting(Posting *p);
+  Blackboard(Changelist *cl);
 
-  void CreateTupleInfo(Posting *p) {
-  }
-  
+  void L1_AddWTSubscription(WTSubscription *sub);
+  void L1_RemoveWTSubscription(WTSubscription *sub);
+
+  void L1_AddPosting(Posting *p);
+  void L1_RemovePosting(Posting *p);
+
+  static void Shell();
+
+ private:
+  // returns null on failure
+  IndexRow * GetIndexRow(OTuple wildcard_tuple);
   IndexRow * GetAddIndexRow(OTuple wildcard_tuple);
+
+  TupleInfo * GetTupleInfo(OTuple tuple);
+
 
   map<OTuple, IndexRow *> index_;
   map<OTuple, TupleInfo *> tuple_info_;
   Changelist *changelist_;
+
 };

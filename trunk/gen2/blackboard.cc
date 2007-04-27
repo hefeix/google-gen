@@ -17,60 +17,62 @@
 // Author: Georges Harik and Noam Shazeer
 
 #include "blackboard.h"
+#include "tuple.h"
 
-Posting::Posting(Blackboard *blackboard,OTuple tuple, Time time)
-  :blackboard_(blackboard), tuple_(tuple), time_(time){
+Posting::Posting(OTuple tuple, Time time, Blackboard *blackboard)
+  :tuple_(tuple), time_(time), blackboard_(blackboard){
   blackboard_->changelist_->Creating(this);
-  blackboard_->AddPosting(this);
+  blackboard_->L1_AddPosting(this);
 }
-Posting::L1_Erase(){
-  blackboard_->RemovePosting(this);
+void Posting::L1_Erase(){
+  blackboard_->L1_RemovePosting(this);
   blackboard_->changelist_->Destroying(this);
 }
-TupleInfo::TupleInfo(Blackboard *blackboard, Posting *first_posting)
-  :blackboard_(blackboard_), tuple_(tuple) {
+TupleInfo::TupleInfo(Posting *first_posting, Blackboard *blackboard)
+  :tuple_(first_posting->tuple_), blackboard_(blackboard) {
   blackboard_->changelist_->Creating(this);
   blackboard_->changelist_->Make
     (new MapInsertChange<OTuple, TupleInfo *>
-     (blackboard_->tuple_info_, tuple_, this));
+     (&blackboard_->tuple_info_, tuple_, this));
   blackboard_->changelist_->Make
     (new SetInsertChange<pair<Time, Posting *> >
      (&postings_, make_pair(first_posting->time_, first_posting)));
-  for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.Done(); ++g_iter){
+  for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.done(); ++g_iter){
     const Tuple & generalized = g_iter.Current();
-    IndexRow * ir = blackboard_->GetAddIndexRow(generalized);
+    IndexRow * ir = blackboard_->GetAddIndexRow(OTuple::Make(generalized));
     ir->AddTuple(this);
   }
 }
-TupleInfo::L1_Erase() {
+void TupleInfo::L1_Erase() {
   // remove me from index rows and blackboard.
-  for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.Done(); ++g_iter){
+  for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.done(); ++g_iter){
     const Tuple & generalized = g_iter.Current();
-    IndexRow * ir = blackboard_->GetIndexRow(Generalized);
+    IndexRow * ir = blackboard_->GetIndexRow(OTuple::Make(generalized));
     CHECK(ir);
     ir->RemoveTuple(this);
   }
   blackboard_->changelist_->Make
     (new MapRemoveChange<OTuple, TupleInfo *>
-     (blackboard_->tuple_info_, tuple_, this));
+     (&blackboard_->tuple_info_, tuple_));
   blackboard_->changelist_->Destroying(this);
 }
 Time TupleInfo::FirstTime() const {
   CHECK(postings_.size());
   return postings_.begin()->first;
 }
-TupleInfo::ChangeTimesInIndexRows(Time old_first_time, Time new_first_time) {
+void TupleInfo::ChangeTimesInIndexRows(Time old_first_time, 
+				       Time new_first_time) {
   if (new_first_time != old_first_time) {
-    for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.Done(); 
+    for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.done(); 
 	 ++g_iter){
       const Tuple & generalized = g_iter.Current();
-      IndexRow * ir = blackboard_->GetIndexRow();
+      IndexRow * ir = blackboard_->GetIndexRow(OTuple::Make(generalized));
       CHECK(ir);
       ir->ChangeTupleTime(this, old_first_time, new_first_time);
     }    
   }
 }
-TupleInfo::L1_AddPosting(Posting *p) {
+void TupleInfo::L1_AddPosting(Posting *p) {
   Time old_first_time = FirstTime();
   blackboard_->changelist_->Make
     (new SetInsertChange<pair<Time, Posting *> >
@@ -78,7 +80,7 @@ TupleInfo::L1_AddPosting(Posting *p) {
   Time new_first_time = FirstTime();
   ChangeTimesInIndexRows(old_first_time, new_first_time);
 }
-TupleInfo::L1_RemovePosting(Posting *p){
+void TupleInfo::L1_RemovePosting(Posting *p){
   if (postings_.size()==1) {
     L1_Erase();
     return;
@@ -91,22 +93,158 @@ TupleInfo::L1_RemovePosting(Posting *p){
   ChangeTimesInIndexRows(old_first_time, new_first_time);
 }
 
-Blackboard::L1_AddPosting(Posting *p){
-  TupleInfo *ti = GetTupleInfo(p->tuple_);
-  if (ti) {
-    ti->AddPosting(p);
-    return;
+IndexRow::IndexRow(OTuple wildcard_tuple, Blackboard *blackboard)
+  :wildcard_tuple_(wildcard_tuple), blackboard_(blackboard){  
+  blackboard_->changelist_->Creating(this);
+  blackboard_->changelist_->Make
+    (new MapInsertChange<OTuple, IndexRow *>
+     (&blackboard_->index_, wildcard_tuple_, this) );
+}
+void IndexRow::L1_Erase() {
+  blackboard_->changelist_->Make
+    (new MapRemoveChange<OTuple, IndexRow *>
+     (&blackboard_->index_, wildcard_tuple_) );
+  blackboard_->changelist_->Destroying(this);
+}
+void IndexRow::ChangeTupleTime(TupleInfo *tuple_info, 
+			       Time old_time, Time new_time){
+  blackboard_->changelist_->Make
+    (new SetRemoveChange<pair<Time, TupleInfo *> >
+     (&tuples_, make_pair(old_time, tuple_info)));
+  blackboard_->changelist_->Make
+    (new SetInsertChange<pair<Time, TupleInfo *> >
+     (&tuples_, make_pair(new_time, tuple_info)));
+  forall(run, time_matters_subscriptions_) {
+    (*run)->TimeChange(tuple_info->tuple_, old_time, new_time);
   }
-  new TupleInfo(this, p);
+}
+void IndexRow::AddTuple(TupleInfo *tuple_info) {
+  Time time = tuple_info->FirstTime();
+  blackboard_->changelist_->Make
+    (new SetInsertChange<pair<Time, TupleInfo *> >
+     (&tuples_, make_pair(time, tuple_info)));
+  forall(run, existence_subscriptions_) {
+    (*run)->AddTuple(tuple_info->tuple_, time);
+  }
+  forall(run, time_matters_subscriptions_) {
+    (*run)->AddTuple(tuple_info->tuple_, time);
+  }
+}
+void IndexRow::EraseIfEmpty(){
+  if (tuples_.size() ||
+      time_matters_subscriptions_.size() ||
+      existence_subscriptions_.size()) return;
+  L1_Erase();
 }
 
-Blackboard::L1_RemovePosting(Posting * p){
-  TupleInfo * ti = GetTupleInfo(p);
-  ti->RemovePosting(p);
+void IndexRow::RemoveTuple(TupleInfo *tuple_info) {
+  Time time = tuple_info->FirstTime();
+  blackboard_->changelist_->Make
+    (new SetRemoveChange<pair<Time, TupleInfo *> >
+     (&tuples_, make_pair(time, tuple_info)));
+  forall(run, existence_subscriptions_) {
+    (*run)->RemoveTuple(tuple_info->tuple_, time);
+  }
+  forall(run, time_matters_subscriptions_) {
+    (*run)->RemoveTuple(tuple_info->tuple_, time);
+  }
+  EraseIfEmpty();
+}
+void IndexRow::AddWTSubscription(WTSubscription *sub) {
+  blackboard_->changelist_->Make
+    (new SetInsertChange<WTSubscription *>
+     (sub->TimeMatters()?(&time_matters_subscriptions_):
+      (&existence_subscriptions_), sub));
+}
+void IndexRow::RemoveWTSubscription(WTSubscription *sub) {
+  blackboard_->changelist_->Make
+    (new SetRemoveChange<WTSubscription *>
+     (sub->TimeMatters()?(&time_matters_subscriptions_):
+      (&existence_subscriptions_), sub));
+  EraseIfEmpty();
+}
+
+Blackboard::Blackboard(Changelist *cl) 
+  :changelist_(cl) {
+}
+
+
+void Blackboard::L1_AddPosting(Posting *p){
+  TupleInfo *ti = GetTupleInfo(p->tuple_);
+  if (ti) {
+    ti->L1_AddPosting(p);
+    return;
+  }
+  new TupleInfo(p, this);
+}
+
+void Blackboard::L1_RemovePosting(Posting * p){
+  TupleInfo * ti = GetTupleInfo(p->tuple_);
+  CHECK(ti);
+  ti->L1_RemovePosting(p);
 }
 TupleInfo * Blackboard::GetTupleInfo(OTuple t){
-  TupleInfo ** find = tuples_ % p->tuple_;
+  TupleInfo ** find = tuple_info_ % t;
   if (find) return *find;
   return NULL;
+}
+
+IndexRow * Blackboard::GetIndexRow(OTuple wildcard_tuple){
+  IndexRow ** find = index_ % wildcard_tuple;
+  if (find) return *find;
+  return NULL;
+}
+IndexRow * Blackboard::GetAddIndexRow(OTuple wildcard_tuple){
+  IndexRow ** find = index_ % wildcard_tuple;
+  if (find) return *find;
+  return new IndexRow(wildcard_tuple, this);
+}
+
+void Blackboard::L1_AddWTSubscription(WTSubscription *sub) {
+  IndexRow *ir = GetAddIndexRow(sub->WildcardTuple());
+  ir->AddWTSubscription(sub);
+}
+void Blackboard::L1_RemoveWTSubscription(WTSubscription *sub) {
+  IndexRow *ir = GetIndexRow(sub->WildcardTuple());
+  CHECK(ir);
+  ir->RemoveWTSubscription(sub);
+}
+
+void Blackboard::Shell() {
+  Changelist cl;
+  Blackboard b(&cl);
+  string command;
+  OTuple tuple;
+  Time time;
+  vector<Posting *> postings;
+  vector<WTSubscription *> subscriptions;
+  for (;(cin >> command) && command != "q"; cout << endl) {
+    if (command == "post") {
+      cin >> tuple >> time;
+      cout << "Posting " << (postings.size()) << endl;      
+      postings.push_back(new Posting(tuple, time, &b));
+      continue;
+    }
+    if (command == "dp") {
+      int i;
+      cin >> i;
+      postings[i]->L1_Erase();
+    }
+    if (command == "subscribe") {
+      int time_matters;
+      cin >> tuple >> time_matters;
+      cout << "Subscription " << (subscriptions.size()) << endl;
+      WTSubscription *sub = new LoggingSubscription(tuple, time_matters);
+      subscriptions.push_back(sub);
+      b.L1_AddWTSubscription(sub);
+      continue;      
+    }
+    if (command == "ds") {
+      int i;
+      cin >> i;
+      b.L1_RemoveWTSubscription(subscriptions[i]);
+    }
+  };
+  
 }
 

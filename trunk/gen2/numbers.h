@@ -37,6 +37,17 @@ struct EncodedNumber {
     FromSortableString(&p);
   }
 };
+inline istream & operator >> (istream & input, EncodedNumber & n){
+  string s;
+  input >> s;
+  n.FromSortableString(s);
+  return input;
+}
+inline ostream & operator << (ostream & output, const EncodedNumber &n){
+  output << n.ToSortableString();
+  return output;
+}
+
 bool OPERATORLESS(const EncodedNumber & a, const EncodedNumber & b);
 bool OPERATOREQ(const EncodedNumber & a, const EncodedNumber & b);
 inline bool OPERATORLE(const EncodedNumber & a, const EncodedNumber & b) {
@@ -87,6 +98,18 @@ inline Time operator +(const Time & t, EncodedNumber coordninate){
   ret.Increment(coordninate, 1);
   return ret;
 }
+
+inline istream & operator >> (istream & input, Time & n){
+  string s;
+  input >> s;
+  n.FromSortableString(s);
+  return input;
+}
+inline ostream & operator << (ostream & output, const Time &n){
+  output << n.ToSortableString();
+  return output;
+}
+
 #define NEVER Time::Never()
 #define CREATION Time()
 bool OPERATORLESS(const Time & a, const Time & b);
