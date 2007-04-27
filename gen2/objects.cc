@@ -228,7 +228,7 @@ istream & operator >>(istream & input, Object & o){
   return input;
 }
 
-int main() {
+/*int main() {
   InitKeywords();
   Object o;
   vector<Object> v;
@@ -239,23 +239,4 @@ int main() {
     if (o==Keyword::Make("clear")) v = vector<Object>();
     if (o==Keyword::Make("done")) break;
   }
-  /*Variable seven = Variable::Make(7);
-  Flake n = Flake::Make("Noam");
-  Flake n2 = Flake::Make("Noam");
-  Flake g = Flake::Make("Georges");
-  Flake g2 = g;
-  cout << "n=n2 " << ((n==n2)?"T":"F") << endl;
-  cout << "n=g " << ((n==g)?"T":"F") << endl;
-  cout << "g=g2 " << ((g==g2)?"T":"F") << endl;
-  vector<Object> v;
-  v.push_back(n);
-  v.push_back(g);
-  v.push_back(seven);
-  Tuple t = Tuple::Make(v);
-  cout << n.ToString() << " " 
-       << g.ToString() << " " 
-       << seven.ToString() << " " 
-       << t.ToString() << endl;
-  */
-
-}
+  }*/

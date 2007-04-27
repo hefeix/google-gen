@@ -1,6 +1,0 @@
-objects.o: objects.cc objects.h util.h hash.h shorthand.h
-hash.o: hash.cc
-util.o: util.cc util.h hash.h shorthand.h
-changelist.o: changelist.cc changelist.h util.h hash.h shorthand.h
-tuple.o: tuple.cc tuple.h util.h hash.h shorthand.h probutil.h numbers.h \
-  objects.h
