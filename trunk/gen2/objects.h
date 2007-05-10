@@ -1,4 +1,4 @@
- // Copyright (C) 2007 Google Inc. and Georges Harik
+// Copyright (C) 2007 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@
 
 #include "util.h"
 #include "hash.h"
+#include "numbers.h"
 
 enum ObjectType {
   OBJECT,
@@ -28,11 +29,13 @@ enum ObjectType {
   KEYWORD,
   VARIABLE,
   OTUPLE,
-  PATTERN,
   OMAP,
+  OPATTERN,
   BOOLEAN,
   INTEGER,
   REAL,
+  OTIME, 
+  OBITSEQ,
   ESCAPE,
   ERRORTYPE,
 };
@@ -43,9 +46,12 @@ inline string ObjectTypeName(ObjectType t) {
   case VARIABLE: return "VARIABLE";
   case OTUPLE: return "OTUPLE";
   case OMAP: return "OMAP";
+  case OPATTERN: return "OPATTERN";
   case BOOLEAN: return "BOOLEAN";
   case INTEGER: return "INTEGER";
   case REAL: return "REAL";
+  case OTIME: return "OTIME";
+  case OBITSEQ: return "OBITSEQ";
   case ESCAPE: return "ESCAPE";
   case ERRORTYPE: return "ERRORTYPE";
   default: CHECK(false); return "ERROR";
@@ -233,7 +239,8 @@ inline ostream & operator <<(ostream & output, const Object & o) {
 
 typedef vector<Object> Tuple;
 typedef map<Object, Object> Map;
-typedef vector<vector<Object> > Pattern;
+typedef vector<Tuple> MPattern; // mutable 2 levels down
+
 
 typedef SpecificObject<FLAKE, string> Flake;
 typedef SpecificObject<KEYWORD, string> Keyword;
@@ -243,6 +250,10 @@ typedef SpecificObject<OMAP, Map> OMap;
 typedef SpecificObject<BOOLEAN, bool> Boolean;
 typedef SpecificObject<INTEGER, int> Integer;
 typedef SpecificObject<REAL, double> Real;
+typedef SpecificObject<OTIME, Time> OTime;
+typedef vector<OTuple> Pattern;
+typedef SpecificObject<OPATTERN, Pattern> OPattern;
+typedef SpecificObject<OBITSEQ, BitSeq> OBitSeq;
 typedef SpecificObject<ESCAPE, Object> Escape;
 
 inline const Object * operator %(const OMap & m, Object key) {
@@ -272,15 +283,37 @@ inline uint64 Fingerprint(const Object & o, uint64 level = 0) {
   return o.DeepFingerprint(level);
 }
 
+inline Pattern TupleToPattern(const Tuple & t) {
+  Pattern ret;
+  for (uint i=0; i<t.size(); i++) ret.push_back(t[i]);
+  return ret;
+}
+inline Tuple PatternToTuple(const Pattern & p) {
+  Tuple ret;
+  for (uint i=0; i<p.size(); i++) ret.push_back(p[i]);
+  return ret;
+}
+inline MPattern PatternToMPattern(const Pattern &p) {
+  MPattern ret;
+  for (uint i=0; i<p.size(); i++) ret.push_back(p[i].Data());
+  return ret;
+}
+inline Pattern MPatternToPattern(const MPattern &p) {
+  Pattern ret;
+  for (uint i=0; i<p.size(); i++) ret.push_back(OTuple::Make(p[i]));
+  return ret;
+}
+
 
 void InitKeywords();
 // keywords that need to be created in InitKeywords
 extern Keyword WILDCARD;
+extern OTime NEVER;
 
 inline bool IsVariable(const Object & o) {  return (o.Type()==VARIABLE); }
 inline bool IsWildcard(const Object & o) {  return (o == WILDCARD); }
 
-
+void ObjectsShell();
 
 #endif
 

@@ -18,6 +18,8 @@
 
 #include "changelist.h"
 
+Changelist CL;
+
 DestructibleCheckpoint::DestructibleCheckpoint(Changelist *cl){
   cl_ = cl;
   cp_ = cl_->GetCheckpoint();

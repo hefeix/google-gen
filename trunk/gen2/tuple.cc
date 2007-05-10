@@ -131,7 +131,7 @@ int GeneralizationIterator::GeneralizeMask() const{
 void Substitute(Map m, Tuple *t) {
   for (uint i=0; i<t->size(); i++) (*t)[i] = Replacement(m, (*t)[i]);
 };
-void Substitute(Map m, Pattern *p){
+void Substitute(Map m, MPattern *p){
   for (uint i=0; i<p->size(); i++) Substitute(m, &((*p)[i]));
 }
 void Substitute(Map m, CandidateRule *r){
@@ -179,7 +179,7 @@ set<Variable> GetVariables(const Tuple & t) {
     if (IsVariable(t[i])) ret.insert(t[i]);
   return ret;
 }
-set<Variable> GetVariables(const Pattern & v) {
+set<Variable> GetVariables(const MPattern & v) {
   set<Variable> ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
@@ -188,10 +188,10 @@ set<Variable> GetVariables(const Pattern & v) {
 }
 
 // If a pattern's variables are connected
-bool IsConnectedPattern(const Pattern& v) {
+bool IsConnectedPattern(const MPattern& v) {
   return (GetConnectedComponents(v, NULL)<=1);
 }
-int GetConnectedComponents(const Pattern &p, vector<int> *components){
+int GetConnectedComponents(const MPattern &p, vector<int> *components){
   map<Variable, set<int> > var_to_tuple;
   for (uint c=0; c<p.size(); c++)
     for (uint c2=0; c2<p[c].size(); c2++)
@@ -202,8 +202,8 @@ int GetConnectedComponents(const Pattern &p, vector<int> *components){
   return ConnectedComponents(p.size(), tuple_adjacency, components);
 }
 
-Pattern RemoveVariableFreeTuples(const Pattern &v) {
-  Pattern ret;
+MPattern RemoveVariableFreeTuples(const MPattern &v) {
+  MPattern ret;
   for (uint i=0; i<v.size(); i++) {
     if (!IsConstantTuple(v[i])) 
       ret.push_back(v[i]);
@@ -226,32 +226,20 @@ bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
   if (result) *result = sub;
   return true;
 }
-set<Object> GetAllTerms(const Pattern & v) {
+set<Object> GetAllTerms(const MPattern & v) {
   set<Object> ret;
   for (uint i=0; i<v.size(); i++) 
     ret.insert(v[i].begin(), v[i].end());
   return ret;
 }
 
-Pattern OTupleToPattern(OTuple ot){
-  Pattern ret;
-  for (uint i=0; i<ot.size(); i++) {
-    ret.push_back(OTuple(ot[i]).Data());
-  }
-  return ret;
+string ToString(const MPattern &p) {
+  return OPattern::Make(MPatternToPattern(p)).ToString();
 }
-OTuple PatternToOTuple(const Pattern &p){
-  Tuple t;
-  for(uint i=0; i<p.size(); i++) t.push_back(OTuple::Make(p[i]));
-  return OTuple::Make(t);
-}
-string ToString(const Pattern &p) {
-  return PatternToOTuple(p).ToString();
-}
-istream & operator >>(istream & input, Pattern &p){
-  OTuple t;
-  input >> t;
-  p = OTupleToPattern(t);
+istream & operator >>(istream & input, MPattern &p){
+  OPattern o;
+  input >> o;
+  p = PatternToMPattern(o.Data());
   return input;
 }
 string ToString(const Map &m) {
@@ -281,7 +269,7 @@ string ToString(const Tuple & s, const Map & sub){
   return ret;
 }
 
-void RenameVariablesInOrder(Pattern * v, Map *m){
+void RenameVariablesInOrder(MPattern * v, Map *m){
   int next_var = 0;
   Map sub;
   for (uint i=0; i<v->size(); i++) {
@@ -298,7 +286,7 @@ void RenameVariablesInOrder(Pattern * v, Map *m){
 }
 
 // smaller is better.
-int PatternReadability(const Pattern & p){
+int PatternReadability(const MPattern & p){
   int ret =0;
   map<Variable, set<int> > m; // maps variables to sets of positions.
   int pos =0;
@@ -312,13 +300,13 @@ int PatternReadability(const Pattern & p){
     ret += abs(*run2-*run3);
   return ret;
 }
-Pattern SortPatternForReadability(Pattern p){
+MPattern SortPatternForReadability(MPattern p){
   if (p.size() < 7){
     // iterate over all permutations
-    Pattern best = p;
+    MPattern best = p;
     int m = PatternReadability(p);
     for (PermutationIterator iter(p.size(), p.size()); !iter.done(); ++iter){
-      Pattern q;
+      MPattern q;
       for (uint i=0; i<p.size(); i++) q.push_back(p[iter.current()[i]]);
       int u = PatternReadability(q);
       if (u<m) {
@@ -334,7 +322,7 @@ Pattern SortPatternForReadability(Pattern p){
     bool any_better = false;
     for (uint source=0; source<p.size(); source++) {
       for (uint dest=0; dest<p.size(); dest++) {
-	Pattern q = p;
+	MPattern q = p;
 	q[dest] = p[source];
 	uint write_ptr = 0; if (write_ptr==dest) write_ptr++;
 	for (uint read_ptr=0; read_ptr<p.size(); read_ptr++) {
@@ -354,13 +342,13 @@ Pattern SortPatternForReadability(Pattern p){
   return p;
 }
 
-Pattern Canonicalize(const Pattern & v, Map*sub){
+MPattern Canonicalize(const MPattern & v, Map*sub){
 
   // Figerprints of all of the tuples, with variables changed to wildcards
   // aligned with the pattern
   vector<uint64> fprints;
 
-  Pattern ret;
+  MPattern ret;
 
   // Map between fingerprints and position in the pattern
   map<uint64, int> sorted;

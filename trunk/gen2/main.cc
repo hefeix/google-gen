@@ -21,5 +21,6 @@
 
 int main() {
   InitKeywords();
-  Blackboard::Shell();
+  ObjectsShell();
+  //Blackboard::Shell();
 }

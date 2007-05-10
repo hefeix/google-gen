@@ -334,6 +334,7 @@ class DestructibleCheckpoint{
 };
 
 
-
+// a global changelist
+extern Changelist CL;
 
 #endif // _CHANGELIST_H_

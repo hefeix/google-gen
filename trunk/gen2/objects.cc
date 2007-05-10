@@ -1,16 +1,24 @@
 #include <iostream>
 #include "objects.h"
+#include "numbers.h"
 
 Keyword WILDCARD;
+OTime NEVER;
 
 void InitKeywords(){
-  WILDCARD = Keyword::Make("*");  
+  WILDCARD = Keyword::Make("*");
+  NEVER = OTime::Make(Time::Never());
 };
 
 // There must be some black magic going on here, but the compiler is happy.
 template<ObjectType OT, class D>
 map<D, class SpecificObject<OT, D>::Definition *> 
 SpecificObject<OT, D>::unique_;
+
+// there must be blacker magic going on that this line is necessary.
+template<>
+map<BitSeq, OBitSeq::Definition *> OBitSeq::unique_ = map<BitSeq, OBitSeq::Definition *>();
+
 
 template<>
 string Flake::Definition::ToStringSpecific(bool verbose) const { return data_; }
@@ -49,6 +57,12 @@ string OMap::Definition::ToStringSpecific(bool verbose) const {
 }
 
 template<>
+string OPattern::Definition::ToStringSpecific(bool verbose) const { 
+  Tuple t = PatternToTuple(data_);
+  return "pattern " + OTuple::Make(t).ToString(verbose);
+}
+
+template<>
 string Boolean::Definition::ToStringSpecific(bool verbose) const {
   return data_?"true":"false";
 }
@@ -66,6 +80,14 @@ string Real::Definition::ToStringSpecific(bool verbose) const {
   return ret;
 }
 
+template<>
+string OBitSeq::Definition::ToStringSpecific(bool verbose) const {
+  return data_.ToString();
+}
+template<>
+string OTime::Definition::ToStringSpecific(bool verbose) const {
+  return data_.ToString();
+}
 template<>
 string Escape::Definition::ToStringSpecific(bool verbose) const {
   return "\'" + data_.ToString();
@@ -166,6 +188,13 @@ istream & operator >>(istream & input, Object & o){
     o = WILDCARD;
     return input;
   }
+  if (firstchar == '#') {
+    input.putback('#');
+    BitSeq s;
+    input >> s;
+    o = OBitSeq::Make(s);
+    return input;
+  }
   if (IsBeginningNumericChar(firstchar) ) {
     // it's an integer/real    
     string s;
@@ -217,6 +246,33 @@ istream & operator >>(istream & input, Object & o){
       o = Boolean::Make(false);
       return input;
     }
+    if (s=="never") {
+      o = NEVER;
+      return input;
+    }
+    if (s=="time") {
+      OTuple t;
+      input >> t;
+      CHECK(t.size() % 2 == 0);
+      vector<pair<BitSeq, int> > coordinates;
+      for (uint i=0; i<t.size(); i+=2) {
+	OBitSeq s = t[i];
+	Integer n = t[i+1];
+	coordinates.push_back(make_pair(s.Data(), n.Data()));	
+      }
+      o = OTime::Make(Time(coordinates));
+      return input;
+    }
+    if (s=="pattern") {
+      OTuple t;
+      input >> t;
+      vector<OTuple> p;
+      for (uint i=0; i<t.size(); i++) {
+	p.push_back(t[i]);
+      }
+      o = OPattern::Make(p);
+      return input;
+    }
     if (s=="null") {
       o = NULL;
       return input;
@@ -228,8 +284,7 @@ istream & operator >>(istream & input, Object & o){
   return input;
 }
 
-/*int main() {
-  InitKeywords();
+void ObjectsShell(){
   Object o;
   vector<Object> v;
   while (cin >> o) {
@@ -239,4 +294,5 @@ istream & operator >>(istream & input, Object & o){
     if (o==Keyword::Make("clear")) v = vector<Object>();
     if (o==Keyword::Make("done")) break;
   }
-  }*/
+}
+  
