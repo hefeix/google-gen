@@ -19,6 +19,65 @@
 #include "blackboard.h"
 #include "tuple.h"
 
+
+SamplingInfo::SamplingInfo() {
+  sampled_ = false;
+}
+SamplingInfo::SamplingInfo(int position, uint32 start_hash, uint32 end_hash){
+  sampled_ = true;
+  position_ = position;
+  start_hash_ = start_hash;
+  end_hash_ = end_hash;
+}
+
+SamplingInfo SamplingInfo::RandomRange(int position, int denominator, int part){
+  if (part < 0) part = rand() % denominator;
+  uint32 start = (0xFFFFFFFF / denominator) * part;
+  uint32 end = (0xFFFFFFFF / denominator) * (part+1);
+  return SamplingInfo(position, start, end);
+}
+
+SamplingInfo SamplingInfo::LimitToPosition(uint32 position) const{
+  if (!sampled_ || (position != position_)) return SamplingInfo();
+  return SamplingInfo(0, start_hash_, end_hash_);
+}
+
+bool SamplingInfo::RemovePosition(uint32 position) {
+  if (!sampled_) return false;
+  if (position < position_) {
+    position_--;
+    return true;
+  }
+  if (position == position_) {
+    sampled_ = false;
+    return false;
+  }
+  return true;
+}
+
+bool SamplingInfo::Matches(const Tuple& t) const {
+  if (!sampled_) return true;
+  uint32 fp = t.Fingerprint32();
+  return (start_hash_ <= fp) && (fp <= end_hash_);
+}
+
+SamplingInfo SamplingInfo::StringToSamplingInfo(const string& s) {
+  istringstream istr(s);
+  int position, denominator, part;
+  istr >> position >> denominator >> part;
+  return RandomRange(position, denominator, part);
+}
+
+string SamplingInfo::ToString() const {
+  if (!sampled_) return "Unsampled";
+  return "{pos=" + itoa(position_) + " 1/" 
+    + dtoa(1.0/GetFraction()) + "}";
+}
+double SamplingInfo::GetFraction() const {
+  if (!sampled_) return 1.0;
+  return (end_hash_-start_hash_+1.0)/pow(2,32);
+}
+
 Posting::Posting(OTuple tuple, Time time, Blackboard *blackboard)
   :tuple_(tuple), time_(time), blackboard_(blackboard){
   blackboard_->changelist_->Creating(this);
@@ -93,6 +152,10 @@ void TupleInfo::L1_RemovePosting(Posting *p){
   ChangeTimesInIndexRows(old_first_time, new_first_time);
 }
 
+OTuple WTSubscription::GetWildcardTuple() const {
+  return index_row_->GetWildcardTuple();
+}
+
 IndexRow::IndexRow(OTuple wildcard_tuple, Blackboard *blackboard)
   :wildcard_tuple_(wildcard_tuple), blackboard_(blackboard){  
   blackboard_->changelist_->Creating(this);
@@ -107,15 +170,19 @@ void IndexRow::L1_Erase() {
   blackboard_->changelist_->Destroying(this);
 }
 void IndexRow::ChangeTupleTime(TupleInfo *tuple_info, 
-			       Time old_time, Time new_time){
+			       Time old_time, Time new_time){  
   blackboard_->changelist_->Make
     (new SetRemoveChange<pair<Time, TupleInfo *> >
      (&tuples_, make_pair(old_time, tuple_info)));
   blackboard_->changelist_->Make
     (new SetInsertChange<pair<Time, TupleInfo *> >
      (&tuples_, make_pair(new_time, tuple_info)));
+  WTUpdate update;
+  update.changes_.push_back
+    (make_pair(tuple_info->tuple_, 
+	       make_pair(&old_time, &new_time)));
   forall(run, time_matters_subscriptions_) {
-    (*run)->TimeChange(tuple_info->tuple_, old_time, new_time);
+    (*run)->Update(update);
   }
 }
 void IndexRow::AddTuple(TupleInfo *tuple_info) {
@@ -123,12 +190,13 @@ void IndexRow::AddTuple(TupleInfo *tuple_info) {
   blackboard_->changelist_->Make
     (new SetInsertChange<pair<Time, TupleInfo *> >
      (&tuples_, make_pair(time, tuple_info)));
-  forall(run, existence_subscriptions_) {
-    (*run)->AddTuple(tuple_info->tuple_, time);
-  }
-  forall(run, time_matters_subscriptions_) {
-    (*run)->AddTuple(tuple_info->tuple_, time);
-  }
+  WTUpdate update;
+  update.count_delta_ = 1;
+  update.changes_.push_back
+    (make_pair(tuple_info->tuple_, 
+	       make_pair((const Time *)NULL, &time)));
+  forall(run, time_matters_subscriptions_) (*run)->Update(update);
+  forall(run, existence_subscriptions_) (*run)->Update(update);
 }
 void IndexRow::EraseIfEmpty(){
   if (tuples_.size() ||
@@ -142,24 +210,25 @@ void IndexRow::RemoveTuple(TupleInfo *tuple_info) {
   blackboard_->changelist_->Make
     (new SetRemoveChange<pair<Time, TupleInfo *> >
      (&tuples_, make_pair(time, tuple_info)));
-  forall(run, existence_subscriptions_) {
-    (*run)->RemoveTuple(tuple_info->tuple_, time);
-  }
-  forall(run, time_matters_subscriptions_) {
-    (*run)->RemoveTuple(tuple_info->tuple_, time);
-  }
+  WTUpdate update;
+  update.count_delta_ = -1;
+  update.changes_.push_back
+    (make_pair(tuple_info->tuple_, 
+	       make_pair(&time, (const Time *)NULL)));
+  forall(run, time_matters_subscriptions_) (*run)->Update(update);
+  forall(run, existence_subscriptions_) (*run)->Update(update);
   EraseIfEmpty();
 }
-void IndexRow::AddWTSubscription(WTSubscription *sub) {
+void IndexRow::L1_AddWTSubscription(WTSubscription *sub) {
   blackboard_->changelist_->Make
     (new SetInsertChange<WTSubscription *>
-     (sub->TimeMatters()?(&time_matters_subscriptions_):
+     ((sub->Needs() & UPDATE_TIME)?(&time_matters_subscriptions_):
       (&existence_subscriptions_), sub));
 }
-void IndexRow::RemoveWTSubscription(WTSubscription *sub) {
+void IndexRow::L1_RemoveWTSubscription(WTSubscription *sub) {
   blackboard_->changelist_->Make
     (new SetRemoveChange<WTSubscription *>
-     (sub->TimeMatters()?(&time_matters_subscriptions_):
+     ((sub->Needs() & UPDATE_TIME)?(&time_matters_subscriptions_):
       (&existence_subscriptions_), sub));
   EraseIfEmpty();
 }
@@ -200,14 +269,14 @@ IndexRow * Blackboard::GetAddIndexRow(OTuple wildcard_tuple){
   return new IndexRow(wildcard_tuple, this);
 }
 
-void Blackboard::L1_AddWTSubscription(WTSubscription *sub) {
-  IndexRow *ir = GetAddIndexRow(sub->WildcardTuple());
-  ir->AddWTSubscription(sub);
-}
-void Blackboard::L1_RemoveWTSubscription(WTSubscription *sub) {
-  IndexRow *ir = GetIndexRow(sub->WildcardTuple());
-  CHECK(ir);
-  ir->RemoveWTSubscription(sub);
+WTSubscription::WTSubscription(Blackboard *blackboard, OTuple wildcard_tuple,
+			       UpdateNeeds needs) {
+  index_row_ = blackboard->GetAddIndexRow(wildcard_tuple);
+  needs_ = needs;
+  index_row_->L1_AddWTSubscription(this);
+} 
+void WTSubscription::L1_Erase() { 
+  index_row_->L1_RemoveWTSubscription(this);
 }
 
 void Blackboard::Shell() {
@@ -229,20 +298,22 @@ void Blackboard::Shell() {
       int i;
       cin >> i;
       postings[i]->L1_Erase();
+      continue;
     }
     if (command == "subscribe") {
-      int time_matters;
-      cin >> tuple >> time_matters;
+      UpdateNeeds needs;
+      cin >> tuple >> needs;
       cout << "Subscription " << (subscriptions.size()) << endl;
-      WTSubscription *sub = new LoggingSubscription(tuple, time_matters);
+      WTSubscription *sub 
+	= new LoggingWTSubscription(&b, tuple, needs);
       subscriptions.push_back(sub);
-      b.L1_AddWTSubscription(sub);
       continue;      
     }
     if (command == "ds") {
       int i;
       cin >> i;
-      b.L1_RemoveWTSubscription(subscriptions[i]);
+      subscriptions[i]->L1_Erase();
+      continue;
     }
   };
   

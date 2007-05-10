@@ -59,8 +59,8 @@ LL LnCombinations(uint n, uint k);
 LL uintQuadraticLnProb(uint n);
 
 // Cost of encoding a number in our funky binary representation.  
-// Returns uintQuadraticLnProb(n)-n*log(2)
-LL EncodedNumberLnLikelihood(const EncodedNumber & n);
+// Returns uintQuadraticLnProb(length)-length*log(2)
+LL BitSeqLnLikelihood(const BitSeq & n);
 
 // ln( 1 / ((num_total CHOOSE num_positive) (num_total+1)))
 LL BinaryChoiceLnLikelihood(uint num_total, uint num_positive);

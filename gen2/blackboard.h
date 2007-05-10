@@ -20,7 +20,28 @@
 #include "numbers.h"
 #include "changelist.h"
 
+struct IndexRow;
 struct Blackboard;
+
+
+
+struct SamplingInfo{
+  bool sampled_;
+  uint32 position_;
+  uint32 start_hash_; // inclusive
+  uint32 end_hash_; // inclusive
+  double GetFraction() const;
+  SamplingInfo(); // creates an unsampled SamplingInfo
+  SamplingInfo(int position, uint32 start_hash, uint32 end_hash);
+  bool RemovePosition(uint32 position);
+  SamplingInfo LimitToPosition(uint32 position) const;
+  bool Matches(const Tuple& t) const;
+  static SamplingInfo RandomRange(int position, int denominator, int part=-1);
+  static SamplingInfo StringToSamplingInfo(const string& s);
+  string ToString() const; //  not the inverse of the above.
+  static SamplingInfo Unsampled() { return SamplingInfo();}
+};
+
 
 // You change the contents of the blackboard by creating and destroying
 // postings.  You own your own postings.  
@@ -73,42 +94,72 @@ struct TupleInfo {
   Blackboard * blackboard_;
 };
 
+typedef uint32 UpdateNeeds;
+#define UPDATE_COUNT 0x1
+#define UPDATE_WHICH 0x2
+#define UPDATE_TIME 0x4
+
+struct WTUpdate {
+  int64 count_delta_;
+  // These are the changes.
+  // You pass the OTuple, the old time and the new time.
+  // If it's an insertion, the old time is NULL.
+  // If it's a deletion, the new time is NULL.
+  vector<pair<OTuple, pair<const Time *, const Time *> > > changes_;
+
+
+  WTUpdate() {count_delta_ = 0;}
+  string ToString() const {
+    string ret = "WTUpdate { count_delta_=" + itoa(count_delta_) + "\n";
+    for (uint i=0; i<changes_.size(); i++) {
+      ret += "   " + changes_[i].first.ToString() + " : " 
+	+ TimeToStringOrNothing(changes_[i].second.first) + "->" 
+	+ TimeToStringOrNothing(changes_[i].second.second) + "\n";
+    }
+    ret += "}\n";
+    return ret;
+  }
+};
+
 struct WTSubscription {
+  WTSubscription(Blackboard *blackboard, OTuple wildcard_tuple, 
+		 UpdateNeeds needs);
+  void L1_Erase();
   virtual ~WTSubscription(){}
-  virtual OTuple WildcardTuple() = 0;
-  virtual void TimeChange(OTuple t, Time old_time, Time new_time) {}
-  virtual void AddTuple(OTuple t, Time new_time) {}
-  virtual void RemoveTuple(OTuple t, Time old_time) {}
-  virtual bool TimeMatters() { return false;}
+  OTuple GetWildcardTuple() const;
+  virtual void Update(const WTUpdate & update) = 0;
+  virtual UpdateNeeds Needs() {
+    return needs_;
+  }
+  IndexRow * index_row_;
+  private:
+  UpdateNeeds needs_;
 };
 
-struct LoggingSubscription : public WTSubscription {
-  OTuple tuple_;
-  bool time_matters_;
-  LoggingSubscription(OTuple tuple, bool time_matters)
-    :tuple_(tuple), time_matters_(time_matters) {}
-  bool TimeMatters() { return time_matters_;}
-
-  OTuple WildcardTuple() { return tuple_;}
+struct LoggingWTSubscription : public WTSubscription {
+  LoggingWTSubscription(Blackboard *blackboard, OTuple tuple, UpdateNeeds needs)
+    :WTSubscription(blackboard, tuple, needs) {}
   string ToString() {
-    return "LoggingSubscription(" + tuple_.ToString() + ")";
+    return "LoggingWTSubscription(" + GetWildcardTuple().ToString() + ")";
   }
-  void TimeChange(OTuple t, Time old_time, Time new_time) { 
-    cout << ToString() << " TimeChange " << t << " " 
-	 << old_time.ToSortableString()
-	 << " -> " << new_time.ToSortableString() << endl;
-  }
-  void AddTuple(OTuple t, Time new_time) {
-    cout << ToString() << " AddTuple "<< t << " time=" 
-	 << new_time.ToSortableString()
-	 << endl;
-  }
-  void RemoveTuple(OTuple t, Time old_time) {
-    cout << ToString() << " RemoveTuple "<< t << " time=" 
-	 << old_time.ToSortableString()
-	 << endl;
+  void Update(const WTUpdate &update) {
+    cout << ToString() + " " + update.ToString();
   }
 };
+
+// a WTSubscription that calls an Update(WTUpdate, WTSubscription*) 
+// method on an object
+template <class T> 
+struct UpdateWTSubscription : public WTSubscription {
+  SearchTreeWTSubscription(Blackboard *blackboard, OTuple tuple, 
+			   UpdateNeeds needs, T *subscriber)
+    :WTSubscription(blackboard, tuple, needs), subscriber_(subscriber) {}
+  void Update(const WTUpdate &update) {
+    subscriber_->Update(update, this);
+  }
+  T * subscriber_;
+};
+
 
 struct IndexRow {
   IndexRow(OTuple wildcard_tuple, Blackboard *blackboard);
@@ -120,10 +171,13 @@ struct IndexRow {
   // Must be called before deleting the posting in the tupleinfo.
   // otherwise the time is wrong.
   void RemoveTuple(TupleInfo * tuple_info);
-  void AddWTSubscription(WTSubscription *sub);
-  void RemoveWTSubscription(WTSubscription *sub);
+  void L1_AddWTSubscription(WTSubscription *sub);
+  void L1_RemoveWTSubscription(WTSubscription *sub);
   // erases this row if there are no subscriptions or tuples.
   void EraseIfEmpty();
+  OTuple GetWildcardTuple() const {
+    return wildcard_tuple_;
+  }
 
   // contains (first time, tupleinfo *) for each tuple on the blackboard
   // that matches.
@@ -141,11 +195,8 @@ class Blackboard {
   friend class TupleInfo;
   friend class WTSubscription;
   friend class Posting;
-
+ 
   Blackboard(Changelist *cl);
-
-  void L1_AddWTSubscription(WTSubscription *sub);
-  void L1_RemoveWTSubscription(WTSubscription *sub);
 
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);

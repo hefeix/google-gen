@@ -70,8 +70,9 @@ LL uintQuadraticLnProb(uint n){
   return -Log((n+1)*(n+2));
 }
 
-LL EncodedNumberLnLikelihood(const EncodedNumber & n){
-  return uintQuadraticLnProb(n.bits_.size()) - n.bits_.size() * Log(2);
+LL BitSeqLnLikelihood(const BitSeq & n){
+  int nb = n.NumBits();
+  return uintQuadraticLnProb(nb) - nb * Log(2);
 }
 
 LL BinaryChoiceLnLikelihood(uint num_total, uint num_positive){

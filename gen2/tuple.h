@@ -66,13 +66,13 @@ struct GeneralizationIterator {
 
 
 // TODO? maybe this stuff doesn't belong in this file
-typedef pair<Pattern, Pattern > CandidateRule;
-inline static Pattern Concat(const CandidateRule & r) {
-  Pattern ret = r.first; 
+typedef pair<MPattern, MPattern > CandidateRule;
+inline static MPattern Concat(const CandidateRule & r) {
+  MPattern ret = r.first; 
   ret.insert(ret.end(), r.second.begin(), r.second.end()); return ret; }
-inline static CandidateRule SplitOffLast(const Pattern & p) {
+inline static CandidateRule SplitOffLast(const MPattern & p) {
   return make_pair(RemoveFromVector(p, p.size()-1), 
-		   Pattern(1, p.back())); }
+		   MPattern(1, p.back())); }
 
 // Either return the value associated with a given key, or return the key if
 // it is not in the map.  
@@ -82,7 +82,7 @@ inline Object Replacement(Map m, const Object &o) {
   return o;
 };
 void Substitute(Map m, Tuple * t);
-void Substitute(Map m,  Pattern * p);
+void Substitute(Map m,  MPattern * p);
 void Substitute(Map m, CandidateRule *r);
 
 // Adds a key-value pair to a Map.
@@ -104,21 +104,21 @@ Variable FirstUnusedVariable(Map m);
 bool IsSubsetOf(const Map  & m1, const Map & m2);
 
 set<Variable> GetVariables(const Tuple & t);
-set<Variable> GetVariables(const Pattern & v);
+set<Variable> GetVariables(const MPattern & v);
 
 // find ths connected components of the pattern.  
 // Two tuples are connected if they share variables
 // Returns the number of connected components.
 // components is optional and is set to a vector aligned with p, represnenting
 // a mapping from tuples to densely numbered component ids.
-int GetConnectedComponents(const Pattern & p, vector<int> *components);
+int GetConnectedComponents(const MPattern & p, vector<int> *components);
 
 // Simpler interface if you only care whether the pattern has at most one 
 // component.
-bool IsConnectedPattern(const Pattern & p);
+bool IsConnectedPattern(const MPattern & p);
 
 // removes the tuples that have no variables
-Pattern RemoveVariableFreeTuples(const Pattern & v);
+MPattern RemoveVariableFreeTuples(const MPattern & v);
 
 // computes the substitution to get from one tuple to another.
 // The substitution may only use Variables as keys.  Returns NULL if
@@ -126,12 +126,12 @@ Pattern RemoveVariableFreeTuples(const Pattern & v);
 bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub, 
 			 Map *result);
 
-set<Object> GetAllTerms(const Pattern & v);
+set<Object> GetAllTerms(const MPattern & v);
 
-Pattern OTupleToPattern(OTuple ot);
-OTuple PatternToOTuple(const Pattern &p);
-string ToString(const Pattern &p);
-istream & operator >>(istream & input, Pattern &p);
+//Pattern OTupleToPattern(OTuple ot);
+//OTuple PatternToOTuple(const Pattern &p);
+string ToString(const MPattern &p);
+istream & operator >>(istream & input, MPattern &p);
 string ToString(const Map &m);
 istream & operator >>(istream &input, Map &m);
 string ToString(const CandidateRule &r);
@@ -142,11 +142,11 @@ string ToString(const Tuple & s, const Map & sub);
 // so that the first variable to occur in the vector of tuples is 
 // Variable(0), the next is Variable(1), etc.
 // Set m to the substitution from the old variables to the new variables
-void RenameVariablesInOrder(Pattern * v, Map *m);
+void RenameVariablesInOrder(MPattern * v, Map *m);
 
 // try to put the pattern in a canonical form
 // I believe that this may be NP-hard, but let's at least make an attempt. 
 // TODO: comment what is canonical
-Pattern Canonicalize(const Pattern & v, Map *sub);
+MPattern Canonicalize(const MPattern & v, Map *sub);
 
 #endif
