@@ -51,6 +51,7 @@ struct FirstProjection {
   static const K & Key(const pair<K,V> &p) { return p.first;}  
   typedef K KeyType;
   typedef pair<K,V> DataType;
+  typedef V ValueType;
 };
 
 
@@ -98,15 +99,21 @@ class RBTree {
       return 1;
     }
     Node * Grandparent() {
-      if (parent_ == NULL) return NULL;
+      //CHECK(parent_->parent_);
+      // if (parent_ == NULL) return NULL;
       return parent_->parent_;
     }
-    Node Uncle() {
-      if (!Grandparent()) return NULL;
+    Node * Uncle() {
+      return parent_->Sibling();
+      /*if (!Grandparent()) return NULL;
       if (parent_ == Grandparent()->left_)
         return Grandparent()->right_;
       else
-	return Grandparent()->left_;
+      return Grandparent()->left_;*/
+    }
+    Node * Sibling() const {
+      //CHECK(parent_);
+      return ( (this==parent_->right_)?parent_->left_:parent_->right_ );
     }
     // where should point to the parent's left_ or right_, or to the
     // tree's root_
@@ -125,6 +132,8 @@ class RBTree {
       if (parent_) CHECK(parent_->left_==this || parent_->right_==this);
       if (left_) CHECK(left_->parent_==this);
       if (right_) CHECK(right_->parent_==this);
+      if (parent_) CHECK(parent_->color_ == BLACK || color_ == BLACK);
+      CHECK(subtree_size_ == 1 + SubtreeSize(left_) + SubtreeSize(right_));
     }    
   };
   Node * root_;
@@ -134,53 +143,158 @@ class RBTree {
       return lineheadtop + "NULL\n";
     }
     string ret;
-    ret += ToString(n->left_, lineheadtop+"  ", lineheadtop+" | ");
-    ret += lineheadtop + n->data_ + "\n";
+    ret += ToString(n->left_, lineheadtop+"   ", lineheadtop+" | ");
+    ret += lineheadtop + n->data_ + " (" 
+      + string((n->color_==RED)?"RED":"BLACK")
+      + ")\n";
     ret += ToString(n->right_, lineheadbottom+" | ", lineheadbottom + "   ");
     return ret;
   } 
   
  public:
   
-  void CheckNode(Node *n) {
+  // returns the number of black nodes in every path down from a given node.
+  int CheckNode(Node *n) {
     if (n) {
       n->Check();
-      CheckNode(n->left_);
-      CheckNode(n->right_);
+      int count1 = CheckNode(n->left_);
+      int count2 = CheckNode(n->right_);
+      CHECK(count1==count2);
+      return count1 + (n->color_==BLACK)?1:0;
     }
+    return 1;    
   }
   void Check() {
     CheckNode(root_);
+    
   }
 
 
   struct iterator {
     Node * current_;
     iterator(Node *n) :current_(n){}
-    void operator ++(){
-      current_ = NextNode(current_);
-    }
-    Data operator *() {
+    void operator ++(){ current_ = NextNode(current_); }
+    Data & operator *() {
       return current_->data_;
     }
   };
-  iterator begin() {
+  struct const_iterator {
+    Node * current_;
+    const_iterator(Node *n) :current_(n){}
+    // const_iterator(const iterator &i) :current_(i.current_){}
+    void operator ++(){ current_ = NextNode(current_); }
+    const Data & operator *() {
+      return current_->data_;
+    }
+  };
+
+  Node* _begin() {
     Node * c = root_;
     if (c) while (c && c->left_) c = c->left_;
-    return iterator(c);
+    return c;
   }
+  iterator begin() { return _begin(); }
+  const_iterator begin() const { return _begin(); }
+
   iterator end() { return NULL; }
+  const_iterator end() const { return NULL; }
+
+  Node* _find(const Key & k) {
+    Node ** look = search(k, NULL);
+    if (*look) return *look;
+    return NULL;
+  }
+  iterator find(const Key &k) { return _find(k);}
+  const_iterator find(const Key &k) const{ return _find(k);}
+
+  // first element greater than or equal to k
+  Node * _first_ge(const Key &k) {
+    Node *parent;
+    Node **look = search(k, &parent);
+    if (*look) return iterator(*look);
+    if (!parent) return NULL;
+    if (look == &(parent->left_)) {
+      return parent;
+    }
+    Node *n = parent;
+    while (n->WhichChild()) n = n->parent_;
+    return n->parent_;
+  }
+  iterator first_ge(const Key &k) { return _first_ge(k); }
+  const_iterator first_ge(const Key &k) const { return _first_ge(k); }
+
+  Node * _th(uint i) {
+    CHECK(i<size());
+    Node *n = root_;
+    while(1) {
+      int leftsize = SubtreeSize(n->left_);
+      if (i<leftsize) n = n->left_;
+      else if (i==leftsize) return n;
+      else {
+	n = n->right_;
+	i -= (leftsize + 1);
+      }
+    }
+  }
+  iterator th(uint i){ return _th(i); }
+  const_iterator th(uint i) const{ return _th(i); }
+
+  uint _index(const Node * n) const{
+    if (!n) return size();
+    int ret = SubtreeSize(n->left_);
+    while(n) {
+      int which = n->WhichChild();
+      n = n->parent_;
+      if (which==1) ret += 1 + SubtreeSize(n->left_);
+    }
+    return ret;
+  }
+  uint index(const iterator& iter) const { return _index(iter.current_); }
+  uint index(const const_iterator& iter) const { return _index(iter.current_); }
+  
+  uint num_lt(const Key & k) const {
+    // TODO: can be made faster.
+    const_iterator find = first_ge(k);
+    return index(find);
+  }
+  // range includes lower bound but not upper bound
+  uint range_count(const Key & lower, const Key & upper) {
+    return num_lt(upper) - num_lt(lower);
+  }
 
  private:
 
   void Delete(Node * n) { // deletes a node
-    if (!(n->left_ && n->right_)) DeleteOneChild(n);
-    Node * current = n->left_;
-    while (current->right_) current = current->right_;
-    n->data_ = current->data_;
-    DeleteOneChild(current);
+    if (!(n->left_ && n->right_)) {
+      DeleteOneChild(n);
+      return;
+    }
+    Node * swap_in = n->left_;
+    while (swap_in->right_) swap_in = swap_in->right_;
+    // We swap the places of n and swap_in
+    // We would have rather just swapped the data, but that would invalidate
+    // iterators.
+    // This code is a little delicate when swap_in == n->left_, 
+    // but it works.
+    
+    if (swap_in->left_) swap(n->left_->parent_, swap_in->left_->parent_);
+    else n->left_->parent_ = swap_in;
+    swap(n->left_, swap_in->left_);
+    swap(*GetPointerTo(swap_in), *GetPointerTo(n));
+    swap(n->parent_, swap_in->parent_);
+    if (swap_in->right_) swap(n->right_->parent_, swap_in->right_->parent_);
+    else n->right_->parent_ = swap_in;
+    swap(n->right_, swap_in->right_);
+    swap(n->color_, swap_in->color_);
+    swap(n->subtree_size_, swap_in->subtree_size_);
+    DeleteOneChild(n);
   }
   void DeleteOneChild(Node *n) { // deletes a node with at most one child
+    if (n->right_==NULL && n->left_ == NULL) {
+      if (n->color_ == BLACK) DeleteCase1(n);
+      ReplaceAndDestroy(n, NULL);
+      return;
+    }
     Node *child = (n->right_==NULL) ? n->left_ : n->right_;
     Color n_color = n->color_;
     ReplaceAndDestroy(n, child);
@@ -197,8 +311,148 @@ class RBTree {
     if (which==1) return &(n->parent_->right_);
     return &(n->parent_->left_);
   }
+  
+  void RotateLeft(Node *n) {
+    Node * newtop = n->right_;
+    //CHECK(newtop);
+    *(GetPointerTo(n)) = newtop;
+    n->right_ = newtop->left_;
+    if (n->right_) n->right_->parent_ = n;
+    newtop->left_ = n;
+    newtop->parent_ = n->parent_;
+    n->parent_ = newtop;
+    n->subtree_size_ = 1 + SubtreeSize(n->left_) + SubtreeSize(n->right_);
+    newtop->subtree_size_ = 1 + SubtreeSize(newtop->left_) 
+      + SubtreeSize(newtop->right_);
+  }
+  void RotateRight(Node *n) {
+    Node * newtop = n->left_;
+    //CHECK(newtop);
+    *(GetPointerTo(n)) = newtop;
+    n->left_ = newtop->right_;
+    if (n->left_) n->left_->parent_ = n;
+    newtop->right_ = n;
+    newtop->parent_ = n->parent_;
+    n->parent_ = newtop;
+    n->subtree_size_ = 1 + SubtreeSize(n->left_) + SubtreeSize(n->right_);
+    newtop->subtree_size_ = 1 + SubtreeSize(newtop->left_) 
+      + SubtreeSize(newtop->right_);
+  }
+
+  void InsertCase1(Node *n) {
+    if (n->parent_ == NULL) n->color_ = BLACK;
+    else InsertCase2(n);
+  }
+  void InsertCase2(Node *n) {
+    if (n->parent_->color_==BLACK) return;
+    else InsertCase3(n);
+  }
+  void InsertCase3(Node *n) {
+    Node *uncle = n->Uncle();
+    if (uncle && (uncle->color_==RED)) {
+      n->parent_->color_ = BLACK;
+      uncle->color_ = BLACK;
+      n->Grandparent()->color_ = RED;
+      InsertCase1(n->Grandparent());
+    } else InsertCase4(n);
+  }
+  void InsertCase4(Node *n) {
+    if (n->WhichChild() == 1 && n->parent_->WhichChild() == -1) {
+      RotateLeft(n->parent_);
+      n = n->left_;
+    } else if (n->WhichChild() == -1 && n->parent_->WhichChild() == 1) {
+      RotateRight(n->parent_);
+      n = n->right_;
+    }
+    InsertCase5(n);
+  }
+  void InsertCase5(Node *n) {
+    Node *gp = n->Grandparent();
+    n->parent_->color_ = BLACK;
+    gp->color_ = RED;
+    if (n->WhichChild() == -1 && n->parent_->WhichChild() == -1) {
+      RotateRight(gp);
+    } else {
+      //CHECK(n->WhichChild() == 1 && n->parent_->WhichChild()==1);
+      RotateLeft(gp);
+    }
+  }
 
   void DeleteCase1(Node *n) {
+    if (n->parent_==NULL) return;
+    DeleteCase2(n);
+  }
+  void DeleteCase2(Node *n) {
+    Node *sib = n->Sibling();
+    if (ColorOf(sib) == RED) {
+      n->parent_->color_ = RED;
+      sib->color_ = BLACK;
+      if (n->WhichChild() == -1)
+	RotateLeft(n->parent_);
+      else
+	RotateRight(n->parent_);
+    }
+    DeleteCase3(n);
+  }
+  void DeleteCase3(Node *n) {
+    Node *sib = n->Sibling();
+    if (n->parent_->color_ == BLACK &&
+        sib->color_ == BLACK &&
+        ColorOf(sib->left_) == BLACK && 
+        ColorOf(sib->right_) == BLACK)
+      {
+        sib->color_ = RED;
+        DeleteCase1(n->parent_);
+      }
+    else
+      DeleteCase4(n);
+  }
+  void DeleteCase4(Node *n) {
+    Node *sib = n->Sibling();
+    if (n->parent_->color_ == RED &&
+        sib->color_ == BLACK &&	
+        ColorOf(sib->left_) == BLACK &&
+	ColorOf(sib->right_) == BLACK) {
+        sib->color_ = RED;
+        n->parent_->color_ = BLACK;
+    }
+    else DeleteCase5(n);    
+  }
+  void DeleteCase5(Node *n) {
+    Node *sib = n->Sibling();
+    int which = n->WhichChild();
+    if (which == -1 &&
+        sib->color_ == BLACK &&
+        ColorOf(sib->left_) == RED &&
+        ColorOf(sib->right_) == BLACK) {
+      sib->color_ = RED;
+      sib->left_->color_ = BLACK;
+      RotateRight(sib);
+    }
+    else if (which == 1 &&
+             sib->color_ == BLACK &&
+             ColorOf(sib->right_) == RED &&
+             ColorOf(sib->left_) == BLACK)
+      {
+        sib->color_ = RED;
+        sib->right_->color_ = BLACK;
+        RotateLeft(sib);
+      }
+    DeleteCase6(n);    
+  }
+  void DeleteCase6(Node *n) {
+    Node *sib = n->Sibling();
+    sib->color_ = n->parent_->color_;
+    n->parent_->color_ = BLACK;
+    if (n == n->parent_->left_) {
+      //CHECK(sib->right_->color_ == RED);
+      sib->right_->color_ = BLACK;
+      RotateLeft(n->parent_);
+    } else {
+      //CHECK(sib->left_->color_ == RED);
+      sib->left_->color_ = BLACK;
+      RotateRight(n->parent_);
+    }   
   }
 
   Node * GetAddNode(const Data & data) {
@@ -206,7 +460,7 @@ class RBTree {
     Node ** where = search(data, &parent);
     if (*where) return *where;
     Node * ret = new Node(where, parent, data);
-    // TODO rebalance and color here.
+    InsertCase1(ret);
     return ret;
   }
 
@@ -216,6 +470,8 @@ class RBTree {
   // if a matching node already exists, then *(the return value) 
   // will be non-null and point to it.
   Node ** search(const Key & k, Node **parent) {
+    Node *dummy;
+    if (!parent) parent = &dummy;
     Node **current = &root_;
     *parent = NULL;
     while (*current) {
@@ -235,16 +491,20 @@ class RBTree {
     if (p) return p->color_;
     return BLACK;
   }
+  static int SubtreeSize(const Node *n) {
+    if (!n) return 0;
+    return n->subtree_size_;
+  }
   // puts displacer where victim was and deletes victim
   void ReplaceAndDestroy(Node *victim, Node *displacer) {
+    //CHECK(victim);
     int count_delta = SubtreeSize(displacer) - SubtreeSize(victim);
-    if (displacer) displacer->parent_ = (*victim)->parent_;
+    Node * parent = victim->parent_;
+    if (displacer) displacer->parent_ = parent;
     *GetPointerTo(victim) = displacer;
     delete victim;
-    if (displacer) {
-      for (Node *n = displacer->parent_; n; n = n->parent_) {
-	n->subtree_size_ += count_delta;
-      }
+    for (Node *n = parent; n; n = n->parent_) {
+      n->subtree_size_ += count_delta;
     }
   }
 };
@@ -263,7 +523,26 @@ bool operator !=(const Iterator & i1,
 template <class T> 
 class orderset : public RBTree<IdentityProjection<T> >{
 };
+template<class T>
+class ordermap : public RBTree<FirstProjection<T> >{
+  const T
+};
 
+inline void TestOrderTree() {
+  //set<int> foo;
+  orderset<int> foo;
+  int start = time(0);
+  for (int i=0; i<100000000; i++) { 
+    if (!(i & (i-1))) { 
+      cout << "Testing " << i 
+	   << " size= " << foo.size() << endl;
+      foo.Check();
+    }
+    if (rand() % 2) foo.insert(rand() % 1000);
+    else foo.erase(rand() % 1000);
+  }
+  cout << "time=" << time(0)-start << endl;
+}
 
 //template <class T>
 //typedef RBTree<IdentityProjection<T> > orderset;
