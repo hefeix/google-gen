@@ -20,7 +20,7 @@
  
 int main() {
   // RBTree<SetNode<string> > foo;
-
+  // TestOrderTree();
   orderset<string> foo;
   for (int i=0; i<26; i++) {
     string s(string("")+char('a'+((i*17)%26)));
@@ -34,7 +34,7 @@ int main() {
   }
   cout << foo.ToString();
   foo.Check();
-  for (orderset<string>::iterator run = foo.begin(); run!=foo.end(); ++run){
+  forall(run, foo) {
     cout << (*run) << endl;
   }
   cout << "DONE" << endl;
