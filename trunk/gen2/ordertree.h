@@ -22,6 +22,31 @@
 #include <map>
 #include "shorthand.h"
 
+/*
+  An orderset or ordermap is our reimplementation of stl set and map.
+  Most of the stl functions work.  In addition, we have the following
+  member functions:
+
+  // returns pointer to the nth element
+  (const_)iterator nth(uint n); 
+
+  // first iterator not less than k
+  (const_)iterator first_ge(const Key &k);
+
+  // returns the rank.
+  uint index(const (const_)iterator &iter) const;
+
+  // number of elements <k
+  uint num_lt(const Key & k) const;
+
+  // number of elements >=k
+  uint num_ge(const Key &k) const;
+  
+  // range includes lower bound but not upper bound
+  uint range_count(const Key & lower, const Key & upper) const;
+ 
+*/
+
 using namespace std;
 
 template <class NPtr> 
@@ -42,16 +67,19 @@ NPtr NextNode(NPtr current) {
 // Projcetions of data onto keys
 template<class K> 
 struct IdentityProjection {
-  static const K & Key(const K &k) { return k;}
   typedef K KeyType;
   typedef K DataType;
+  static const KeyType & ToKey(const DataType &k) { return k;}
+  static const DataType & ToData(const KeyType &k) { return k;}
 };
 template<class K, class V> 
-struct FirstProjection {
-  static const K & Key(const pair<K,V> &p) { return p.first;}  
+  struct FirstProjection {
   typedef K KeyType;
   typedef pair<K,V> DataType;
   typedef V ValueType;
+  
+  static const KeyType & ToKey(const DataType &p) { return p.first;}  
+  static DataType ToData(const KeyType & k) { return make_pair(k, V());}
 };
 
 
@@ -61,7 +89,7 @@ class RBTree {
   typedef typename Projection::DataType Data;
   
   bool ProjectLT(const Data & d1, const Data & d2) {
-    return (Projection::Key(d1) < Projection::Key(d2));
+    return (Projection::ToKey(d1) < Projection::ToKey(d2));
   }
 
  public:
@@ -80,7 +108,7 @@ class RBTree {
     return "tree\n" + ToString(root_, "", "");
   }
 
- private:
+ protected:
   enum Color {
     RED,
     BLACK,
@@ -99,20 +127,16 @@ class RBTree {
       return 1;
     }
     Node * Grandparent() {
-      //CHECK(parent_->parent_);
+      CHECK(parent_->parent_);
       // if (parent_ == NULL) return NULL;
       return parent_->parent_;
     }
     Node * Uncle() {
+      CHECK(parent_);
       return parent_->Sibling();
-      /*if (!Grandparent()) return NULL;
-      if (parent_ == Grandparent()->left_)
-        return Grandparent()->right_;
-      else
-      return Grandparent()->left_;*/
     }
     Node * Sibling() const {
-      //CHECK(parent_);
+      CHECK(parent_);
       return ( (this==parent_->right_)?parent_->left_:parent_->right_ );
     }
     // where should point to the parent's left_ or right_, or to the
@@ -177,18 +201,24 @@ class RBTree {
     Data & operator *() {
       return current_->data_;
     }
+    Data * operator->() {
+      return &(**this);
+    }
   };
   struct const_iterator {
     Node * current_;
     const_iterator(Node *n) :current_(n){}
-    // const_iterator(const iterator &i) :current_(i.current_){}
+    const_iterator(const iterator &i) :current_(i.current_){}
     void operator ++(){ current_ = NextNode(current_); }
     const Data & operator *() {
       return current_->data_;
     }
+    const Data * operator->() {
+      return &(**this);
+    }
   };
 
-  Node* _begin() {
+  Node* _begin() const {
     Node * c = root_;
     if (c) while (c && c->left_) c = c->left_;
     return c;
@@ -199,7 +229,7 @@ class RBTree {
   iterator end() { return NULL; }
   const_iterator end() const { return NULL; }
 
-  Node* _find(const Key & k) {
+  Node* _find(const Key & k) const{
     Node ** look = search(k, NULL);
     if (*look) return *look;
     return NULL;
@@ -208,7 +238,7 @@ class RBTree {
   const_iterator find(const Key &k) const{ return _find(k);}
 
   // first element greater than or equal to k
-  Node * _first_ge(const Key &k) {
+  Node * _first_ge(const Key &k) const {
     Node *parent;
     Node **look = search(k, &parent);
     if (*look) return iterator(*look);
@@ -223,7 +253,7 @@ class RBTree {
   iterator first_ge(const Key &k) { return _first_ge(k); }
   const_iterator first_ge(const Key &k) const { return _first_ge(k); }
 
-  Node * _th(uint i) {
+  Node * _nth(uint i) const {
     CHECK(i<size());
     Node *n = root_;
     while(1) {
@@ -236,8 +266,8 @@ class RBTree {
       }
     }
   }
-  iterator th(uint i){ return _th(i); }
-  const_iterator th(uint i) const{ return _th(i); }
+  iterator nth(uint i){ return _nth(i); }
+  const_iterator nth(uint i) const{ return _nth(i); }
 
   uint _index(const Node * n) const{
     if (!n) return size();
@@ -257,12 +287,15 @@ class RBTree {
     const_iterator find = first_ge(k);
     return index(find);
   }
+  uint num_ge(const Key &k) const {
+    return size() - num_lt(k);
+  }
   // range includes lower bound but not upper bound
-  uint range_count(const Key & lower, const Key & upper) {
+  uint range_count(const Key & lower, const Key & upper) const {
     return num_lt(upper) - num_lt(lower);
   }
 
- private:
+ protected:
 
   void Delete(Node * n) { // deletes a node
     if (!(n->left_ && n->right_)) {
@@ -455,11 +488,13 @@ class RBTree {
     }   
   }
 
-  Node * GetAddNode(const Data & data) {
+  // Gets a node or adds it using the projection's conversion from 
+  // key to Data (in the case of a map, we will tack on a default value).
+  Node * GetAddNode(const Key & k) {
     Node *parent;
-    Node ** where = search(data, &parent);
+    Node ** where = search(k, &parent);
     if (*where) return *where;
-    Node * ret = new Node(where, parent, data);
+    Node * ret = new Node(where, parent, Projection::ToData(k));
     InsertCase1(ret);
     return ret;
   }
@@ -475,11 +510,11 @@ class RBTree {
     Node **current = &root_;
     *parent = NULL;
     while (*current) {
-      if ( k < Projection::Key((*current)->data_) ) {
+      if ( k < Projection::ToKey((*current)->data_) ) {
 	*parent = *current;
 	current = &((*current)->left_);
       }
-      else if ( Projection::Key((*current)->data_) < k) {
+      else if ( Projection::ToKey((*current)->data_) < k) {
 	*parent = *current;
 	current = &((*current)->right_);
       }
@@ -523,25 +558,48 @@ bool operator !=(const Iterator & i1,
 template <class T> 
 class orderset : public RBTree<IdentityProjection<T> >{
 };
-template<class T>
-class ordermap : public RBTree<FirstProjection<T> >{
-  const T
+template<class K, class V>
+class ordermap : public RBTree<FirstProjection<K,V> >{
+ public:
+  typedef typename RBTree<FirstProjection<K,V> >::Node Node;
+  V & operator [](const K & k) {
+    Node *n = GetAddNode(k);
+    return n->data_.second;    
+  }
 };
 
-inline void TestOrderTree() {
-  //set<int> foo;
-  orderset<int> foo;
+inline void TestOrderSet() {
+  set<int> foo;
+  //orderset<int> foo;
   int start = time(0);
   for (int i=0; i<100000000; i++) { 
     if (!(i & (i-1))) { 
       cout << "Testing " << i 
 	   << " size= " << foo.size() << endl;
-      foo.Check();
+      //foo.Check();
     }
     if (rand() % 2) foo.insert(rand() % 1000);
     else foo.erase(rand() % 1000);
   }
   cout << "time=" << time(0)-start << endl;
+}
+inline void TestOrderMap() {
+  ordermap<string, int> foo;
+  foo["noam"] = 1;
+  foo["georges"] = 4;
+  foo["georges"] = -3;
+  foo["ralph"];
+  foo.erase("noam");
+  foo.Check();
+  
+  forall(run, foo) {
+    cout << "foo[" << run->first << "] = " << run->second << endl;
+  }
+  const ordermap<string, int> & bar = foo;
+  forall(run, bar) {
+    cout << "foo[" << run->first << "] = " << run->second << endl;
+  }
+  
 }
 
 //template <class T>

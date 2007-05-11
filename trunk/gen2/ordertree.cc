@@ -19,13 +19,15 @@
 #include "ordertree.h"
  
 int main() {
-  // RBTree<SetNode<string> > foo;
-  // TestOrderTree();
+  TestOrderSet();
+  return 0;
+
   orderset<string> foo;
   for (int i=0; i<26; i++) {
     string s(string("")+char('a'+((i*17)%26)));
     foo.insert(s);
   }
+  
   foo.insert("foo");
   foo.insert("bar");  
   for (int i=0; i<13; i++) {
@@ -37,6 +39,12 @@ int main() {
   forall(run, foo) {
     cout << (*run) << endl;
   }
+  cout << "5th element of foo = " << *(foo.nth(5)) << endl;
+  orderset<string>::iterator iter = foo.nth(6);
+  orderset<string>::const_iterator iter2 = foo.nth(6);
+  const orderset<string> & bar = foo;
+  cout << "5th element of foo = " << *(foo.nth(5)) << endl;
+  orderset<string>::const_iterator citer = bar.nth(6);
   cout << "DONE" << endl;
   return 0;
 
