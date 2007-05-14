@@ -20,7 +20,7 @@
 #define _SEARCHTREE_H_
 #include "util.h"
 #include "tuple.h"
-#include "tupleindex.h"
+#include "blackboard.h"
 
 /*
 
@@ -35,7 +35,7 @@
   so that Search can be subclassed and Search objects can be swapped out to
   change search strategies.   
 		       
- */
+*/
 
 // The informaiton passed back by a Query about changes to its results
 struct QueryUpdate {

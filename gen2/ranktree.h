@@ -23,7 +23,7 @@
 #include "shorthand.h"
 
 /*
-  An orderset or ordermap is our reimplementation of stl set and map.
+  An orderset or rankmap is our reimplementation of stl set and map.
   Most of the stl functions work.  In addition, we have the following
   member functions:
 
@@ -556,10 +556,10 @@ bool operator !=(const Iterator & i1,
 }
 
 template <class T> 
-class orderset : public RBTree<IdentityProjection<T> >{
+class rankset : public RBTree<IdentityProjection<T> >{
 };
 template<class K, class V>
-class ordermap : public RBTree<FirstProjection<K,V> >{
+class rankmap : public RBTree<FirstProjection<K,V> >{
  public:
   typedef typename RBTree<FirstProjection<K,V> >::Node Node;
   V & operator [](const K & k) {
@@ -568,9 +568,9 @@ class ordermap : public RBTree<FirstProjection<K,V> >{
   }
 };
 
-inline void TestOrderSet() {
+inline void TestRankSet() {
   set<int> foo;
-  //orderset<int> foo;
+  //rankset<int> foo;
   int start = time(0);
   for (int i=0; i<100000000; i++) { 
     if (!(i & (i-1))) { 
@@ -583,8 +583,8 @@ inline void TestOrderSet() {
   }
   cout << "time=" << time(0)-start << endl;
 }
-inline void TestOrderMap() {
-  ordermap<string, int> foo;
+inline void TestRankMap() {
+  rankmap<string, int> foo;
   foo["noam"] = 1;
   foo["georges"] = 4;
   foo["georges"] = -3;
@@ -595,7 +595,7 @@ inline void TestOrderMap() {
   forall(run, foo) {
     cout << "foo[" << run->first << "] = " << run->second << endl;
   }
-  const ordermap<string, int> & bar = foo;
+  const rankmap<string, int> & bar = foo;
   forall(run, bar) {
     cout << "foo[" << run->first << "] = " << run->second << endl;
   }
@@ -603,7 +603,7 @@ inline void TestOrderMap() {
 }
 
 //template <class T>
-//typedef RBTree<IdentityProjection<T> > orderset;
+//typedef RBTree<IdentityProjection<T> > rankset;
 
 
 //template <class K, class V> 
