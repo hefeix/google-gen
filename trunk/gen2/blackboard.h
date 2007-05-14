@@ -19,6 +19,7 @@
 #include "objects.h"
 #include "numbers.h"
 #include "changelist.h"
+#include "ranktree.h"
 
 struct IndexRow;
 struct Blackboard;
@@ -181,7 +182,7 @@ struct IndexRow {
 
   // contains (first time, tupleinfo *) for each tuple on the blackboard
   // that matches.
-  set<pair<Time, TupleInfo *> > tuples_;
+  rankset<pair<Time, TupleInfo *> > tuples_;
   Blackboard * blackboard_;
   // the subscriptions that care about time
   set<WTSubscription *> time_matters_subscriptions_;
