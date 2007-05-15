@@ -241,7 +241,6 @@ typedef vector<Object> Tuple;
 typedef map<Object, Object> Map;
 typedef vector<Tuple> MPattern; // mutable 2 levels down
 
-
 typedef SpecificObject<FLAKE, string> Flake;
 typedef SpecificObject<KEYWORD, string> Keyword;
 typedef SpecificObject<VARIABLE, int> Variable;
@@ -306,6 +305,7 @@ inline Pattern MPatternToPattern(const MPattern &p) {
 
 
 void InitKeywords();
+void DestroyKeywords();
 // keywords that need to be created in InitKeywords
 extern Keyword WILDCARD;
 extern OTime NEVER;

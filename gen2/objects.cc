@@ -6,9 +6,16 @@ Keyword WILDCARD;
 OTime NEVER;
 
 void InitKeywords(){
+  cout << "Calling InitKeywords" << endl;
   WILDCARD = Keyword::Make("*");
   NEVER = OTime::Make(Time::Never());
 };
+
+void DestroyKeywords() {
+  cout << "Calling DestroyKeywords" << endl;
+  WILDCARD = (void*)NULL;
+  NEVER = (void*)NULL;
+}
 
 // There must be some black magic going on here, but the compiler is happy.
 template<ObjectType OT, class D>

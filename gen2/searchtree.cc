@@ -17,31 +17,46 @@
 // Author: Noam Shazeer and Georges Harik
 
 #include "searchtree.h"
-#include "model.h"
-#include "tupleindex.h"
 
-void Query::AddParent() { 
+// Parents is a count of things that need you to exist
+void Query::L1_AddParent() { 
   CL.ChangeValue(&parent_count_, parent_count_+1);
 }
-void Query::RemoveParent() { 
+void Query::L1_RemoveParent() { 
     CL.ChangeValue(&parent_count_, parent_count_-1);
     CHECK(parent_count_ >=0);
     if (parent_count_==0) L1_Erase();
-  }
 }
 void Query::L1_Erase() {
   CHECK(parent_count_ == 0);
   if (search_) search_->L1_Erase();
+  CL.Destroying(this);
 }
+
+uint64 Query::GetCount() const {
+  return search_->count_;
+}
+
+void Query::GetSubstitutions(vector<Map> * substitutions) const {
+    return search_->GetSubstitutions(substitutions);
+}
+
 bool Query::L1_Search(int64 *max_work_now){
   if (pattern_.size() == 0) {
     new NoTuplesSearch(this);
     return search_->L1_Search(max_work_now);
   }
   if (pattern_.size() == 1) {
+     const Tuple& t = pattern_[0].Data();
+     if (HasDuplicateVariables(t)) {
+       return false; // UNIMPLEMENTED
+     }
     new OneTupleSearch(this);
     return search_->L1_Search(max_work_now);
   }
+  return false;
+
+  /*
   vector<uint64> num_matches;
   for (uint i=0; i<pattern.size(); i++) 
     num_matches.push_back
@@ -55,37 +70,67 @@ bool Query::L1_Search(int64 *max_work_now){
   } else {
     if (!L1_MakePartition(max_work_now)) return false;
   }
+  */
 }
-
-
-string QueryUpdate::ToString() {
-  string ret = "STUpdate { count_delta_=" + itoa(count_delta_) + "\n";
-  for (int i=0; i<changes_.size(); i++) {
-    ret += "   " + changes_[i].first.ToString() + " : " 
-	+ TimeToStringOrNothing(changes_[i].second.first) + "->" 
-      + TimeToStringOrNothing(changes_[i].second.second) + "\n";
-  }
-  ret += "}\n";
-  return ret;
-}
+ 
 NoTuplesSearch::NoTuplesSearch(Query *query) 
-  :Search(query) {
+  : Search(query) {
 }
+
 OneTupleSearch::OneTupleSearch(Query *query) 
-  :Search(query) {
+  : Search(query) {
 }
-One
+
+bool OneTupleSearch::L1_Search(int64 * max_work_now) {
+  Blackboard & bb = *query_->blackboard_;
+  const Tuple& t = query_->pattern_[0].Data();
+
+  IndexRow * ir = bb.GetIndexRow(OTuple::Make(VariablesToWildcards(t)));
+  if (ir == NULL) {
+    count_ = 0;
+    return true;
+  }
+  count_ = ir->size();
+  return true;
+}
+
+void OneTupleSearch::GetSubstitutions(vector<Map> * substitutions) const {
+  Blackboard & bb = *query_->blackboard_;
+  const Tuple& t = query_->pattern_[0].Data();
+  IndexRow * ir = bb.GetIndexRow(OTuple::Make(VariablesToWildcards(t)));
+  substitutions->clear();
+  if (ir == NULL) {
+    return;
+  }
+  forall(run_tuples, ir->tuples_) {
+    TupleInfo * ti = run_tuples->second;
+    OTuple substituted_t = ti->tuple_;
+    Map sub;
+    bool res = ComputeSubstitution(t, substituted_t.Data(), &sub);
+    // We're not allowing duplicate variables, substitution must work
+    CHECK(res);
+    if (res) {
+      substitutions->push_back(sub);
+    }
+  }
+}
 
 
-QuerySubscription::QuerySubscription(Searchtree *subscribee, UpdateNeeds needs)
+QuerySubscription::QuerySubscription(Query *subscribee, UpdateNeeds needs)
   :subscribee_(subscribee), needs_(needs) {
-  subscribee_->L1_AddSubscription(this);
+  // subscribee_->L1_AddSubscription(this); TODO
 }
 void QuerySubscription::L1_Erase(){
-  subscribee_->L1_RemoveSubscription(this);
+  // subscribee_->L1_RemoveSubscription(this); TODO
 }
 
-OPattern QuerySubscription::GetPattern() const;
+OPattern QuerySubscription::GetPattern() const {
+  // TODO
+  return OPattern();
+}
+
+/*
+
 
 Model * SearchTree::GetModel() {
   CHECK(precondition_);
@@ -141,6 +186,7 @@ void SearchTree::L1_Erase() {
 bool SearchTree::L1_Search(int64 *max_work_now) {
   return root_->L1_Search(max_work_now);  
 }
+
 
 SearchNode::SearchNode(SearchTree * tree, SearchNode * parent) {
   tree_ = tree;
@@ -622,4 +668,16 @@ void SearchNode::VerifyNumSatisfactions(uint64 ns) const{
        << " Node type: " << type_
        << endl;
   CHECK(false);
+}
+*/
+
+string QueryUpdate::ToString() const {
+  string ret = "STUpdate { count_delta_=" + itoa(count_delta_) + "\n";
+  for (uint i=0; i<changes_.size(); i++) {
+    ret += "   " + changes_[i].first.ToString() + " : " 
+	+ TimeToStringOrNothing(changes_[i].second.first) + "->" 
+      + TimeToStringOrNothing(changes_[i].second.second) + "\n";
+  }
+  ret += "}\n";
+  return ret;
 }

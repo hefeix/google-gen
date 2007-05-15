@@ -38,6 +38,7 @@ You can use this free for any purpose.  It has no warranty.
 using namespace std;
 
 typedef unsigned long long uint64;   /* unsigned 8-byte quantities */
+typedef long long int64;
 typedef unsigned long int  uint32;   /* unsigned 4-byte quantities */
 typedef unsigned char uint8;
 
@@ -47,6 +48,18 @@ inline uint64 Fingerprint(const string & s, uint64 level = 0){
 }
 inline uint64 Fingerprint(uint64 n, uint64 level = 0){
   return BJHash((uint8*)&n, 8, level);
+}
+inline uint64 Fingerprint(double n, uint64 level = 0){
+  return BJHash((uint8*)&n, 8, level);
+}
+inline uint64 Fingerprint(int64 n, uint64 level = 0){
+  return BJHash((uint8*)&n, 8, level);
+}
+inline uint64 Fingerprint(uint32 n, uint64 level = 0){
+  return BJHash((uint8*)&n, 4, level);
+}
+inline uint64 Fingerprint(int n, uint64 level = 0){
+  return BJHash((uint8*)&n, 4, level);
 }
 template <class T> uint64 FingerprintIterator(const T & begin, const T & end, uint64 level = 0){
   uint64 ret = level;

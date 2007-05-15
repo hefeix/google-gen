@@ -138,6 +138,21 @@ void Substitute(Map m, CandidateRule *r){
   Substitute(m, &(r->first));
   Substitute(m, &(r->second));
 }
+OTuple Substitute(Map m, OTuple t) {
+  Tuple t2 = t.Data();
+  Substitute(m, &t2);
+  return OTuple::Make(t2);
+}
+Pattern Substitute(Map m, const Pattern &p) {
+  Pattern ret;
+  for (uint c=0; c<p.size(); c++) {
+    ret.push_back(Substitute(m, p[c]));
+  }
+  return ret;
+}
+OPattern Substitute(Map m, OPattern p) {
+  return OPattern::Make(Substitute(m, p.Data()));
+}
 
 void Add(Map * m, Object key, Object value) {
   (*m)[key] = value;
@@ -217,10 +232,10 @@ bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub,
   for (uint i=0; i<pre_sub.size(); i++) {
     if (IsVariable(pre_sub[i])){
       if ( (sub % pre_sub[i]) 
-	   && (sub[pre_sub[i]] != post_sub[i]) ) return NULL;
+	   && (sub[pre_sub[i]] != post_sub[i]) ) return false;
       sub[pre_sub[i]] = post_sub[i];
     } else {
-      if (pre_sub[i] != post_sub[i]) return NULL;
+      if (pre_sub[i] != post_sub[i]) return false;
     }
   }
   if (result) *result = sub;

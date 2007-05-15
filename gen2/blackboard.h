@@ -16,6 +16,9 @@
 //
 // Author: Georges Harik and Noam Shazeer
 
+#ifndef _BLACKBOARD_H_
+#define _BLACKBOARD_H_
+
 #include "objects.h"
 #include "numbers.h"
 #include "changelist.h"
@@ -24,25 +27,23 @@
 struct IndexRow;
 struct Blackboard;
 
-
-
 struct SamplingInfo{
-  bool sampled_;
-  uint32 position_;
-  uint32 start_hash_; // inclusive
-  uint32 end_hash_; // inclusive
-  double GetFraction() const;
-  SamplingInfo(); // creates an unsampled SamplingInfo
-  SamplingInfo(int position, uint32 start_hash, uint32 end_hash);
-  bool RemovePosition(uint32 position);
-  SamplingInfo LimitToPosition(uint32 position) const;
-  bool Matches(const Tuple& t) const;
-  static SamplingInfo RandomRange(int position, int denominator, int part=-1);
+  bool   sampled_;
+  int    position_;
+  double fraction_;
+
+  // Constructors
+  SamplingInfo(); // unsampled
+  SamplingInfo(int position, double fraction);
+
+  // Getting new sampling infos
+  SamplingInfo LimitToPosition(int position) const;
+  SamplingInfo RemovePosition(int position) const;
+
   static SamplingInfo StringToSamplingInfo(const string& s);
   string ToString() const; //  not the inverse of the above.
-  static SamplingInfo Unsampled() { return SamplingInfo();}
+  static SamplingInfo Unsampled() { return SamplingInfo(); }
 };
-
 
 // You change the contents of the blackboard by creating and destroying
 // postings.  You own your own postings.  
@@ -152,8 +153,8 @@ struct LoggingWTSubscription : public WTSubscription {
 // method on an object
 template <class T> 
 struct UpdateWTSubscription : public WTSubscription {
-  SearchTreeWTSubscription(Blackboard *blackboard, OTuple tuple, 
-			   UpdateNeeds needs, T *subscriber)
+  UpdateWTSubscription(Blackboard *blackboard, OTuple tuple, 
+		       UpdateNeeds needs, T *subscriber)
     :WTSubscription(blackboard, tuple, needs), subscriber_(subscriber) {}
   void Update(const WTUpdate &update) {
     subscriber_->Update(update, this);
@@ -179,6 +180,7 @@ struct IndexRow {
   OTuple GetWildcardTuple() const {
     return wildcard_tuple_;
   }
+  uint32 size() { return tuples_.size(); }
 
   // contains (first time, tupleinfo *) for each tuple on the blackboard
   // that matches.
@@ -196,8 +198,9 @@ class Blackboard {
   friend class TupleInfo;
   friend class WTSubscription;
   friend class Posting;
+  friend class OneTupleSearch;
  
-  Blackboard(Changelist *cl);
+  Blackboard() {}
 
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
@@ -211,9 +214,8 @@ class Blackboard {
 
   TupleInfo * GetTupleInfo(OTuple tuple);
 
-
   map<OTuple, IndexRow *> index_;
   map<OTuple, TupleInfo *> tuple_info_;
-  Changelist *changelist_;
-
 };
+
+#endif

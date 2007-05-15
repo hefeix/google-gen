@@ -85,6 +85,10 @@ void Substitute(Map m, Tuple * t);
 void Substitute(Map m,  MPattern * p);
 void Substitute(Map m, CandidateRule *r);
 
+OTuple Substitute(Map m, OTuple t);
+Pattern Substitute(Map m, const Pattern& p);
+OPattern Substitute(Map m, OPattern p);
+
 // Adds a key-value pair to a Map.
 void Add(Map *m, Object key, Object value);
 // union=
