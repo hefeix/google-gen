@@ -16,6 +16,9 @@
 //
 // Author: Noam Shazeer and Georges Harik
 
+#ifndef _RANKTREE_H_
+#define _RANKTREE_H_
+
 #include <vector>
 #include <iostream>
 #include <string>
@@ -504,10 +507,10 @@ class RBTree {
   // sets *parent to what the new node's parent pointer should be.
   // if a matching node already exists, then *(the return value) 
   // will be non-null and point to it.
-  Node ** search(const Key & k, Node **parent) {
+  Node ** search(const Key & k, Node **parent) const {
     Node *dummy;
     if (!parent) parent = &dummy;
-    Node **current = &root_;
+    Node * const *current = &root_;
     *parent = NULL;
     while (*current) {
       if ( k < Projection::ToKey((*current)->data_) ) {
@@ -518,15 +521,15 @@ class RBTree {
 	*parent = *current;
 	current = &((*current)->right_);
       }
-      else return current;
+      else return (Node**) current;
     }
-    return current;
+    return (Node**) current;
   }
-  static Color ColorOf(const Node * p) {
+  static Color ColorOf(const Node * p)  {
     if (p) return p->color_;
     return BLACK;
   }
-  static int SubtreeSize(const Node *n) {
+  static uint SubtreeSize(const Node *n)  {
     if (!n) return 0;
     return n->subtree_size_;
   }
@@ -558,6 +561,7 @@ bool operator !=(const Iterator & i1,
 template <class T> 
 class rankset : public RBTree<IdentityProjection<T> >{
 };
+
 template<class K, class V>
 class rankmap : public RBTree<FirstProjection<K,V> >{
  public:
@@ -567,6 +571,25 @@ class rankmap : public RBTree<FirstProjection<K,V> >{
     return n->data_.second;    
   }
 };
+
+template<class A> bool operator %(const rankset<A> & m, const A & a){
+  return m.find(a) != m.end();
+}
+
+template <class A, class B> B * operator %(rankmap<A, B> & m, const A & a){
+  typedef typeof(m.begin()) iter_type;
+  iter_type look = m.find(a);
+  if (look != m.end()) return &(look->second);
+  return 0;
+}
+
+template<class A, class B> const B * operator %(const rankmap<A, B> & m, 
+						const A & a){
+  typedef typeof(m.begin()) iter_type;
+  iter_type look = m.find(a);
+  if (look != m.end()) return &(look->second);
+  return 0;
+}
 
 inline void TestRankSet() {
   set<int> foo;
@@ -608,3 +631,5 @@ inline void TestRankMap() {
 
 //template <class K, class V> 
 //class o
+
+#endif

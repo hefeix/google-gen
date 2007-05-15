@@ -55,9 +55,10 @@ template <class C> class ValueChange : public Change{
 
 
 // Inserts a value into a set.
-template <class C> class SetInsertChange : public Change {
+template <class C, class SC = set<C> >
+class SetInsertChange : public Change {
  public:
-  SetInsertChange(set<C> * location, const C & val) {
+  SetInsertChange(SC * location, const C & val) {
     location_ = location;
     val_ = val;
     CHECK(! (*location % val_));
@@ -67,14 +68,15 @@ template <class C> class SetInsertChange : public Change {
     location_->erase(val_);
   }
  private:
-  set<C> * location_;
+  SC * location_;
   C val_;
 };
 
 // Removes a value from a set
-template <class C> class SetRemoveChange : public Change {
+template <class C, class SC = set<C> > 
+class SetRemoveChange : public Change {
  public:
-  SetRemoveChange(set<C> * location, const C & val) {
+  SetRemoveChange(SC * location, const C & val) {
     location_ = location;
     val_ = val;
     CHECK(*location % val_);
@@ -84,7 +86,7 @@ template <class C> class SetRemoveChange : public Change {
     location_->insert(val_);
   }
  private:
-  set<C> * location_;
+  SC * location_;
   C val_;
 };
 
@@ -322,6 +324,13 @@ class Changelist {
     Make(new DeleteOnMakePermanentChange<C>(object));
   }
 
+  // Adding to set convenience function
+  template <class C, class SC> void InsertIntoSet(SC * sc, const C& c) {
+    Make(new SetInsertChange<C, SC>(sc, c));
+  }
+  template <class C, class SC> void RemoveFromSet(SC * sc, const C& c) {
+    Make(new SetRemoveChange<C, SC>(sc, c));
+  }
 };
 
 class DestructibleCheckpoint{

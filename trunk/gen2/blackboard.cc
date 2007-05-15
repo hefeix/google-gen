@@ -18,82 +18,61 @@
 
 #include "blackboard.h"
 #include "tuple.h"
-
+#include "searchtree.h"
 
 SamplingInfo::SamplingInfo() {
   sampled_ = false;
+  position_ = -1;
+  fraction_ = 0;
 }
-SamplingInfo::SamplingInfo(int position, uint32 start_hash, uint32 end_hash){
+
+SamplingInfo::SamplingInfo(int position, double fraction) {
   sampled_ = true;
   position_ = position;
-  start_hash_ = start_hash;
-  end_hash_ = end_hash;
+  fraction_ = fraction;
 }
 
-SamplingInfo SamplingInfo::RandomRange(int position, int denominator, int part){
-  if (part < 0) part = rand() % denominator;
-  uint32 start = (0xFFFFFFFF / denominator) * part;
-  uint32 end = (0xFFFFFFFF / denominator) * (part+1);
-  return SamplingInfo(position, start, end);
-}
-
-SamplingInfo SamplingInfo::LimitToPosition(uint32 position) const{
+SamplingInfo SamplingInfo::LimitToPosition(int position) const{
   if (!sampled_ || (position != position_)) return SamplingInfo();
-  return SamplingInfo(0, start_hash_, end_hash_);
+  return SamplingInfo(0, fraction_);
 }
 
-bool SamplingInfo::RemovePosition(uint32 position) {
-  if (!sampled_) return false;
-  if (position < position_) {
-    position_--;
-    return true;
+SamplingInfo SamplingInfo::RemovePosition(int position) const {
+  if (sampled_ && (position < position_)) {
+    return SamplingInfo(position_-1, fraction_);
   }
-  if (position == position_) {
-    sampled_ = false;
-    return false;
-  }
-  return true;
-}
-
-bool SamplingInfo::Matches(const Tuple& t) const {
-  if (!sampled_) return true;
-  uint32 fp = t.Fingerprint32();
-  return (start_hash_ <= fp) && (fp <= end_hash_);
+  return SamplingInfo();
 }
 
 SamplingInfo SamplingInfo::StringToSamplingInfo(const string& s) {
   istringstream istr(s);
-  int position, denominator, part;
-  istr >> position >> denominator >> part;
-  return RandomRange(position, denominator, part);
+  int position;
+  double fraction;
+  istr >> position >> fraction;
+  return SamplingInfo(position, fraction);
 }
 
 string SamplingInfo::ToString() const {
   if (!sampled_) return "Unsampled";
-  return "{pos=" + itoa(position_) + " 1/" 
-    + dtoa(1.0/GetFraction()) + "}";
-}
-double SamplingInfo::GetFraction() const {
-  if (!sampled_) return 1.0;
-  return (end_hash_-start_hash_+1.0)/pow(2,32);
+  return "{pos=" + itoa(position_) + " fraction=1/" + dtoa(1/fraction_) + "}"; 
 }
 
 Posting::Posting(OTuple tuple, Time time, Blackboard *blackboard)
   :tuple_(tuple), time_(time), blackboard_(blackboard){
-  blackboard_->changelist_->Creating(this);
+  CL.Creating(this);
   blackboard_->L1_AddPosting(this);
 }
 void Posting::L1_Erase(){
   blackboard_->L1_RemovePosting(this);
-  blackboard_->changelist_->Destroying(this);
+  CL.Destroying(this);
 }
 TupleInfo::TupleInfo(Posting *first_posting, Blackboard *blackboard)
   :tuple_(first_posting->tuple_), blackboard_(blackboard) {
-  blackboard_->changelist_->Creating(this);
-  blackboard_->changelist_->Make
+  CL.Creating(this);
+  CL.Make
     (new MapInsertChange<OTuple, TupleInfo *>
      (&blackboard_->tuple_info_, tuple_, this));
-  blackboard_->changelist_->Make
+  CL.Make
     (new SetInsertChange<pair<Time, Posting *> >
      (&postings_, make_pair(first_posting->time_, first_posting)));
   for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.done(); ++g_iter){
@@ -110,10 +89,10 @@ void TupleInfo::L1_Erase() {
     CHECK(ir);
     ir->RemoveTuple(this);
   }
-  blackboard_->changelist_->Make
+  CL.Make
     (new MapRemoveChange<OTuple, TupleInfo *>
      (&blackboard_->tuple_info_, tuple_));
-  blackboard_->changelist_->Destroying(this);
+  CL.Destroying(this);
 }
 Time TupleInfo::FirstTime() const {
   CHECK(postings_.size());
@@ -133,7 +112,7 @@ void TupleInfo::ChangeTimesInIndexRows(Time old_first_time,
 }
 void TupleInfo::L1_AddPosting(Posting *p) {
   Time old_first_time = FirstTime();
-  blackboard_->changelist_->Make
+  CL.Make
     (new SetInsertChange<pair<Time, Posting *> >
      (&postings_, make_pair(p->time_, p) ) );
   Time new_first_time = FirstTime();
@@ -145,7 +124,7 @@ void TupleInfo::L1_RemovePosting(Posting *p){
     return;
   }
   Time old_first_time = FirstTime();
-  blackboard_->changelist_->Make
+  CL.Make
     (new SetRemoveChange<pair<Time, Posting *> >
      (&postings_, make_pair(p->time_, p) ) );
   Time new_first_time = FirstTime();
@@ -158,25 +137,22 @@ OTuple WTSubscription::GetWildcardTuple() const {
 
 IndexRow::IndexRow(OTuple wildcard_tuple, Blackboard *blackboard)
   :wildcard_tuple_(wildcard_tuple), blackboard_(blackboard){  
-  blackboard_->changelist_->Creating(this);
-  blackboard_->changelist_->Make
+  CL.Creating(this);
+  CL.Make
     (new MapInsertChange<OTuple, IndexRow *>
      (&blackboard_->index_, wildcard_tuple_, this) );
 }
 void IndexRow::L1_Erase() {
-  blackboard_->changelist_->Make
+  CL.Make
     (new MapRemoveChange<OTuple, IndexRow *>
      (&blackboard_->index_, wildcard_tuple_) );
-  blackboard_->changelist_->Destroying(this);
+  CL.Destroying(this);
 }
 void IndexRow::ChangeTupleTime(TupleInfo *tuple_info, 
 			       Time old_time, Time new_time){  
-  blackboard_->changelist_->Make
-    (new SetRemoveChange<pair<Time, TupleInfo *> >
-     (&tuples_, make_pair(old_time, tuple_info)));
-  blackboard_->changelist_->Make
-    (new SetInsertChange<pair<Time, TupleInfo *> >
-     (&tuples_, make_pair(new_time, tuple_info)));
+
+  CL.RemoveFromSet(&tuples_, make_pair(old_time, tuple_info));
+  CL.InsertIntoSet(&tuples_, make_pair(new_time, tuple_info));
   WTUpdate update;
   update.changes_.push_back
     (make_pair(tuple_info->tuple_, 
@@ -187,9 +163,7 @@ void IndexRow::ChangeTupleTime(TupleInfo *tuple_info,
 }
 void IndexRow::AddTuple(TupleInfo *tuple_info) {
   Time time = tuple_info->FirstTime();
-  blackboard_->changelist_->Make
-    (new SetInsertChange<pair<Time, TupleInfo *> >
-     (&tuples_, make_pair(time, tuple_info)));
+  CL.InsertIntoSet(&tuples_, make_pair(time, tuple_info));
   WTUpdate update;
   update.count_delta_ = 1;
   update.changes_.push_back
@@ -207,9 +181,7 @@ void IndexRow::EraseIfEmpty(){
 
 void IndexRow::RemoveTuple(TupleInfo *tuple_info) {
   Time time = tuple_info->FirstTime();
-  blackboard_->changelist_->Make
-    (new SetRemoveChange<pair<Time, TupleInfo *> >
-     (&tuples_, make_pair(time, tuple_info)));
+  CL.RemoveFromSet(&tuples_, make_pair(time, tuple_info));
   WTUpdate update;
   update.count_delta_ = -1;
   update.changes_.push_back
@@ -220,23 +192,18 @@ void IndexRow::RemoveTuple(TupleInfo *tuple_info) {
   EraseIfEmpty();
 }
 void IndexRow::L1_AddWTSubscription(WTSubscription *sub) {
-  blackboard_->changelist_->Make
+  CL.Make
     (new SetInsertChange<WTSubscription *>
      ((sub->Needs() & UPDATE_TIME)?(&time_matters_subscriptions_):
       (&existence_subscriptions_), sub));
 }
 void IndexRow::L1_RemoveWTSubscription(WTSubscription *sub) {
-  blackboard_->changelist_->Make
+  CL.Make
     (new SetRemoveChange<WTSubscription *>
      ((sub->Needs() & UPDATE_TIME)?(&time_matters_subscriptions_):
       (&existence_subscriptions_), sub));
   EraseIfEmpty();
 }
-
-Blackboard::Blackboard(Changelist *cl) 
-  :changelist_(cl) {
-}
-
 
 void Blackboard::L1_AddPosting(Posting *p){
   TupleInfo *ti = GetTupleInfo(p->tuple_);
@@ -280,8 +247,7 @@ void WTSubscription::L1_Erase() {
 }
 
 void Blackboard::Shell() {
-  Changelist cl;
-  Blackboard b(&cl);
+  Blackboard b;
   string command;
   OTuple tuple;
   Time time;
@@ -314,6 +280,19 @@ void Blackboard::Shell() {
       cin >> i;
       subscriptions[i]->L1_Erase();
       continue;
+    }
+    if (command == "query") {
+      OPattern p;
+      cin >> p;
+      Query *q = new Query(&b, p.Data(), SamplingInfo());
+      q->L1_Search(NULL);
+      cout << "#matches:" << q->GetCount() << endl;
+      vector<Map> subs;
+      q->GetSubstitutions(&subs);
+      for (uint c=0; c<10 && c<subs.size(); c++) {
+	OPattern ps = Substitute(subs[c], p);
+	cout << ps << endl;
+      }
     }
   };
   
