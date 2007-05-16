@@ -118,7 +118,15 @@ struct OneTupleSearch : public Search {
   bool OneTupleSearch::L1_Search(int64 * max_work_now);
   void GetSubstitutions(vector<Map> * substitutions) const;
   WTSubscription *subscription_;
-  OTuple tuple_;
+};
+
+struct ConditionSearch : public Search {
+  ConditionSearch(Query *query, int condition_tuple);
+  bool ConditionSearch::L1_Search(int64 * max_work_now);
+  void GetSubstitutions(vector<Map> * substitutions) const;
+
+  map<OTuple, Query*> children_;
+  int condition_tuple_;
 };
 
 // The informaiton passed back by a Query about changes to its results

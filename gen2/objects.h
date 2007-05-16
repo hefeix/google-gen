@@ -212,8 +212,8 @@ class SpecificObject : public Object {
   
   // this should work for tuples.  I guess it doesn't cause compile errors
   // for the rest because it's in a template.
-  Object operator [](int i) { return Data()[i]; }
-  uint size() { return Data().size(); }
+  Object operator [](int i) const { return Data()[i]; }
+  uint size() const { return Data().size(); }
 
   // constructors at bottom to prevent emacs from @#($*@ing up the indentation
   SpecificObject() : Object() {}

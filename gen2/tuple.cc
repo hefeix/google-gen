@@ -203,10 +203,10 @@ set<Variable> GetVariables(const MPattern & v) {
 }
 
 // If a pattern's variables are connected
-bool IsConnectedPattern(const MPattern& v) {
+bool IsConnectedPattern(const Pattern& v) {
   return (GetConnectedComponents(v, NULL)<=1);
 }
-int GetConnectedComponents(const MPattern &p, vector<int> *components){
+int GetConnectedComponents(const Pattern &p, vector<int> *components){
   map<Variable, set<int> > var_to_tuple;
   for (uint c=0; c<p.size(); c++)
     for (uint c2=0; c2<p[c].size(); c2++)
