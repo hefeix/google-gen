@@ -109,7 +109,6 @@ struct WTUpdate {
   // If it's a deletion, the new time is NULL.
   vector<pair<OTuple, pair<const Time *, const Time *> > > changes_;
 
-
   WTUpdate() {count_delta_ = 0;}
   string ToString() const {
     string ret = "WTUpdate { count_delta_=" + itoa(count_delta_) + "\n";
@@ -199,13 +198,15 @@ class Blackboard {
   friend class WTSubscription;
   friend class Posting;
   friend class OneTupleSearch;
- 
+  friend class ConditionSearch;
+
   Blackboard() {}
 
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
 
   static void Shell();
+  uint64 GetNumWildcardMatches(OTuple wildcard_tuple);
 
  private:
   // returns null on failure

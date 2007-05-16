@@ -115,11 +115,11 @@ set<Variable> GetVariables(const MPattern & v);
 // Returns the number of connected components.
 // components is optional and is set to a vector aligned with p, represnenting
 // a mapping from tuples to densely numbered component ids.
-int GetConnectedComponents(const MPattern & p, vector<int> *components);
+int GetConnectedComponents(const Pattern & p, vector<int> *components);
 
 // Simpler interface if you only care whether the pattern has at most one 
 // component.
-bool IsConnectedPattern(const MPattern & p);
+bool IsConnectedPattern(const Pattern & p);
 
 // removes the tuples that have no variables
 MPattern RemoveVariableFreeTuples(const MPattern & v);

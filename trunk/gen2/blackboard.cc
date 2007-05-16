@@ -19,6 +19,7 @@
 #include "blackboard.h"
 #include "tuple.h"
 #include "searchtree.h"
+#include <fstream>
 
 SamplingInfo::SamplingInfo() {
   sampled_ = false;
@@ -225,6 +226,12 @@ TupleInfo * Blackboard::GetTupleInfo(OTuple t){
   return NULL;
 }
 
+uint64 Blackboard::GetNumWildcardMatches(OTuple wildcard_tuple) {
+  IndexRow * ir = GetIndexRow(wildcard_tuple);
+  if (!ir) return 0;
+  return ir->size();
+}
+
 IndexRow * Blackboard::GetIndexRow(OTuple wildcard_tuple){
   IndexRow ** find = index_ % wildcard_tuple;
   if (find) return *find;
@@ -259,6 +266,17 @@ void Blackboard::Shell() {
       cout << "Posting " << (postings.size()) << endl;      
       postings.push_back(new Posting(tuple, time, &b));
       continue;
+    }
+    if (command == "postfile") {
+      string fn;
+      cin >> fn;
+      ifstream input(fn.c_str());
+      int count = 0;
+      while (input >> tuple) {
+	new Posting(tuple, Time(), &b);
+	count++;
+      }
+      cout << "Posted " << count << " tuples" << endl;      
     }
     if (command == "dp") {
       int i;
