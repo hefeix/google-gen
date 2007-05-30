@@ -127,6 +127,10 @@ double OneOverRandMax = (1.0 / RAND_MAX);
 double RandomFraction(){
   return (rand() + 0.5) * OneOverRandMax;
 }
+int RandomRoundoff(double d) {
+  int f = floor(d);
+  return f + ((RandomFraction() < (d-f))?1:0);
+}
 
 string IntVectorToString(const vector<int> v){
   ostringstream ostr;
@@ -249,3 +253,4 @@ int ConnectedComponents(int num_objects,
   if (components) *components = c;
   return num_components;
 }
+

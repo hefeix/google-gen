@@ -38,6 +38,7 @@ struct SamplingInfo{
 
   // Getting new sampling infos
   SamplingInfo LimitToPosition(int position) const;
+  SamplingInfo LimitToPart(const vector<int> &partition, int part) const;
   SamplingInfo RemovePosition(int position) const;
 
   static SamplingInfo StringToSamplingInfo(const string& s);
@@ -129,10 +130,11 @@ struct WTSubscription {
   virtual ~WTSubscription(){}
   OTuple GetWildcardTuple() const;
   virtual void Update(const WTUpdate & update) = 0;
-  virtual UpdateNeeds Needs() {
+  virtual UpdateNeeds Needs() const {
     return needs_;
   }
-  IndexRow * index_row_;
+  void L1_ChangeNeeds(UpdateNeeds new_needs);
+  IndexRow * subscribee_;
   private:
   UpdateNeeds needs_;
 };
@@ -162,6 +164,8 @@ struct UpdateWTSubscription : public WTSubscription {
 };
 
 
+
+
 struct IndexRow {
   IndexRow(OTuple wildcard_tuple, Blackboard *blackboard);
   void L1_Erase();
@@ -172,23 +176,22 @@ struct IndexRow {
   // Must be called before deleting the posting in the tupleinfo.
   // otherwise the time is wrong.
   void RemoveTuple(TupleInfo * tuple_info);
-  void L1_AddWTSubscription(WTSubscription *sub);
-  void L1_RemoveWTSubscription(WTSubscription *sub);
   // erases this row if there are no subscriptions or tuples.
   void EraseIfEmpty();
   OTuple GetWildcardTuple() const {
     return wildcard_tuple_;
   }
   uint32 size() { return tuples_.size(); }
-
+  
   // contains (first time, tupleinfo *) for each tuple on the blackboard
   // that matches.
-  rankset<pair<Time, TupleInfo *> > tuples_;
+  typedef rankset<pair<Time, TupleInfo *> > TuplesType;
+  TuplesType tuples_;
   Blackboard * blackboard_;
-  // the subscriptions that care about time
-  set<WTSubscription *> time_matters_subscriptions_;
-  // the other subscriptions
-  set<WTSubscription *> existence_subscriptions_;
+
+  // The external subscriptions to this wildcard tuple.
+  // Each subscription is included only once, under its complete needs.
+  map<UpdateNeeds, set<WTSubscription *> > subscriptions_;
 };
 
 class Blackboard {
@@ -200,13 +203,20 @@ class Blackboard {
   friend class OneTupleSearch;
   friend class ConditionSearch;
 
-  Blackboard() {}
+  Blackboard() {num_nonupdated_queries_ = 0;}
 
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
 
   static void Shell();
   uint64 GetNumWildcardMatches(OTuple wildcard_tuple);
+
+  
+  // it is error-prone to change the blackbard when there are searches
+  // that are not being updated.  Let's keep track of whether such 
+  // searches exist. 
+  void L1_ChangeNumNonupdatedQueries(int delta);
+  int64 num_nonupdated_queries_;
 
  private:
   // returns null on failure

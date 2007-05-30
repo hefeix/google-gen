@@ -133,9 +133,9 @@ template<class A> vector<A> Concat(const vector<A> & v, const vector<A> & w){
   return ret;
 }
 
-// union of two sets
-template <class A> set<A> Union(const set<A> & s1, const set<A> & s2){
-  set<A> ret = s1;
+// union of two sets or maps
+template <class A> A Union(const A & s1, const A & s2){
+  A ret = s1;
   ret.insert(s2.begin(), s2.end());
   return ret;
 }
@@ -217,6 +217,35 @@ double RandomFraction();
 // defines an interator A pointing to a ranodm element of B.  Linear time.
 #define RandomElement(A, B) typeof(B.begin()) A = B.begin(); int howfar = RandomUInt32() % B.size(); for (int count=0; count<howfar; count++) ++A;
 
+int RandomRoundoff(double d);
+
+// Extract a sample from a rankset or rankmap.
+template <class S>
+void GetSample(const S & full, S * result, uint sample_size) {
+  CHECK(sample_size < full.size());
+  result->clear();
+  if (sample_size * 3 >= full.size()) {
+    int to_pick = sample_size;
+    int out_of = full.size();
+    forall(run, full) {
+      if (RandomFraction() * out_of < to_pick) {
+	result->insert(*run);
+	to_pick--;
+      }
+      out_of--;
+    }
+    return;
+  }
+  set<int> picked;
+  for (uint i=0; i<sample_size; i++) {
+    int n;
+    do { 
+      n = RandomUInt32() % full.size();
+    } while (!(picked % n));
+    picked.insert(n);
+    result->insert(*(full.nth(n)));
+  }  
+}
 
 #define EMPTY_SLOT (-1)
 // runs through distinct assignments of a number of distincet items to a 
