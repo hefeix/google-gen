@@ -87,7 +87,7 @@ template<class K, class V>
 
 
 template<class Projection> 
-class RBTree {
+class RankTree {
   typedef typename Projection::KeyType Key;
   typedef typename Projection::DataType Data;
   
@@ -106,7 +106,7 @@ class RBTree {
     Node ** look = search(k, &parent);
     if (*look) Delete(*look);
   }
-  RBTree() {root_ = NULL;}
+  RankTree() {root_ = NULL;}
   string ToString(){
     return "tree\n" + ToString(root_, "", "");
   }
@@ -260,7 +260,7 @@ class RBTree {
     CHECK(i<size());
     Node *n = root_;
     while(1) {
-      int leftsize = SubtreeSize(n->left_);
+      uint leftsize = SubtreeSize(n->left_);
       if (i<leftsize) n = n->left_;
       else if (i==leftsize) return n;
       else {
@@ -297,10 +297,31 @@ class RBTree {
   uint range_count(const Key & lower, const Key & upper) const {
     return num_lt(upper) - num_lt(lower);
   }
+  void clear() {
+    RecursiveDelete(root_);
+    root_ = NULL;
+  }
+  template<class I> void insert(const I & b, const I & e) {
+    for (I run=b; run!=e; ++run) {
+      insert(*run);
+    }
+  }
+  void operator=(const RankTree & o) {
+    clear();
+    insert(o.begin(), o.end());
+  }
 
  protected:
+  // just blow the thing away
+  void RecursiveDelete(Node *n) {
+    if (!n) return;
+    RecursiveDelete(n->left_);
+    RecursiveDelete(n->right_);
+    delete n;
+  }
 
-  void Delete(Node * n) { // deletes a node
+
+  void Delete(Node * n) { // deletes a node, maintaining the tree
     if (!(n->left_ && n->right_)) {
       DeleteOneChild(n);
       return;
@@ -559,13 +580,13 @@ bool operator !=(const Iterator & i1,
 }
 
 template <class T> 
-class rankset : public RBTree<IdentityProjection<T> >{
+class rankset : public RankTree<IdentityProjection<T> >{
 };
 
 template<class K, class V>
-class rankmap : public RBTree<FirstProjection<K,V> >{
+class rankmap : public RankTree<FirstProjection<K,V> >{
  public:
-  typedef typename RBTree<FirstProjection<K,V> >::Node Node;
+  typedef typename RankTree<FirstProjection<K,V> >::Node Node;
   V & operator [](const K & k) {
     Node *n = GetAddNode(k);
     return n->data_.second;    
@@ -626,7 +647,7 @@ inline void TestRankMap() {
 }
 
 //template <class T>
-//typedef RBTree<IdentityProjection<T> > rankset;
+//typedef RankTree<IdentityProjection<T> > rankset;
 
 
 //template <class K, class V> 

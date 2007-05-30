@@ -56,14 +56,17 @@ class Changelist;
 struct Query {
   virtual ~Query() {}
   Query(Blackboard *blackboard, const Pattern &pattern, SamplingInfo sampling) 
-  :pattern_(pattern), sampling_(sampling), blackboard_(blackboard),
-    parent_count_(0), search_(NULL) {
+    :pattern_(pattern), sampling_(sampling), blackboard_(blackboard), needs_(0),
+     parent_count_(0), search_(NULL) {
     CL.Creating(this);
+    blackboard_->L1_ChangeNumNonupdatedQueries(1);
   }
   // defining data:
   Pattern pattern_;
   SamplingInfo sampling_;
   Blackboard *blackboard_;
+  // What kind of updates does this search need to get?  
+  // Equal to the union of the needs of the subscriptions.
   UpdateNeeds needs_;  
 
   // Parents are things that need you to exist, they may be tracked
@@ -83,8 +86,68 @@ struct Query {
   void L1_RemoveParent();
   void L1_Erase();
   uint64 GetCount() const;
-  void GetSubstitutions(vector<Map> * substitutions) const;
+  // caution: nondeterministic in the case of sampling
+  void GetSubstitutions(vector<pair<Map, Time> > * substitutions) const;
+  // called when the update needs have changed (subscriptions have been
+  // added, removed, or changed).  Propagates the needs changes to the
+  // children.
+  void L1_RecomputeUpdateNeeds();
 };
+
+
+// The informaiton passed back by a Query about changes to its results
+struct QueryUpdate {
+  int64 count_delta_;
+  vector<pair<OMap, pair<const Time *, const Time *> > > changes_;
+  string ToString() const;
+};
+
+// Subclass this to subscribe to changes to a Query.
+struct QuerySubscription {
+  virtual void Update(const QueryUpdate & update) = 0;
+  QuerySubscription(Query *subscribee, UpdateNeeds needs);
+
+  void L1_Erase();
+  void L1_ChangeNeeds(UpdateNeeds new_needs);
+  virtual ~QuerySubscription(){}
+  OPattern GetPattern() const;
+  UpdateNeeds Needs() const { return needs_;}
+  Query *subscribee_;
+  private:
+  UpdateNeeds needs_;
+};
+template <class C>
+struct UpdateQuerySubscription : public QuerySubscription {
+  C *subscriber_;
+  UpdateQuerySubscription(C *subscriber, 
+			  Query *subscribee, 
+			  UpdateNeeds needs) 
+    :QuerySubscription(subscribee, needs), subscriber_(subscriber_) {}
+  void Update(const QueryUpdate& update) {
+    subscriber_->Update(update, this);
+  }
+};
+class ConditionSearch;
+class PartitionSearch;
+class OneTupleSearch;
+typedef UpdateQuerySubscription<ConditionSearch> ConditionQSub;
+typedef UpdateQuerySubscription<PartitionSearch> PartitionQSub;
+
+typedef UpdateWTSubscription<ConditionSearch> ConditionWTSub;
+typedef UpdateWTSubscription<OneTupleSearch> OneTupleWTSub;
+
+struct LoggingQuerySubscription : public QuerySubscription {
+  LoggingQuerySubscription(Query *subscribee, UpdateNeeds needs) 
+    :QuerySubscription(subscribee, needs){}
+  string ToString() {
+    return "LoggingQuerySubscription(" + 
+      OPattern::Make(subscribee_->pattern_).ToString() + ")";
+  }
+  void Update(const QueryUpdate& update) {
+    cout << ToString() + " " + update.ToString();
+  }
+};
+
 
 struct Search {
   virtual ~Search() {};
@@ -100,14 +163,15 @@ struct Search {
   }
   virtual void L1_EraseSubclass() {};
   virtual bool L1_Search(int64 *max_work_now) = 0;
-  virtual void GetSubstitutions(vector<Map> * substitutions) const = 0;
+  virtual void GetSubstitutions(vector<pair<Map, Time > > * substitutions) const = 0;
+  virtual void L1_ChangeUpdateNeeds(UpdateNeeds new_needs) {};
   uint64 count_;
 };
 
 struct NoTuplesSearch : public Search {
   NoTuplesSearch(Query *query);
   bool L1_Search(int64 *max_work_now) { count_ = 1; return true;}
-  void GetSubstitutions(vector<Map> *substitutions) const {
+  void GetSubstitutions(vector<pair<Map, Time> > *substitutions) const {
     substitutions->clear();
     substitutions->push_back(Map());
   }
@@ -116,63 +180,59 @@ struct NoTuplesSearch : public Search {
 struct OneTupleSearch : public Search {
   OneTupleSearch(Query *query);
   bool OneTupleSearch::L1_Search(int64 * max_work_now);
-  void GetSubstitutions(vector<Map> * substitutions) const;
-  WTSubscription *subscription_;
+  void GetSubstitutions(vector<pair<Map, Time> > * substitutions) const;
+  OTuple GetWildcardTuple() const { 
+    return OTuple::Make(VariablesToWildcards(GetVariableTuple().Data()));
+  }
+  OTuple GetVariableTuple() const { 
+    return query_->pattern_[condition_tuple_];
+  }
+  // Receive an update.
+  // should be caled L1_Update to keep to convention, but the name is
+  // required by the template magic.
+  void Update(const WTUpdate &update, const OneTupleWTSub *subscription);
+  void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
+  OneTupleWTSub *wt_subscription_;
 };
 
 struct ConditionSearch : public Search {
   ConditionSearch(Query *query, int condition_tuple);
-  bool ConditionSearch::L1_Search(int64 * max_work_now);
-  void GetSubstitutions(vector<Map> * substitutions) const;
-
-  map<OTuple, Query*> children_;
+  bool L1_MaybeAddChild(OTuple specifcation, int64 * max_work_now, 
+			Query ** child_query);
+  bool L1_Search(int64 * max_work_now);
+  void GetSubstitutions(vector<pair<Map, Time> > * substitutions) const;
+  void L1_EraseSubclass();
+    OTuple GetWildcardTuple() const { 
+      return OTuple::Make(VariablesToWildcards(GetVariableTuple().Data()));
+  }
+  OTuple GetVariableTuple() const { 
+    return query_->pattern_[condition_tuple_].Data();
+  }
+  // Receive an update.
+  // should be caled L1_Update to keep to convention, but the name is
+  // required by the template magic.
+  void Update(const WTUpdate &update, const ConditionWTSub *subscription);
+  void Update(const QueryUpdate &update, const ConditionQSub *subscription);
+  void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
+  map<OTuple, pair<Query*, ConditionQSub *> > children_;
   int condition_tuple_;
+  ConditionWTSub *wt_subscription_;
 };
 
-// The informaiton passed back by a Query about changes to its results
-struct QueryUpdate {
-  int64 count_delta_;
-  const vector<pair<OMap, pair<const Time *, const Time *> > > changes_;
-  string ToString() const;
-};
+struct PartitionSearch : public Search {
+  PartitionSearch(Query *query);
+  bool L1_Search(int64 * max_work_now);
+  void GetSubstitutions(vector<pair<Map, Time> > * substitutions) const;
+  void L1_EraseSubclass();
+  // Receive an update.
+  // should be caled L1_Update to keep to convention, but the name is
+  // required by the template magic.
+  void Update(const QueryUpdate &update, const PartitionQSub *subscription);
+  void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
 
-// Subclass this to subscribe to changes to a Query.
-struct QuerySubscription {
-  virtual void Update(const QueryUpdate & update) = 0;
-  QuerySubscription(Query *subscribee, UpdateNeeds needs);
-
-  void L1_Erase();
-  virtual ~QuerySubscription(){}
-  OPattern GetPattern() const;
-  UpdateNeeds Needs() const { return needs_;}
-  Query *subscribee_;
-  private:
-  UpdateNeeds needs_;
+  vector<int> partition_; // element i says which part contains tuple i.
+  vector<pair<Query *, PartitionQSub *> >children_;
 };
-template <class C>
-struct UpdateQuerySubscription : public QuerySubscription {
-  C *subscriber_;
-  UpdateQuerySubscription(C *subscriber, 
-		       Query *subscribee, 
-		       UpdateNeeds needs) 
-    :subscriber_(subscriber), QuerySubscription(subscribee, needs) {}
-  void Update(const QueryUpdate& update) {
-    subscriber_->Update(this, update);
-  }
-};
-struct LoggingQuerySubscription : public QuerySubscription {
-  UpdateNeeds needs_;
-  LoggingQuerySubscription(Query *subscribee, UpdateNeeds needs) 
-    :QuerySubscription(subscribee, needs){}
-  string ToString() {
-    return "LoggingQuerySubscription(" + 
-      OPattern::Make(subscribee_->pattern_).ToString() + ")";
-  }
-  void Update(const QueryUpdate& update) {
-    cout << ToString() + " " + update.ToString();
-  }
-};
-
 
 
 

@@ -37,6 +37,13 @@ SamplingInfo SamplingInfo::LimitToPosition(int position) const{
   if (!sampled_ || (position != position_)) return SamplingInfo();
   return SamplingInfo(0, fraction_);
 }
+SamplingInfo SamplingInfo::LimitToPart(const vector<int> &partition, int part) 
+  const {
+  if (!sampled_ || partition[position_] != part) return SamplingInfo();
+  int new_position = 0;
+  for (int i=0; i<position_; i++) if (partition[i]==part) new_position++;
+  return SamplingInfo(new_position, fraction_);
+}
 
 SamplingInfo SamplingInfo::RemovePosition(int position) const {
   if (sampled_ && (position < position_)) {
@@ -133,7 +140,7 @@ void TupleInfo::L1_RemovePosting(Posting *p){
 }
 
 OTuple WTSubscription::GetWildcardTuple() const {
-  return index_row_->GetWildcardTuple();
+  return subscribee_->GetWildcardTuple();
 }
 
 IndexRow::IndexRow(OTuple wildcard_tuple, Blackboard *blackboard)
@@ -158,8 +165,11 @@ void IndexRow::ChangeTupleTime(TupleInfo *tuple_info,
   update.changes_.push_back
     (make_pair(tuple_info->tuple_, 
 	       make_pair(&old_time, &new_time)));
-  forall(run, time_matters_subscriptions_) {
-    (*run)->Update(update);
+  forall(run_type, subscriptions_) {
+    if (!(run_type->first & UPDATE_TIME)) continue; 
+    forall(run, run_type->second) {
+      (*run)->Update(update);
+    }
   }
 }
 void IndexRow::AddTuple(TupleInfo *tuple_info) {
@@ -170,13 +180,15 @@ void IndexRow::AddTuple(TupleInfo *tuple_info) {
   update.changes_.push_back
     (make_pair(tuple_info->tuple_, 
 	       make_pair((const Time *)NULL, &time)));
-  forall(run, time_matters_subscriptions_) (*run)->Update(update);
-  forall(run, existence_subscriptions_) (*run)->Update(update);
+  forall(run_type, subscriptions_) {
+    forall(run, run_type->second) {
+      (*run)->Update(update);
+    }
+  }
 }
 void IndexRow::EraseIfEmpty(){
   if (tuples_.size() ||
-      time_matters_subscriptions_.size() ||
-      existence_subscriptions_.size()) return;
+      subscriptions_.size()) return;
   L1_Erase();
 }
 
@@ -188,25 +200,17 @@ void IndexRow::RemoveTuple(TupleInfo *tuple_info) {
   update.changes_.push_back
     (make_pair(tuple_info->tuple_, 
 	       make_pair(&time, (const Time *)NULL)));
-  forall(run, time_matters_subscriptions_) (*run)->Update(update);
-  forall(run, existence_subscriptions_) (*run)->Update(update);
-  EraseIfEmpty();
-}
-void IndexRow::L1_AddWTSubscription(WTSubscription *sub) {
-  CL.Make
-    (new SetInsertChange<WTSubscription *>
-     ((sub->Needs() & UPDATE_TIME)?(&time_matters_subscriptions_):
-      (&existence_subscriptions_), sub));
-}
-void IndexRow::L1_RemoveWTSubscription(WTSubscription *sub) {
-  CL.Make
-    (new SetRemoveChange<WTSubscription *>
-     ((sub->Needs() & UPDATE_TIME)?(&time_matters_subscriptions_):
-      (&existence_subscriptions_), sub));
+  forall(run_type, subscriptions_) {
+    forall(run, run_type->second) {
+      (*run)->Update(update);
+    }
+  }
   EraseIfEmpty();
 }
 
 void Blackboard::L1_AddPosting(Posting *p){
+  if (num_nonupdated_queries_ > 0) 
+    cerr << "Adding a posting while nonupdated queries exist";
   TupleInfo *ti = GetTupleInfo(p->tuple_);
   if (ti) {
     ti->L1_AddPosting(p);
@@ -216,6 +220,8 @@ void Blackboard::L1_AddPosting(Posting *p){
 }
 
 void Blackboard::L1_RemovePosting(Posting * p){
+  if (num_nonupdated_queries_ > 0) 
+    cerr << "Removing a posting while nonupdated queries exist";
   TupleInfo * ti = GetTupleInfo(p->tuple_);
   CHECK(ti);
   ti->L1_RemovePosting(p);
@@ -232,6 +238,12 @@ uint64 Blackboard::GetNumWildcardMatches(OTuple wildcard_tuple) {
   return ir->size();
 }
 
+void Blackboard::L1_ChangeNumNonupdatedQueries(int delta) {
+  if (delta==0) return;
+  CL.ChangeValue(&num_nonupdated_queries_, num_nonupdated_queries_+delta);
+  CHECK(num_nonupdated_queries_>=0);
+}
+
 IndexRow * Blackboard::GetIndexRow(OTuple wildcard_tuple){
   IndexRow ** find = index_ % wildcard_tuple;
   if (find) return *find;
@@ -245,12 +257,24 @@ IndexRow * Blackboard::GetAddIndexRow(OTuple wildcard_tuple){
 
 WTSubscription::WTSubscription(Blackboard *blackboard, OTuple wildcard_tuple,
 			       UpdateNeeds needs) {
-  index_row_ = blackboard->GetAddIndexRow(wildcard_tuple);
+  subscribee_ = blackboard->GetAddIndexRow(wildcard_tuple);
   needs_ = needs;
-  index_row_->L1_AddWTSubscription(this);
+  CL.Make(new MapOfSetsInsertChange<UpdateNeeds, WTSubscription *>
+	  (&(subscribee_->subscriptions_), needs_, this));
+  
 } 
 void WTSubscription::L1_Erase() { 
-  index_row_->L1_RemoveWTSubscription(this);
+  CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, WTSubscription*>
+	  (&(subscribee_->subscriptions_), needs_, this));
+  subscribee_->EraseIfEmpty();
+}
+void WTSubscription::L1_ChangeNeeds(UpdateNeeds new_needs){
+  CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, WTSubscription*>
+	  (&(subscribee_->subscriptions_), needs_, this));
+  CL.ChangeValue(&needs_, new_needs);
+  CL.Make(new MapOfSetsInsertChange<UpdateNeeds, WTSubscription*>
+	  (&(subscribee_->subscriptions_), needs_, this));
+  subscribee_->EraseIfEmpty();
 }
 
 void Blackboard::Shell() {

@@ -30,6 +30,8 @@ void Query::L1_RemoveParent() {
     if (parent_count_==0) L1_Erase();
 }
 void Query::L1_Erase() {
+  CHECK(needs_ == 0);
+  blackboard_->L1_ChangeNumNonupdatedQueries(-1);
   CHECK(parent_count_ == 0);
   if (search_) search_->L1_Erase();
   CL.Destroying(this);
@@ -41,6 +43,16 @@ uint64 Query::GetCount() const {
 
 void Query::GetSubstitutions(vector<Map> * substitutions) const {
     return search_->GetSubstitutions(substitutions);
+}
+
+void Query::L1_RecomputeUpdateNeeds(){
+  UpdateNeeds old_needs = needs_;
+  UpdateNeeds new_needs = 0;
+  forall(run, subscriptions_) new_needs |= run->first;
+  if (new_needs==old_needs) return;
+  blackboard_->L1_ChangeNumNonupdatedQueries((new_needs?0:1)-(old_needs?0:1));
+  search_->L1_ChangeUpdateNeeds(new_needs);
+  CL.ChangeValue(&needs_, new_needs);
 }
 
 bool Query::L1_Search(int64 *max_work_now){
@@ -69,8 +81,8 @@ bool Query::L1_Search(int64 *max_work_now){
   int num_components = GetConnectedComponents(pattern_, NULL);
   if ( (num_components > 1) && (least_matches > 0) ) {
     // Partition node TODO
-    //new PartitionSearch(this);
-    //return search_->L1_Search(max_work_now);
+    new PartitionSearch(this);
+    return search_->L1_Search(max_work_now);
     return false;
   }
 
@@ -89,20 +101,31 @@ OneTupleSearch::OneTupleSearch(Query *query)
 
 bool OneTupleSearch::L1_Search(int64 * max_work_now) {
   Blackboard & bb = *query_->blackboard_;
-  const Tuple& t = query_->pattern_[0].Data();
-  count_ = bb.GetNumWildcardMatches(OTuple::Make(VariablesToWildcards(t)));
+  count_ = bb.GetNumWildcardMatches(GetWildcardTuple());
+  if (query_->sampling_.sampled_) {
+    CHECK(query_->sampling_.position_ == 0);
+    count_ = RandomRoundoff(double(count_) * query_->sampling_.fraction_);
+  }
   return true;
 }
 
 void OneTupleSearch::GetSubstitutions(vector<Map> * substitutions) const {
   Blackboard & bb = *query_->blackboard_;
-  const Tuple& t = query_->pattern_[0].Data();
-  IndexRow * ir = bb.GetIndexRow(OTuple::Make(VariablesToWildcards(t)));
+  const Tuple &t = query_->pattern_[0].Data();
+  IndexRow * ir = bb.GetIndexRow(GetWildcardTuple());
   substitutions->clear();
   if (ir == NULL) {
     return;
   }
-  forall(run_tuples, ir->tuples_) {
+  
+  IndexRow::TuplesType * tuples = &ir->tuples_;
+  IndexRow::TuplesType sampled_tuples;
+  if (query_->sampling_.sampled_) {
+    GetSample(ir->tuples_, &sampled_tuples, count_);
+    tuples = &sampled_tuples;
+  }
+
+  forall(run_tuples, *tuples) {
     TupleInfo * ti = run_tuples->second;
     OTuple substituted_t = ti->tuple_;
     Map sub;
@@ -114,36 +137,174 @@ void OneTupleSearch::GetSubstitutions(vector<Map> * substitutions) const {
     }
   }
 }
+void OneTupleSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
+  if (!wt_subscription_) {
+    CHECK(query_->needs_);
+    wt_subscription_ = 
+      new OneTupleWTSub(query_->blackboard_, 
+			GetWildcardTuple(), new_needs, this);
+    return;
+  }
+  if (new_needs == 0) {
+    wt_subscription_->L1_Erase();
+    return;
+  }
+  wt_subscription_->L1_ChangeNeeds(new_needs);
+}
+void OneTupleSearch::Update(const WTUpdate &update, 
+			    const OneTupleWTSub *subscription){
+  count_ += update.count_delta_;
+  QueryUpdate out_update;
+  out_update.count_delta_ = update.count_delta_;
+  QueryUpdate out_update_with_subs = out_update;
+  QueryUpdate out_update_with_times = out_update;
+
+  if (query_->needs_ & UPDATE_WHICH) {
+    forall(run, update.changes_) {
+      Map sub;
+      CHECK(ComputeSubstitution(query_->pattern_[0].Data(),
+				run->first.Data(), &sub));
+      out_update_with_times.changes_.push_back
+	(make_pair(OMap::Make(sub), run->second));
+      if (!(run->second.first && run->second.second)) {
+	out_update_with_subs.changes_.push_back
+	  (out_update_with_times.changes_.back());
+      }
+    }
+  }
+  forall(run_needs, query_->subscriptions_) {
+    // could possibly optimize this by not building a whole new
+    // update for every set of needs.
+    UpdateNeeds needs = run_needs->first;
+    QueryUpdate * out = &out_update;
+    if (needs && UPDATE_WHICH) out = &out_update_with_subs;
+    if (needs && UPDATE_TIME) out = &out_update_with_times;
+    forall(run, run_needs->second) {
+      (*run)->Update(*out);
+    }
+  }
+}
+
+
+PartitionSearch::PartitionSearch(Query *query)
+  :Search(query) {}
+
+bool PartitionSearch::L1_Search(int64 * max_work_now) {
+  int num_parts = GetConnectedComponents(query_->pattern_, &partition_);
+  vector<Pattern> parts(num_parts);
+  for(uint i=0; i<query_->pattern_.size(); i++) {
+    parts[partition_[i]].push_back(query_->pattern_[i]);
+  }
+  count_ = 1;
+  for (int i=0; i<num_parts; i++) {
+    SamplingInfo sub_sampling = query_->sampling_.LimitToPart(partition_, i);
+    Query * q = new Query(query_->blackboard_, parts[i], sub_sampling);
+    q->L1_AddParent();
+    children_.push_back(make_pair(q, (PartitionQSub*)NULL) );
+    bool res = q->L1_Search(max_work_now);
+    count_ *= q->GetCount();
+    if (!res) return false;
+  }
+  return true;
+}
+
+void PartitionSearch::GetSubstitutions(vector<Map> * substitutions) const {
+  substitutions->clear();
+  vector<vector<Map> > child_subs(children_.size());
+  vector<uint> bounds;
+  for (uint i=0; i<children_.size(); i++) {
+    children_[i].first->GetSubstitutions(&child_subs[i]);
+    bounds.push_back(child_subs[i].size());
+  }
+  for (ProductIterator run(bounds); !run.done(); ++run) {
+    Map m;
+    for (uint i=0; i<children_.size(); i++) {
+      const Map & cs = child_subs[i][run.Current()[i]];
+      m.insert(cs.begin(), cs.end());      
+    }
+    substitutions->push_back(m);
+  }
+}
+void PartitionSearch::L1_EraseSubclass() {
+  forall(run, children_) run->first->L1_RemoveParent();
+}
+void PartitionSearch::Update(const QueryUpdate &update, const PartitionQSub *subscription){
+  // TODO
+}
+void PartitionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
+  forall(run, children_) {
+    PartitionQSub * & sub_ref = run->second;
+    if (sub_ref == NULL) {
+      CHECK(query_->needs_);
+      sub_ref = new PartitionQSub(this, run->first, new_needs);
+      continue;
+    }
+    if (new_needs == 0) {
+      sub_ref->L1_Erase();
+      sub_ref = NULL;
+      continue;
+    }
+    sub_ref->L1_ChangeNeeds(new_needs);
+  }
+}
 
 ConditionSearch::ConditionSearch(Query * query, int condition_tuple)
   : Search(query), condition_tuple_(condition_tuple) {
 }
 
+// If the specifcation matches the variable tuple, adds a child query.
+bool ConditionSearch::MaybeAddChild(OTuple specification, int64 *max_work_now, 
+				    Query ** child_query) { 
+  OTuple substituted_t = ti->tuple_;
+  Map sub;
+  bool res = ComputeSubstitution(GetVariableTuple(), 
+				 specification.Data(), &sub);
+  if (!res) {
+    // tuple doesn't match;
+    if (child_query) *child_query = NULL; 
+    return true;
+  };
+  SamplingInfo sub_sampling
+    = query_->sampling_.RemovePosition(condition_tuple_);
+  Pattern sub_pattern 
+    = Substitute(sub, RemoveFromVector(query_->pattern_, condition_tuple_));    
+  Query * q = new Query(&bb, sub_pattern, sub_sampling);
+  q->L1_AddParent();
+  children_[substituted_t] = make_pair(q, (ConditionQSub*)NULL);
+  res = q->L1_Search(max_work_now);
+  count_ += q->GetCount();
+  if (!res) return false;
+  if (child_query) *child_query = q;
+  return true;
+}
+
 bool ConditionSearch::L1_Search(int64 * max_work_now) {
   Blackboard & bb = *(query_->blackboard_);
   const Tuple& t = query_->pattern_[condition_tuple_].Data();  
-  IndexRow * ir = bb.GetIndexRow(OTuple::Make(VariablesToWildcards(t)));
+  IndexRow * ir = bb.GetIndexRow(GetWildcardTuple());
   if (ir == NULL) {
     count_ = 0;
     return true;
   }
-  // Have to run through all of these and compute substitutions, so costs work
-  MOREWORK(ir->tuples_.size());
+  // we will either be running over ir->tuples_, or a sampled subset of it.
+  IndexRow::TuplesType * tuples = &ir->tuples_;
+  IndexRow::TuplesType sampled_tuples;
+  if (query_->sampling_.sampled_ 
+      && query_->sampling_.position_ == condition_tuple_) {
+    int sample_size = RandomRoundoff((double)ir->tuples_.size()
+				     *query_->sampling_.fraction_);
+    MOREWORK(sample_size);
+    GetSample(ir->tuples_, &sampled_tuples, sample_size);
+    tuples = &sampled_tuples;
+  } else {
+    // Have to run through all of these and compute substitutions, so costs work
+    MOREWORK(ir->tuples_.size());
+  }
+
   count_ = 0;
-  forall(run_tuples, ir->tuples_) {
-    TupleInfo * ti = run_tuples->second;
-    OTuple substituted_t = ti->tuple_;
-    Map sub;
-    bool res = ComputeSubstitution(t, substituted_t.Data(), &sub);
-    if (!res) continue;
-    SamplingInfo sub_sampling = query_->sampling_.RemovePosition(condition_tuple_);
-    Pattern sub_pattern 
-      = Substitute(sub, RemoveFromVector(query_->pattern_, condition_tuple_));    
-    Query * q = new Query(&bb, sub_pattern, sub_sampling);
-    children_[substituted_t] = q;
-    res = q->L1_Search(max_work_now);
-    count_ += q->GetCount();
-    if (!res) return false;
+  forall(run_tuples, *tuples) {
+    if (!MaybeAddChild(run_tuples->second->tuple_, max_work_now, NULL))
+      return false;
   }
   return true;
 }
@@ -153,7 +314,7 @@ void ConditionSearch::GetSubstitutions(vector<Map> * substitutions) const {
   const Tuple& condition_tuple = query_->pattern_[condition_tuple_].Data();  
   forall(run, children_) {
     OTuple specific_tuple = run->first;
-    Query * child_query = run->second;
+    Query * child_query = run->second.first;
     Map sub;
     CHECK(ComputeSubstitution(condition_tuple, specific_tuple.Data(), &sub));
     vector<Map> child_subs;
@@ -164,13 +325,115 @@ void ConditionSearch::GetSubstitutions(vector<Map> * substitutions) const {
     }
   }
 }
+void ConditionSearch::L1_EraseSubclass() {
+  forall(run, children_) run->second.first->L1_RemoveParent();
+}
+
+void ConditionSearch::Update(const WTUpdate &update, 
+			     const ConditionWTSub *subscription){
+  // TODO: what about sampling.  Maybe we won't update sampled queries.
+  forall(run, update.changes_){
+    if (run->second.first == NULL) {      
+      uint64 old_count = count_;
+      // add a tuple
+      Query * child_query;
+      L1_MaybeAddChild(run->first, NULL, &child_query);
+      if (child_query) {
+	int64 count_delta = count_ - old_count;
+      }
+      continue;
+    }
+    if (run->second.second == NULL) {
+      // remove a tuple
+      continue;
+    }
+    // change time on a tuple
+  }
+  count_ += update.count_delta_;
+  QueryUpdate out_update;
+  out_update.count_delta_ = update.count_delta_;
+  QueryUpdate out_update_with_subs = out_update;
+  QueryUpdate out_update_with_times = out_update;
+
+  if (query_->needs_ & UPDATE_WHICH) {
+    forall(run, update.changes_) {
+      Map sub;
+      CHECK(ComputeSubstitution(query_->pattern_[0].Data(),
+				run->first.Data(), &sub));
+      out_update_with_times.changes_.push_back
+	(make_pair(OMap::Make(sub), run->second));
+      if (!(run->second.first && run->second.second)) {
+	out_update_with_subs.changes_.push_back
+	  (out_update_with_times.changes_.back());
+      }
+    }
+  }
+  forall(run_needs, query_->subscriptions_) {
+    // could possibly optimize this by not building a whole new
+    // update for every set of needs.
+    UpdateNeeds needs = run_needs->first;
+    QueryUpdate * out = &out_update;
+    if (needs && UPDATE_WHICH) out = &out_update_with_subs;
+    if (needs && UPDATE_TIME) out = &out_update_with_times;
+    forall(run, run_needs->second) {
+      (*run)->Update(*out);
+    }
+  }
+}
+void ConditionSearch::Update(const QueryUpdate &update, 
+			     const ConditionQSub *subscription){
+  // TODO
+}
+void ConditionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
+  forall(run, children_) {
+    ConditionQSub * & sub_ref = run->second.second;
+    if (sub_ref == NULL) {
+      CHECK(query_->needs_);
+      sub_ref = new ConditionQSub(this, run->second.first, new_needs);
+      continue;
+    }
+    if (new_needs == 0) {
+      sub_ref->L1_Erase();
+      sub_ref = NULL;
+      continue;
+    }
+    sub_ref->L1_ChangeNeeds(new_needs);
+  }
+  if (!wt_subscription_) {
+    CHECK(query_->needs_);
+    wt_subscription_ = 
+      new ConditionWTSub(query_->blackboard_, 
+			 query_->pattern_[condition_tuple_], new_needs, this);
+    return;
+  }
+  if (new_needs == 0) {
+    wt_subscription_->L1_Erase();
+    return;
+  }
+  wt_subscription_->L1_ChangeNeeds(new_needs);
+}
+
 
 QuerySubscription::QuerySubscription(Query *subscribee, UpdateNeeds needs)
   :subscribee_(subscribee), needs_(needs) {
-  // subscribee_->L1_AddSubscription(this); TODO
+  CL.Make(new MapOfSetsInsertChange<UpdateNeeds, QuerySubscription*>
+	  (&(subscribee_->subscriptions_), needs_, this));
+  subscribee_->L1_RecomputeUpdateNeeds();
+  subscribee_->L1_AddParent();
 }
 void QuerySubscription::L1_Erase(){
-  // subscribee_->L1_RemoveSubscription(this); TODO
+  CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, QuerySubscription*>
+	  (&(subscribee_->subscriptions_), needs_, this));
+  subscribee_->L1_RecomputeUpdateNeeds();
+  subscribee_->L1_RemoveParent();
+}
+void QuerySubscription::L1_ChangeNeeds(UpdateNeeds new_needs){
+  CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, QuerySubscription*>
+	  (&(subscribee_->subscriptions_), needs_, this));
+  CL.ChangeValue(&needs_, new_needs);
+  CL.Make(new MapOfSetsInsertChange<UpdateNeeds, QuerySubscription*>
+	  (&(subscribee_->subscriptions_), needs_, this));
+  subscribee_->L1_RecomputeUpdateNeeds();
 }
 
 OPattern QuerySubscription::GetPattern() const {
