@@ -102,65 +102,145 @@ typedef uint32 UpdateNeeds;
 #define UPDATE_WHICH 0x2
 #define UPDATE_TIME 0x4
 
-struct WTUpdate {
+enum UpdateAction {
+  UPDATE_CREATE,
+  UPDATE_DESTROY,
+  UPDATE_CHANGE_TIME,
+};
+inline string UpdateActionToString(UpdateAction action) {
+  switch(action){
+  case UPDATE_CREATE: 
+    return "CREATE";
+  case UPDATE_DESTROY:
+    return "DESTROY";
+  case UPDATE_CHANGE_TIME:
+    return "CHANGE_TIME";
+  };
+  CHECK(false);
+  return "";
+}
+
+template <class T> 
+struct SingleUpdate{
+  UpdateAction action_;
+  T data_;
+  Time old_time_;
+  Time new_time_;
+  static SingleUpdate Create(const T & date, const Time & new_time) {
+    SingleUpdate ret;
+    ret.action_ = UPDATE_CREATE;
+    ret.new_time_ = new_time;
+    return ret;
+  }
+  static SingleUpdate Destroy(const T & data, const Time & old_time) {
+    SingleUpdate ret;
+    ret.action_ = UPDATE_DESTROY;
+    ret.old_time_ = old_time;
+    return ret;
+  }
+  static SingleUpdate ChangeTime(const T & data, 
+				 const Time & old_time, Time new_time) {
+    SingleUpdate ret;
+    ret.action_ = UPDATE_CHANGE_TIME;
+    ret.old_time_ = old_time;
+    ret.new_time_ = new_time;
+    return ret;
+  }
+  string ToString() const {
+    return "[ " + data_.ToString() + UpdateActionToString(action_) 
+      + " " + old_time_.ToString() + " -> " + new_time_.ToString() + " ]";
+  }
+};
+
+typedef SingleUpdate<OTuple> SingleWTUpdate;
+typedef SingleUpdate<OMap> SingeQueryUpdate;
+
+template <class T> 
+struct Update {
   int64 count_delta_;
   // These are the changes.
   // You pass the OTuple, the old time and the new time.
   // If it's an insertion, the old time is NULL.
   // If it's a deletion, the new time is NULL.
-  vector<pair<OTuple, pair<const Time *, const Time *> > > changes_;
-
-  WTUpdate() {count_delta_ = 0;}
+  vector<SingleUpdate<T> > changes_;
+  
+  Update() {count_delta_ = 0;}
   string ToString() const {
-    string ret = "WTUpdate { count_delta_=" + itoa(count_delta_) + "\n";
+    string ret = "Update { count_delta_=" + itoa(count_delta_) + "\n";
     for (uint i=0; i<changes_.size(); i++) {
-      ret += "   " + changes_[i].first.ToString() + " : " 
-	+ TimeToStringOrNothing(changes_[i].second.first) + "->" 
-	+ TimeToStringOrNothing(changes_[i].second.second) + "\n";
+      ret += "   " + changes_[i].ToString() + "\n"; 
     }
     ret += "}\n";
     return ret;
   }
 };
+typedef Update<OTuple> WTUpdate;
+typedef Update<Map> QueryUpdate;
 
-struct WTSubscription {
-  WTSubscription(Blackboard *blackboard, OTuple wildcard_tuple, 
-		 UpdateNeeds needs);
-  void L1_Erase();
-  virtual ~WTSubscription(){}
-  OTuple GetWildcardTuple() const;
-  virtual void Update(const WTUpdate & update) = 0;
+template <class UpdateType, class SubscribeeType> 
+struct Subscription {
+  Subscription(SubscribeeType *subscribee, 
+	       UpdateNeeds needs){
+    needs_ = needs;
+    CL.Make(new MapOfSetsInsertChange<UpdateNeeds, Subscription *>
+	    (&(subscribee_->subscriptions_), needs_, this));
+  }
+  void L1_Erase(){
+    CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, Subscription*>
+	    (&(subscribee_->subscriptions_), needs_, this));
+    subscribee_->EraseIfUnnecessary();
+  }
+  virtual ~Subscription(){}
+  // OTuple GetWildcardTuple() const;
+  virtual void Update(const UpdateType & update) = 0;
   virtual UpdateNeeds Needs() const {
     return needs_;
   }
-  void L1_ChangeNeeds(UpdateNeeds new_needs);
-  IndexRow * subscribee_;
+  void L1_ChangeNeeds(UpdateNeeds new_needs){
+    CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, Subscription*>
+	    (&(subscribee_->subscriptions_), needs_, this));
+    CL.ChangeValue(&needs_, new_needs);
+    CL.Make(new MapOfSetsInsertChange<UpdateNeeds, Subscription*>
+	    (&(subscribee_->subscriptions_), needs_, this));
+  }
+  SubscribeeType * subscribee_;
   private:
   UpdateNeeds needs_;
 };
+class IndexRow;
+typedef Subscription<WTUpdate, IndexRow> WTSubscription;
+//typedef Subscription<QueryUpdate, Query> QuerySubscription; 
 
-struct LoggingWTSubscription : public WTSubscription {
-  LoggingWTSubscription(Blackboard *blackboard, OTuple tuple, UpdateNeeds needs)
-    :WTSubscription(blackboard, tuple, needs) {}
-  string ToString() {
-    return "LoggingWTSubscription(" + GetWildcardTuple().ToString() + ")";
+template <class UpdateType, class SubscribeeType> 
+struct LoggingSubscription : public Subscription<UpdateType, SubscribeeType> {
+  typedef Subscription<UpdateType, SubscribeeType> ParentClass;
+  LoggingSubscription(SubscribeeType *subscribee, UpdateNeeds needs)
+    :ParentClass(subscribee, needs) {}
+
+  string ToString() const {
+    return "LoggingSubscription(" 
+      + ParentClass::subscribee_->GetDescription() + ")";
   }
-  void Update(const WTUpdate &update) {
+  void Update(const UpdateType &update) {
     cout << ToString() + " " + update.ToString();
   }
 };
+typedef LoggingSubscription<WTUpdate, IndexRow> LoggingWTSubscription;
+//typedef LoggingSubscription<QueryUpdate, Query> LoggingQuerySubscription; 
 
-// a WTSubscription that calls an Update(WTUpdate, WTSubscription*) 
+// a Subscription that calls an Update(UpdateType, Subscription*) 
 // method on an object
-template <class T> 
-struct UpdateWTSubscription : public WTSubscription {
-  UpdateWTSubscription(Blackboard *blackboard, OTuple tuple, 
-		       UpdateNeeds needs, T *subscriber)
-    :WTSubscription(blackboard, tuple, needs), subscriber_(subscriber) {}
+template <class UpdateType, class SubscribeeType, class SubscriberType> 
+struct UpdateSubscription : public Subscription<UpdateType, SubscribeeType> {
+  typedef Subscription<UpdateType, SubscribeeType> ParentClass;
+  UpdateSubscription(SubscribeeType *subscribee, 
+		     UpdateNeeds needs, SubscriberType *subscriber)
+    :ParentClass(subscribee, needs), subscriber_(subscriber) {}
+
   void Update(const WTUpdate &update) {
     subscriber_->Update(update, this);
   }
-  T * subscriber_;
+  SubscriberType * subscriber_;
 };
 
 
@@ -177,12 +257,14 @@ struct IndexRow {
   // otherwise the time is wrong.
   void RemoveTuple(TupleInfo * tuple_info);
   // erases this row if there are no subscriptions or tuples.
-  void EraseIfEmpty();
+  void EraseIfUnnecessary();
   OTuple GetWildcardTuple() const {
     return wildcard_tuple_;
   }
   uint32 size() { return tuples_.size(); }
-  
+  string GetDescription() const { 
+    return "IndexRow" + GetWildcardTuple().ToString();
+  }
   // contains (first time, tupleinfo *) for each tuple on the blackboard
   // that matches.
   typedef rankset<pair<Time, TupleInfo *> > TuplesType;
@@ -198,10 +280,11 @@ class Blackboard {
  public:
   friend class IndexRow;
   friend class TupleInfo;
-  friend class WTSubscription;
+  friend class Subscription<WTUpdate, IndexRow>;
   friend class Posting;
   friend class OneTupleSearch;
   friend class ConditionSearch;
+  
 
   Blackboard() {num_nonupdated_queries_ = 0;}
 
@@ -218,6 +301,13 @@ class Blackboard {
   void L1_ChangeNumNonupdatedQueries(int delta);
   int64 num_nonupdated_queries_;
 
+  template <class SubscriptionType> 
+    SubscriptionType * MakeWTSubscription(OTuple wildcard_tuple, 
+					UpdateNeeds needs){
+    return new SubscriptionType(GetAddIndexRow(wildcard_tuple), needs);
+  }
+
+
  private:
   // returns null on failure
   IndexRow * GetIndexRow(OTuple wildcard_tuple);
@@ -228,5 +318,7 @@ class Blackboard {
   map<OTuple, IndexRow *> index_;
   map<OTuple, TupleInfo *> tuple_info_;
 };
+
+
 
 #endif

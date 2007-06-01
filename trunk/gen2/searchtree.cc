@@ -109,11 +109,13 @@ bool OneTupleSearch::L1_Search(int64 * max_work_now) {
   return true;
 }
 
-void OneTupleSearch::GetSubstitutions(vector<Map> * substitutions) const {
+void OneTupleSearch::GetSubstitutions(vector<Map> * substitutions,
+				      vector<Time> * times) const {
+  substitutions->clear(); 
+  if (times) times->clear();
   Blackboard & bb = *query_->blackboard_;
   const Tuple &t = query_->pattern_[0].Data();
   IndexRow * ir = bb.GetIndexRow(GetWildcardTuple());
-  substitutions->clear();
   if (ir == NULL) {
     return;
   }
@@ -132,9 +134,8 @@ void OneTupleSearch::GetSubstitutions(vector<Map> * substitutions) const {
     bool res = ComputeSubstitution(t, substituted_t.Data(), &sub);
     // We're not allowing duplicate variables, substitution must work
     CHECK(res);
-    if (res) {
-      substitutions->push_back(sub);
-    }
+    substitutions->push_back(sub);
+    if (times) times->push_back(ti->FirstTime());
   }
 }
 void OneTupleSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
@@ -208,21 +209,28 @@ bool PartitionSearch::L1_Search(int64 * max_work_now) {
   return true;
 }
 
-void PartitionSearch::GetSubstitutions(vector<Map> * substitutions) const {
+void PartitionSearch::GetSubstitutions(vector<Map> * substitutions
+				       vector<Time> * times) const {
   substitutions->clear();
+  if (times) times->clear();
   vector<vector<Map> > child_subs(children_.size());
+  vector<vector<Time> > child_times(children_.size());
   vector<uint> bounds;
   for (uint i=0; i<children_.size(); i++) {
-    children_[i].first->GetSubstitutions(&child_subs[i]);
+    children_[i].first->GetSubstitutions(&child_subs[i],
+					 times?(&(child_times[i])):NULL);
     bounds.push_back(child_subs[i].size());
   }
   for (ProductIterator run(bounds); !run.done(); ++run) {
     Map m;
+    Time t;
     for (uint i=0; i<children_.size(); i++) {
       const Map & cs = child_subs[i][run.Current()[i]];
-      m.insert(cs.begin(), cs.end());      
+      m.insert(cs.begin(), cs.end());
+      if (times) t = max(t, child_times[i][run.Current()[i]]);
     }
     substitutions->push_back(m);
+    if (times) times->push_back(t);
   }
 }
 void PartitionSearch::L1_EraseSubclass() {
@@ -309,19 +317,29 @@ bool ConditionSearch::L1_Search(int64 * max_work_now) {
   return true;
 }
 
-void ConditionSearch::GetSubstitutions(vector<Map> * substitutions) const {
+void ConditionSearch::GetSubstitutions(vector<Map> * substitutions,
+				       vector<Time> * times) const {
   substitutions->clear();
+  if (times) times->clear();
   const Tuple& condition_tuple = query_->pattern_[condition_tuple_].Data();  
   forall(run, children_) {
     OTuple specific_tuple = run->first;
+    Time tuple_time;
+    if (times) {
+      TupleInfo *ti = query_->blackboard_->GetTupleInfo(specific_tuple);
+      CHECK(ti);
+      tuple_time = ti->FirstTime();
+    }
     Query * child_query = run->second.first;
     Map sub;
     CHECK(ComputeSubstitution(condition_tuple, specific_tuple.Data(), &sub));
     vector<Map> child_subs;
-    child_query->GetSubstitutions(&child_subs);
-    forall(run_cs, child_subs) {
-      Add(&(*run_cs), sub);
-      substitutions->push_back(*run_cs);
+    vector<Time> child_times;
+    child_query->GetSubstitutions(&child_subs, times?(&child_times):NULL);
+    for (uint i=0; i<child_subs.size(); i++) {
+      Add(&(child_subs[i]), sub);
+      substitutions->push_back(child_subs[i]);
+      if (times) times->push_back(max(tuple_time, child_times[i]));
     }
   }
 }
@@ -332,14 +350,32 @@ void ConditionSearch::L1_EraseSubclass() {
 void ConditionSearch::Update(const WTUpdate &update, 
 			     const ConditionWTSub *subscription){
   // TODO: what about sampling.  Maybe we won't update sampled queries.
+  QueryUpdate out_update, out_update_with_subs, out_update_with_times;
+  int64 old_count = count_;
+
+  bool need_subs = query_->needs_ & UPDATE_WHICH;
+  bool need_times = query_->needs_ & UPDATE_TIME;
+  Time dummy_time;
+
   forall(run, update.changes_){
     if (run->second.first == NULL) {      
-      uint64 old_count = count_;
       // add a tuple
       Query * child_query;
       L1_MaybeAddChild(run->first, NULL, &child_query);
       if (child_query) {
-	int64 count_delta = count_ - old_count;
+	if (need_subs) {
+	  vector<Map> subs;
+	  vector<Time> times;
+	  child_query->GetSubstitutions(&subs, need_times?(&times):NULL);
+	  if (need_times) {
+	    for (uint i=0; i<times.size(); i++) times[i] 
+	      = max(times[i], run->second.second);
+	  }
+	  for (uint i=0; i<subs.size(); i++) {
+	    out_update_with_subs.changes_.push_back
+	      (make_pair(
+	  }
+	}
       }
       continue;
     }
@@ -349,11 +385,11 @@ void ConditionSearch::Update(const WTUpdate &update,
     }
     // change time on a tuple
   }
-  count_ += update.count_delta_;
-  QueryUpdate out_update;
-  out_update.count_delta_ = update.count_delta_;
-  QueryUpdate out_update_with_subs = out_update;
-  QueryUpdate out_update_with_times = out_update;
+  
+  out_update.count_delta_ = 
+    out_update_with_subs.count_delta_ = 
+    out_update_with_times.count_delta_ = count_ - old_count;
+
 
   if (query_->needs_ & UPDATE_WHICH) {
     forall(run, update.changes_) {

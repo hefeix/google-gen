@@ -18,7 +18,7 @@
 
 #include "blackboard.h"
 #include "tuple.h"
-#include "searchtree.h"
+//#include "searchtree.h"
 #include <fstream>
 
 SamplingInfo::SamplingInfo() {
@@ -139,9 +139,6 @@ void TupleInfo::L1_RemovePosting(Posting *p){
   ChangeTimesInIndexRows(old_first_time, new_first_time);
 }
 
-OTuple WTSubscription::GetWildcardTuple() const {
-  return subscribee_->GetWildcardTuple();
-}
 
 IndexRow::IndexRow(OTuple wildcard_tuple, Blackboard *blackboard)
   :wildcard_tuple_(wildcard_tuple), blackboard_(blackboard){  
@@ -162,9 +159,8 @@ void IndexRow::ChangeTupleTime(TupleInfo *tuple_info,
   CL.RemoveFromSet(&tuples_, make_pair(old_time, tuple_info));
   CL.InsertIntoSet(&tuples_, make_pair(new_time, tuple_info));
   WTUpdate update;
-  update.changes_.push_back
-    (make_pair(tuple_info->tuple_, 
-	       make_pair(&old_time, &new_time)));
+  update.changes_.push_back(SingleWTUpdate::ChangeTime(tuple_info->tuple_, 
+						       old_time, new_time));
   forall(run_type, subscriptions_) {
     if (!(run_type->first & UPDATE_TIME)) continue; 
     forall(run, run_type->second) {
@@ -177,16 +173,14 @@ void IndexRow::AddTuple(TupleInfo *tuple_info) {
   CL.InsertIntoSet(&tuples_, make_pair(time, tuple_info));
   WTUpdate update;
   update.count_delta_ = 1;
-  update.changes_.push_back
-    (make_pair(tuple_info->tuple_, 
-	       make_pair((const Time *)NULL, &time)));
+  update.changes_.push_back(SingleWTUpdate::Create(tuple_info->tuple_, time));
   forall(run_type, subscriptions_) {
     forall(run, run_type->second) {
       (*run)->Update(update);
     }
   }
 }
-void IndexRow::EraseIfEmpty(){
+void IndexRow::EraseIfUnnecessary(){
   if (tuples_.size() ||
       subscriptions_.size()) return;
   L1_Erase();
@@ -197,15 +191,13 @@ void IndexRow::RemoveTuple(TupleInfo *tuple_info) {
   CL.RemoveFromSet(&tuples_, make_pair(time, tuple_info));
   WTUpdate update;
   update.count_delta_ = -1;
-  update.changes_.push_back
-    (make_pair(tuple_info->tuple_, 
-	       make_pair(&time, (const Time *)NULL)));
+  update.changes_.push_back(SingleWTUpdate::Destroy(tuple_info->tuple_, time));
   forall(run_type, subscriptions_) {
     forall(run, run_type->second) {
       (*run)->Update(update);
     }
   }
-  EraseIfEmpty();
+  EraseIfUnnecessary();
 }
 
 void Blackboard::L1_AddPosting(Posting *p){
@@ -255,27 +247,6 @@ IndexRow * Blackboard::GetAddIndexRow(OTuple wildcard_tuple){
   return new IndexRow(wildcard_tuple, this);
 }
 
-WTSubscription::WTSubscription(Blackboard *blackboard, OTuple wildcard_tuple,
-			       UpdateNeeds needs) {
-  subscribee_ = blackboard->GetAddIndexRow(wildcard_tuple);
-  needs_ = needs;
-  CL.Make(new MapOfSetsInsertChange<UpdateNeeds, WTSubscription *>
-	  (&(subscribee_->subscriptions_), needs_, this));
-  
-} 
-void WTSubscription::L1_Erase() { 
-  CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, WTSubscription*>
-	  (&(subscribee_->subscriptions_), needs_, this));
-  subscribee_->EraseIfEmpty();
-}
-void WTSubscription::L1_ChangeNeeds(UpdateNeeds new_needs){
-  CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, WTSubscription*>
-	  (&(subscribee_->subscriptions_), needs_, this));
-  CL.ChangeValue(&needs_, new_needs);
-  CL.Make(new MapOfSetsInsertChange<UpdateNeeds, WTSubscription*>
-	  (&(subscribee_->subscriptions_), needs_, this));
-  subscribee_->EraseIfEmpty();
-}
 
 void Blackboard::Shell() {
   Blackboard b;
@@ -313,7 +284,7 @@ void Blackboard::Shell() {
       cin >> tuple >> needs;
       cout << "Subscription " << (subscriptions.size()) << endl;
       WTSubscription *sub 
-	= new LoggingWTSubscription(&b, tuple, needs);
+	= b.MakeWTSubscription<LoggingWTSubscription>(tuple, needs);
       subscriptions.push_back(sub);
       continue;      
     }
@@ -322,7 +293,7 @@ void Blackboard::Shell() {
       cin >> i;
       subscriptions[i]->L1_Erase();
       continue;
-    }
+    }/*
     if (command == "query") {
       OPattern p;
       cin >> p;
@@ -335,7 +306,7 @@ void Blackboard::Shell() {
 	OPattern ps = Substitute(subs[c], p);
 	cout << ps << endl;
       }
-    }
+      }*/
   };
   
 }

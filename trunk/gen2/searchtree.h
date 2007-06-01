@@ -87,7 +87,7 @@ struct Query {
   void L1_Erase();
   uint64 GetCount() const;
   // caution: nondeterministic in the case of sampling
-  void GetSubstitutions(vector<pair<Map, Time> > * substitutions) const;
+  void GetSubstitutions(vector<Map> * substitutions, vector<Time> *times) const;
   // called when the update needs have changed (subscriptions have been
   // added, removed, or changed).  Propagates the needs changes to the
   // children.
@@ -163,7 +163,8 @@ struct Search {
   }
   virtual void L1_EraseSubclass() {};
   virtual bool L1_Search(int64 *max_work_now) = 0;
-  virtual void GetSubstitutions(vector<pair<Map, Time > > * substitutions) const = 0;
+  virtual void GetSubstitutions(vector<Map> * substitutions, 
+				vector<Time> *times) const = 0;
   virtual void L1_ChangeUpdateNeeds(UpdateNeeds new_needs) {};
   uint64 count_;
 };
@@ -171,16 +172,22 @@ struct Search {
 struct NoTuplesSearch : public Search {
   NoTuplesSearch(Query *query);
   bool L1_Search(int64 *max_work_now) { count_ = 1; return true;}
-  void GetSubstitutions(vector<pair<Map, Time> > *substitutions) const {
+  void GetSubstitutions(vector<Map> * substitutions, 
+			vector<Time> *times) const {
     substitutions->clear();
     substitutions->push_back(Map());
+    if (times) {
+      times->clear();
+      times->push_back(Time());
+    }
   }
 };
 
 struct OneTupleSearch : public Search {
   OneTupleSearch(Query *query);
   bool OneTupleSearch::L1_Search(int64 * max_work_now);
-  void GetSubstitutions(vector<pair<Map, Time> > * substitutions) const;
+  void GetSubstitutions(vector<Map> * substitutions, 
+			vector<Time> *times) const;
   OTuple GetWildcardTuple() const { 
     return OTuple::Make(VariablesToWildcards(GetVariableTuple().Data()));
   }
@@ -200,7 +207,8 @@ struct ConditionSearch : public Search {
   bool L1_MaybeAddChild(OTuple specifcation, int64 * max_work_now, 
 			Query ** child_query);
   bool L1_Search(int64 * max_work_now);
-  void GetSubstitutions(vector<pair<Map, Time> > * substitutions) const;
+  void GetSubstitutions(vector<Map> * substitutions, 
+			vector<Time> *times) const;
   void L1_EraseSubclass();
     OTuple GetWildcardTuple() const { 
       return OTuple::Make(VariablesToWildcards(GetVariableTuple().Data()));
@@ -222,7 +230,8 @@ struct ConditionSearch : public Search {
 struct PartitionSearch : public Search {
   PartitionSearch(Query *query);
   bool L1_Search(int64 * max_work_now);
-  void GetSubstitutions(vector<pair<Map, Time> > * substitutions) const;
+  void GetSubstitutions(vector<Map> * substitutions, 
+			vector<Time> *times) const;
   void L1_EraseSubclass();
   // Receive an update.
   // should be caled L1_Update to keep to convention, but the name is
