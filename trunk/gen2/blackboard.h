@@ -57,33 +57,6 @@ struct Posting {
   Time time_;
   Blackboard * blackboard_;
 };
-/*
-struct QueryUpdate {
-  int satisfaction_delta_;
-  vector<Map> new_satisfactions_;
-  vector<Map> old_satisfactions_;
-};
-
-// You get updated by the blackboard via queries.  You create queries and own
-// them.  They give you callbacks when the blackboard contents change in 
-// relevant ways.
-class Query {
-  // todo: write this class.
-  Blackboard * blackboard_;
-  
-  OPattern pattern_;
-  Time time_; // satisfactions must happen before this time.
-
-  bool need_substitutions_;
-  void callbackfunction(QueryUpdate *) *
-};
-*/
-
-/*bool operator <=(const Posting & p1, const Posting & p2) {
-  if (p1.time_ < p2.time_) return true;
-  if (p1.time_ > p2.time_) return false;
-  return (p1.tuple_ < p2.tuple_);
-  }*/
 
 struct TupleInfo {
   TupleInfo(Posting *first_posting, Blackboard *blackboard);  
@@ -120,13 +93,16 @@ inline string UpdateActionToString(UpdateAction action) {
   return "";
 }
 
+// We templatize the update class in order to share code.
+// T is an OTuple in the case of a SingleWTUpdate, 
+// or an OMap in the case of a SingleQueryUpdate. 
 template <class T> 
 struct SingleUpdate{
   UpdateAction action_;
-  T data_;
+  T data_; 
   Time old_time_;
   Time new_time_;
-  static SingleUpdate Create(const T & date, const Time & new_time) {
+  static SingleUpdate Create(const T & data, const Time & new_time) {
     SingleUpdate ret;
     ret.action_ = UPDATE_CREATE;
     ret.new_time_ = new_time;
@@ -153,20 +129,22 @@ struct SingleUpdate{
 };
 
 typedef SingleUpdate<OTuple> SingleWTUpdate;
-typedef SingleUpdate<OMap> SingeQueryUpdate;
 
 template <class T> 
-struct Update {
+struct CombinedUpdate {
+  // You might just need the change in count, so we put it here.
+  // This is the number of creations - the number of deletions.
   int64 count_delta_;
+
   // These are the changes.
   // You pass the OTuple, the old time and the new time.
   // If it's an insertion, the old time is NULL.
   // If it's a deletion, the new time is NULL.
   vector<SingleUpdate<T> > changes_;
   
-  Update() {count_delta_ = 0;}
+  CombinedUpdate() {count_delta_ = 0;}
   string ToString() const {
-    string ret = "Update { count_delta_=" + itoa(count_delta_) + "\n";
+    string ret = "CombinedUpdate { count_delta_=" + itoa(count_delta_) + "\n";
     for (uint i=0; i<changes_.size(); i++) {
       ret += "   " + changes_[i].ToString() + "\n"; 
     }
@@ -174,21 +152,22 @@ struct Update {
     return ret;
   }
 };
-typedef Update<OTuple> WTUpdate;
-typedef Update<Map> QueryUpdate;
+typedef CombinedUpdate<OTuple> WTUpdate;
 
 template <class UpdateType, class SubscribeeType> 
 struct Subscription {
   Subscription(SubscribeeType *subscribee, 
 	       UpdateNeeds needs){
     needs_ = needs;
+    subscribee_ = subscribee;
     CL.Make(new MapOfSetsInsertChange<UpdateNeeds, Subscription *>
 	    (&(subscribee_->subscriptions_), needs_, this));
+    subscribee_->L1_AddedSubscription();
   }
   void L1_Erase(){
     CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, Subscription*>
 	    (&(subscribee_->subscriptions_), needs_, this));
-    subscribee_->EraseIfUnnecessary();
+    subscribee_->L1_RemovedSubscription();
   }
   virtual ~Subscription(){}
   // OTuple GetWildcardTuple() const;
@@ -202,6 +181,7 @@ struct Subscription {
     CL.ChangeValue(&needs_, new_needs);
     CL.Make(new MapOfSetsInsertChange<UpdateNeeds, Subscription*>
 	    (&(subscribee_->subscriptions_), needs_, this));
+    subscribee_->L1_ChangedSubscriptionNeeds();
   }
   SubscribeeType * subscribee_;
   private:
@@ -209,7 +189,6 @@ struct Subscription {
 };
 class IndexRow;
 typedef Subscription<WTUpdate, IndexRow> WTSubscription;
-//typedef Subscription<QueryUpdate, Query> QuerySubscription; 
 
 template <class UpdateType, class SubscribeeType> 
 struct LoggingSubscription : public Subscription<UpdateType, SubscribeeType> {
@@ -226,7 +205,6 @@ struct LoggingSubscription : public Subscription<UpdateType, SubscribeeType> {
   }
 };
 typedef LoggingSubscription<WTUpdate, IndexRow> LoggingWTSubscription;
-//typedef LoggingSubscription<QueryUpdate, Query> LoggingQuerySubscription; 
 
 // a Subscription that calls an Update(UpdateType, Subscription*) 
 // method on an object
@@ -237,7 +215,7 @@ struct UpdateSubscription : public Subscription<UpdateType, SubscribeeType> {
 		     UpdateNeeds needs, SubscriberType *subscriber)
     :ParentClass(subscribee, needs), subscriber_(subscriber) {}
 
-  void Update(const WTUpdate &update) {
+  void Update(const UpdateType &update) {
     subscriber_->Update(update, this);
   }
   SubscriberType * subscriber_;
@@ -250,14 +228,17 @@ struct IndexRow {
   IndexRow(OTuple wildcard_tuple, Blackboard *blackboard);
   void L1_Erase();
   OTuple wildcard_tuple_;
-  void ChangeTupleTime(TupleInfo *tuple_info, Time old_time,
+  void L1_ChangeTupleTime(TupleInfo *tuple_info, Time old_time,
 		       Time new_time);
-  void AddTuple(TupleInfo * tuple_info); 
+  void L1_AddTuple(TupleInfo * tuple_info); 
   // Must be called before deleting the posting in the tupleinfo.
   // otherwise the time is wrong.
-  void RemoveTuple(TupleInfo * tuple_info);
+  void L1_RemoveTuple(TupleInfo * tuple_info);
   // erases this row if there are no subscriptions or tuples.
-  void EraseIfUnnecessary();
+  void L1_AddedSubscription() {};
+  void L1_RemovedSubscription() {L1_EraseIfUnnecessary();}
+  void L1_ChangedSubscriptionNeeds() {}
+  void L1_EraseIfUnnecessary();
   OTuple GetWildcardTuple() const {
     return wildcard_tuple_;
   }
@@ -301,10 +282,17 @@ class Blackboard {
   void L1_ChangeNumNonupdatedQueries(int delta);
   int64 num_nonupdated_queries_;
 
-  template <class SubscriptionType> 
-    SubscriptionType * MakeWTSubscription(OTuple wildcard_tuple, 
-					UpdateNeeds needs){
-    return new SubscriptionType(GetAddIndexRow(wildcard_tuple), needs);
+  LoggingWTSubscription * L1_MakeLoggingWTSubscription(OTuple wildcard_tuple, 
+						    UpdateNeeds needs){
+    return new LoggingWTSubscription(GetAddIndexRow(wildcard_tuple), needs);
+  }
+  template <class SubscriberType>
+    UpdateSubscription<WTUpdate, IndexRow, SubscriberType> * 
+    L1_MakeUpdateWTSubscription(OTuple wildcard_tuple, 
+			     UpdateNeeds needs,
+			     SubscriberType *subscriber){
+    return new UpdateSubscription<WTUpdate, IndexRow, SubscriberType>
+      (GetAddIndexRow(wildcard_tuple), needs, subscriber);
   }
 
 

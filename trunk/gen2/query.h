@@ -16,8 +16,8 @@
 //
 // Author: Noam Shazeer and Georges Harik
 
-#ifndef _SEARCHTREE_H_
-#define _SEARCHTREE_H_
+#ifndef _QUERY_H_
+#define _QUERY_H_
 #include "util.h"
 #include "tuple.h"
 #include "blackboard.h"
@@ -38,7 +38,6 @@
 */
 
 struct Search;
-struct QuerySubscription;
 class Precondition;
 class TupleIndex;
 class SamplingInfo;
@@ -52,6 +51,12 @@ class Changelist;
    Query maintains the connections to the subscriptions, which 
    remain the same as the strategy changes.
  */
+
+class Query;
+typedef SingleUpdate<OMap> SingleQueryUpdate;
+typedef CombinedUpdate<OMap> QueryUpdate;
+typedef Subscription<QueryUpdate, Query> QuerySubscription; 
+typedef LoggingSubscription<QueryUpdate, Query> LoggingQuerySubscription; 
 
 struct Query {
   virtual ~Query() {}
@@ -84,6 +89,9 @@ struct Query {
   bool L1_Search(int64 *max_work_now);
   void L1_AddParent();
   void L1_RemoveParent();
+  void L1_AddedSubscription() { L1_RecomputeUpdateNeeds(); L1_AddParent();}
+  void L1_RemovedSubscription() { L1_RecomputeUpdateNeeds(); L1_RemoveParent();}
+  void L1_ChangedSubscriptionNeeds() { L1_RecomputeUpdateNeeds(); }
   void L1_Erase();
   uint64 GetCount() const;
   // caution: nondeterministic in the case of sampling
@@ -94,60 +102,14 @@ struct Query {
   void L1_RecomputeUpdateNeeds();
 };
 
-
-// The informaiton passed back by a Query about changes to its results
-struct QueryUpdate {
-  int64 count_delta_;
-  vector<pair<OMap, pair<const Time *, const Time *> > > changes_;
-  string ToString() const;
-};
-
-// Subclass this to subscribe to changes to a Query.
-struct QuerySubscription {
-  virtual void Update(const QueryUpdate & update) = 0;
-  QuerySubscription(Query *subscribee, UpdateNeeds needs);
-
-  void L1_Erase();
-  void L1_ChangeNeeds(UpdateNeeds new_needs);
-  virtual ~QuerySubscription(){}
-  OPattern GetPattern() const;
-  UpdateNeeds Needs() const { return needs_;}
-  Query *subscribee_;
-  private:
-  UpdateNeeds needs_;
-};
-template <class C>
-struct UpdateQuerySubscription : public QuerySubscription {
-  C *subscriber_;
-  UpdateQuerySubscription(C *subscriber, 
-			  Query *subscribee, 
-			  UpdateNeeds needs) 
-    :QuerySubscription(subscribee, needs), subscriber_(subscriber_) {}
-  void Update(const QueryUpdate& update) {
-    subscriber_->Update(update, this);
-  }
-};
 class ConditionSearch;
 class PartitionSearch;
 class OneTupleSearch;
-typedef UpdateQuerySubscription<ConditionSearch> ConditionQSub;
-typedef UpdateQuerySubscription<PartitionSearch> PartitionQSub;
+typedef UpdateSubscription<QueryUpdate, Query, ConditionSearch> ConditionQSub;
+typedef UpdateSubscription<QueryUpdate, Query, PartitionSearch> PartitionQSub;
 
-typedef UpdateWTSubscription<ConditionSearch> ConditionWTSub;
-typedef UpdateWTSubscription<OneTupleSearch> OneTupleWTSub;
-
-struct LoggingQuerySubscription : public QuerySubscription {
-  LoggingQuerySubscription(Query *subscribee, UpdateNeeds needs) 
-    :QuerySubscription(subscribee, needs){}
-  string ToString() {
-    return "LoggingQuerySubscription(" + 
-      OPattern::Make(subscribee_->pattern_).ToString() + ")";
-  }
-  void Update(const QueryUpdate& update) {
-    cout << ToString() + " " + update.ToString();
-  }
-};
-
+typedef UpdateSubscription<WTUpdate, IndexRow, ConditionSearch> ConditionWTSub;
+typedef UpdateSubscription<WTUpdate, IndexRow, OneTupleSearch> OneTupleWTSub;
 
 struct Search {
   virtual ~Search() {};
@@ -192,7 +154,7 @@ struct OneTupleSearch : public Search {
     return OTuple::Make(VariablesToWildcards(GetVariableTuple().Data()));
   }
   OTuple GetVariableTuple() const { 
-    return query_->pattern_[condition_tuple_];
+    return query_->pattern_[0];
   }
   // Receive an update.
   // should be caled L1_Update to keep to convention, but the name is
@@ -214,7 +176,7 @@ struct ConditionSearch : public Search {
       return OTuple::Make(VariablesToWildcards(GetVariableTuple().Data()));
   }
   OTuple GetVariableTuple() const { 
-    return query_->pattern_[condition_tuple_].Data();
+    return query_->pattern_[condition_tuple_];
   }
   // Receive an update.
   // should be caled L1_Update to keep to convention, but the name is
