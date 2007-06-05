@@ -86,7 +86,7 @@ TupleInfo::TupleInfo(Posting *first_posting, Blackboard *blackboard)
   for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.done(); ++g_iter){
     const Tuple & generalized = g_iter.Current();
     IndexRow * ir = blackboard_->GetAddIndexRow(OTuple::Make(generalized));
-    ir->AddTuple(this);
+    ir->L1_AddTuple(this);
   }
 }
 void TupleInfo::L1_Erase() {
@@ -95,7 +95,7 @@ void TupleInfo::L1_Erase() {
     const Tuple & generalized = g_iter.Current();
     IndexRow * ir = blackboard_->GetIndexRow(OTuple::Make(generalized));
     CHECK(ir);
-    ir->RemoveTuple(this);
+    ir->L1_RemoveTuple(this);
   }
   CL.Make
     (new MapRemoveChange<OTuple, TupleInfo *>
@@ -114,7 +114,7 @@ void TupleInfo::ChangeTimesInIndexRows(Time old_first_time,
       const Tuple & generalized = g_iter.Current();
       IndexRow * ir = blackboard_->GetIndexRow(OTuple::Make(generalized));
       CHECK(ir);
-      ir->ChangeTupleTime(this, old_first_time, new_first_time);
+      ir->L1_ChangeTupleTime(this, old_first_time, new_first_time);
     }    
   }
 }
@@ -153,7 +153,7 @@ void IndexRow::L1_Erase() {
      (&blackboard_->index_, wildcard_tuple_) );
   CL.Destroying(this);
 }
-void IndexRow::ChangeTupleTime(TupleInfo *tuple_info, 
+void IndexRow::L1_ChangeTupleTime(TupleInfo *tuple_info, 
 			       Time old_time, Time new_time){  
 
   CL.RemoveFromSet(&tuples_, make_pair(old_time, tuple_info));
@@ -168,7 +168,7 @@ void IndexRow::ChangeTupleTime(TupleInfo *tuple_info,
     }
   }
 }
-void IndexRow::AddTuple(TupleInfo *tuple_info) {
+void IndexRow::L1_AddTuple(TupleInfo *tuple_info) {
   Time time = tuple_info->FirstTime();
   CL.InsertIntoSet(&tuples_, make_pair(time, tuple_info));
   WTUpdate update;
@@ -180,13 +180,13 @@ void IndexRow::AddTuple(TupleInfo *tuple_info) {
     }
   }
 }
-void IndexRow::EraseIfUnnecessary(){
+void IndexRow::L1_EraseIfUnnecessary(){
   if (tuples_.size() ||
       subscriptions_.size()) return;
   L1_Erase();
 }
 
-void IndexRow::RemoveTuple(TupleInfo *tuple_info) {
+void IndexRow::L1_RemoveTuple(TupleInfo *tuple_info) {
   Time time = tuple_info->FirstTime();
   CL.RemoveFromSet(&tuples_, make_pair(time, tuple_info));
   WTUpdate update;
@@ -197,7 +197,7 @@ void IndexRow::RemoveTuple(TupleInfo *tuple_info) {
       (*run)->Update(update);
     }
   }
-  EraseIfUnnecessary();
+  L1_EraseIfUnnecessary();
 }
 
 void Blackboard::L1_AddPosting(Posting *p){
@@ -284,7 +284,7 @@ void Blackboard::Shell() {
       cin >> tuple >> needs;
       cout << "Subscription " << (subscriptions.size()) << endl;
       WTSubscription *sub 
-	= b.MakeWTSubscription<LoggingWTSubscription>(tuple, needs);
+	= b.L1_MakeLoggingWTSubscription(tuple, needs);
       subscriptions.push_back(sub);
       continue;      
     }

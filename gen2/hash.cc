@@ -425,13 +425,13 @@ void driver3()
 }
 
 
-int main()
+/*int main()
 {
-  driver1();   /* test that the key is hashed: used for timings */
-  driver2();   /* test that whole key is hashed thoroughly */
-  driver3();   /* test that nothing but the key is hashed */
-  driver4();   /* test hashing multiple buffers (all buffers are null) */
-  return 1;
-}
+driver1();   // test that the key is hashed: used for timings 
+driver2();   // test that whole key is hashed thoroughly 
+driver3();   // test that nothing but the key is hashed 
+driver4();   // test hashing multiple buffers (all buffers are null) 
+return 1;
+}*/
 
 #endif  /* SELF_TEST */

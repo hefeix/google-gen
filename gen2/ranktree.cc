@@ -18,7 +18,8 @@
 
 #include "ranktree.h"
  
-int main() {
+
+/*int main() {
   TestRankSet();
   return 0;
 
@@ -48,5 +49,5 @@ int main() {
   cout << "DONE" << endl;
   return 0;
 
-}
+  }*/
 
