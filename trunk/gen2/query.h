@@ -27,8 +27,10 @@
   Query - A query on a blackboard to find all satisfactions of a pattern
   Search - The implementation of that search - subclasses are
     NoTuplesSearch - Used in the degenerate case where the pattern is empty.
-    OneTupleSearch - If the pattern contains one tuple
+    OneTupleSearch - If the pattern contains one tuple with no repeated 
+                     variables
     ConditionSearch - If we search by conditioning on the value of one tuple.
+                      this is the catch-all.
     PartitionSearch - If we search by partitioning the pattern into 
                        a set of patterns which share no variables. 
   Query and Search are tightly coupled one to one.  They are separate objects
@@ -50,6 +52,13 @@ class Changelist;
    strategies.  The searchtree can be swapped out to change strategies.  The 
    Query maintains the connections to the subscriptions, which 
    remain the same as the strategy changes.
+ */
+
+/*
+Some notes about updates:
+
+NoTuplesSearch gets no updates.
+OneTupleSearch gets WTUpdates
  */
 
 class Query;

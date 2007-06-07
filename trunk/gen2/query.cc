@@ -154,8 +154,9 @@ void OneTupleSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
   }
   wt_subscription_->L1_ChangeNeeds(new_needs);
 }
-void OneTupleSearch::Update(const WTUpdate &update, 
+void OneTupleSearch::Update(const SingleWTUpdate &update, 
 			    const OneTupleWTSub *subscription){
+  // HERE
   count_ += update.count_delta_;
   QueryUpdate out_update;
   out_update.count_delta_ = update.count_delta_;

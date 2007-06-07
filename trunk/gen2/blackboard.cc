@@ -83,19 +83,31 @@ TupleInfo::TupleInfo(Posting *first_posting, Blackboard *blackboard)
   CL.Make
     (new SetInsertChange<pair<Time, Posting *> >
      (&postings_, make_pair(first_posting->time_, first_posting)));
-  for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.done(); ++g_iter){
-    const Tuple & generalized = g_iter.Current();
-    IndexRow * ir = blackboard_->GetAddIndexRow(OTuple::Make(generalized));
-    ir->L1_AddTuple(this);
+  SingleWTUpdate update = SingleWTUpdate::Create(tuple_, first_posting->time_);
+  // First we add the tuple to all of the index rows, then we send updates.
+  for (int pass=0; pass<2; pass++) {
+    for (GeneralizationIterator g_iter(tuple_.Data()); 
+	 !g_iter.done(); ++g_iter){
+      const Tuple & generalized = g_iter.Current();
+      IndexRow * ir = blackboard_->GetAddIndexRow(OTuple::Make(generalized));
+      if (pass==0) ir->L1_AddTuple(this);
+      else ir->L1_SendUpdates(update);
+    }
   }
+  
 }
 void TupleInfo::L1_Erase() {
-  // remove me from index rows and blackboard.
-  for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.done(); ++g_iter){
-    const Tuple & generalized = g_iter.Current();
-    IndexRow * ir = blackboard_->GetIndexRow(OTuple::Make(generalized));
-    CHECK(ir);
-    ir->L1_RemoveTuple(this);
+  // first we send updates, then we remove the tuple from all index rows.
+  SingleWTUpdate update = SingleWTUpdate::Destroy(tuple_, FirstTime());
+  for (int pass=0; pass<2; pass++) {
+    for (GeneralizationIterator g_iter(tuple_.Data()); 
+	 !g_iter.done(); ++g_iter){
+      const Tuple & generalized = g_iter.Current();
+      IndexRow * ir = blackboard_->GetIndexRow(OTuple::Make(generalized));
+      CHECK(ir);
+      if (pass==0) ir->L1_SendUpdates(update);
+      else ir->L1_RemoveTuple(this);
+    }
   }
   CL.Make
     (new MapRemoveChange<OTuple, TupleInfo *>
@@ -106,17 +118,28 @@ Time TupleInfo::FirstTime() const {
   CHECK(postings_.size());
   return postings_.begin()->first;
 }
-void TupleInfo::ChangeTimesInIndexRows(Time old_first_time, 
-				       Time new_first_time) {
-  if (new_first_time != old_first_time) {
+void TupleInfo::L1_ChangeTimesInIndexRows(Time old_first_time, 
+					  Time new_first_time, 
+					  bool send_updates) {
+  if (new_first_time == old_first_time) return;
+  SingleWTUpdate update 
+    = SingleWTUpdate::ChangeTime(tuple_, old_first_time, new_first_time);
+  blackboard_->current_wt_update_ = new SingleWTUpdate(update);
+  // first we send the updates, then we change the times in the index rows.
+  // this is an arbitrary choice. 
+  for (int pass=0; pass<2; pass++) {
+    if (!send_updates && pass==0) continue; 
     for (GeneralizationIterator g_iter(tuple_.Data()); !g_iter.done(); 
 	 ++g_iter){
       const Tuple & generalized = g_iter.Current();
       IndexRow * ir = blackboard_->GetIndexRow(OTuple::Make(generalized));
       CHECK(ir);
-      ir->L1_ChangeTupleTime(this, old_first_time, new_first_time);
+      if (pass==0) ir->L1_SendUpdates(update);
+      else ir->L1_ChangeTupleTime(this, old_first_time, new_first_time);
     }    
   }
+  delete blackboard_->current_wt_update_;
+  blackboard_->current_wt_update_ = NULL;
 }
 void TupleInfo::L1_AddPosting(Posting *p) {
   Time old_first_time = FirstTime();
@@ -124,7 +147,7 @@ void TupleInfo::L1_AddPosting(Posting *p) {
     (new SetInsertChange<pair<Time, Posting *> >
      (&postings_, make_pair(p->time_, p) ) );
   Time new_first_time = FirstTime();
-  ChangeTimesInIndexRows(old_first_time, new_first_time);
+  L1_ChangeTimesInIndexRows(old_first_time, new_first_time, true);
 }
 void TupleInfo::L1_RemovePosting(Posting *p){
   if (postings_.size()==1) {
@@ -136,7 +159,7 @@ void TupleInfo::L1_RemovePosting(Posting *p){
     (new SetRemoveChange<pair<Time, Posting *> >
      (&postings_, make_pair(p->time_, p) ) );
   Time new_first_time = FirstTime();
-  ChangeTimesInIndexRows(old_first_time, new_first_time);
+  L1_ChangeTimesInIndexRows(old_first_time, new_first_time, true);
 }
 
 
@@ -153,32 +176,25 @@ void IndexRow::L1_Erase() {
      (&blackboard_->index_, wildcard_tuple_) );
   CL.Destroying(this);
 }
-void IndexRow::L1_ChangeTupleTime(TupleInfo *tuple_info, 
-			       Time old_time, Time new_time){  
-
-  CL.RemoveFromSet(&tuples_, make_pair(old_time, tuple_info));
-  CL.InsertIntoSet(&tuples_, make_pair(new_time, tuple_info));
-  WTUpdate update;
-  update.changes_.push_back(SingleWTUpdate::ChangeTime(tuple_info->tuple_, 
-						       old_time, new_time));
+void IndexRow::L1_SendUpdates(const SingleWTUpdate & update){
   forall(run_type, subscriptions_) {
-    if (!(run_type->first & UPDATE_TIME)) continue; 
+    if (update.action_ == UPDATE_CHANGE_TIME &&
+	!(run_type->first & UPDATE_TIME)) continue; 
     forall(run, run_type->second) {
       (*run)->Update(update);
     }
   }
 }
+
+void IndexRow::L1_ChangeTupleTime(TupleInfo *tuple_info, 
+				  Time old_time, Time new_time){  
+
+  CL.RemoveFromSet(&tuples_, make_pair(old_time, tuple_info));
+  CL.InsertIntoSet(&tuples_, make_pair(new_time, tuple_info));
+}
 void IndexRow::L1_AddTuple(TupleInfo *tuple_info) {
   Time time = tuple_info->FirstTime();
   CL.InsertIntoSet(&tuples_, make_pair(time, tuple_info));
-  WTUpdate update;
-  update.count_delta_ = 1;
-  update.changes_.push_back(SingleWTUpdate::Create(tuple_info->tuple_, time));
-  forall(run_type, subscriptions_) {
-    forall(run, run_type->second) {
-      (*run)->Update(update);
-    }
-  }
 }
 void IndexRow::L1_EraseIfUnnecessary(){
   if (tuples_.size() ||
@@ -189,14 +205,6 @@ void IndexRow::L1_EraseIfUnnecessary(){
 void IndexRow::L1_RemoveTuple(TupleInfo *tuple_info) {
   Time time = tuple_info->FirstTime();
   CL.RemoveFromSet(&tuples_, make_pair(time, tuple_info));
-  WTUpdate update;
-  update.count_delta_ = -1;
-  update.changes_.push_back(SingleWTUpdate::Destroy(tuple_info->tuple_, time));
-  forall(run_type, subscriptions_) {
-    forall(run, run_type->second) {
-      (*run)->Update(update);
-    }
-  }
   L1_EraseIfUnnecessary();
 }
 
