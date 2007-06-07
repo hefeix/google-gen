@@ -64,7 +64,8 @@ struct TupleInfo {
   OTuple tuple_;
   set<pair<Time, Posting *> > postings_; // all postings that make it true.
   Time FirstTime() const;
-  void ChangeTimesInIndexRows(Time old_first_time, Time new_first_time);
+  void L1_ChangeTimesInIndexRows(Time old_first_time, Time new_first_time,
+			      bool send_updates);
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
   Blackboard * blackboard_;
@@ -104,12 +105,14 @@ struct SingleUpdate{
   Time new_time_;
   static SingleUpdate Create(const T & data, const Time & new_time) {
     SingleUpdate ret;
+    ret.data_ = data;
     ret.action_ = UPDATE_CREATE;
     ret.new_time_ = new_time;
     return ret;
   }
   static SingleUpdate Destroy(const T & data, const Time & old_time) {
     SingleUpdate ret;
+    ret.data_ = data;
     ret.action_ = UPDATE_DESTROY;
     ret.old_time_ = old_time;
     return ret;
@@ -117,14 +120,20 @@ struct SingleUpdate{
   static SingleUpdate ChangeTime(const T & data, 
 				 const Time & old_time, Time new_time) {
     SingleUpdate ret;
+    ret.data_ = data;
     ret.action_ = UPDATE_CHANGE_TIME;
     ret.old_time_ = old_time;
     ret.new_time_ = new_time;
     return ret;
   }
   string ToString() const {
-    return "[ " + data_.ToString() + UpdateActionToString(action_) 
+    return "[ " + data_.ToString() + " " + UpdateActionToString(action_) 
       + " " + old_time_.ToString() + " -> " + new_time_.ToString() + " ]";
+  }
+  int GetCountDelta() { 
+    if (action_ == UPDATE_CREATE) return 1;
+    if (action_ == UPDATE_DESTROY) return -1;
+    return 0;
   }
 };
 
@@ -152,7 +161,6 @@ struct CombinedUpdate {
     return ret;
   }
 };
-typedef CombinedUpdate<OTuple> WTUpdate;
 
 template <class UpdateType, class SubscribeeType> 
 struct Subscription {
@@ -188,7 +196,7 @@ struct Subscription {
   UpdateNeeds needs_;
 };
 class IndexRow;
-typedef Subscription<WTUpdate, IndexRow> WTSubscription;
+typedef Subscription<SingleWTUpdate, IndexRow> WTSubscription;
 
 template <class UpdateType, class SubscribeeType> 
 struct LoggingSubscription : public Subscription<UpdateType, SubscribeeType> {
@@ -204,7 +212,7 @@ struct LoggingSubscription : public Subscription<UpdateType, SubscribeeType> {
     cout << ToString() + " " + update.ToString();
   }
 };
-typedef LoggingSubscription<WTUpdate, IndexRow> LoggingWTSubscription;
+typedef LoggingSubscription<SingleWTUpdate, IndexRow> LoggingWTSubscription;
 
 // a Subscription that calls an Update(UpdateType, Subscription*) 
 // method on an object
@@ -261,13 +269,16 @@ class Blackboard {
  public:
   friend class IndexRow;
   friend class TupleInfo;
-  friend class Subscription<WTUpdate, IndexRow>;
+  friend class Subscription<SingleWTUpdate, IndexRow>;
   friend class Posting;
   friend class OneTupleSearch;
   friend class ConditionSearch;
   
 
-  Blackboard() {num_nonupdated_queries_ = 0;}
+  Blackboard() {
+    num_nonupdated_queries_ = 0;
+    current_wt_update_ = NULL;
+  }
 
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
@@ -287,14 +298,21 @@ class Blackboard {
     return new LoggingWTSubscription(GetAddIndexRow(wildcard_tuple), needs);
   }
   template <class SubscriberType>
-    UpdateSubscription<WTUpdate, IndexRow, SubscriberType> * 
+    UpdateSubscription<SingleWTUpdate, IndexRow, SubscriberType> * 
     L1_MakeUpdateWTSubscription(OTuple wildcard_tuple, 
 			     UpdateNeeds needs,
 			     SubscriberType *subscriber){
-    return new UpdateSubscription<WTUpdate, IndexRow, SubscriberType>
+    return new UpdateSubscription<SingleWTUpdate, IndexRow, SubscriberType>
       (GetAddIndexRow(wildcard_tuple), needs, subscriber);
   }
 
+  // used in computing updates.
+  // requires a rollback to undo it.
+  void L1_HackTupleTime(OTuple tuple, Time old_time, Time new_time) {
+    TupleInfo * ti = GetTupleInfo(tuple);
+    CHECK(ti->FirstTime() == old_time);
+    ti->L1_ChangeTimesInIndexRows(old_time, new_time, false);
+  }
 
  private:
   // returns null on failure
@@ -305,6 +323,7 @@ class Blackboard {
 
   map<OTuple, IndexRow *> index_;
   map<OTuple, TupleInfo *> tuple_info_;
+  SingleWTUpdate * current_wt_update_;
 };
 
 
