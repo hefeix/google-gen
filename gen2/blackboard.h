@@ -27,6 +27,11 @@
 struct IndexRow;
 struct Blackboard;
 
+struct Query;
+struct QueryUpdate;
+
+
+
 struct SamplingInfo{
   bool   sampled_;
   int    position_;
@@ -323,6 +328,16 @@ class Blackboard {
 
   map<OTuple, IndexRow *> index_;
   map<OTuple, TupleInfo *> tuple_info_;
+  // (Query size, query) -> queued updates
+  struct StoredUpdates;
+  struct StoredUpdates {
+    SingleWTUpdate wt_update_;
+    vector<QueryUpdate<   pair>
+  }
+  map<pair<int, Query *>, UpdatesForQuery*>;
+  
+    pair<vector<SingleWTUpdate *>, vector<QueryUpdate *> > 
+    update_queue_;
   SingleWTUpdate * current_wt_update_;
 };
 

@@ -57,6 +57,14 @@ class Changelist;
 /*
 Some notes about updates:
 
+The main trickiness is that when a tuple changes, it can affect a search through mutple different paths.   Yet, we want the query to send one and only one update that reflects that change.   
+
+Adding tuples:
+We first add the tuple to all index rows, then send updates.
+Deleting tuples: 
+We first send the updates, then delete the tuple from all index rows.
+
+
 NoTuplesSearch gets no updates.
 OneTupleSearch gets WTUpdates
  */
