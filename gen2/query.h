@@ -122,8 +122,8 @@ struct Query {
 class ConditionSearch;
 class PartitionSearch;
 class OneTupleSearch;
-typedef UpdateSubscription<QueryUpdate, Query, ConditionSearch> ConditionQSub;
-typedef UpdateSubscription<QueryUpdate, Query, PartitionSearch> PartitionQSub;
+typedef UpdateSubscriptionWithData<QueryUpdate, Query, ConditionSearch, OTuple> ConditionQSub;
+typedef UpdateSubscriptionWithData<QueryUpdate, Query, PartitionSearch, int> PartitionQSub;
 
 typedef UpdateSubscription<WTUpdate, IndexRow, ConditionSearch> ConditionWTSub;
 typedef UpdateSubscription<WTUpdate, IndexRow, OneTupleSearch> OneTupleWTSub;
@@ -145,6 +145,8 @@ struct Search {
   virtual void GetSubstitutions(vector<Map> * substitutions, 
 				vector<Time> *times) const = 0;
   virtual void L1_ChangeUpdateNeeds(UpdateNeeds new_needs) {};
+  virtual void L1_FlushUpdates() { CHECK(false); }
+  
   uint64 count_;
 };
 
@@ -198,12 +200,15 @@ struct ConditionSearch : public Search {
   // Receive an update.
   // should be caled L1_Update to keep to convention, but the name is
   // required by the template magic.
-  void Update(const WTUpdate &update, const ConditionWTSub *subscription);
+  void Update(const SingleWTUpdate &update, const ConditionWTSub *subscription);
   void Update(const QueryUpdate &update, const ConditionQSub *subscription);
   void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
   map<OTuple, pair<Query*, ConditionQSub *> > children_;
   int condition_tuple_;
   ConditionWTSub *wt_subscription_;
+
+  SingleWTUpdate * queued_wt_update_;
+  map<OTuple, QueryUpdate> queued_query_updates_;
 };
 
 struct PartitionSearch : public Search {
@@ -220,8 +225,8 @@ struct PartitionSearch : public Search {
 
   vector<int> partition_; // element i says which part contains tuple i.
   vector<pair<Query *, PartitionQSub *> >children_;
+
+  map<int, QueryUpdate> queued_query_updates_;
 };
-
-
 
 #endif

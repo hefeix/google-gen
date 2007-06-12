@@ -69,8 +69,8 @@ struct TupleInfo {
   OTuple tuple_;
   set<pair<Time, Posting *> > postings_; // all postings that make it true.
   Time FirstTime() const;
-  void L1_ChangeTimesInIndexRows(Time old_first_time, Time new_first_time,
-			      bool send_updates);
+  void L1_ChangeTimesInIndexRows(Time old_first_time, Time new_first_time);
+  void L1_ChangePostingTime(Posting *p, Time new_time);
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
   Blackboard * blackboard_;
@@ -234,7 +234,25 @@ struct UpdateSubscription : public Subscription<UpdateType, SubscribeeType> {
   SubscriberType * subscriber_;
 };
 
+// a Subscription that calls an Update(UpdateType, Subscription*) 
+// method on an object
+template <class UpdateType, class SubscribeeType, class SubscriberType,
+          class DataType> 
+struct UpdateSubscriptionWithData : 
+public Subscription<UpdateType, SubscribeeType> {
+  typedef Subscription<UpdateType, SubscribeeType> ParentClass;
+  UpdateSubscriptionWithData(SubscribeeType *subscribee, 
+		     UpdateNeeds needs, 
+			     SubscriberType *subscriber,
+			     DataType d)
+    :ParentClass(subscribee, needs), subscriber_(subscriber), data_(d) {}
 
+  void Update(const UpdateType &update) {
+    subscriber_->Update(update, this, data_);
+  }
+  SubscriberType * subscriber_;
+  DataType data_;
+};
 
 
 struct IndexRow {
@@ -288,6 +306,8 @@ class Blackboard {
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
 
+  void L1_FlushUpdates();
+
   static void Shell();
   uint64 GetNumWildcardMatches(OTuple wildcard_tuple);
 
@@ -311,33 +331,18 @@ class Blackboard {
       (GetAddIndexRow(wildcard_tuple), needs, subscriber);
   }
 
-  // used in computing updates.
-  // requires a rollback to undo it.
-  void L1_HackTupleTime(OTuple tuple, Time old_time, Time new_time) {
-    TupleInfo * ti = GetTupleInfo(tuple);
-    CHECK(ti->FirstTime() == old_time);
-    ti->L1_ChangeTimesInIndexRows(old_time, new_time, false);
-  }
+  void L1_AddSearchToFlush(Search * s);
 
  private:
   // returns null on failure
   IndexRow * GetIndexRow(OTuple wildcard_tuple);
   IndexRow * GetAddIndexRow(OTuple wildcard_tuple);
-
   TupleInfo * GetTupleInfo(OTuple tuple);
 
   map<OTuple, IndexRow *> index_;
   map<OTuple, TupleInfo *> tuple_info_;
-  // (Query size, query) -> queued updates
-  struct StoredUpdates;
-  struct StoredUpdates {
-    SingleWTUpdate wt_update_;
-    vector<QueryUpdate<   pair>
-  }
-  map<pair<int, Query *>, UpdatesForQuery*>;
-  
-    pair<vector<SingleWTUpdate *>, vector<QueryUpdate *> > 
-    update_queue_;
+  set<pair<int, Search*> > searches_to_flush_;
+
   SingleWTUpdate * current_wt_update_;
 };
 
