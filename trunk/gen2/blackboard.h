@@ -28,8 +28,7 @@ struct IndexRow;
 struct Blackboard;
 
 struct Query;
-struct QueryUpdate;
-
+struct Search;
 
 
 struct SamplingInfo{
@@ -135,7 +134,7 @@ struct SingleUpdate{
     return "[ " + data_.ToString() + " " + UpdateActionToString(action_) 
       + " " + old_time_.ToString() + " -> " + new_time_.ToString() + " ]";
   }
-  int GetCountDelta() { 
+  int GetCountDelta() const{ 
     if (action_ == UPDATE_CREATE) return 1;
     if (action_ == UPDATE_DESTROY) return -1;
     return 0;
@@ -270,6 +269,7 @@ struct IndexRow {
   void L1_RemovedSubscription() {L1_EraseIfUnnecessary();}
   void L1_ChangedSubscriptionNeeds() {}
   void L1_EraseIfUnnecessary();
+  void L1_SendUpdates(const SingleWTUpdate & update);
   OTuple GetWildcardTuple() const {
     return wildcard_tuple_;
   }

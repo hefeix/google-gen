@@ -79,6 +79,8 @@ bool Query::L1_Search(int64 *max_work_now){
   }
   int best_tuple 
     = min_element(num_matches.begin(), num_matches.end())-num_matches.begin();
+#define NO_PARTITION
+#ifndef NO_PARTITION
   uint64 least_matches = num_matches[best_tuple];
   int num_components = GetConnectedComponents(pattern_, NULL);
   if ( (num_components > 1) && (least_matches > 0) ) {
@@ -87,6 +89,7 @@ bool Query::L1_Search(int64 *max_work_now){
     return search_->L1_Search(max_work_now);
     return false;
   }
+#endif
 
   // Condition node
   new ConditionSearch(this, best_tuple);
@@ -161,7 +164,6 @@ void OneTupleSearch::Update(const SingleWTUpdate &update,
 
   // Update the count
   CL.ChangeValue(&count_, count_ + update.GetCountDelta());
-  count_ += update.count_delta_;
 
   // A subscription could need one of three things
   // It could need a count delta only (no WHICH or TIME)
@@ -169,7 +171,7 @@ void OneTupleSearch::Update(const SingleWTUpdate &update,
   // It could need both substitutions and time changes (WHICH and TIME)
   // So we prepare 3 separate responses
   QueryUpdate out_update;
-  out_update.count_delta_ = update.count_delta_;
+  out_update.count_delta_ = update.GetCountDelta();
   QueryUpdate out_update_with_subs = out_update;
   QueryUpdate out_update_with_times = out_update;
 
@@ -188,7 +190,7 @@ void OneTupleSearch::Update(const SingleWTUpdate &update,
     
     // Decide where this update goes in the 2 advanced responses
     out_update_with_times.changes_.push_back(out_single);
-    if (single.action_ != UPDATE_CHANGE_TIME)
+    if (update.action_ != UPDATE_CHANGE_TIME)
       out_update_with_subs.changes_.push_back(out_single);
   }
 
@@ -260,15 +262,15 @@ void PartitionSearch::Update(const QueryUpdate &update,
   CL.InsertIntoMap(&queued_query_updates_, which, update);
   query_->blackboard_->L1_AddSearchToFlush(this);
 }
-void PartitionSearch::FlushUpdates() {
+void PartitionSearch::L1_FlushUpdates() {
   // WORKING TODO
 }
 void PartitionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
-  forall(run, children_) {
-    PartitionQSub * & sub_ref = (*run).second;
+  for (uint i=0; i<children_.size(); i++) {
+    PartitionQSub * & sub_ref = children_[i].second;
     if (sub_ref == NULL) {
       CHECK(query_->needs_);
-      sub_ref = new PartitionQSub(run->first, new_needs, this);
+      sub_ref = new PartitionQSub(children_[i].first, new_needs, this, i);
       continue;
     }
     if (new_needs == 0) {
@@ -380,13 +382,12 @@ void ConditionSearch::Update(const SingleWTUpdate &update,
   query_->blackboard_->L1_AddSearchToFlush(this);
 }
 
-void ConditionSearch::FlushUpdates() {
+void ConditionSearch::L1_FlushUpdates() {
 
   // Three different outputs correspond to not needing which or time,
   // needing which only, or needing both
   QueryUpdate out_update, out_update_with_subs, out_update_with_times;
 
-  QueryUpdate out_update, out_update_with_subs, out_update_with_times;
   int64 count_delta = 0;
   bool need_subs = query_->needs_ & UPDATE_WHICH;
   bool need_times = query_->needs_ & UPDATE_TIME;
@@ -405,7 +406,7 @@ void ConditionSearch::FlushUpdates() {
       out_single.data_ = OMap::Make(Union(single.data_.Data(), additional_sub));
       out_update_with_times.changes_.push_back(out_single);
       if (out_single.action_ != UPDATE_CHANGE_TIME)
-	out_update_with_subs.push_back(out_single);
+	out_update_with_subs.changes_.push_back(out_single);
     }
   }
   CL.ChangeValue(&queued_query_updates_, map<OTuple, QueryUpdate>());
@@ -421,7 +422,7 @@ void ConditionSearch::FlushUpdates() {
       Query * child_query;
       L1_MaybeAddChild(tuple, NULL, &child_query);
       if (child_query) {
-	count_delta += child_query->count_;
+	count_delta += child_query->GetCount();
 	if (need_subs) {
 	  vector<Map> subs;
 	  vector<Time> times;
@@ -444,7 +445,7 @@ void ConditionSearch::FlushUpdates() {
     if (children_ % tuple) { // ignore it if it doesn't match
       Query * child_query = children_[tuple].first;
       ConditionQSub *subscription = children_[tuple].second;
-      count_delta -= child_query->count_;
+      count_delta -= child_query->GetCount();
       if (queued_wt_update_->action_ == UPDATE_DESTROY) { // it's a tuple deletion
 	if (need_subs) {
 	  vector<Map> subs;
@@ -452,7 +453,7 @@ void ConditionSearch::FlushUpdates() {
 	  child_query->GetSubstitutions(&subs, need_times?(&times):NULL);
 	  if (need_times) {
 	    for (uint i=0; i<times.size(); i++) times[i] 
-	      = max(times[i], run->old_time_);
+	      = max(times[i], queued_wt_update_->old_time_);
 	  }
 	  for (uint i=0; i<subs.size(); i++) {
 	    SingleQueryUpdate s 
@@ -466,7 +467,7 @@ void ConditionSearch::FlushUpdates() {
 	CL.RemoveFromMap(&children_, tuple);
       } else {
 	// change time on a tuple
-	CHECK(run->action_ == UPDATE_CHANGE_TIME);
+	CHECK(queued_wt_update_->action_ == UPDATE_CHANGE_TIME);
 	if (need_times) {
 	  vector<Map> subs;
 	  vector<Time> times;
@@ -490,7 +491,7 @@ void ConditionSearch::FlushUpdates() {
     out_update_with_subs.count_delta_ = 
     out_update_with_times.count_delta_ = count_delta;
 
-  CL.ChangeValue(&query_->count_, query_->count_ + count_delta);
+  CL.ChangeValue(&count_, count_ + count_delta);
 
   forall(run_needs, query_->subscriptions_) {
     // could possibly optimize this by not building a whole new
@@ -518,7 +519,7 @@ void ConditionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
     ConditionQSub * & sub_ref = run->second.second;
     if (sub_ref == NULL) {
       CHECK(query_->needs_);
-      sub_ref = new ConditionQSub(run->second.first, new_needs, this);
+      sub_ref = new ConditionQSub(run->second.first, new_needs, this, run->first);
       continue;
     }
     if (new_needs == 0) {

@@ -125,8 +125,8 @@ class OneTupleSearch;
 typedef UpdateSubscriptionWithData<QueryUpdate, Query, ConditionSearch, OTuple> ConditionQSub;
 typedef UpdateSubscriptionWithData<QueryUpdate, Query, PartitionSearch, int> PartitionQSub;
 
-typedef UpdateSubscription<WTUpdate, IndexRow, ConditionSearch> ConditionWTSub;
-typedef UpdateSubscription<WTUpdate, IndexRow, OneTupleSearch> OneTupleWTSub;
+typedef UpdateSubscription<SingleWTUpdate, IndexRow, ConditionSearch> ConditionWTSub;
+typedef UpdateSubscription<SingleWTUpdate, IndexRow, OneTupleSearch> OneTupleWTSub;
 
 struct Search {
   virtual ~Search() {};
@@ -178,7 +178,7 @@ struct OneTupleSearch : public Search {
   // Receive an update.
   // should be caled L1_Update to keep to convention, but the name is
   // required by the template magic.
-  void Update(const WTUpdate &update, const OneTupleWTSub *subscription);
+  void Update(const SingleWTUpdate &update, const OneTupleWTSub *subscription);
   void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
   OneTupleWTSub *wt_subscription_;
 };
@@ -201,8 +201,11 @@ struct ConditionSearch : public Search {
   // should be caled L1_Update to keep to convention, but the name is
   // required by the template magic.
   void Update(const SingleWTUpdate &update, const ConditionWTSub *subscription);
-  void Update(const QueryUpdate &update, const ConditionQSub *subscription);
+  void Update(const QueryUpdate &update, const ConditionQSub *subscription,
+	      OTuple t);
   void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
+  void L1_FlushUpdates();
+
   map<OTuple, pair<Query*, ConditionQSub *> > children_;
   int condition_tuple_;
   ConditionWTSub *wt_subscription_;
@@ -220,8 +223,10 @@ struct PartitionSearch : public Search {
   // Receive an update.
   // should be caled L1_Update to keep to convention, but the name is
   // required by the template magic.
-  void Update(const QueryUpdate &update, const PartitionQSub *subscription);
+  void Update(const QueryUpdate &update, const PartitionQSub *subscription,
+	      int which);
   void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
+  void L1_FlushUpdates();
 
   vector<int> partition_; // element i says which part contains tuple i.
   vector<pair<Query *, PartitionQSub *> >children_;

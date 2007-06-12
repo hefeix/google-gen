@@ -18,7 +18,7 @@
 
 #include "blackboard.h"
 #include "tuple.h"
-//#include "searchtree.h"
+#include "query.h"
 #include <fstream>
 
 SamplingInfo::SamplingInfo() {
@@ -69,13 +69,13 @@ Posting::Posting(OTuple tuple, Time time, Blackboard *blackboard)
   :tuple_(tuple), time_(time), blackboard_(blackboard){
   CL.Creating(this);
   blackboard_->L1_AddPosting(this);
-  blackboard_->FlushUpdates();
+  blackboard_->L1_FlushUpdates();
 }
 
 void Posting::L1_Erase(){
   blackboard_->L1_RemovePosting(this);
   CL.Destroying(this);
-  blackboard_->FlushUpdates();
+  blackboard_->L1_FlushUpdates();
 }
 
 void Posting::L1_ChangeTime(Time new_time) {
@@ -83,7 +83,7 @@ void Posting::L1_ChangeTime(Time new_time) {
   TupleInfo *ti = blackboard_->GetTupleInfo(tuple_);
   CHECK(ti);
   ti->L1_ChangePostingTime(this, new_time);
-  blackboard_->FlushUpdates();
+  blackboard_->L1_FlushUpdates();
 }
 
 TupleInfo::TupleInfo(Posting *first_posting, Blackboard *blackboard)
@@ -299,6 +299,99 @@ void Blackboard::L1_AddSearchToFlush(Search * s) {
   int num_terms = s->query_->pattern_.size();
   if (searches_to_flush_ % make_pair(num_terms, s)) return;
   CL.InsertIntoSet(&searches_to_flush_, make_pair(num_terms, s));
+}
+
+Time RandomTime() {
+  vector<pair<BitSeq, int> > coordinates;
+  coordinates.push_back(make_pair(BitSeq(), rand()%3 + 1));
+  return Time(coordinates);
+}
+Object RandomConstant() {
+  return Integer::Make(rand() % 3 + 1);
+}
+Object RandomVariable() {
+  return Variable::Make(rand() % 3);
+}
+
+OTuple RandomConstantTuple() {
+  Tuple t;
+  for (int i=0; i<2; i++) {
+    t.push_back(RandomConstant());
+  }
+  return OTuple::Make(t);
+}
+OTuple RandomVariableTuple() {
+  Tuple t;
+  for (int i=0; i<2; i++) {
+    if (rand() % 2) t.push_back(RandomConstant());
+    else t.push_back(RandomVariable());
+  }
+  return OTuple::Make(t);
+}
+OPattern RandomPattern() {
+  Pattern p;
+  int sz = rand() % 3 + 1;
+  for (int i=0; i<sz; i++) {
+    p.push_back(MakeRandomVariableTuple());
+  }
+  return OPattern::Make(p);
+}
+
+UpdateNeeds RandomUpdateNeeds() {
+  int c = rand() % 3;
+  switch(c) {
+  case 0: return 1; break;
+  case 1: return 3; break;
+  case 2: return 7; break;
+  }
+  return 1;
+}
+void Blackboard::RandomTest() {
+  CL.MakeChangesPermanent();
+  rankset<Posting *> postings;
+  rankset<LoggingQuerySubscription *> subscriptions;
+  int reps = 100000;
+  int max_postings = 20;
+  for (int rep=0; rep<reps; rep++) {
+    if (rand() % 1000 == 0) {
+      cout << "Rolling back changelist" << endl;
+      CL.Rollback(0);
+    }
+    if (rand() % 1000 == 0) {
+      cout << "Making changes permanent" << endl;
+      CL.MakeChangesPermanent();
+    }
+
+    int action = rand() % 4;
+    switch(action) {
+    case 0: // Add a posting
+      if (postings.size() == max_postings) break;
+      Posting * p = new Posting(RandomConstantTuple(), RandomTime(), this);
+      cout << "add posting " << p->tuple_.ToString() << " " 
+	   << p->time_.ToString() << endl;
+      postings.insert(p);
+      break;
+    case 1: // Delete a posting
+      if (postings.size() == 0) break;
+      Posting *p = *(postings.nth(rand() % postings.size()));
+      cout << "remove posting " << p->tuple_.ToString() << " " 
+	   << p->time_.ToString() << endl;
+      p->L1_Erase();
+      postings.erase(p);
+      break;
+    case 2: // Add a query;
+      OPattern p = RandomPattern();
+      UpdateNeeds needs = RandomUpdateNeeds();
+      cout << "Adding a query " << p << " needs=" << needs << endl;
+      Query * q = new Query(this, p.Data(), SamplingInfo());
+      q->L1_Search(NULL);
+      LoggingQuerySubscription *s = new LoggingQuerySubscription(q, needs);
+      subscriptions.insert(s);
+      break;
+    case 3: // Delete a query;
+      break;
+    }
+  }
 }
 
 void Blackboard::Shell() {
