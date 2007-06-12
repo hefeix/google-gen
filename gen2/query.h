@@ -117,6 +117,10 @@ struct Query {
   // added, removed, or changed).  Propagates the needs changes to the
   // children.
   void L1_RecomputeUpdateNeeds();
+  string GetDescription() const { 
+    return "Query" + OPattern::Make(pattern_).ToString();
+  }
+
 };
 
 class ConditionSearch;

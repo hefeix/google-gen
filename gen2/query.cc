@@ -101,7 +101,7 @@ NoTuplesSearch::NoTuplesSearch(Query *query)
 }
 
 OneTupleSearch::OneTupleSearch(Query *query) 
-  : Search(query) {
+  : Search(query), wt_subscription_(NULL) {
 }
 
 bool OneTupleSearch::L1_Search(int64 * max_work_now) {
@@ -283,7 +283,8 @@ void PartitionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
 }
 
 ConditionSearch::ConditionSearch(Query * query, int condition_tuple)
-  : Search(query), condition_tuple_(condition_tuple), queued_wt_update_(NULL) {
+  : Search(query), condition_tuple_(condition_tuple), wt_subscription_(NULL), 
+    queued_wt_update_(NULL) {
 }
 
 // If the specifcation matches the variable tuple, adds a child query.
