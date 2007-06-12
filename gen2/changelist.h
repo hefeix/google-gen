@@ -336,7 +336,7 @@ class Changelist {
 						 const V& val) {
     Make (new MapInsertChange<K, V>(location, key, val));
   }
-  template <class K, class V> void InsertIntoMap(map<K,V> * location,
+  template <class K, class V> void RemoveFromMap(map<K,V> * location,
 						 const K& key) {
     Make (new MapRemoveChange<K, V>(location, key));
   }
