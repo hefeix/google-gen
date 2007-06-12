@@ -332,7 +332,7 @@ OPattern RandomPattern() {
   Pattern p;
   int sz = rand() % 3 + 1;
   for (int i=0; i<sz; i++) {
-    p.push_back(MakeRandomVariableTuple());
+    p.push_back(RandomVariableTuple());
   }
   return OPattern::Make(p);
 }
@@ -351,7 +351,8 @@ void Blackboard::RandomTest() {
   rankset<Posting *> postings;
   rankset<LoggingQuerySubscription *> subscriptions;
   int reps = 100000;
-  int max_postings = 20;
+  uint max_postings = 20;
+  uint max_subscriptions = 20;
   for (int rep=0; rep<reps; rep++) {
     if (rand() % 1000 == 0) {
       cout << "Rolling back changelist" << endl;
@@ -361,35 +362,57 @@ void Blackboard::RandomTest() {
       cout << "Making changes permanent" << endl;
       CL.MakeChangesPermanent();
     }
-
     int action = rand() % 4;
     switch(action) {
-    case 0: // Add a posting
+    case 0: { // Add a posting
       if (postings.size() == max_postings) break;
-      Posting * p = new Posting(RandomConstantTuple(), RandomTime(), this);
-      cout << "add posting " << p->tuple_.ToString() << " " 
-	   << p->time_.ToString() << endl;
-      postings.insert(p);
+      OTuple t = RandomConstantTuple();
+      Time tm = RandomTime();
+      cout << "add posting " << t << " " << tm.ToString() << endl;
+      Posting * p = new Posting(t, tm, this);
+      CL.InsertIntoSet(&postings, p);
       break;
-    case 1: // Delete a posting
+    }
+    case 1: {// Delete a posting
       if (postings.size() == 0) break;
       Posting *p = *(postings.nth(rand() % postings.size()));
       cout << "remove posting " << p->tuple_.ToString() << " " 
 	   << p->time_.ToString() << endl;
       p->L1_Erase();
-      postings.erase(p);
+      CL.RemoveFromSet(&postings, p);
       break;
-    case 2: // Add a query;
+    }
+    case 2: {// Add a query;
+      if (subscriptions.size() == max_subscriptions) break;
       OPattern p = RandomPattern();
       UpdateNeeds needs = RandomUpdateNeeds();
       cout << "Adding a query " << p << " needs=" << needs << endl;
       Query * q = new Query(this, p.Data(), SamplingInfo());
       q->L1_Search(NULL);
+      cout << " Number of satisfactions:  " << q->GetCount() << endl;
+      if (q->GetCount() < 10) {
+	vector<Map> subs;
+	vector<Time> times;
+	q->GetSubstitutions(&subs, &times);
+	CHECK(subs.size() == q->GetCount());
+	for (uint i=0; i<subs.size(); i++) {
+	  cout << "    " << OMap::Make(subs[i]) << " " << times[i].ToString()
+	       << endl;
+	}
+      }
       LoggingQuerySubscription *s = new LoggingQuerySubscription(q, needs);
-      subscriptions.insert(s);
+      CL.InsertIntoSet(&subscriptions, s);
       break;
-    case 3: // Delete a query;
+    }
+    case 3: { // Delete a query;
+      if (subscriptions.size()==0) break;
+      LoggingQuerySubscription * s = 
+	*(subscriptions.nth(rand() % subscriptions.size()));
+      cout << "Deleting a query " << s->ToString() << endl;
+      s->L1_Erase();
+      CL.RemoveFromSet(&subscriptions, s);
       break;
+    }
     }
   }
 }
@@ -402,6 +425,10 @@ void Blackboard::Shell() {
   vector<Posting *> postings;
   vector<WTSubscription *> subscriptions;
   for (;(cin >> command) && command != "q"; cout << endl) {
+    if (command == "rt") {
+      b.RandomTest();
+      continue;
+    }
     if (command == "post") {
       cin >> tuple >> time;
       cout << "Posting " << (postings.size()) << endl;      

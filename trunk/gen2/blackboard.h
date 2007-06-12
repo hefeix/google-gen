@@ -309,6 +309,7 @@ class Blackboard {
   void L1_FlushUpdates();
 
   static void Shell();
+  void RandomTest();
   uint64 GetNumWildcardMatches(OTuple wildcard_tuple);
 
   
