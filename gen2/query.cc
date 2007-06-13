@@ -31,7 +31,7 @@ void Query::L1_RemoveParent() {
 }
 void Query::L1_Erase() {
   CHECK(needs_ == 0);
-  blackboard_->L1_ChangeNumNonupdatedQueries(-1);
+  blackboard_->L1_DeleteNonupdatedQuery(this);
   CHECK(parent_count_ == 0);
   if (search_) search_->L1_Erase();
   CL.Destroying(this);
@@ -51,7 +51,10 @@ void Query::L1_RecomputeUpdateNeeds(){
   UpdateNeeds new_needs = 0;
   forall(run, subscriptions_) new_needs |= run->first;
   if (new_needs==old_needs) return;
-  blackboard_->L1_ChangeNumNonupdatedQueries((new_needs?0:1)-(old_needs?0:1));
+  if ((new_needs == 0) && (old_needs != 0))
+    blackboard_->L1_AddNonupdatedQuery(this);
+  if ((old_needs == 0) && (new_needs != 0))
+    blackboard_->L1_DeleteNonupdatedQuery(this);
   search_->L1_ChangeUpdateNeeds(new_needs);
   CL.ChangeValue(&needs_, new_needs);
 }
@@ -145,7 +148,7 @@ void OneTupleSearch::GetSubstitutions(vector<Map> * substitutions,
 }
 void OneTupleSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
   if (!wt_subscription_) {
-    CHECK(query_->needs_);
+    CHECK(query_->needs_ == 0);
     wt_subscription_ = 
       query_->blackboard_->L1_MakeUpdateWTSubscription<OneTupleSearch>
       (GetWildcardTuple(), new_needs, this);
@@ -288,6 +291,7 @@ ConditionSearch::ConditionSearch(Query * query, int condition_tuple)
 }
 
 // If the specifcation matches the variable tuple, adds a child query.
+// The return value is true if we havent run out of work_now
 bool ConditionSearch::L1_MaybeAddChild(OTuple specification, 
 				       int64 *max_work_now, 
 				       Query ** child_query) { 
@@ -305,9 +309,13 @@ bool ConditionSearch::L1_MaybeAddChild(OTuple specification,
     = Substitute(sub, RemoveFromVector(query_->pattern_, condition_tuple_));    
   Query * q = new Query(query_->blackboard_, sub_pattern, sub_sampling);
   q->L1_AddParent();
-  CL.InsertIntoMap(&children_, specification, make_pair(q, (ConditionQSub*)NULL));
   res = q->L1_Search(max_work_now);
   if (!res) return false;
+  ConditionQSub * new_qsub = NULL;
+  if (query_->needs_) {
+    new_qsub = new ConditionQSub(q, query_->needs_, this, specification);
+  }
+  CL.InsertIntoMap(&children_, specification, make_pair(q, new_qsub));
   if (child_query) *child_query = q;
   return true;
 }
@@ -339,7 +347,8 @@ bool ConditionSearch::L1_Search(int64 * max_work_now) {
     Query * child;
     if (!L1_MaybeAddChild(run_tuples->second->tuple_, max_work_now, &child))
       return false;
-    CL.ChangeValue(&count_, count_ + child->GetCount());
+    // There's no child if we don't match a repeated variable
+    if (child) CL.ChangeValue(&count_, count_ + child->GetCount());
   }
   return true;
 }
@@ -410,13 +419,15 @@ void ConditionSearch::L1_FlushUpdates() {
 	out_update_with_subs.changes_.push_back(out_single);
     }
   }
+  // Ok now we have processed the updates, delete them
   CL.ChangeValue(&queued_query_updates_, map<OTuple, QueryUpdate>());
-  
+
   if (queued_wt_update_) { 
     OTuple tuple = queued_wt_update_->data_;
     Map additional_sub;
     CHECK(ComputeSubstitution(GetVariableTuple().Data(),
 			      tuple.Data(), &additional_sub));
+
     // It's a creation
     if (queued_wt_update_->action_ == UPDATE_CREATE) {
       // add a tuple
@@ -430,7 +441,7 @@ void ConditionSearch::L1_FlushUpdates() {
 	  child_query->GetSubstitutions(&subs, need_times?(&times):NULL);
 	  if (need_times) {
 	    for (uint i=0; i<times.size(); i++) 
-	    times[i] = max(times[i], queued_wt_update_->new_time_);
+	      times[i] = max(times[i], queued_wt_update_->new_time_);
 	  }
 	  for (uint i=0; i<subs.size(); i++) {
 	    SingleQueryUpdate s 
@@ -441,7 +452,9 @@ void ConditionSearch::L1_FlushUpdates() {
 	  }
 	}
       }
+      goto step2;
     }
+
     // It's a deletion or a time change.
     if (children_ % tuple) { // ignore it if it doesn't match
       Query * child_query = children_[tuple].first;
@@ -466,28 +479,33 @@ void ConditionSearch::L1_FlushUpdates() {
 	}
 	subscription->L1_Erase();
 	CL.RemoveFromMap(&children_, tuple);
-      } else {
-	// change time on a tuple
-	CHECK(queued_wt_update_->action_ == UPDATE_CHANGE_TIME);
-	if (need_times) {
-	  vector<Map> subs;
-	  vector<Time> times;
-	  child_query->GetSubstitutions(&subs, &times);
-	  for (uint i=0; i<subs.size(); i++) {
-	    Time old_time = max(times[i], queued_wt_update_->old_time_);
-	    Time new_time = max(times[i], queued_wt_update_->new_time_);
-	    if (old_time != new_time) {
-	      out_update_with_times.changes_.push_back
-		(SingleQueryUpdate::ChangeTime
-		 (OMap::Make(Union(subs[i], additional_sub)),
-		  old_time, new_time));
-	    }
-	  }
+	goto step2;
+      } 
+	
+      // change time on a tuple
+      CHECK(queued_wt_update_->action_ == UPDATE_CHANGE_TIME);
+      if (!need_times) goto step2;
+      vector<Map> subs;
+      vector<Time> times;
+      child_query->GetSubstitutions(&subs, &times);
+      for (uint i=0; i<subs.size(); i++) {
+	Time old_time = max(times[i], queued_wt_update_->old_time_);
+	Time new_time = max(times[i], queued_wt_update_->new_time_);
+	if (old_time != new_time) {
+	  out_update_with_times.changes_.push_back
+	    (SingleQueryUpdate::ChangeTime
+	     (OMap::Make(Union(subs[i], additional_sub)),
+	      old_time, new_time));
 	}
       }
     }
   }
   
+ step2:
+  // Done with the wt update, delete it
+  SingleWTUpdate * nullptr = NULL;
+  CL.ChangeValue(&queued_wt_update_, nullptr);
+
   out_update.count_delta_ = 
     out_update_with_subs.count_delta_ = 
     out_update_with_times.count_delta_ = count_delta;
@@ -505,6 +523,7 @@ void ConditionSearch::L1_FlushUpdates() {
       (*run)->Update(*out);
     }
   }
+
 }
 
 void ConditionSearch::Update(const QueryUpdate &update, 
@@ -519,7 +538,7 @@ void ConditionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
   forall(run, children_) {
     ConditionQSub * & sub_ref = run->second.second;
     if (sub_ref == NULL) {
-      CHECK(query_->needs_);
+      CHECK(query_->needs_ == 0);
       sub_ref = new ConditionQSub(run->second.first, new_needs, this, run->first);
       continue;
     }
@@ -531,7 +550,7 @@ void ConditionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
     sub_ref->L1_ChangeNeeds(new_needs);
   }
   if (!wt_subscription_) {
-    CHECK(query_->needs_);
+    CHECK(query_->needs_ == 0);
     wt_subscription_ = 
       query_->blackboard_->L1_MakeUpdateWTSubscription<ConditionSearch>
       (query_->pattern_[condition_tuple_], new_needs, this);

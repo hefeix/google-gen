@@ -81,7 +81,7 @@ struct Query {
     :pattern_(pattern), sampling_(sampling), blackboard_(blackboard), needs_(0),
      parent_count_(0), search_(NULL) {
     CL.Creating(this);
-    blackboard_->L1_ChangeNumNonupdatedQueries(1);
+    blackboard_->L1_AddNonupdatedQuery(this);
   }
   // defining data:
   Pattern pattern_;

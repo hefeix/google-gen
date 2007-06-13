@@ -73,6 +73,7 @@ struct TupleInfo {
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
   Blackboard * blackboard_;
+  string ToString();
 };
 
 typedef uint32 UpdateNeeds;
@@ -299,7 +300,6 @@ class Blackboard {
   
 
   Blackboard() {
-    num_nonupdated_queries_ = 0;
     current_wt_update_ = NULL;
   }
 
@@ -316,8 +316,15 @@ class Blackboard {
   // it is error-prone to change the blackbard when there are searches
   // that are not being updated.  Let's keep track of whether such 
   // searches exist. 
-  void L1_ChangeNumNonupdatedQueries(int delta);
-  int64 num_nonupdated_queries_;
+  void L1_AddNonupdatedQuery(Query * q) {
+    CL.InsertIntoSet(&nonupdated_queries_, q);
+  }
+  void L1_DeleteNonupdatedQuery(Query * q) {
+    CL.RemoveFromSet(&nonupdated_queries_, q);
+  }
+  void PrintNonupdateQueries();
+  void PrintBlackboard();
+  set<Query *> nonupdated_queries_;
 
   LoggingWTSubscription * L1_MakeLoggingWTSubscription(OTuple wildcard_tuple, 
 						    UpdateNeeds needs){

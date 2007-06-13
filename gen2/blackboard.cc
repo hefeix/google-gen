@@ -109,6 +109,13 @@ TupleInfo::TupleInfo(Posting *first_posting, Blackboard *blackboard)
   
 }
 
+string TupleInfo::ToString() {
+  string ret = tuple_.ToString();
+  forall(run, postings_)
+    ret += " " + run->first.ToString();
+  return ret;
+}
+
 void TupleInfo::L1_Erase() {
   // first we send updates, then we remove the tuple from all index rows.
   SingleWTUpdate update = SingleWTUpdate::Destroy(tuple_, FirstTime());
@@ -239,9 +246,27 @@ void IndexRow::L1_RemoveTuple(TupleInfo *tuple_info) {
   L1_EraseIfUnnecessary();
 }
 
+void Blackboard::PrintNonupdateQueries() {
+  cout << "Printing nonupdated queries" << endl;
+  forall(run, nonupdated_queries_) {
+    cout << "  " << (*run)->GetDescription() << endl;
+  }
+}
+
+void Blackboard::PrintBlackboard() {
+  cout << "PrintBlackboard" << endl;
+  forall (run, tuple_info_) {
+    cout << "  " << run->second->ToString() << endl;
+  }
+}
+
 void Blackboard::L1_AddPosting(Posting *p){
-  if (num_nonupdated_queries_ > 0) 
-    cerr << "Adding a posting while nonupdated queries exist";
+  if (nonupdated_queries_.size()) {
+    cerr << "Adding a posting while nonupdated queries exist" << endl;
+    PrintBlackboard();
+    PrintNonupdateQueries();
+    CHECK(false);
+  }
   TupleInfo *ti = GetTupleInfo(p->tuple_);
   if (ti) {
     ti->L1_AddPosting(p);
@@ -251,8 +276,12 @@ void Blackboard::L1_AddPosting(Posting *p){
 }
 
 void Blackboard::L1_RemovePosting(Posting * p){
-  if (num_nonupdated_queries_ > 0) 
-    cerr << "Removing a posting while nonupdated queries exist";
+  if (nonupdated_queries_.size()) {
+    cerr << "Removing a posting while nonupdated queries exist" << endl;
+    PrintBlackboard();
+    PrintNonupdateQueries();
+    CHECK(false);
+  }
   TupleInfo * ti = GetTupleInfo(p->tuple_);
   CHECK(ti);
   ti->L1_RemovePosting(p);
@@ -268,12 +297,6 @@ uint64 Blackboard::GetNumWildcardMatches(OTuple wildcard_tuple) {
   IndexRow * ir = GetIndexRow(wildcard_tuple);
   if (!ir) return 0;
   return ir->size();
-}
-
-void Blackboard::L1_ChangeNumNonupdatedQueries(int delta) {
-  if (delta==0) return;
-  CL.ChangeValue(&num_nonupdated_queries_, num_nonupdated_queries_+delta);
-  CHECK(num_nonupdated_queries_>=0);
 }
 
 IndexRow * Blackboard::GetIndexRow(OTuple wildcard_tuple){
