@@ -295,6 +295,7 @@ class Blackboard {
   friend class TupleInfo;
   friend class Subscription<SingleWTUpdate, IndexRow>;
   friend class Posting;
+  friend class Query;
   friend class OneTupleSearch;
   friend class ConditionSearch;
   
@@ -305,6 +306,11 @@ class Blackboard {
 
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
+
+  // returns null if the query fails to execute in time
+  Query * L1_GetExecuteQuery(OPattern p, SamplingInfo sampling, 
+			     int64 * max_work_now);
+
 
   void L1_FlushUpdates();
 
@@ -322,6 +328,7 @@ class Blackboard {
   void L1_DeleteNonupdatedQuery(Query * q) {
     CL.RemoveFromSet(&nonupdated_queries_, q);
   }
+  void L1_DeletingQuery(Query *q);
   void PrintNonupdateQueries();
   void PrintBlackboard();
   set<Query *> nonupdated_queries_;
@@ -339,7 +346,9 @@ class Blackboard {
       (GetAddIndexRow(wildcard_tuple), needs, subscriber);
   }
 
+
   void L1_AddSearchToFlush(Search * s);
+  void Verify() const; // for debugging
 
  private:
   // returns null on failure
@@ -352,6 +361,14 @@ class Blackboard {
   set<pair<int, Search*> > searches_to_flush_;
 
   SingleWTUpdate * current_wt_update_;
+
+  // all the queries
+  map<OPattern, Query *> queries_;
+
+
+ public:
+  set<Query *> flushed_query_update_;// for debugging purposes.
+  set<Query *> flushed_wt_update_;// for debugging purposes.
 };
 
 
