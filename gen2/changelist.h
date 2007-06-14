@@ -90,6 +90,25 @@ class SetRemoveChange : public Change {
   C val_;
 };
 
+template<class K, class V> class MapValueChange : public Change {
+ public:
+  MapValueChange(map<K,V> * location, const K & key, const V & new_val) {
+    location_ = location;
+    key_ = key;
+    V * look = (*location_) % key_;
+    CHECK(look);    
+    old_val_ = *look;
+    *look = new_val;
+  }
+  void Undo(){
+    (*location_)[key_] = old_val_;
+  }
+ private:
+  map<K,V> * location_;
+  K key_;
+  V old_val_;
+};
+
 // Inserts a key/value pair into a map.
 // Precondition: the map must lack that key.
 template <class K, class V> class MapInsertChange : public Change {
@@ -339,6 +358,11 @@ class Changelist {
   template <class K, class V> void RemoveFromMap(map<K,V> * location,
 						 const K& key) {
     Make (new MapRemoveChange<K, V>(location, key));
+  }
+  template<class K, class V> void ChangeMapValue(map<K,V> *location,
+						 const K&key, 
+						 const V&new_val) {
+    Make(new MapValueChange<K,V>(location, key, new_val));
   }
 };
 

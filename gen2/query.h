@@ -76,7 +76,6 @@ typedef Subscription<QueryUpdate, Query> QuerySubscription;
 typedef LoggingSubscription<QueryUpdate, Query> LoggingQuerySubscription; 
 
 struct Query {
-  virtual ~Query() {}
   Query(Blackboard *blackboard, const Pattern &pattern, SamplingInfo sampling) 
     :pattern_(pattern), sampling_(sampling), blackboard_(blackboard), needs_(0),
      parent_count_(0), search_(NULL) {
@@ -120,6 +119,10 @@ struct Query {
   string GetDescription() const { 
     return "Query" + OPattern::Make(pattern_).ToString();
   }
+  string ToString() const {
+    return GetDescription();
+  } 
+  void Verify() const;
 
 };
 
@@ -150,7 +153,7 @@ struct Search {
 				vector<Time> *times) const = 0;
   virtual void L1_ChangeUpdateNeeds(UpdateNeeds new_needs) {};
   virtual void L1_FlushUpdates() { CHECK(false); }
-  
+  virtual void Verify() const {}
   uint64 count_;
 };
 
@@ -184,6 +187,7 @@ struct OneTupleSearch : public Search {
   // required by the template magic.
   void Update(const SingleWTUpdate &update, const OneTupleWTSub *subscription);
   void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
+  void Verify() const;
   OneTupleWTSub *wt_subscription_;
 };
 
@@ -195,8 +199,8 @@ struct ConditionSearch : public Search {
   void GetSubstitutions(vector<Map> * substitutions, 
 			vector<Time> *times) const;
   void L1_EraseSubclass();
-    OTuple GetWildcardTuple() const { 
-      return OTuple::Make(VariablesToWildcards(GetVariableTuple().Data()));
+  OTuple GetWildcardTuple() const { 
+    return OTuple::Make(VariablesToWildcards(GetVariableTuple().Data()));
   }
   OTuple GetVariableTuple() const { 
     return query_->pattern_[condition_tuple_];
@@ -209,6 +213,7 @@ struct ConditionSearch : public Search {
 	      OTuple t);
   void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
   void L1_FlushUpdates();
+  void Verify() const;
 
   map<OTuple, pair<Query*, ConditionQSub *> > children_;
   int condition_tuple_;
@@ -231,6 +236,7 @@ struct PartitionSearch : public Search {
 	      int which);
   void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
   void L1_FlushUpdates();
+  void Verify() const;
 
   vector<int> partition_; // element i says which part contains tuple i.
   vector<pair<Query *, PartitionQSub *> >children_;

@@ -254,10 +254,24 @@ void Blackboard::PrintNonupdateQueries() {
 }
 
 void Blackboard::PrintBlackboard() {
-  cout << "PrintBlackboard" << endl;
+  cout << "PrintBlackboard " << endl << " tuples: " << endl;
   forall (run, tuple_info_) {
     cout << "  " << run->second->ToString() << endl;
   }
+  cout << "Queries "<< endl;
+  forall(run, queries_) {
+    Query * q = run->second;
+    cout << "  " << run->first << " count_=" << q->GetCount() 
+	 << " FlushedQueryUpdate=" << ( (flushed_query_update_%(q))?'T':'F')
+	 << " FlushedWTUpdate=" << ( (flushed_wt_update_%(q))?'T':'F')
+	 << " queued=" << ((searches_to_flush_ % make_pair((int)q->pattern_.size(), q->search_))?'T':'F')
+	 << " needs=" << q->needs_
+	 << endl;
+  }
+}
+
+void Blackboard::Verify() const {
+  forall(run, queries_) run->second->Verify();
 }
 
 void Blackboard::L1_AddPosting(Posting *p){
@@ -287,6 +301,29 @@ void Blackboard::L1_RemovePosting(Posting * p){
   ti->L1_RemovePosting(p);
 }
 
+Query * Blackboard::L1_GetExecuteQuery(OPattern p, SamplingInfo sampling, 
+				       int64 *max_work_now){
+  if (!sampling.sampled_) {
+    Query ** find = queries_ % p;
+    if (find) return *find;
+  }
+  Checkpoint cp = CL.GetCheckpoint();
+  Query * q = new Query(this, p.Data(), sampling);
+  CL.Creating(q);
+  if (!q->L1_Search(max_work_now)) {
+    CL.Rollback(cp);
+    return NULL;
+  }
+  if (!sampling.sampled_) CL.InsertIntoMap(&queries_, p, q);
+  return q;
+}
+void Blackboard::L1_DeletingQuery(Query *q){
+  OPattern p = OPattern::Make(q->pattern_);
+  Query ** stored_query = queries_ % p;
+  if (stored_query && *stored_query == q) {
+    CL.RemoveFromMap(&queries_, p);
+  }
+}
 TupleInfo * Blackboard::GetTupleInfo(OTuple t){
   TupleInfo ** find = tuple_info_ % t;
   if (find) return *find;
@@ -311,6 +348,8 @@ IndexRow * Blackboard::GetAddIndexRow(OTuple wildcard_tuple){
 }
 
 void Blackboard::L1_FlushUpdates() {
+  flushed_query_update_.clear();
+  flushed_wt_update_.clear();
   while (searches_to_flush_.size()) {
     pair<int, Search*> start = *(searches_to_flush_.begin());
     CL.RemoveFromSet(&searches_to_flush_, start);
@@ -392,8 +431,12 @@ void Blackboard::RandomTest() {
       OTuple t = RandomConstantTuple();
       Time tm = RandomTime();
       cout << "add posting " << t << " " << tm.ToString() << endl;
-      Posting * p = new Posting(t, tm, this);
-      CL.InsertIntoSet(&postings, p);
+      Checkpoint cp = CL.GetCheckpoint();
+      for (int rep=0; rep<2; rep++) {
+	Posting * p = new Posting(t, tm, this);
+	CL.InsertIntoSet(&postings, p);
+	if (rep==0) CL.Rollback(cp);
+      }
       break;
     }
     case 1: {// Delete a posting
@@ -401,42 +444,54 @@ void Blackboard::RandomTest() {
       Posting *p = *(postings.nth(rand() % postings.size()));
       cout << "remove posting " << p->tuple_.ToString() << " " 
 	   << p->time_.ToString() << endl;
-      p->L1_Erase();
-      CL.RemoveFromSet(&postings, p);
+      Checkpoint cp = CL.GetCheckpoint();
+      for (int rep=0; rep<2; rep++) {      
+	p->L1_Erase();
+	CL.RemoveFromSet(&postings, p);
+	if (rep==0) CL.Rollback(cp);
+      }
       break;
     }
     case 2: {// Add a query;
       if (subscriptions.size() == max_subscriptions) break;
       OPattern p = RandomPattern();
       UpdateNeeds needs = RandomUpdateNeeds();
-      cout << "Adding a query " << p << " needs=" << needs << endl;
-      Query * q = new Query(this, p.Data(), SamplingInfo());
-      q->L1_Search(NULL);
-      cout << " Number of satisfactions:  " << q->GetCount() << endl;
-      if (q->GetCount() < 10) {
-	vector<Map> subs;
-	vector<Time> times;
-	q->GetSubstitutions(&subs, &times);
-	CHECK(subs.size() == q->GetCount());
-	for (uint i=0; i<subs.size(); i++) {
-	  cout << "    " << OMap::Make(subs[i]) << " " << times[i].ToString()
-	       << endl;
+      Checkpoint cp = CL.GetCheckpoint();
+      for (int rep=0; rep<2; rep++) {      
+	cout << "Adding a query " << p << " needs=" << needs << endl;
+	Query * q = L1_GetExecuteQuery(p, SamplingInfo(), NULL);
+	cout << " Number of satisfactions:  " << q->GetCount() << endl;
+	if (q->GetCount() < 10) {
+	  vector<Map> subs;
+	  vector<Time> times;
+	  q->GetSubstitutions(&subs, &times);
+	  CHECK(subs.size() == q->GetCount());
+	  for (uint i=0; i<subs.size(); i++) {
+	    cout << "    " << OMap::Make(subs[i]) << " " << times[i].ToString()
+		 << endl;
+	  }
 	}
+	LoggingQuerySubscription *s = new LoggingQuerySubscription(q, needs);
+	CL.InsertIntoSet(&subscriptions, s);
+	if (rep==0) CL.Rollback(cp);
       }
-      LoggingQuerySubscription *s = new LoggingQuerySubscription(q, needs);
-      CL.InsertIntoSet(&subscriptions, s);
       break;
     }
     case 3: { // Delete a query;
       if (subscriptions.size()==0) break;
+      Checkpoint cp = CL.GetCheckpoint();
       LoggingQuerySubscription * s = 
 	*(subscriptions.nth(rand() % subscriptions.size()));
-      cout << "Deleting a query " << s->ToString() << endl;
-      s->L1_Erase();
-      CL.RemoveFromSet(&subscriptions, s);
+      for (int rep=0; rep<2; rep++) {      
+	cout << "Deleting a query " << s->ToString() << endl;
+	s->L1_Erase();
+	CL.RemoveFromSet(&subscriptions, s);
+	if (rep==0) CL.Rollback(cp);
+      }
       break;
     }
     }
+    Verify();
   }
 }
 
@@ -454,7 +509,7 @@ void Blackboard::Shell() {
     }
     if (command == "post") {
       cin >> tuple >> time;
-      cout << "Posting " << (postings.size()) << endl;      
+      cout << "Posting " << (postings.size()) << endl;
       postings.push_back(new Posting(tuple, time, &b));
       continue;
     }
@@ -489,20 +544,22 @@ void Blackboard::Shell() {
       cin >> i;
       subscriptions[i]->L1_Erase();
       continue;
-    }/*
+    }
     if (command == "query") {
       OPattern p;
       cin >> p;
-      Query *q = new Query(&b, p.Data(), SamplingInfo());
-      q->L1_Search(NULL);
+      Query *q = b.L1_GetExecuteQuery(p, SamplingInfo(), NULL);
+      CHECK(q);
+      cout << q->ToString() << endl;
       cout << "#matches:" << q->GetCount() << endl;
       vector<Map> subs;
-      q->GetSubstitutions(&subs);
+      q->GetSubstitutions(&subs, NULL);
       for (uint c=0; c<10 && c<subs.size(); c++) {
 	OPattern ps = Substitute(subs[c], p);
 	cout << ps << endl;
       }
-      }*/
+    }
+    b.Verify();
   };
   
 }
