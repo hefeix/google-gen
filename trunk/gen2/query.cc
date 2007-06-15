@@ -141,10 +141,12 @@ OneTupleSearch::OneTupleSearch(Query *query)
 
 bool OneTupleSearch::L1_Search(int64 * max_work_now) {
   Blackboard & bb = *query_->blackboard_;
-  count_ = bb.GetNumWildcardMatches(GetWildcardTuple());
+  CL.ChangeValue(&count_, bb.GetNumWildcardMatches(GetWildcardTuple()));
   if (query_->sampling_.sampled_) {
     CHECK(query_->sampling_.position_ == 0);
-    count_ = RandomRoundoff(double(count_) * query_->sampling_.fraction_);
+    CL.ChangeValue
+      (&count_, (uint64)
+       RandomRoundoff(double(count_) * query_->sampling_.fraction_));
   }
   return true;
 }
@@ -184,13 +186,15 @@ void OneTupleSearch::GetSubstitutions(vector<Map> * substitutions,
 void OneTupleSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
   if (!wt_subscription_) {
     CHECK(query_->needs_ == 0);
-    wt_subscription_ = 
-      query_->blackboard_->L1_MakeUpdateWTSubscription<OneTupleSearch>
-      (GetWildcardTuple(), new_needs, this);
+    CL.ChangeValue
+      (&wt_subscription_,      
+       query_->blackboard_->L1_MakeUpdateWTSubscription<OneTupleSearch>
+       (GetWildcardTuple(), new_needs, this));
     return;
   }
   if (new_needs == 0) {
     wt_subscription_->L1_Erase();
+    CL.ChangeValue(&wt_subscription_, (typeof(wt_subscription_))NULL);
     return;
   }
   wt_subscription_->L1_ChangeNeeds(new_needs);
@@ -603,7 +607,9 @@ void ConditionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
     }
     if (new_needs == 0) {
       sub_ref->L1_Erase();
-      sub_ref = NULL;
+      CL.ChangeMapValue
+	(&children_, run->first, 
+	 make_pair(run->second.first, (ConditionQSub*)NULL));
       continue;
     }
     sub_ref->L1_ChangeNeeds(new_needs);

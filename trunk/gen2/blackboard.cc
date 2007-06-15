@@ -309,7 +309,6 @@ Query * Blackboard::L1_GetExecuteQuery(OPattern p, SamplingInfo sampling,
   }
   Checkpoint cp = CL.GetCheckpoint();
   Query * q = new Query(this, p.Data(), sampling);
-  CL.Creating(q);
   if (!q->L1_Search(max_work_now)) {
     CL.Rollback(cp);
     return NULL;
@@ -415,7 +414,10 @@ void Blackboard::RandomTest() {
   int reps = 100000;
   uint max_postings = 20;
   uint max_subscriptions = 20;
-  for (int rep=0; rep<reps; rep++) {
+  bool chacha = true;
+  int first_rep = chacha?0:1;
+  
+  for (int rep=first_rep; rep<reps; rep++) {
     if (rand() % 1000 == 0) {
       cout << "Rolling back changelist" << endl;
       CL.Rollback(0);
@@ -432,7 +434,7 @@ void Blackboard::RandomTest() {
       Time tm = RandomTime();
       cout << "add posting " << t << " " << tm.ToString() << endl;
       Checkpoint cp = CL.GetCheckpoint();
-      for (int rep=0; rep<2; rep++) {
+      for (int rep=first_rep; rep<2; rep++) {
 	Posting * p = new Posting(t, tm, this);
 	CL.InsertIntoSet(&postings, p);
 	if (rep==0) CL.Rollback(cp);
@@ -445,7 +447,7 @@ void Blackboard::RandomTest() {
       cout << "remove posting " << p->tuple_.ToString() << " " 
 	   << p->time_.ToString() << endl;
       Checkpoint cp = CL.GetCheckpoint();
-      for (int rep=0; rep<2; rep++) {      
+      for (int rep=first_rep; rep<2; rep++) {      
 	p->L1_Erase();
 	CL.RemoveFromSet(&postings, p);
 	if (rep==0) CL.Rollback(cp);
@@ -482,7 +484,7 @@ void Blackboard::RandomTest() {
       Checkpoint cp = CL.GetCheckpoint();
       LoggingQuerySubscription * s = 
 	*(subscriptions.nth(rand() % subscriptions.size()));
-      for (int rep=0; rep<2; rep++) {      
+      for (int rep=first_rep; rep<2; rep++) {      
 	cout << "Deleting a query " << s->ToString() << endl;
 	s->L1_Erase();
 	CL.RemoveFromSet(&subscriptions, s);
@@ -503,9 +505,22 @@ void Blackboard::Shell() {
   vector<Posting *> postings;
   vector<WTSubscription *> subscriptions;
   for (;(cin >> command) && command != "q"; cout << endl) {
+    if (command == "MakePattern") {
+      OPattern * p = new OPattern;
+      cin >> (*p);
+      cout << "Made pattern " << (*p) << endl;
+      delete p;
+    }
     if (command == "rt") {
       b.RandomTest();
       continue;
+    }
+    if (command == "rollback"){
+      cout << CL.ToString();
+      cout << "Rolling back" << endl;      
+      CL.Rollback(0);
+      postings.clear();
+      subscriptions.clear();
     }
     if (command == "post") {
       cin >> tuple >> time;

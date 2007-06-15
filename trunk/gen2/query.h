@@ -159,7 +159,10 @@ struct Search {
 
 struct NoTuplesSearch : public Search {
   NoTuplesSearch(Query *query);
-  bool L1_Search(int64 *max_work_now) { count_ = 1; return true;}
+  bool L1_Search(int64 *max_work_now) { 
+    CL.ChangeValue(&count_, (uint64)1);
+    return true;
+  }
   void GetSubstitutions(vector<Map> * substitutions, 
 			vector<Time> *times) const {
     substitutions->clear();
