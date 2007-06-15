@@ -29,6 +29,13 @@ DestructibleCheckpoint::~DestructibleCheckpoint(){
   cl_->Rollback(cp_);
 }
 
+string Changelist::ToString() const {
+  ostringstream out;
+  out << "Changelist" << endl;
+  for (uint i=0; i<history_.size(); i++) 
+    out << " " << i << " " << history_[i]->ToString() << endl;
+  return out.str();
+}
 void Changelist::Make(Change * c){
   history_.push_back(c);
 }

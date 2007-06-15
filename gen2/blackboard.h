@@ -171,6 +171,7 @@ template <class UpdateType, class SubscribeeType>
 struct Subscription {
   Subscription(SubscribeeType *subscribee, 
 	       UpdateNeeds needs){
+    CL.Creating(this);
     needs_ = needs;
     subscribee_ = subscribee;
     CL.Make(new MapOfSetsInsertChange<UpdateNeeds, Subscription *>
@@ -181,6 +182,7 @@ struct Subscription {
     CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, Subscription*>
 	    (&(subscribee_->subscriptions_), needs_, this));
     subscribee_->L1_RemovedSubscription();
+    CL.Destroying(this);
   }
   virtual ~Subscription(){}
   // OTuple GetWildcardTuple() const;

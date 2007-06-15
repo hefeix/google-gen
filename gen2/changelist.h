@@ -34,6 +34,9 @@ class Change {
   virtual void Undo() = 0;
   virtual void MakePermanent() {};
   virtual ~Change() {};
+  virtual string ToString() const {
+    return "Unknown Change";
+  }
 };
 
 // Changes the value of a variable.  
@@ -47,6 +50,11 @@ template <class C> class ValueChange : public Change{
   }
   void Undo(){
     *location_ = old_val_;
+  }
+  string ToString() const {
+    ostringstream out;
+    out << "ValueChange " << location_;
+    return out.str();
   }
  private:
   C * location_;
@@ -67,6 +75,11 @@ class SetInsertChange : public Change {
   void Undo(){
     location_->erase(val_);
   }
+  string ToString() const {
+    ostringstream out;
+    out << "SetInsertChange " << location_;
+    return out.str();
+  }
  private:
   SC * location_;
   C val_;
@@ -85,6 +98,11 @@ class SetRemoveChange : public Change {
   void Undo(){
     location_->insert(val_);
   }
+  string ToString() const {
+    ostringstream out;
+    out << "SetRemoveChange " << location_;
+    return out.str();
+  }
  private:
   SC * location_;
   C val_;
@@ -102,6 +120,11 @@ template<class K, class V> class MapValueChange : public Change {
   }
   void Undo(){
     (*location_)[key_] = old_val_;
+  }
+  string ToString() const {
+    ostringstream out;
+    out << "MapValueChange " << location_;
+    return out.str();
   }
  private:
   map<K,V> * location_;
@@ -122,6 +145,11 @@ template <class K, class V> class MapInsertChange : public Change {
   void Undo(){
     location_->erase(key_);
   }
+  string ToString() const {
+    ostringstream out;
+    out << "MapInsertChange " << location_;
+    return out.str();
+  }
  private:
   map<K,V> * location_;
   K key_;
@@ -139,6 +167,11 @@ template <class K, class V> class MapRemoveChange : public Change {
   }
   void Undo(){
     (*location_)[key_] = val_;
+  }
+  string ToString() const {
+    ostringstream out;
+    out << "MapRemoveChange " << location_;
+    return out.str();
   }
   map<K,V> * location_;
  private:
@@ -162,6 +195,11 @@ template <class MK, class SV> class MapOfSetsInsertChange : public Change {
   void Undo(){
     (*location_)[key_].erase(value_);
     if ((*location_)[key_].size()==0) location_->erase(key_);
+  }
+  string ToString() const {
+    ostringstream out;
+    out << "MapOfSetsInsertChange " << location_;
+    return out.str();
   }
  private:
   map<MK,set<SV> > * location_;
@@ -187,6 +225,11 @@ template <class MK, class SV> class MapOfSetsRemoveChange : public Change {
   void Undo(){
     (*location_)[key_].insert(value_);
   }
+  string ToString() const {
+    ostringstream out;
+    out << "MapOfSetsRemoveChange " << location_;
+    return out.str();
+  }
  private:
   map<MK,set<SV> > * location_;
   MK key_;
@@ -209,6 +252,12 @@ template <class K, class V> class MapOfCountsAddChange : public Change {
     if (old_value_==0) location_->erase(key_);
     else (*location_)[key_] = old_value_;
   }
+  string ToString() const {
+    ostringstream out;
+    out << "MapOfCountsAddChange " << location_;
+    return out.str();
+  }
+
  private:
   map<K,V> * location_;
   K key_;
@@ -227,6 +276,11 @@ template <class C> class DeleteOnRollbackChange : public Change {
   void Undo(){
     delete object_;
   }
+  string ToString() const {
+    ostringstream out;
+    out << "DeleteOnRollbackChange " << object_;
+    return out.str();
+  }
  private:
   C * object_;
 };
@@ -240,6 +294,11 @@ template <class C> class DeleteOnMakePermanentChange : public Change {
   void Undo(){}
   void MakePermanent(){
     delete object_;
+  }
+  string ToString() const {
+    ostringstream out;
+    out << "DeleteOnMakePermanentChange " << object_;
+    return out.str();
   }
  private:
   C * object_;
@@ -298,6 +357,11 @@ template <class C, class P> class MemberCall1Change : public Change {
     if (make_permanent_function_) 
       (object_->*make_permanent_function_)(parameter_);
   }
+  string ToString() const {
+    ostringstream out;
+    out << "MemberCall1Change " << object_;
+    return out.str();
+  }
   void (C::*revert_function_)(P); 
   void (C::*make_permanent_function_)(P); 
   C * object_;
@@ -326,6 +390,7 @@ class Changelist {
   Checkpoint GetCheckpoint();  // Create a checkpoint.
   void Rollback(Checkpoint cp); // Roll back to a checkpoint.
   void MakeChangesPermanent(); // Invalidates checkpoints and frees memory.
+  string ToString() const;
  private:
   vector<Change *> history_;
 
