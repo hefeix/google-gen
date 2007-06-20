@@ -30,7 +30,14 @@ struct OnStatement : public Statement {
   Statement * child_;
 };
 
-struct RepeatStatement : 
+struct RepeatStatement : public Statement {
+  Experession * number_of_repetitions_;
+  // this variable is useless except to preserve the property that a dynamic
+  // node is associated with a unique (static node, substitution) pair.
+  Variable repetition_name_; 
+  Statement *child_;
+};
+
 struct ParallelStatement : public Statement {
   set<Statement *> children_;
 };
@@ -74,6 +81,8 @@ struct Expression {
   virtual ~Expression(){}
 };
 
+// Self-modeling chooser object
+// Which chooser object to use is determined by run-time evaluation of chooser_
 struct BinaryChoice : public Expression {
   Expression * chooser_;  
 };
@@ -107,7 +116,7 @@ struct CountExpresison : public Expression {
 };
 
 struct RandomBoolExpression : public Expression { 
-  Expression ln_likelihood_;
+  Expression * ln_likelihood_;
 };
 
 #endif
