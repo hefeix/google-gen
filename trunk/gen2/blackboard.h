@@ -236,7 +236,7 @@ struct UpdateSubscription : public Subscription<UpdateType, SubscribeeType> {
   SubscriberType * subscriber_;
 };
 
-// a Subscription that calls an Update(UpdateType, Subscription*) 
+// a Subscription that calls an Update(UpdateType, Subscription*, DataType) 
 // method on an object
 template <class UpdateType, class SubscribeeType, class SubscriberType,
           class DataType> 

@@ -145,7 +145,8 @@ struct Search {
   }
   void L1_Erase() { 
     L1_EraseSubclass(); 
-    CL.ChangeValue(&query_->search_, (Search*)NULL);    
+    CL.ChangeValue(&query_->search_, (Search*)NULL);
+    CL.Destroying(this);
   }
   virtual void L1_EraseSubclass() {};
   virtual bool L1_Search(int64 *max_work_now) = 0;
