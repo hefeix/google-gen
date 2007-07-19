@@ -2,18 +2,21 @@
 #include "objects.h"
 #include "numbers.h"
 
+Keyword SEMICOLON;
 Keyword WILDCARD;
 OTime NEVER;
 
 void InitKeywords(){
   cout << "Calling InitKeywords" << endl;
   WILDCARD = Keyword::Make("*");
+  SEMICOLON = Keyword::Make(";");
   NEVER = OTime::Make(Time::Never());
 };
 
 void DestroyKeywords() {
   cout << "Calling DestroyKeywords" << endl;
   WILDCARD = (void*)NULL;
+  SEMICOLON = (void*)NULL;
   NEVER = (void*)NULL;
 }
 
@@ -75,10 +78,35 @@ string Boolean::Definition::ToStringSpecific(bool verbose) const {
 }
 
 template<>
+string String::Definition::ToStringSpecific(bool verbose) const {
+  string ret= "\"";
+  for (uint i=0; i<data_.size(); i++) {
+    char c = data_[i];
+    switch(c) {
+    case '\n':
+      ret += "\\n";
+      break;
+    case '\t':
+      ret += "\\t";
+      break
+    case '\\':
+      ret += "\\\\";
+      break;
+    case '\"':
+      ret += "\\\"";
+      break;
+    default:
+      ret += c;
+    }
+  }
+  ret += "\"";
+  return ret;
+}
+
+template<>
 string Integer::Definition::ToStringSpecific(bool verbose) const {
   return itoa(data_);
 }
-
 template<>
 string Real::Definition::ToStringSpecific(bool verbose) const {
   string ret = dtoa(data_);
@@ -195,11 +223,38 @@ istream & operator >>(istream & input, Object & o){
     o = WILDCARD;
     return input;
   }
+  if (firstchar == ';') {
+    o = SEMICOLON;
+    return input;
+  }
   if (firstchar == '#') {
     input.putback('#');
     BitSeq s;
     input >> s;
     o = OBitSeq::Make(s);
+    return input;
+  }
+  if (firstchar == '\"') {
+    string s;
+    char c;
+    while (input.get(c) && (c!='\"')) {
+      if (c=='\\') {	
+	input.get(c);
+	switch(c) {
+	case 'n':
+	  s += '\n';
+	  break;
+	case 't':
+	  s += '\t';
+	  break;
+	default:
+	  s+=c;
+	}
+      } else {
+	s+= c;
+      }
+    }
+    o = String::Make(s);
     return input;
   }
   if (IsBeginningNumericChar(firstchar) ) {
