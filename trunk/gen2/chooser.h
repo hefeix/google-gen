@@ -36,12 +36,11 @@
 // creative variable per rule.  
 
 struct Chooser {
-  Model * model_;
   Chooser *parent_;
   LL ln_likelihood_;
   map<int, int> counts_;
   int64 total_;
-  Chooser(Model *model, Chooser *parent);
+  Chooser(Chooser *parent);
   virtual ~Chooser() {}
   void L1_Erase();
   virtual LL ComputeLLDelta(int object,
@@ -56,7 +55,7 @@ struct Chooser {
   Record ChooserInfo(bool include_objects);
 };
 struct UintChooser : public Chooser {
-  UintChooser(Model *model) : Chooser(model, NULL) {}
+  UintChooser() : Chooser(NULL) {}
   virtual LL ComputeLLDelta(int object,
 			    int old_count, int new_count, 
 			    int old_num_objects,  int new_num_objects, 

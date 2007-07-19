@@ -21,46 +21,101 @@
 
 #include "objects.h"
 
-struct Statement {  
+class Statement : public Named{
+ public:
+  
+  // Constructors etc.
+  Statement();
   virtual ~Statement(){}
+  
+  // Erasing. Can only erase unlinked statements.
+  virtual void L1_Erase();
+  
+  // child_ is only used if you can only have 1 child
+  Statement * child_;
+  Statement * parent_;
+
+  virtual uint32 GetNumChildren() {
+    if (child_) return 1;
+    return 0;
+  }
+  
+  // Hook up static nodes to each other
+  ConnectToParent(Statement * parent);
+  DisconnectFromParent();
+
+ protected:
+  virtual void L1_LinkToChild(Statement * child);
+  virtual void L1_UnlinkChild(Statement * child);
+  
+  map<Map, DynamicStatement*> dynamic_statements_;
 };
 
 struct OnStatement : public Statement {
+  typedef UpdateSubscription<QueryUpdate, Query, OnStatement> SubType;
+  friend class SubType;
+
+  OnStatement(Pattern p);
+
   Pattern pattern_;
-  Statement * child_;
+  SubType * subscription_;
 };
 
 struct RepeatStatement : public Statement {
+  RepeatStatement(Expression * number_of_repetitions,
+		  Variable repetition_name);
+
   Experession * number_of_repetitions_;
   // this variable is useless except to preserve the property that a dynamic
   // node is associated with a unique (static node, substitution) pair.
   Variable repetition_name_; 
-  Statement *child_;
 };
 
-struct ParallelStatement : public Statement {
-  set<Statement *> children_;
+struct DelayStatement : public Statement { 
+  DelayStatement(OBitSeq delay, Statement * child);
+  OBitSeq delay_;
+};
+  
+struct LetStatement : public Statement {
+  LetStatement(Variable variable, 
+	       Expression * value, Statement * child);
+  Variable variable_;
+  Expression * value_;
 };
 
+struct OutputStatement : public Statement {
+  OutputStatement(OTuple tuple);
+  OTuple tuple_;
+
+  // no children
+  L1_LinkToChild(Statement * child) { CHECK(FALSE); }
+};
+
+struct Expression : public Named{  
+  Expression();
+  virtual ~Expression(){}
+};
+
+struct FlakeChoice : public Expression { 
+  FlakeChoice(Expression *);
+
+  // if the chooser is null, uses the global flake chooser.
+  Expression * chooser_;
+};
+
+
+/*
 struct IfStatement : public Statement {
   Expression * expression_;
   Statement * child_;
   Statement * else_;
 };
 
-struct DelayStatement : public Statement { 
-  EncodedNumber delay_;
-  Statement *child_;
-};
-  
-struct LetStatement : public Statement {
-  Variable variable_;
-  Expression value_;
-  Statement *child_;  
-};
-
-struct OutputStatement : public Statement {
-  Tuple tuple_;
+struct ParallelStatement : public Statement {
+  // These have to be implemented differently
+  virtual void LinkToChild(Statement * child);
+  virtual void UnlinkChild(Statement * child);
+  set<Statement *> children_;
 };
 
 struct ForEachStatement : public Statement {
@@ -77,20 +132,13 @@ struct ChooseStatement : public Statement {
   Statement *child_;
 };
 
-struct Expression {  
-  virtual ~Expression(){}
-};
-
 // Self-modeling chooser object
 // Which chooser object to use is determined by run-time evaluation of chooser_
 struct BinaryChoice : public Expression {
   Expression * chooser_;  
 };
 
-struct FlakeChoice : public Expression { 
-  Expression * chooser_;
-};
-
+//  Do we need both this and escapes???
 struct SubstituteExpression : public Expression {
   Expression * arg_;
 };
@@ -118,5 +166,6 @@ struct CountExpresison : public Expression {
 struct RandomBoolExpression : public Expression { 
   Expression * ln_likelihood_;
 };
+*/
 
 #endif

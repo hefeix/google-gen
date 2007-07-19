@@ -258,14 +258,14 @@ istream & operator >>(istream & input, Object & o){
       return input;
     }
     if (s=="time") {
-      OTuple t;
+      OMap t;
       input >> t;
-      CHECK(t.size() % 2 == 0);
       vector<pair<BitSeq, int> > coordinates;
-      for (uint i=0; i<t.size(); i+=2) {
-	OBitSeq s = t[i];
-	Integer n = t[i+1];
+      forall(run, t.Data()) {
+	OBitSeq s = run->first;
+	Integer n = run->second;
 	coordinates.push_back(make_pair(s.Data(), n.Data()));	
+	sort(coordinates.begin(), coordinates.end());
       }
       o = OTime::Make(Time(coordinates));
       return input;

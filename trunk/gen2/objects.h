@@ -16,6 +16,37 @@
 //
 // Author: Georges Harik and Noam Shazeer
 
+/*
+
+How objects get parsed:
+
+based on the first character:
+
+:     It's an empty OMap
+([{   It's an OTuple or an OMap.  Can be comma delimited or not. 
+      if there are colons between key/value pairs, it's an OMap
+      Example OTuple [ 1, 2, Georges ]
+      Example OMap ( 1:1 2:4 3:Harik )
+'     It's an Escape.  The escaped object is after the '
+*     It's a wildcard
+#     It's an OBitSeq, example #00011100
+0-9.- It's an Integer or a Real.  It's a real if it has a period.
+A-Z   It's a Flake. example: Noam
+a-z(single character)   It's a variable.
+v(followed by an integer) It's a variable. example: v26
+a-z(otherwise)   It's a keyword, except for the following exceptions:
+   true   the Boolean true
+   false  the Boolean false
+   never  the OTime NEVER
+   null   a null Object.
+   time (followed by an OMap)   a time.  Dimensions mapped to coordinates.
+      Example: time (#00:3 #0:2 #:7 #1:12)
+   pattern (followd by an OTuple of OTuples)   an OPattern
+TODO:
+"     A string object where quotes and \ need to be escaped with \ 
+
+*/
+
 #ifndef _OBJECTS_H_
 #define _OBJECTS_H_
 
