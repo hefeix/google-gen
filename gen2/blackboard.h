@@ -373,6 +373,6 @@ class Blackboard {
   set<Query *> flushed_wt_update_;// for debugging purposes.
 };
 
-
+extern Blackbard BB;
 
 #endif

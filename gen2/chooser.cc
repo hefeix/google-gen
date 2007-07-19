@@ -64,9 +64,9 @@ LL UintChooser::ComputeLnLikelihood() const{
 }
 
 void Chooser::L1_AddToLnLikelihood(LL delta) {
-  model_->GetChangelist()->ChangeValue(&ln_likelihood_, 
-				       ln_likelihood_ +  delta);
-  model_->A1_AddToLnLikelihood(delta);
+  CL.ChangeValue(&ln_likelihood_, 
+		 ln_likelihood_ +  delta);
+  M.A1_AddToLnLikelihood(delta);
 }
 
 LL Chooser::ComputeLLDelta(int object,
@@ -99,12 +99,11 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
   int new_count = old_count + delta;
   CHECK (new_count >= 0);
   
-  Changelist * cl = model_->GetChangelist();
   int old_num_objects = counts_.size();
   int64 old_total = total_;
   
-  cl->Make(new MapOfCountsAddChange<int, int>(&counts_, object, delta));
-  cl->ChangeValue(&total_, delta + old_total);
+  CL.Make(new MapOfCountsAddChange<int, int>(&counts_, object, delta));
+  CL.ChangeValue(&total_, delta + old_total);
   
   int new_num_objects = counts_.size();
   int64 new_total = total_;
@@ -122,22 +121,21 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
     parent_->L1_ChangeObjectCount(object, 1);
 }
 
-Chooser::Chooser(Model *model, Chooser *parent){
+Chooser::Chooser(Chooser *parent){
   parent_ = parent;
-  model_ = model;
   CHECK(model_);
   ln_likelihood_ = 0;
   total_ = 0;
-  model_->A1_InsertIntoChoosers(this);
-  model_->GetChangelist()->Creating(this);
+  CL.InsertIntoSet(&M.all_choosers_, this);
+  CL.Creating(this);
 }
 
 void Chooser::L1_Erase(){
   CHECK(counts_.size()==0);
   CHECK(ln_likelihood_ == 0);
   CHECK(total_ ==0);
-  model_->A1_RemoveFromChoosers(this);
-  model_->GetChangelist()->Destroying(this);
+  CL.RemoveFromSet(&M.all_choosers_, this);
+  CL.Destroying(this);
 }
 
 Record Chooser::ChooserInfo(bool include_objects) {

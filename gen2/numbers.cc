@@ -22,13 +22,12 @@
 
 string Time::ToString() const {
   if (never_) return "never";
-  Tuple t;
+  Map t;
   for (uint i=0; i<coordinates_.size(); i++) {
-    t.push_back(OBitSeq::Make(coordinates_[i].first));
-    t.push_back(Integer::Make(coordinates_[i].second));
+    t[coordinates_[i].first] = coordinates_[i].second;
   }
   string ret = "time";
-  OTuple ot = OTuple::Make(t);
+  OTuple ot = OMap::Make(t);
   ret += ot.ToString();
   return ret;
 }
