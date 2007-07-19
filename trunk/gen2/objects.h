@@ -42,7 +42,6 @@ a-z(otherwise)   It's a keyword, except for the following exceptions:
    time (followed by an OMap)   a time.  Dimensions mapped to coordinates.
       Example: time (#00:3 #0:2 #:7 #1:12)
    pattern (followd by an OTuple of OTuples)   an OPattern
-TODO:
 "     A string object where quotes and \ need to be escaped with \ 
 
 */
@@ -67,6 +66,7 @@ enum ObjectType {
   REAL,
   OTIME, 
   OBITSEQ,
+  STRING, 
   ESCAPE,
   ERRORTYPE,
 };
@@ -83,6 +83,7 @@ inline string ObjectTypeName(ObjectType t) {
   case REAL: return "REAL";
   case OTIME: return "OTIME";
   case OBITSEQ: return "OBITSEQ";
+  case STRING: return "STRING";
   case ESCAPE: return "ESCAPE";
   case ERRORTYPE: return "ERRORTYPE";
   default: CHECK(false); return "ERROR";
@@ -284,6 +285,7 @@ typedef SpecificObject<OTIME, Time> OTime;
 typedef vector<OTuple> Pattern;
 typedef SpecificObject<OPATTERN, Pattern> OPattern;
 typedef SpecificObject<OBITSEQ, BitSeq> OBitSeq;
+typedef SpecificObject<STRING, string> String;
 typedef SpecificObject<ESCAPE, Object> Escape;
 
 inline const Object * operator %(const OMap & m, Object key) {
@@ -339,6 +341,7 @@ void InitKeywords();
 void DestroyKeywords();
 // keywords that need to be created in InitKeywords
 extern Keyword WILDCARD;
+extern Keyword SEMICOLON;
 extern OTime NEVER;
 
 inline bool IsVariable(const Object & o) {  return (o.Type()==VARIABLE); }

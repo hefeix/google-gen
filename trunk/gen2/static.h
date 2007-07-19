@@ -49,7 +49,15 @@ class Statement : public Named{
   virtual void L1_UnlinkChild(Statement * child);
   
   map<Map, DynamicStatement*> dynamic_statements_;
+
+  // position points to where to start parsing, and is changed by the function
+  // to the end of what was parsed.
+  static Statement * ParseSingle(const Tuple & t, int * position);
+  static vector<Statement *> Parse(const Tuple & t); // ad hoc parser.
+  string PrettyOutput();
+
 };
+
 
 struct OnStatement : public Statement {
   typedef UpdateSubscription<QueryUpdate, Query, OnStatement> SubType;
