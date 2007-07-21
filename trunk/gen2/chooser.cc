@@ -1,4 +1,4 @@
-/ Copyright (C) 2007 Google Inc. and Georges Harik
+// Copyright (C) 2007 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,6 +34,12 @@
     / [ total! * (total-1)! ]
 
 */
+
+#include "chooser.h"
+#include "probutil.h"
+#include "changelist.h"
+#include "model.h"
+
 LL Chooser::ComputeLnLikelihood() const {
   LL ret(0);
   if (counts_.size()==0) return ret;
@@ -123,7 +129,6 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
 
 Chooser::Chooser(Chooser *parent){
   parent_ = parent;
-  CHECK(model_);
   ln_likelihood_ = 0;
   total_ = 0;
   CL.InsertIntoSet(&M.all_choosers_, this);
@@ -146,9 +151,10 @@ Record Chooser::ChooserInfo(bool include_objects) {
   if (!include_objects) return r;
 
   forall (run, counts_) {
-    int object = run->first;
-    int count = run->second;
-    r["objects"] += LEXICON.GetString(object) + ":" + itoa(count) + "<br>";
+    //int object = run->first;
+    //int count = run->second;
+    // TODO fix all of this file because a chooser should be choosing objects, not ints!!!!
+    // r["objects"] += LEXICON.GetString(object) + ":" + itoa(count) + "<br>";
   }
   return r;
 }

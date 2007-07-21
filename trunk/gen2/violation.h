@@ -19,6 +19,12 @@
 #ifndef _VIOLATION_H_
 #define _VIOLATION_H_
 
+#include "changelist.h"
+#include "objects.h"
+
+class Requirement;
+class Prohibition;
+
 enum ViolationType{
   REQUIREMENT_VIOLATION,
   PROHIBITION_VIOLATION, 
@@ -27,9 +33,7 @@ enum ViolationType{
 
 // base class for all violations.
 struct Violation {
-  Violation() {
-    // add to the model's set of violations
-  }
+  Violation();
   void L1_Erase() {
     // remove from the model's set of violations
     L1_RemoveFromGlobalMap();
@@ -44,13 +48,13 @@ struct Violation {
 };
 
 struct RequirementViolation : public Violation {  
-  RequirementViolation(const Requirement * requirement);
+  RequirementViolation(Requirement * requirement);
   Requirement * requirement_;
   ViolationType GetType() { return REQUIREMENT_VIOLATION;}
 };
 
 struct ProhibitionViolation : public Violation {
-  ProhibitionViolation(const Prohibition * prohibition, 
+  ProhibitionViolation(Prohibition * prohibition, 
 		       OTuple tuple);
   Prohibition *prohibition_;
   OTuple tuple_;

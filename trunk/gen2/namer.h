@@ -19,6 +19,8 @@
 #ifndef _NAMER_H_
 #define _NAMER_H_
 
+#include "objects.h"
+
 enum NamedType {
   STATEMENT,
   EXPRESSION,
@@ -29,13 +31,14 @@ enum NamedType {
 };
 
 class Named {
- pubilc:
+ public:
   Named();
   Object Name() const;
   void L1_SetName(Object new_name_);
   void L1_AutomaticallyName();
   virtual NamedType Type() const = 0;
   virtual void L1_Erase();
+  virtual ~Named() {};
  private:
   Object name_;
 };
@@ -52,7 +55,8 @@ class Namer {
     return dynamic_cast<NamedClass *>(Lookup(NamedClass::Type(), name));
   }
   // Get a constant index of one named type by name. 
-  const map<Object, Named *> & Index(NamedType type) { return index_[type];}
+  const map<Object, Named *> & Index(NamedType type) const 
+    { return index_[type];}
 
  private:
   vector<map<Object, Named *> > index_;

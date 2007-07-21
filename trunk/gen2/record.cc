@@ -31,7 +31,7 @@ int FromHexit(char c) {
   return c-'A'+10;
 }
 
-string Escape(const string & s){
+string RecordEscape(const string & s){
   ostringstream ret;
   for (uint i=0; i<s.size(); i++) {
     unsigned char c= s[i];
@@ -43,7 +43,7 @@ string Escape(const string & s){
   }
   return ret.str();
 }
-string Unescape(const string & s){
+string RecordUnescape(const string & s){
   istringstream istr(s);
   string ret;
   char c;
@@ -78,7 +78,7 @@ Record StringToRecord(const string & s){
     } else {
       while ((istr >> c) && (c!=',') && (c!='}')) value += c;
     }
-    ret[Unescape(key)] = Unescape(value);
+    ret[RecordUnescape(key)] = RecordUnescape(value);
     if (c=='}') break;
     CHECK(c==',');
   }
@@ -91,9 +91,9 @@ string RecordToString(const Record &r){
     bool quote_first = (run->first.find_first_of("= \t\n")!=string::npos);
     bool quote_second = (run->second.find_first_of(", \t\n")!=string::npos);
     if (run != r.begin()) ostr << ",";
-    ostr << (quote_first?"\"":"") << Escape(run->first) 
+    ostr << (quote_first?"\"":"") << RecordEscape(run->first) 
 	 << (quote_first?"\"":"") << "="
-	 << (quote_second?"\"":"") << Escape(run->second) 
+	 << (quote_second?"\"":"") << RecordEscape(run->second) 
 	 << (quote_second?"\"":"");
   }
   ostr << "}";
