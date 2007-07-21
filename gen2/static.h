@@ -20,6 +20,7 @@
 #define _STATIC_H_
 
 #include "objects.h"
+#include "named.h"
 
 class Statement : public Named{
  public:
@@ -27,6 +28,7 @@ class Statement : public Named{
   // Constructors etc.
   Statement();
   virtual ~Statement(){}
+  NamedType Type() const { return STATEMENT };
   
   // Erasing. Can only erase unlinked statements.
   virtual void L1_Erase();
@@ -73,20 +75,20 @@ struct RepeatStatement : public Statement {
   RepeatStatement(Expression * number_of_repetitions,
 		  Variable repetition_name);
 
-  Experession * number_of_repetitions_;
+  Expression * number_of_repetitions_;
   // this variable is useless except to preserve the property that a dynamic
   // node is associated with a unique (static node, substitution) pair.
   Variable repetition_name_; 
 };
 
 struct DelayStatement : public Statement { 
-  DelayStatement(OBitSeq delay, Statement * child);
+  DelayStatement(OBitSeq delay);
   OBitSeq delay_;
 };
   
 struct LetStatement : public Statement {
   LetStatement(Variable variable, 
-	       Expression * value, Statement * child);
+	       Expression * value);
   Variable variable_;
   Expression * value_;
 };
@@ -101,7 +103,12 @@ struct OutputStatement : public Statement {
 
 struct Expression : public Named{  
   Expression();
-  virtual ~Expression(){}
+  NamedType Type() const { return NAMED };
+};
+
+struct SubstituteExpression : public Expression {
+  SubstituteExpression(Object object);
+  Object object_;
 };
 
 struct FlakeChoice : public Expression { 
@@ -110,6 +117,8 @@ struct FlakeChoice : public Expression {
   // if the chooser is null, uses the global flake chooser.
   Expression * chooser_;
 };
+
+
 
 
 /*
@@ -144,15 +153,6 @@ struct ChooseStatement : public Statement {
 // Which chooser object to use is determined by run-time evaluation of chooser_
 struct BinaryChoice : public Expression {
   Expression * chooser_;  
-};
-
-//  Do we need both this and escapes???
-struct SubstituteExpression : public Expression {
-  Expression * arg_;
-};
-
-struct ConstantExpression : public Expression { 
-  Object object_;
 };
 
 struct FunctionExpression : pubic Expression {

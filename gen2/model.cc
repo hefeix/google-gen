@@ -23,27 +23,11 @@ Model::Model(){
   global_uint_chooser_ = new UintChooser();
   ln_likelihood_ = 0;
   next_name_ = 0;
+  next_unique_variable_ = -1;
 }
 
-void Named::L1_SetName(Object new_name) {
-  Named ** clobbered = M.name_index_ % new_name;
-  if (clobbered) CL.RemoveFromMap(&M.name_index_, new_name);
-  CL.ChangeValue(&name_, new_name);
-  CL.InsertIntoMap(&m.name_index_, new_name, this);
-  if (clobbered) (*clobbered)->L1_AutomaticallyName();
+Variable Model::L1_GetNextUniqueVariable() {
+  Varible ret = Varible::Make(next_unique_variable_);
+  CL.ChangeValue(&next_unique_variable_, next_unique_variable_-1);
 }
 
-void Named::L1_AutomaticallyName() {
-  while (name_index_ % Integer::Make(next_name_)) next_name_++;
-  L1_SetName(Integer::Make(next_name_));
-}
-
-void Named::L1_Erase() {
-  CL.RemoveFromMap(&M.name_index_, name_);
-  CL.Destroying(this);
-}
-
-Named::Named() {
-  CL.Creating(this);
-  L1_AutomaticallyName();
-}

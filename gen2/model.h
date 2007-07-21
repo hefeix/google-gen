@@ -22,14 +22,6 @@
 #include "blackboard.h"
 #include "static.h"
 
-class Named {
-  Object name_;
-  void L1_SetName(Object new_name_);
-  void L1_AutomaticallyName();
-  virtual void L1_Erase();
-  Named();
-};
-
 class Model {
  public:
   Model();
@@ -63,6 +55,10 @@ class Model {
   // all named objects by name
   map<Object, Named *> name_index_;
   int next_name_;  
+
+  // throw-away variables
+  int next_unique_variable_;
+  Variable L1_GetNextUniqueVariable();
 };
 
 
