@@ -20,7 +20,8 @@
 #define _CHOOSER_H_
 
 #include "util.h"
-
+#include "record.h"
+#include "probutil.h"
 
 // Keeps track of the likelihood of a sequence of choices of objects.  
 // Doesn't actually keep track of the sequence.

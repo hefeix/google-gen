@@ -88,7 +88,7 @@ string String::Definition::ToStringSpecific(bool verbose) const {
       break;
     case '\t':
       ret += "\\t";
-      break
+      break;
     case '\\':
       ret += "\\\\";
       break;

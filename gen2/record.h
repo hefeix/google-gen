@@ -22,8 +22,8 @@
 typedef map<string, string> Record;
 
 // escaped string has no spaces, quotes, whitespace, braces
-string Escape(const string & s); 
-string Unescape(const string & s);
+string RecordEscape(const string & s); 
+string RecordUnescape(const string & s);
 
 string RecordToString(const Record &r);
 Record StringToRecord(const string & s);

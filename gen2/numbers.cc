@@ -24,7 +24,8 @@ string Time::ToString() const {
   if (never_) return "never";
   Map t;
   for (uint i=0; i<coordinates_.size(); i++) {
-    t[coordinates_[i].first] = coordinates_[i].second;
+    t[OBitSeq::Make(coordinates_[i].first)] 
+      = Integer::Make(coordinates_[i].second);
   }
   string ret = "time";
   OTuple ot = OMap::Make(t);

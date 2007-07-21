@@ -429,6 +429,17 @@ class Changelist {
 						 const V&new_val) {
     Make(new MapValueChange<K,V>(location, key, new_val));
   }
+  template <class MK, class SV> 
+    void InsertIntoMapOfSets(map<MK, set<SV> > * location, const MK & key, 
+			     const SV & value) {
+    Make(new MapOfSetsInsertChange<MK, SV>(location, key, value));
+  }
+  template <class MK, class SV> 
+    void RemoveFromMapOfSets(map<MK, set<SV> > * location, const MK & key, 
+			     const SV & value) {
+    Make(new MapOfSetsRemoveChange<MK, SV>(location, key, value));
+  }
+
 };
 
 class DestructibleCheckpoint{

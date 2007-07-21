@@ -27,7 +27,14 @@ Model::Model(){
 }
 
 Variable Model::L1_GetNextUniqueVariable() {
-  Varible ret = Varible::Make(next_unique_variable_);
+  Variable ret = Variable::Make(next_unique_variable_);
   CL.ChangeValue(&next_unique_variable_, next_unique_variable_-1);
+  return ret;
 }
 
+void Model::A1_AddToLnLikelihood(LL delta) {
+  CL.ChangeValue(&ln_likelihood_, ln_likelihood_+delta);
+}
+void Model::A1_AddToSearchWork(int64 delta) {
+  CL.ChangeValue(&search_work_, search_work_+delta);
+}

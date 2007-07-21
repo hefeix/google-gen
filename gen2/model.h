@@ -21,6 +21,8 @@
 
 #include "blackboard.h"
 #include "static.h"
+#include "chooser.h"
+#include "violation.h"
 
 class Model {
  public:
@@ -42,9 +44,6 @@ class Model {
   // The violations
   map<ViolationType, set<Violation *> > violations_;
 
-  // The ln likelihood
-  LL ln_likelihood_;
-
   // All Choosers
   set<Chooser *> all_choosers_;
 
@@ -56,9 +55,25 @@ class Model {
   map<Object, Named *> name_index_;
   int next_name_;  
 
-  // throw-away variables
+  // throw-away variables (we use negative integers)
+  // TODO WORKING, make the parsing handle this!!!
   int next_unique_variable_;
   Variable L1_GetNextUniqueVariable();
+
+  // likelihood and utility tracking
+
+  // Total of search_work_ for all preconditions.
+  void A1_AddToLnLikelihood(LL delta);
+  void A1_AddToSearchWork(int64 delta);
+  LL ln_likelihood_;
+  uint64 search_work_; 
+  // We prefer models that cost us less work in searching for satisfactions of 
+  // preconditions, since they are quicker to reason about.  The number of 
+  // units of search work is multiplied by this number and subtracted from the
+  // ln_likelihood_ of the model (in nats).  Guess: make this number about 
+  // 1/1000
+  LL work_penalty_;
+
 };
 
 

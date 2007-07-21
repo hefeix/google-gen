@@ -22,7 +22,8 @@
 Requirement::Requirement(OTuple tuple) {
   CL.InsertIntoSet(&M.requirements_, this);
   tuple_ = tuple;
-  Query * q = BB.L1_GetExecuteQuery(Pattern(1, tuple), SamplingInfo(), NULL);
+  Query * q = BB.L1_GetExecuteQuery(OPattern::Make(Pattern(1, tuple)), 
+				    SamplingInfo(), NULL);
   subscription_ = new SubType(q, UPDATE_COUNT, this);
   if (q->GetCount() == 0) L1_AddViolation();
 }
@@ -32,11 +33,12 @@ void Requirement::L1_Erase() {
   CL.RemoveFromSet(&M.requirements_, this);
   CL.Destroying(this);
 }
-void Requirement::Update(const QueryUpdate &update, typeof(subscription_) sub){
-  if (violation_ && q->GetCount() != 0) {
+void Requirement::Update(const QueryUpdate &update, SubType * sub){
+  int count = subscription_->subscribee_->GetCount();
+  if (violation_ && count != 0) {
     L1_RemoveViolation();
   }
-  if (!violation_ && q->GetCount() == 0) {
+  if (!violation_ && count == 0) {
     L1_AddViolation();
   }
 }
@@ -47,40 +49,41 @@ void Requirement::L1_AddViolation() {
 void Requirement::L1_RemoveViolation() {
   CHECK(violation_);
   violation_->L1_Erase();
-  CL.ChangeValue(&violation_, NULL);
+  CL.ChangeValue(&violation_, (RequirementViolation*)NULL);
 }
 
 Prohibition::Prohibition(OTuple tuple) {
   CL.InsertIntoSet(&M.prohibitions_, this);
   tuple_ = tuple;
-  Query * q = BB.L1_GetExecuteQuery(Pattern(1, tuple), SamplingInfo(), NULL);
+  Query * q = BB.L1_GetExecuteQuery(OPattern::Make(Pattern(1, tuple)), 
+				    SamplingInfo(), NULL);
   subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH, this);
   vector<Map> subs;
-  BB.GetSubstitutions(&subs, NULL);
+  q->GetSubstitutions(&subs, NULL);
   for (uint i=0; i<subs.size(); i++) {
     L1_AddViolation(Substitute(subs[i], tuple_));
   }
 }
 void Prohibition::L1_Erase() {
   subscription_->L1_Erase();
-  while (violations.size()) {
-    L1_RemoveViolation(violations.begin()->first);    
+  while (violations_.size()) {
+    L1_RemoveViolation(violations_.begin()->first);    
   }
   CL.RemoveFromSet(&M.prohibitions_, this);
   CL.Destroying(this);
 }
-void Prohibition::Update(const QueryUpdate &update, typeof(subscription_) sub){
+void Prohibition::Update(const QueryUpdate &update, SubType * sub){
   forall(run, update.changes_) {
     if (run->action_ == UPDATE_CREATE) {
-      OTuple t = Substitute(run->data_, tuple_);
+      OTuple t = Substitute(run->data_.Data(), tuple_);
       if (exceptions_ % t) continue;
-      CHECK(!violations_ % t);
+      CHECK(!(violations_ % t));
       L1_AddViolation(t);
     }
     if (run->action_ == UPDATE_DESTROY) {
-      OTuple t = Substitute(run->data_, tuple_);
+      OTuple t = Substitute(run->data_.Data(), tuple_);
       if (exceptions_ % t) {
-	CHECK(!violations_ % t);
+	CHECK(!(violations_ % t));
 	continue;
       }
       CHECK(violations_ % t);
@@ -98,7 +101,7 @@ void Prohibition::L1_RemoveViolation(OTuple t) {
   CL.RemoveFromMap(&violations_, t);
 }
 void Prohibition::L1_AddException(OTuple t) {
-  CHECK(!exceptions_ % t);
+  CHECK(!(exceptions_ % t));
   CL.InsertIntoSet(&exceptions_, t);
   if (violations_ % t) L1_RemoveViolation(t);
 }

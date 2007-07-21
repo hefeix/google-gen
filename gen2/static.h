@@ -20,7 +20,13 @@
 #define _STATIC_H_
 
 #include "objects.h"
-#include "named.h"
+#include "namer.h"
+#include "query.h"
+
+class Statement;
+class Expression;
+class DynamicStatement;
+class DynamicExpression;
 
 class Statement : public Named{
  public:
@@ -28,7 +34,7 @@ class Statement : public Named{
   // Constructors etc.
   Statement();
   virtual ~Statement(){}
-  NamedType Type() const { return STATEMENT };
+  NamedType Type() const { return STATEMENT; }
   
   // Erasing. Can only erase unlinked statements.
   virtual void L1_Erase();
@@ -41,10 +47,22 @@ class Statement : public Named{
     if (child_) return 1;
     return 0;
   }
+  virtual vector<Statement *> GetChildren() const {
+    vector<Statement *> ret;
+    if (child_) ret.push_back(child_);
+    return ret;
+  }
   
   // Hook up static nodes to each other
-  ConnectToParent(Statement * parent);
-  DisconnectFromParent();
+  void ConnectToParent(Statement * parent);
+  void DisconnectFromParent();
+
+  // position points to where to start parsing, and is changed by the function
+  // to the end of what was parsed.
+  static Statement * ParseSingle(const Tuple & t, uint * position);
+  static vector<Statement *> Parse(const Tuple & t); // ad hoc parser.
+  string ToString(int indent) const;
+  virtual string ToStringSingle() const = 0;
 
  protected:
   virtual void L1_LinkToChild(Statement * child);
@@ -52,28 +70,26 @@ class Statement : public Named{
   
   map<Map, DynamicStatement*> dynamic_statements_;
 
-  // position points to where to start parsing, and is changed by the function
-  // to the end of what was parsed.
-  static Statement * ParseSingle(const Tuple & t, int * position);
-  static vector<Statement *> Parse(const Tuple & t); // ad hoc parser.
-  string PrettyOutput();
 
 };
 
 
 struct OnStatement : public Statement {
   typedef UpdateSubscription<QueryUpdate, Query, OnStatement> SubType;
-  friend class SubType;
+  friend class UpdateSubscription<QueryUpdate, Query, OnStatement>;
+  //friend class SubType;
 
-  OnStatement(Pattern p);
-
-  Pattern pattern_;
+  OnStatement(OPattern p);
+  string ToStringSingle() const;
+  
+  OPattern pattern_;
   SubType * subscription_;
 };
 
 struct RepeatStatement : public Statement {
   RepeatStatement(Expression * number_of_repetitions,
 		  Variable repetition_name);
+  string ToStringSingle() const;
 
   Expression * number_of_repetitions_;
   // this variable is useless except to preserve the property that a dynamic
@@ -83,36 +99,44 @@ struct RepeatStatement : public Statement {
 
 struct DelayStatement : public Statement { 
   DelayStatement(OBitSeq delay);
+  string ToStringSingle() const;
   OBitSeq delay_;
 };
   
 struct LetStatement : public Statement {
   LetStatement(Variable variable, 
 	       Expression * value);
+  string ToStringSingle() const;
   Variable variable_;
   Expression * value_;
 };
 
 struct OutputStatement : public Statement {
   OutputStatement(OTuple tuple);
+  string ToStringSingle() const;
+
   OTuple tuple_;
 
   // no children
-  L1_LinkToChild(Statement * child) { CHECK(FALSE); }
+  void L1_LinkToChild(Statement * child) { CHECK(false); }
 };
 
 struct Expression : public Named{  
   Expression();
-  NamedType Type() const { return NAMED };
+  static Expression * Parse(const Tuple & t); // ad hoc parser.
+  virtual string ToString() const = 0;
+  NamedType Type() const { return EXPRESSION;}
 };
 
 struct SubstituteExpression : public Expression {
   SubstituteExpression(Object object);
+  string ToString() const;
   Object object_;
 };
 
 struct FlakeChoice : public Expression { 
   FlakeChoice(Expression *);
+  string ToString() const;
 
   // if the chooser is null, uses the global flake chooser.
   Expression * chooser_;

@@ -18,22 +18,25 @@
 
 #include "violation.h"
 #include "model.h"
+#include "changelist.h"
 
-Violation::Violation() {
+Violation::Violation() {  
   CL.Creating(this);
+  // add to the model's set of violations
+  L1_InsertIntoGlobalMap();
 }
-Violation::L1_InsertIntoGlobalMap(){
-  CL.Make(new MapOfSetsInsertChange(&M.violations_, GetType(), this));
+void Violation::L1_InsertIntoGlobalMap(){
+  CL.InsertIntoMapOfSets(&M.violations_, GetType(), this);
 }
-Violation::L1_RemoveFromGlobalMap(){
-  CL.Make(new MapOfSetsRemoveChange(&M.violations_, GetType(), this));
+void Violation::L1_RemoveFromGlobalMap(){
+  CL.RemoveFromMapOfSets(&M.violations_, GetType(), this);
 }
 
-RequirementViolation::RequirementViolation(const Requirement *requirement) {
+RequirementViolation::RequirementViolation(Requirement *requirement) {
   requirement_ = requirement;
   L1_InsertIntoGlobalMap();
 }
-ProhibitionViolation::ProhibitionViolation(const Prohibition *prohibition,
+ProhibitionViolation::ProhibitionViolation(Prohibition *prohibition,
 					   OTuple tuple) {
   prohibition_ = prohibition;
   tuple_ = tuple;

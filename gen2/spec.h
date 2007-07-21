@@ -27,15 +27,19 @@
 #ifndef _SPEC_H_
 #define _SPEC_H_
 
-#include "component.h"
 #include "blackboard.h"
+#include "query.h"
+
+class RequirementViolation;
+class ProhibitionViolation;
 
 class Requirement {
  public:
   Requirement(OTuple tuple);  
   void L1_Erase();
   typedef UpdateSubscription<QueryUpdate, Query, Requirement> SubType;
-  friend class SubType;
+  friend class UpdateSubscription<QueryUpdate, Query, Requirement>;
+
  private:
   // null if not violated
   void L1_AddViolation();
@@ -50,9 +54,9 @@ class Prohibition {
  public:
   Prohibition(OTuple tuple);  
   void L1_Erase();
-  void L1_AddException();    
+  void L1_AddException(OTuple t);    
   typedef UpdateSubscription<QueryUpdate, Query, Prohibition> SubType;
-  friend class SubType;
+  friend class UpdateSubscription<QueryUpdate, Query, Prohibition>;
  private:
   OTuple tuple_;
   SubType * subscription_;
