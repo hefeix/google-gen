@@ -58,11 +58,7 @@ Prohibition::Prohibition(OTuple tuple) {
   Query * q = BB.L1_GetExecuteQuery(OPattern::Make(Pattern(1, tuple)), 
 				    SamplingInfo(), NULL);
   subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH, this);
-  vector<Map> subs;
-  q->GetSubstitutions(&subs, NULL);
-  for (uint i=0; i<subs.size(); i++) {
-    L1_AddViolation(Substitute(subs[i], tuple_));
-  }
+  subscription_->L1_SendCurrentAsUpdates();
 }
 void Prohibition::L1_Erase() {
   subscription_->L1_Erase();

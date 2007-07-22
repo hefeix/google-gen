@@ -185,10 +185,12 @@ struct Subscription {
     CL.Destroying(this);
   }
   virtual ~Subscription(){}
-  // OTuple GetWildcardTuple() const;
   virtual void Update(const UpdateType & update) = 0;
   virtual UpdateNeeds Needs() const {
     return needs_;
+  }
+  void L1_SendCurrentAsUpdates() {
+    subscribee_->L1_SendCurrentAsUpdates(this);
   }
   void L1_ChangeNeeds(UpdateNeeds new_needs){
     CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, Subscription*>
@@ -273,6 +275,7 @@ struct IndexRow {
   void L1_ChangedSubscriptionNeeds() {}
   void L1_EraseIfUnnecessary();
   void L1_SendUpdates(const SingleWTUpdate & update);
+  void L1_SendCurrentAsUpdates(WTSubscription * sub);
   OTuple GetWildcardTuple() const {
     return wildcard_tuple_;
   }

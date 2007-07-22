@@ -223,6 +223,11 @@ void IndexRow::L1_SendUpdates(const SingleWTUpdate & update){
     }
   }
 }
+void IndexRow::L1_SendCurrentAsUpdates(WTSubscription *sub) {
+  forall(run, tuples_){
+    sub->Update(SingleWTUpdate::Create(run->second, run->first));  
+  }
+}
 
 void IndexRow::L1_ChangeTupleTime(TupleInfo *tuple_info, 
 				  Time old_time, Time new_time){  

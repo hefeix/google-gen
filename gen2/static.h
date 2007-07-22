@@ -78,6 +78,7 @@ struct OnStatement : public Statement {
   typedef UpdateSubscription<QueryUpdate, Query, OnStatement> SubType;
   friend class UpdateSubscription<QueryUpdate, Query, OnStatement>;
   //friend class SubType;
+  void Update(const QueryUpdate &update, SubType *sub);
 
   OnStatement(OPattern p);
   string ToStringSingle() const;
