@@ -55,6 +55,17 @@ void Statement::L1_UnlinkChild(Statement * child) {
   CL.ChangeValue(&child_, (Statement *)NULL);
 }
 
+OnStatement::OnStatement(OPattern p) {
+  pattern_ = p;
+  Query * q = BB.L1_GetExecuteQuery(pattern_, SamplingInfo(), NULL);
+  subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH | UPDATE_TIME,
+			      this);
+  subscription_->L1_SendCurrentAsUpdates();
+}
+void OnStatement::Update(const QueryUpdate &update, SubType *sub) {
+  cout << "TODO: implement on statement update";
+}
+
 Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
   Statement * ret;
   Keyword stype = t[*position++];
@@ -192,3 +203,4 @@ string SubstituteExpression::ToString() const {
 string FlakeChoice::ToString() const {
   return "( flakechoice " + (chooser_?chooser_->ToString():"()") + " )";
 }
+

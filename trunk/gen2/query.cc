@@ -91,6 +91,26 @@ void Query::L1_RecomputeUpdateNeeds(){
   CL.ChangeValue(&needs_, new_needs);
 }
 
+void Query::L1_SendCurrentAsUpdates(QuerySubscription *sub){
+  if (GetCount() ==0) return;
+  QueryUpdate update;
+  update.count_delta_ = GetCount();
+
+  if (sub->Needs() & UPDATE_WHICH) {
+    bool need_time = sub->Needs() & UPDATE_TIME;
+    vector<Map> subs;
+    vector<Time> times;
+    GetSubstitutions(&subs, need_time?(&times):NULL);
+    for (uint i=0; i<subs.size(); i++) {
+      update.changes_.push_back
+	(SingleQueryUpdate::Create(OMap::Make(subs[i]), 
+				   need_time?times[i]:Time())); 
+    }
+  }
+  sub->Update(update);
+}
+
+
 bool Query::L1_Search(int64 *max_work_now){
   CHECK(search_ == NULL);
   if (pattern_.size() == 0) {

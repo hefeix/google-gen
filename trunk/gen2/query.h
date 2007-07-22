@@ -116,6 +116,7 @@ struct Query {
   // added, removed, or changed).  Propagates the needs changes to the
   // children.
   void L1_RecomputeUpdateNeeds();
+  void L1_SendCurrentAsUpdates(QuerySubscription *sub);
   string GetDescription() const { 
     return "Query" + OPattern::Make(pattern_).ToString();
   }
