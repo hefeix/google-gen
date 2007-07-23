@@ -189,6 +189,10 @@ struct Subscription {
   virtual UpdateNeeds Needs() const {
     return needs_;
   }
+  // Sends the update that would be necessary to go from nothing to the current
+  // state of the world.  Often useful when we want to do the same thing upon
+  // creating the subscription as we do when the subscription sends an update
+  // that something was created.  This lets us not duplicate code.
   void L1_SendCurrentAsUpdates() {
     subscribee_->L1_SendCurrentAsUpdates(this);
   }
