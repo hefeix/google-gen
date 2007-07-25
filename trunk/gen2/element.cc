@@ -18,32 +18,3 @@
 
 #include "element.h"
 
-void SingleLink::L1_AddChild(Element *child) {
-  if (!child) return;
-  CHECK(!child_);
-  CL.ChangeValue(&child_, child);
-  child->L1_ConnectToParentLink(this);
-}
-void SingleLink::L1_RemoveChild(Element *child){
-  CHECK(child_ == child);
-  CL.ChangeValue(&child_, NULL);
-}
-void MultiLink::L1_AddChild(Element *child){
-  if (!child) return;
-  CL.InsertIntoMap(&children_, child->GetMap(), child);
-  child->L1_ConnectToParentLink(this);
-}
-void MultiLink::L1_RemoveChild(Element *child) {
-  CHECK(children_[child->GetMap()] == child);
-  CL.RemoveFromMap(&children_, child->GetMap());  
-}
-set<Element *> SingleLinkBase::GetChildren() const {
-  set<Element *> ret;
-  ret.insert(child_);
-  return ret;
-}
-set<Element *> MultiLink::GetChildren() const {
-  set<Element> ret;
-  forall(run, children_) ret.insert(run->second);
-  return ret;
-}

@@ -29,30 +29,53 @@ struct Element : public Named {
 struct Link {
   Element * parent_;
   Link(Element * parent);
+  Element * GetParent() { return parent_;}
+  virtual set<Element *> GetChildren() = 0;
   virtual void L1_AddChild(Element *child) = 0;
   virtual void L1_RemoveChild(Element *child) = 0;
-  virtual set<Element *> GetChildren();
+  virtual Element * GetChildElement() { CHECK(false);}
 };
-struct SingleLinkBase : public Link {
-  SingleLink(Element *parent);
-  Element * child_;
-  Element * GetChildElement() { return child_;}
-  void L1_AddChild(Element *child);
-  void L1_RemoveChild(Element *child);
-  set<Element *> GetChildren();
+template <class ParentClass, class ChildClass> struct MultiLink : public Link {
+  MultiLink(ParentClass *parent);
+  map<OMap, ChildClass *> children_;
+  ChildClass * GetChild(OMap m);
+  void L1_AddChild(Element *child){
+    if (!child) return;
+    CL.InsertIntoMap(&children_, child->GetMap(), 
+		     dynamic_cast<ChildClass *>(child_));
+    child->L1_ConnectToParentLink(this);
+  }
+  void L1_RemoveChild(Element *child){
+    CHECK(children_[child->GetMap()] == child);
+    CL.RemoveFromMap(&children_, child->GetMap());  
+  }
+  set<Element *> GetChildren(){
+    set<Element *> ret;
+    forall(run, children_) ret.insert(run->second);
+    return ret;
+  }
 };
-struct MultiLink : public Link {
-  MultiLink(Element *parent);
-  map<OMap, Element *> children_;
-  Element * GetChild(OMap m);
-  void L1_AddChild(Element *child);
-  void L1_RemoveChild(Element *child);
-  set<Element *> GetChildren();
-};
-template <class ChildClass> struct SingleLink : public SingleLinkBase {
+template <class ParentClass, ChildClass> struct SingleLink : public Link {
+  ChildClass * child_;
   SingleLink(Element *parent) :SingleLinkBase(parent) {}
   ChildClass * GetChild() {
     return dynamic_cast<ChildClass *>(child_);
+  }
+  Element * GetChildElement() { return GetChild();}
+  void L1_AddChild(Element *child) {
+    if (!child) return;
+    CHECK(!child_);
+    CL.ChangeValue(&child_, dynamic_cast<ChildClass>(child));
+    child->L1_ConnectToParentLink(this);
+  }
+  void L1_RemoveChild(Element *child){
+    CHECK(child_ == child);
+    CL.ChangeValue(&child_, NULL);
+  }
+  set<Element *> GetChildren() const {
+    set<Element *> ret;
+    ret.insert(child_);
+    return ret;
   }
 };
 
