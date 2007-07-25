@@ -28,8 +28,16 @@ class Expression;
 class DynamicStatement;
 class DynamicExpression;
 
-class Statement : public Named{
- public:
+struct StaticElement : public Element{
+  StaticElement();
+  bool IsDynamic() const { return false; }
+  void L1_ConnectToParentLink(Link *link) {
+    parent_ = link;
+  }
+  MultiLink dynamic_children_;
+};
+
+struct Statement : public StaticElement{
   
   // Constructors etc.
   Statement();
@@ -40,8 +48,7 @@ class Statement : public Named{
   virtual void L1_Erase();
   
   // child_ is only used if you can only have 1 child
-  Statement * child_;
-  Statement * parent_;
+  SingleLink * child_;
 
   virtual uint32 GetNumChildren() {
     if (child_) return 1;
@@ -88,20 +95,26 @@ struct OnStatement : public Statement {
 };
 
 struct RepeatStatement : public Statement {
-  RepeatStatement(Expression * number_of_repetitions,
-		  Variable repetition_name);
+  RepeatStatement(Expression * number_of_repetitions);
   string ToStringSingle() const;
-
-  Expression * number_of_repetitions_;
+  Expression * GetNumberOfRepetitions() {
+    return dynamic_cast<Expression *>(number_of_repetitions_.child_);
+  }
+  
+  SingleLink number_of_repetitions_;
   // this variable is useless except to preserve the property that a dynamic
   // node is associated with a unique (static node, substitution) pair.
-  Variable repetition_name_; 
+  // assigned automatically in the constructor.
+  Variable repetition_variable_; 
 };
 
 struct DelayStatement : public Statement { 
-  DelayStatement(OBitSeq delay);
+  DelayStatement(Expression * delay);
+  Expression * GetDelay() const {
+    return dynamic_cast<Expression *>(delay_.child_);
+  }
   string ToStringSingle() const;
-  OBitSeq delay_;
+  SingleLink delay_;
 };
   
 struct LetStatement : public Statement {
@@ -109,20 +122,19 @@ struct LetStatement : public Statement {
 	       Expression * value);
   string ToStringSingle() const;
   Variable variable_;
-  Expression * value_;
+  SingleLink<Expression> value_;
 };
 
 struct OutputStatement : public Statement {
-  OutputStatement(OTuple tuple);
+  OutputStatement(Expression * tuple);
   string ToStringSingle() const;
-
-  OTuple tuple_;
-
+  Expression * tuple_;
+  
   // no children
   void L1_LinkToChild(Statement * child) { CHECK(false); }
 };
 
-struct Expression : public Named{  
+struct Expression : public StaticElement {  
   Expression();
   static Expression * Parse(const Tuple & t); // ad hoc parser.
   virtual string ToString() const = 0;
@@ -136,7 +148,7 @@ struct SubstituteExpression : public Expression {
 };
 
 struct FlakeChoice : public Expression { 
-  FlakeChoice(Expression *);
+  FlakeChoice(Expression * chooser);
   string ToString() const;
 
   // if the chooser is null, uses the global flake chooser.
