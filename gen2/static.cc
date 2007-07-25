@@ -19,18 +19,19 @@
 #include "static.h"
 #include "model.h"
 
-Statement::Statement() {
+StaticElement::StaticElement()
+  :dynamic_children_(this) {
+}
+
+Statement::Statement()
+  :child_(this) {
   // don't call CL.Creating(this) because it's called by the superclass Named.
-  child_ = NULL;
-  parent_ = NULL;
-  CL.InsertIntoSet(&M.static_statements_, this);
 }
 
 // Can't erase statements that are linked
 void Statement::L1_Erase() {
   CHECK(GetNumChildren() == 0);
   CHECK(parent_ == NULL);
-  CL.RemoveFromSet(&M.static_statements_, this);
   Named::L1_Erase();
 }
 
@@ -66,6 +67,34 @@ void OnStatement::Update(const QueryUpdate &update, SubType *sub) {
   cout << "TODO: implement on statement update";
 }
 
+RepeatStatement::RepeatStatement(Expression * number_of_repetitions)
+  :number_of_repetitions_(this) {
+  number_of_repetitions_->L1_AddChild(number_of_repetitions);
+  repetition_variable_ = M.L1_GetNextUniqueVariable();
+}
+
+DelayStatement::DelayStatement(Expression * delay)
+  :delay_(this) {
+  delay_.L1_AddChild(delay);
+}
+
+LetStatement::LetStatement(Variable variable, Expression *value)
+  :value_(this) {
+  variable_ = variable;
+  value_.L1_AddChild(value);
+}
+
+OutputStatement::OutputStatement(Expression * tuple) {
+  tuple_ = tuple;
+}
+
+FlakeChoice::FlakeChoice(Expression *chooser) {
+  chooser_ = chooser;
+}
+SubstituteExpression::SubstituteExpression(Object object) {
+  object_ = object;
+}
+
 Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
   Statement * ret;
   Keyword stype = t[*position++];
@@ -75,11 +104,10 @@ Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
   } 
   if (stype.Data() == "repeat") {
     Expression * expr = Expression::Parse(OTuple(t[*position++]).Data());
-    Variable var = M.L1_GetNextUniqueVariable();
-    ret = new RepeatStatement(expr, var);
+    ret = new RepeatStatement(expr);
   }
   if (stype.Data() == "delay") {
-    OBitSeq delay = t[*position++];
+    Expression * delay = Expression::Parse(OTuple(t[*position++]).Data());
     ret = new DelayStatement(delay);
   }
   if (stype.Data() == "let") {
@@ -88,8 +116,8 @@ Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
     ret = new LetStatement(var, value);
   }
   if (stype.Data() == "output") {
-    OTuple to_output = t[*position++];
-    ret = new OutputStatement(to_output);
+    Expression * tuple = Expression::Parse(OTuple(t[*position++]).Data());
+    ret = new OutputStatement(tuple);
   } 
   /*
     more statement types l8r
@@ -188,13 +216,13 @@ string RepeatStatement::ToStringSingle() const {
   return "repeat " + number_of_repetitions_->ToString();
 }
 string DelayStatement::ToStringSingle() const {
-  return "delay " + delay_.ToString();
+  return "delay " + delay_->ToString();
 }
 string LetStatement::ToStringSingle() const {
   return "let " + variable_.ToString() + " " + value_->ToString();
 }
 string OutputStatement::ToStringSingle() const {
-  return "output " + tuple_.ToString();
+  return "output " + tuple_->ToString();
 }
 
 string SubstituteExpression::ToString() const {

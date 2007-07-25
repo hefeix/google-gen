@@ -40,6 +40,8 @@ template<>
 string Variable::Definition::ToStringSpecific(bool verbose) const { 
   if (data_ < 26)
     return string() + (char('a' + data_));
+  if (data_ < 0)  
+    return "u" + itoa(-data_);
   return "v" + itoa(data_);
 }
 
@@ -296,53 +298,54 @@ istream & operator >>(istream & input, Object & o){
     return input;
   } 
   if (isdigit(s[1])) {
-    CHECK(s[0]=='v')
-    o = Variable::Make(atoi(&(s[1])));
+    if (s[0]=='v') {
+      o = Variable::Make(atoi(&(s[1])));
+      return input;
+    } 
+    CHECK(s[0]=='u');
+    o = Variable::Make(-atoi(&(s[1])));
     return input;
-  } else {
-    if (s=="true") {
-      o = Boolean::Make(true);
-      return input;
-    }
-    if (s=="false") {
-      o = Boolean::Make(false);
-      return input;
-    }
-    if (s=="never") {
-      o = NEVER;
-      return input;
-    }
-    if (s=="time") {
-      OMap t;
-      input >> t;
-      vector<pair<BitSeq, int> > coordinates;
-      forall(run, t.Data()) {
-	OBitSeq s = run->first;
+  }
+  if (s=="true") {
+    o = Boolean::Make(true);
+    return input;
+  }
+  if (s=="false") {
+    o = Boolean::Make(false);
+    return input;
+  }
+  if (s=="never") {
+    o = NEVER;
+    return input;
+  }
+  if (s=="time") {
+    OMap t;
+    input >> t;
+    vector<pair<BitSeq, int> > coordinates;
+    forall(run, t.Data()) {
+      OBitSeq s = run->first;
 	Integer n = run->second;
 	coordinates.push_back(make_pair(s.Data(), n.Data()));	
 	sort(coordinates.begin(), coordinates.end());
-      }
-      o = OTime::Make(Time(coordinates));
-      return input;
     }
-    if (s=="pattern") {
-      OTuple t;
-      input >> t;
-      vector<OTuple> p;
-      for (uint i=0; i<t.size(); i++) {
-	p.push_back(t[i]);
-      }
-      o = OPattern::Make(p);
-      return input;
-    }
-    if (s=="null") {
-      o = NULL;
-      return input;
-    }
-    o = Keyword::Make(s);
+    o = OTime::Make(Time(coordinates));
     return input;
   }
-  CHECK(false);
+  if (s=="pattern") {
+    OTuple t;
+    input >> t;
+    vector<OTuple> p;
+    for (uint i=0; i<t.size(); i++) {
+      p.push_back(t[i]);
+    }
+    o = OPattern::Make(p);
+    return input;
+  }
+  if (s=="null") {
+    o = NULL;
+    return input;
+  }
+  o = Keyword::Make(s);
   return input;
 }
 

@@ -38,6 +38,7 @@ class Named {
   void L1_AutomaticallyName();
   virtual NamedType Type() const = 0;
   virtual void L1_Erase();
+  virtual OMap GetMap() { CHECK(false);} // overriden for dynamic nodes.
   virtual ~Named() {};
  private:
   Object name_;
@@ -64,6 +65,5 @@ class Namer {
 };
 
 extern Namer N;
-
 
 #endif
