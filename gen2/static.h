@@ -34,7 +34,24 @@ struct StaticElement : public Element{
   void L1_ConnectToParentLink(Link *link) {
     parent_ = link;
   }
-  MultiLink dynamic_children_;
+  Link * dynamic_children_; // a multilink
+  vector<Link *> static_children_; // stick everything in the irack
+  Element * GetChild(int which) { 
+    return static_children_[which]->GetChildElement();
+  }
+  Statement * GetStatementChild(int which) {
+    return dynamic_cast<Statement *>(GetChild(which));
+  }
+  Expression * GetExpressionChild(int which){
+    return dynamic_cast<Expression *>(GetChild(which));
+  }
+  void AddStatementLink(Statement *child) {
+    static_children_->push_back(new SingleLink<StaticElement, Statement
+  }
+
+  
+  
+
 };
 
 struct Statement : public StaticElement{
@@ -48,7 +65,7 @@ struct Statement : public StaticElement{
   virtual void L1_Erase();
   
   // child_ is only used if you can only have 1 child
-  SingleLink * child_;
+  SingleLink<Statement, Statement> child_;
 
   virtual uint32 GetNumChildren() {
     if (child_) return 1;
@@ -74,10 +91,12 @@ struct Statement : public StaticElement{
  protected:
   virtual void L1_LinkToChild(Statement * child);
   virtual void L1_UnlinkChild(Statement * child);
+  void L1_AddStatementChild(Statement * 
+
   
-  map<Map, DynamicStatement*> dynamic_statements_;
-
-
+  vector<SingleLink<Statement, Statement> *> statement_children_;
+  vector<SingleLink<Statement, Expression> *> expression_children_;
+  Multilink<Statement, DynamicStatement> * dynamic_;
 };
 
 
