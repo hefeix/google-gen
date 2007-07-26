@@ -25,74 +25,63 @@ StaticElement::StaticElement() {
   dynamic_children_ = new MultiLink(this);
 }
 void StaticElement::L1_Erase() {
-  for (int i=0; i<static_children_.size(); i++) 
+  for (uint i=0; i<static_children_.size(); i++) 
     static_children_[i]->L1_Erase();
   dynamic_children_->L1_Erase();
   Named::L1_Erase();
 }
-Element * StaticElement::GetChild(int which) { 
+Element * StaticElement::GetChild(int which) const { 
   return static_children_[which]->GetChild();
 }
-Statement * StaticElement::GetStatementChild(int which) {
-  return dynamic_cast<Statement *>(GetChild(which));
+Statement * StaticElement::GetStatementChild(int which) const {
+  CHECK(which < NumStatementChildren());
+  return dynamic_cast<Statement *>(GetChild(which + NumExpressionChildren()));
 }
-Expression * StaticElement::GetExpressionChild(int which){
+vector<Statement *> StaticElement::GetStatementChildren() const {
+  vector<Statement *> ret;
+  for (int i=0; i<NumStatementChildren(); i++) {
+    ret.push_back(GetStatementChild(i));
+  }
+  return ret;
+}
+Expression * StaticElement::GetExpressionChild(int which) const{
   return dynamic_cast<Expression *>(GetChild(which));
+}
+Object StaticElement::GetObject(int which) const{
+  return objects_[which];
+}
+void StaticElement::L1_SetObject(int which, Object new_value) {
+  CHECK(which < (int)objects_.size());
+  CL.ChangeValue(&(objects_[which]), new_value);
 }
 void StaticElement::CreateChildren(int num) {
   CHECK(static_children_.size() == 0);
   for (int i=0; i<num; i++) static_children_.push_back(new SingleLink(this));
 }
 void StaticElement::L1_LinkChild(int where, StaticElement *child){
-  CHECK(where < static_children_.size());
-  static_children_[i]->L1_AddChild(child);
+  CHECK(where < (int)static_children_.size());
+  static_children_[where]->L1_AddChild(child);
 }
 void StaticElement::L1_UnlinkChild(int where){
-  CHECK(where < static_children_.size());
-  static_children_[i]->L1_RemoveChild(GetChild(where));
+  CHECK(where < (int)static_children_.size());
+  static_children_[where]->L1_RemoveChild(GetChild(where));
 }
 
-
-
-
-Statement::Statement()
-  :child_(this) {
+Statement::Statement() {
   // don't call CL.Creating(this) because it's called by the superclass Named.
 }
 
 // Can't erase statements that are linked
 void Statement::L1_Erase() {
-  CHECK(GetNumChildren() == 0);
   CHECK(parent_ == NULL);
   Named::L1_Erase();
-}
-
-void Statement::ConnectToParent(Statement * parent) {
-  CHECK(parent_ == NULL);
-  CHECK(parent != NULL);
-  CL.ChangeValue(&parent_, parent);
-  parent->L1_LinkToChild(this);
-}
-
-void Statement::DisconnectFromParent() {
-  CHECK(parent_ != NULL);
-  parent_->L1_UnlinkChild(this);
-  CL.ChangeValue(&parent_, (Statement *)NULL);
-}
-
-void Statement::L1_LinkToChild(Statement * child) {
-  CL.ChangeValue(&child_, child);
-}
-
-void Statement::L1_UnlinkChild(Statement * child) {
-  CL.ChangeValue(&child_, (Statement *)NULL);
 }
 
 OnStatement::OnStatement() {
 }
 
 void OnStatement::L1_Subscribe() {
-  Query * q = BB.L1_GetExecuteQuery(pattern_, SamplingInfo(), NULL);
+  Query * q = BB.L1_GetExecuteQuery(GetPattern(), SamplingInfo(), NULL);
   subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH | UPDATE_TIME,
 			      this);
   subscription_->L1_SendCurrentAsUpdates();
@@ -109,49 +98,37 @@ DelayStatement::DelayStatement() {}
 
 LetStatement::LetStatement() {}
 
-OutputStatement::OutputStatement(Expression * tuple) {}
+OutputStatement::OutputStatement() {}
 
-FlakeChoice::FlakeChoice() {}
+Expression::Expression() {}
 
-SubstituteExpression::SubstituteExpression(Object object) {
-  object_ = object;
-}
+FlakeChoiceExpression::FlakeChoiceExpression() {}
+
+SubstituteExpression::SubstituteExpression() {}
+
+ConstantExpression::ConstantExpression() {}
 
 Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
   Statement * ret;
   Keyword stype = t[*position++];
-  if (stype.Data() == "on") {
-    OPattern pattern = t[*position++];
-    ret = new OnStatement(pattern);
-  } 
-  if (stype.Data() == "repeat") {
-    Expression * expr = Expression::Parse(OTuple(t[*position++]).Data());
-    ret = new RepeatStatement(expr);
+  if (stype.Data() == "on") ret = new OnStatement();
+  else if (stype.Data() == "repeat") ret = new RepeatStatement();
+  else if (stype.Data() == "delay") ret = new DelayStatement();
+  else if (stype.Data() == "let") ret = new LetStatement();
+  else if (stype.Data() == "output") ret = new OutputStatement();
+  else CHECK(false);
+  for (int i=0; i<ret->NumObjects(); i++) {
+    CHECK(*position < t.size());
+    Object o = t[*position++];
+    ret->L1_SetObject(i, o);
   }
-  if (stype.Data() == "delay") {
-    Expression * delay = Expression::Parse(OTuple(t[*position++]).Data());
-    ret = new DelayStatement(delay);
+  for (int i=0; i<ret->NumExpressionChildren(); i++) {
+    CHECK(*position < t.size());
+    Object o = t[*position++];
+    Expression * e = Expression::Parse(o);
+    ret->L1_LinkChild(i, e);
   }
-  if (stype.Data() == "let") {
-    Variable var =  t[*position++];
-    Expression * value = Expression::Parse(OTuple(t[*position++]).Data());
-    ret = new LetStatement(var, value);
-  }
-  if (stype.Data() == "output") {
-    Expression * tuple = Expression::Parse(OTuple(t[*position++]).Data());
-    ret = new OutputStatement(tuple);
-  } 
-  /*
-    more statement types l8r
-  if (stype.Data() == "") {
-  }
-  if (stype.Data() == "") {
-  }
-  if (stype.Data() == "") {
-  }
-  if (stype.Data() == "") {
-  }*/
-
+  
   if (*position < t.size()  && t[*position].Type() == OMAP) {
     OMap m = t[*(position++)];
     forall(run, m.Data()) {
@@ -165,7 +142,6 @@ Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
       }
     }
   }  
-  
   return ret;
 }
 
@@ -181,15 +157,17 @@ vector<Statement *> Statement::Parse(const Tuple & t) {
       position++;
     } else if (o.Type() == OTUPLE) {
       vector<Statement *> subs = Parse(OTuple(o).Data());
+      CHECK((int)subs.size() == parent->NumStatementChildren());
       for (uint i=0; i<subs.size(); i++) {
-	subs[i]->ConnectToParent(parent);
+	parent->L1_LinkChild(parent->NumExpressionChildren()+i, subs[i]);
       }
       parent = NULL;
       position++;
     } else {
       Statement * s = ParseSingle(t, &position);
       if (parent) {
-	s->ConnectToParent(parent);
+	CHECK(parent->NumStatementChildren() == 1);
+	parent->L1_LinkChild(parent->NumExpressionChildren(), s);
       } else {
 	ret.push_back(s);
       }
@@ -199,25 +177,39 @@ vector<Statement *> Statement::Parse(const Tuple & t) {
   return ret;
 }
 
-Expression * Expression::Parse(const Tuple & t){
+Expression * Expression::Parse(const Object & o){
+  Tuple t;
+  if (o.Type() != OTUPLE) {
+    if (o != NULL) t.push_back(o);
+  } else {
+    t = OTuple(o).Data();
+  }
   if (t.size() == 0) 
     return NULL;
+  Expression * ret;
   if (t.size() == 1) {
-    return new SubstituteExpression(t[0]);
+    ret = new ConstantExpression();
+  } else {
+    Keyword type = t[0];
+    if (type.Data() == "substitute") ret = new FlakeChoiceExpression();
+    else if (type.Data() == "flake_choice") ret = new FlakeChoiceExpression();
+    else CHECK(false);
   }
-  Keyword type = t[0];
-  if (type.Data() == "flakechoice"){
-    OTuple chooser_name_expression = t[1];
-    return new FlakeChoice(Expression::Parse(chooser_name_expression.Data()));
+  CHECK((int)t.size()-1 == ret->NumObjects() + ret->NumChildren());
+  for (int i=0; i<ret->NumObjects(); i++) {
+    ret->L1_SetObject(i, t[1+i]);
   }
-  CHECK(false);
-  return NULL;
+  for (int i=0; i<ret->NumChildren(); i++) {
+    Expression * sub = Expression::Parse(t[1+ret->NumObjects()+i]);
+    ret->L1_LinkChild(i, sub);
+  }
+  return ret;
 }
 
 string Statement::ToString(int indent) const {
   string ret(indent, ' ');
   ret += ToStringSingle();
-  vector<Statement *> children = GetChildren();
+  vector<Statement *> children = GetStatementChildren();
   if (children.size() == 0) {
     return ret + " ;\n";
   }
@@ -230,27 +222,62 @@ string Statement::ToString(int indent) const {
   ret += string(indent, ' ') + "}\n";
   return ret;
 }
+string Statement::ToStringSingle() const {
+  string ret = TypeKeyword().ToString();
+  ret += ParameterListToString();
+  return ret;
+}
+string Expression::ToString() const {
+  string ret = "(";
+  ret += TypeKeyword().ToString();
+  ret += ParameterListToString();
+  ret += ")";
+  return ret;
+}
+string ConstantExpression::ToString() const {
+  Object o = GetObject(OBJECT);
+  if (o==NULL) return "null";
+  if (o.Type() == OTUPLE) {
+    return "[" + o.ToString() + "]";    
+  }
+  return o.ToString();
+}
+string StaticElement::ParameterListToString() const {
+  string ret;
+  for (int i=0; i<NumObjects(); i++) {
+    ret += " " + GetObject(i).ToString();
+  }
+  for (int i=0; i<NumExpressionChildren(); i++) {
+    Expression * expr = GetExpressionChild(i);
+    if (expr) ret += " " + expr->ToString();
+    else ret += " null";
+  }
+  return ret;
+}
 
-string OnStatement::ToStringSingle() const {
-  return "on " + pattern_.ToString();
+Keyword OnStatement::TypeKeyword() const {
+  return Keyword::Make("on");
 }
-string RepeatStatement::ToStringSingle() const {
-  return "repeat " + number_of_repetitions_->ToString();
+Keyword RepeatStatement::TypeKeyword() const {
+  return Keyword::Make("repeat");
 }
-string DelayStatement::ToStringSingle() const {
-  return "delay " + delay_->ToString();
+Keyword DelayStatement::TypeKeyword() const {
+  return Keyword::Make("delay ");
 }
-string LetStatement::ToStringSingle() const {
-  return "let " + variable_.ToString() + " " + value_->ToString();
+Keyword LetStatement::TypeKeyword() const {
+  return Keyword::Make("let");
 }
-string OutputStatement::ToStringSingle() const {
-  return "output " + tuple_->ToString();
+Keyword OutputStatement::TypeKeyword() const {
+  return Keyword::Make("output");
 }
 
-string SubstituteExpression::ToString() const {
-  return "(" + object_.ToString() + ")";
+Keyword ConstantExpression::TypeKeyword() const {
+  return Keyword::Make("output");
 }
-string FlakeChoice::ToString() const {
-  return "( flakechoice " + (chooser_?chooser_->ToString():"()") + " )";
+Keyword SubstituteExpression::TypeKeyword() const {
+  return Keyword::Make("substitute");
+}
+Keyword FlakeChoiceExpression::TypeKeyword() const {
+  return Keyword::Make("flake_choice");
 }
 

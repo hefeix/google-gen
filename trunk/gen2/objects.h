@@ -115,10 +115,10 @@ class Object {
   Object() {
     def_ = NULL;
   }
-  Object(ObjectDefinition * def) {
+  /*Object(ObjectDefinition * def) {
     def_ = NULL;
     PointTo(def);
-  };
+    };*/
   Object(void *null) {
     CHECK(null==NULL);
     def_ = NULL;
@@ -254,10 +254,10 @@ class SpecificObject : public Object {
       CHECK(o.Type() == OT);    
     }
       
-      SpecificObject(ObjectDefinition *def) 
+      /*SpecificObject(ObjectDefinition *def) 
 	: Object(def) {
 	CHECK(def->Type() == OT);
-      }
+	}*/
 	
 	SpecificObject(void *null) : Object(null) {}
 };
