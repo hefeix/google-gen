@@ -24,25 +24,25 @@ struct Element : public Named {
   virtual void L1_ConnectToParentLink (Link * link) = 0;
   virtual OMap GetMap() const { CHECK(false); }
   Element() :parent_(NULL);
+  // does not need an L1_Erase, since subclasses' L1_Erase skips it.
 };
 
 struct Link {
   Element * parent_;
   Link(Element * parent);
+  void L1_Erase();
   Element * GetParent() { return parent_;}
   virtual set<Element *> GetChildren() = 0;
   virtual void L1_AddChild(Element *child) = 0;
   virtual void L1_RemoveChild(Element *child) = 0;
-  virtual Element * GetChildElement() { CHECK(false);}
 };
-template <class ParentClass, class ChildClass> struct MultiLink : public Link {
-  MultiLink(ParentClass *parent);
-  map<OMap, ChildClass *> children_;
-  ChildClass * GetChild(OMap m);
+struct MultiLink : public Link {
+  MultiLink(Element *parent);
+  map<OMap, Element *> children_;
+  Element * GetChild(OMap m);
   void L1_AddChild(Element *child){
     if (!child) return;
-    CL.InsertIntoMap(&children_, child->GetMap(), 
-		     dynamic_cast<ChildClass *>(child_));
+    CL.InsertIntoMap(&children_, child->GetMap(), child_);
     child->L1_ConnectToParentLink(this);
   }
   void L1_RemoveChild(Element *child){
@@ -55,17 +55,14 @@ template <class ParentClass, class ChildClass> struct MultiLink : public Link {
     return ret;
   }
 };
-template <class ParentClass, ChildClass> struct SingleLink : public Link {
-  ChildClass * child_;
+struct SingleLink : public Link {
+  Element * child_;
   SingleLink(Element *parent) :SingleLinkBase(parent) {}
-  ChildClass * GetChild() {
-    return dynamic_cast<ChildClass *>(child_);
-  }
-  Element * GetChildElement() { return GetChild();}
+  Element * GetChild() const { return child_;  }
   void L1_AddChild(Element *child) {
     if (!child) return;
     CHECK(!child_);
-    CL.ChangeValue(&child_, dynamic_cast<ChildClass>(child));
+    CL.ChangeValue(&child_, child);
     child->L1_ConnectToParentLink(this);
   }
   void L1_RemoveChild(Element *child){
