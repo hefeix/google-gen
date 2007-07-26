@@ -31,27 +31,26 @@ class DynamicExpression;
 struct StaticElement : public Element{
   StaticElement();
   bool IsDynamic() const { return false; }
-  void L1_ConnectToParentLink(Link *link) {
-    parent_ = link;
-  }
-  Link * dynamic_children_; // a multilink
-  vector<Link *> static_children_; // stick everything in the irack
-  Element * GetChild(int which) { 
-    return static_children_[which]->GetChildElement();
-  }
-  Statement * GetStatementChild(int which) {
-    return dynamic_cast<Statement *>(GetChild(which));
-  }
-  Expression * GetExpressionChild(int which){
-    return dynamic_cast<Expression *>(GetChild(which));
-  }
-  void AddStatementLink(Statement *child) {
-    static_children_->push_back(new SingleLink<StaticElement, Statement
-  }
+  void L1_ConnectToParentLink(Link *link) { parent_ = link;}
+  void L1_Erase();
 
-  
-  
+  MultiLink * dynamic_children_;
+  vector<SingleLink *> static_children_; // statements and expressions
+  vector<Object> objects_;
 
+  Element * GetChild(int which);
+  Statement * GetStatementChild(int which);
+  Expression * GetExpressionChild(int which);
+  void CreateChildren(int num);
+  void L1_LinkChild(int where, StaticElement *child);
+  void L1_UnlinkChild(int where);
+  Object GetObject(int which);
+  void L1_SetObject(int which, Object new_value);
+
+  virtual int NumExpressionChildren() = 0;
+  virtual int NumChildren() = 0;
+  virtual int NumStatementChildren() { 
+    return NumChildren() - NumExpressionChildren(); }  
 };
 
 struct Statement : public StaticElement{
@@ -64,19 +63,6 @@ struct Statement : public StaticElement{
   // Erasing. Can only erase unlinked statements.
   virtual void L1_Erase();
   
-  // child_ is only used if you can only have 1 child
-  SingleLink<Statement, Statement> child_;
-
-  virtual uint32 GetNumChildren() {
-    if (child_) return 1;
-    return 0;
-  }
-  virtual vector<Statement *> GetChildren() const {
-    vector<Statement *> ret;
-    if (child_) ret.push_back(child_);
-    return ret;
-  }
-  
   // Hook up static nodes to each other
   void ConnectToParent(Statement * parent);
   void DisconnectFromParent();
@@ -87,70 +73,104 @@ struct Statement : public StaticElement{
   static vector<Statement *> Parse(const Tuple & t); // ad hoc parser.
   string ToString(int indent) const;
   virtual string ToStringSingle() const = 0;
+  virtual int NumExpressionChildren() = 0;
+  virtual int NumChildren() = 0;
+  virtual int NumObjects() { return 0;}
 
- protected:
-  virtual void L1_LinkToChild(Statement * child);
-  virtual void L1_UnlinkChild(Statement * child);
-  void L1_AddStatementChild(Statement * 
-
-  
-  vector<SingleLink<Statement, Statement> *> statement_children_;
-  vector<SingleLink<Statement, Expression> *> expression_children_;
-  Multilink<Statement, DynamicStatement> * dynamic_;
+  protected:
 };
 
 
 struct OnStatement : public Statement {
+  enum {
+    CHILD,
+    NUM_CHILDREN,
+  };
+  enum {
+    PATTERN, // OPattern
+    NUM_OBJECTS,
+  };
+  int NumExpressionChildren() { return CHILD;}
+  int NumChildren() { return NUM_CHILDREN;}
+  int NumObjects() { return NUM_OBJECTS;}
+  OPattern GetPattern() const { return GetObject(PATTERN);}
+  
   typedef UpdateSubscription<QueryUpdate, Query, OnStatement> SubType;
   friend class UpdateSubscription<QueryUpdate, Query, OnStatement>;
   //friend class SubType;
   void Update(const QueryUpdate &update, SubType *sub);
 
-  OnStatement(OPattern p);
+  OnStatement();
   string ToStringSingle() const;
   
-  OPattern pattern_;
   SubType * subscription_;
 };
 
 struct RepeatStatement : public Statement {
-  RepeatStatement(Expression * number_of_repetitions);
-  string ToStringSingle() const;
-  Expression * GetNumberOfRepetitions() {
-    return dynamic_cast<Expression *>(number_of_repetitions_.child_);
+  enum {
+    REPETITIONS,
+    CHILD,
+    NUM_CHILDREN,
+  };
+  enum {
+    REPETITION_VARIABLE,
+    NUM_OBJECTS,
   }
-  
-  SingleLink number_of_repetitions_;
+  int NumExpressionChildren() { return CHILD;}
+  int NumChildren() { return NUM_CHILDREN;}
+  int NumObjects() { return NUM_OBJECTS;}
+  Variable GetRepetitionVariable() { return GetObject(REPETITION_VARIABLE);}
+
+  RepeatStatement();
+  string ToStringSingle() const;
   // this variable is useless except to preserve the property that a dynamic
   // node is associated with a unique (static node, substitution) pair.
   // assigned automatically in the constructor.
-  Variable repetition_variable_; 
 };
 
 struct DelayStatement : public Statement { 
-  DelayStatement(Expression * delay);
-  Expression * GetDelay() const {
-    return dynamic_cast<Expression *>(delay_.child_);
-  }
+  enum {
+    DELAY,
+    CHILD,
+    NUM_CHILDREN,
+  };
+  int NumExpressionChildren() { return CHILD;}
+  int NumChildren() { return NUM_CHILDREN;}
+  
+  DelayStatement();
   string ToStringSingle() const;
-  SingleLink delay_;
 };
   
 struct LetStatement : public Statement {
-  LetStatement(Variable variable, 
-	       Expression * value);
+  enum {
+    VALUE,
+    CHILD,
+    NUM_CHILDREN,
+  };
+  enum {
+    VARIABLE,
+    NUM_OBJECTS,
+  }
+
+  int NumExpressionChildren() { return CHILD;}
+  int NumChildren() { return NUM_CHILDREN;}
+  int NumObjects() { return NUM_OBJECTS;}
+  Variable GetVariable() { return GetObject(VARIABLE);}
+
+  LetStatement();
   string ToStringSingle() const;
-  Variable variable_;
-  SingleLink<Expression> value_;
 };
 
 struct OutputStatement : public Statement {
-  OutputStatement(Expression * tuple);
+  enum {
+    TUPLE,
+    NUM_CHILDREN,
+  };
+  int NumExpressionChildren() { return NUM_CHILDREN;}
+  int NumChildren() { return NUM_CHILDREN;}
+
+  OutputStatement();
   string ToStringSingle() const;
-  Expression * tuple_;
-  
-  // no children
-  void L1_LinkToChild(Statement * child) { CHECK(false); }
 };
 
 struct Expression : public StaticElement {  
@@ -158,26 +178,56 @@ struct Expression : public StaticElement {
   static Expression * Parse(const Tuple & t); // ad hoc parser.
   virtual string ToString() const = 0;
   NamedType Type() const { return EXPRESSION;}
+  virtual int NumExpressionChildren() { return NumChildren();}
+  virtual int NumChildren() = 0;
+  virtual int NumObjects() { return 0;}
 };
 
 struct SubstituteExpression : public Expression {
-  SubstituteExpression(Object object);
+  enum {
+    CHILD,
+    NUM_CHILDREN,
+  };
+  int NumChildren() { return NUM_CHILDREN;}
+  SubstituteExpression();
   string ToString() const;
-  Object object_;
 };
 
 struct FlakeChoice : public Expression { 
-  FlakeChoice(Expression * chooser);
+  enum {
+    CHOOSER, // if the chooser is null, use the global flake chooser
+    NUM_CHILDREN,
+  };
+  int NumChildren() { return NUM_CHILDREN;}
+  FlakeChoice();
   string ToString() const;
-
-  // if the chooser is null, uses the global flake chooser.
-  Expression * chooser_;
 };
 
-
-
+struct ConstantExpression : public Expression {
+  enum {
+    NUM_CHILDREN,
+  };
+  enum {
+    OBJECT, 
+    NUM_OBJECTS,
+  }
+  int NumChildren() { return NUM_CHILDREN;}
+  int NumObjects() { return NUM_OBJECTS;}
+  ConstantExpression();
+  string ToString() const;
+};
 
 /*
+struct MatchCombineExpression : public Expression {
+  Expression *combination_function_
+  Expression *pattern_
+  Expression *child_
+}
+
+
+
+
+
 struct IfStatement : public Statement {
   Expression * expression_;
   Statement * child_;

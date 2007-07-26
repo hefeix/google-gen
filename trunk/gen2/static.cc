@@ -19,9 +19,41 @@
 #include "static.h"
 #include "model.h"
 
-StaticElement::StaticElement()
-  :dynamic_children_(this) {
+
+
+StaticElement::StaticElement() {
+  dynamic_children_ = new MultiLink(this);
 }
+void StaticElement::L1_Erase() {
+  for (int i=0; i<static_children_.size(); i++) 
+    static_children_[i]->L1_Erase();
+  dynamic_children_->L1_Erase();
+  Named::L1_Erase();
+}
+Element * StaticElement::GetChild(int which) { 
+  return static_children_[which]->GetChild();
+}
+Statement * StaticElement::GetStatementChild(int which) {
+  return dynamic_cast<Statement *>(GetChild(which));
+}
+Expression * StaticElement::GetExpressionChild(int which){
+  return dynamic_cast<Expression *>(GetChild(which));
+}
+void StaticElement::CreateChildren(int num) {
+  CHECK(static_children_.size() == 0);
+  for (int i=0; i<num; i++) static_children_.push_back(new SingleLink(this));
+}
+void StaticElement::L1_LinkChild(int where, StaticElement *child){
+  CHECK(where < static_children_.size());
+  static_children_[i]->L1_AddChild(child);
+}
+void StaticElement::L1_UnlinkChild(int where){
+  CHECK(where < static_children_.size());
+  static_children_[i]->L1_RemoveChild(GetChild(where));
+}
+
+
+
 
 Statement::Statement()
   :child_(this) {
@@ -56,8 +88,10 @@ void Statement::L1_UnlinkChild(Statement * child) {
   CL.ChangeValue(&child_, (Statement *)NULL);
 }
 
-OnStatement::OnStatement(OPattern p) {
-  pattern_ = p;
+OnStatement::OnStatement() {
+}
+
+void OnStatement::L1_Subscribe() {
   Query * q = BB.L1_GetExecuteQuery(pattern_, SamplingInfo(), NULL);
   subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH | UPDATE_TIME,
 			      this);
@@ -67,30 +101,18 @@ void OnStatement::Update(const QueryUpdate &update, SubType *sub) {
   cout << "TODO: implement on statement update";
 }
 
-RepeatStatement::RepeatStatement(Expression * number_of_repetitions)
-  :number_of_repetitions_(this) {
-  number_of_repetitions_->L1_AddChild(number_of_repetitions);
-  repetition_variable_ = M.L1_GetNextUniqueVariable();
+RepeatStatement::RepeatStatement() {
+  L1_SetObject(REPETITION_VARIABLE, M.L1_GetNextUniqueVariable());
 }
 
-DelayStatement::DelayStatement(Expression * delay)
-  :delay_(this) {
-  delay_.L1_AddChild(delay);
-}
+DelayStatement::DelayStatement() {}
 
-LetStatement::LetStatement(Variable variable, Expression *value)
-  :value_(this) {
-  variable_ = variable;
-  value_.L1_AddChild(value);
-}
+LetStatement::LetStatement() {}
 
-OutputStatement::OutputStatement(Expression * tuple) {
-  tuple_ = tuple;
-}
+OutputStatement::OutputStatement(Expression * tuple) {}
 
-FlakeChoice::FlakeChoice(Expression *chooser) {
-  chooser_ = chooser;
-}
+FlakeChoice::FlakeChoice() {}
+
 SubstituteExpression::SubstituteExpression(Object object) {
   object_ = object;
 }

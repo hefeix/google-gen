@@ -18,3 +18,11 @@
 
 #include "element.h"
 
+Link::Link(Element *parent) {
+  CL.Creating(this);
+  parent_ = parent;
+}
+void Link::L1_Erase() {
+  CHECK(GetChildren().size() == 0);
+  CL.Destroying(this);
+}
