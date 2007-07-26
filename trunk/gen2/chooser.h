@@ -22,6 +22,7 @@
 #include "util.h"
 #include "record.h"
 #include "probutil.h"
+#include "namer.h"
 
 // Keeps track of the likelihood of a sequence of choices of objects.  
 // Doesn't actually keep track of the sequence.
@@ -36,7 +37,7 @@
 // with the model, and in dynamic naming choices, we use one child chooser per
 // creative variable per rule.  
 
-struct Chooser {
+struct Chooser : public Named {
   Chooser *parent_;
   LL ln_likelihood_;
   map<int, int> counts_;
@@ -44,6 +45,7 @@ struct Chooser {
   Chooser(Chooser *parent);
   virtual ~Chooser() {}
   void L1_Erase();
+  Named::Type GetType() const { return Named::CHOOSER;}
   virtual LL ComputeLLDelta(int object,
 			    int old_count, int new_count, 
 			    int old_num_objects,  int new_num_objects, 

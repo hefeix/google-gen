@@ -56,7 +56,7 @@ void StaticElement::L1_SetObject(int which, Object new_value) {
 }
 void StaticElement::CreateChildren(int num) {
   CHECK(static_children_.size() == 0);
-  for (int i=0; i<num; i++) static_children_.push_back(new SingleLink(this));
+  for (int i=0; i<num; i++) static_children_.push_back(new SingleLink(this));  
 }
 void StaticElement::L1_LinkChild(int where, StaticElement *child){
   CHECK(where < (int)static_children_.size());
@@ -67,7 +67,8 @@ void StaticElement::L1_UnlinkChild(int where){
   static_children_[where]->L1_RemoveChild(GetChild(where));
 }
 
-Statement::Statement() {
+Statement::Statement() {  
+  L1_AutomaticallyName();
   // don't call CL.Creating(this) because it's called by the superclass Named.
 }
 
@@ -100,7 +101,9 @@ LetStatement::LetStatement() {}
 
 OutputStatement::OutputStatement() {}
 
-Expression::Expression() {}
+Expression::Expression() {
+  L1_AutomaticallyName();
+}
 
 FlakeChoiceExpression::FlakeChoiceExpression() {}
 
@@ -238,7 +241,7 @@ string ConstantExpression::ToString() const {
   Object o = GetObject(OBJECT);
   if (o==NULL) return "null";
   if (o.Type() == OTUPLE) {
-    return "[" + o.ToString() + "]";    
+    return "[" + o.ToString() + "]";
   }
   return o.ToString();
 }

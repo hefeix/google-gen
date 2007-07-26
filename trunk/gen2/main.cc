@@ -18,10 +18,14 @@
 
 #include "objects.h"
 #include "blackboard.h"
+#include "model.h"
 
 int main() {
   InitKeywords();
   // ObjectsShell();
-  Blackboard::Shell();
+  // Blackboard::Shell();
+  Model::TestLoadAndStore("tp");
+
+
   DestroyKeywords();
 }

@@ -115,10 +115,10 @@ class Object {
   Object() {
     def_ = NULL;
   }
-  /*Object(ObjectDefinition * def) {
+  Object(ObjectDefinition * def) {
     def_ = NULL;
     PointTo(def);
-    };*/
+  };
   Object(void *null) {
     CHECK(null==NULL);
     def_ = NULL;
@@ -187,6 +187,12 @@ inline bool operator <(const Object & o1, const Object & o2) {
 inline bool operator !=(const Object &o1, const Object &o2){
   return !(o1==o2);
 }
+inline bool operator ==(const Object & o, void *p) {
+  return o.GetObjectDefinition() == p;
+}
+inline bool operator !=(const Object & o, void *p) {
+  return (!(o==p));
+}
 
 // TODO: we could make some types of objects that own their definitions.  
 // We would have to change object comparison to first be by type.  
@@ -254,10 +260,10 @@ class SpecificObject : public Object {
       CHECK(o.Type() == OT);    
     }
       
-      /*SpecificObject(ObjectDefinition *def) 
+      SpecificObject(ObjectDefinition *def) 
 	: Object(def) {
 	CHECK(def->Type() == OT);
-	}*/
+      }
 	
 	SpecificObject(void *null) : Object(null) {}
 };

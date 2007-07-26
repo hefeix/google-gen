@@ -29,23 +29,19 @@ class Model {
   Model();
 
   // Reading things in from an object
-  void LoadFromObject(Object o);
-  Object WriteToObject() const;
+  void Load(istream & input); // turns into statements.
+  string ToString() const;
+  static void TestLoadAndStore(string filename);
 
   // The problem specification
   set<Requirement *> requirements_;
   set<Prohibition *> prohibitions_;
 
-  // The static statements
-  set<Statement *> static_statements_;  
-
-  // The dynamic statements
-
   // The violations
   map<ViolationType, set<Violation *> > violations_;
 
-  // All Choosers
-  set<Chooser *> all_choosers_;
+  // Statements, Expressions, Dynamic counterparts, and choosers are named.
+  // The namer can give you maps of these indexed by name.
 
   // Global Choosers
   Chooser * global_flake_chooser_;
@@ -76,6 +72,14 @@ class Model {
 
 };
 
+inline istream & operator >> (istream & input, Model &m) { 
+  m.Load(input); 
+  return input;
+}
+inline ostream & operator << (ostream & output, Model &m) {
+  output << m.ToString();
+  return output;
+}
 
 extern Model M;
 

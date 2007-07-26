@@ -67,7 +67,7 @@ struct Statement : public StaticElement{
   // Constructors etc.
   Statement();
   virtual ~Statement(){}
-  NamedType Type() const { return STATEMENT; }
+  Named::Type GetType() const { return Named::STATEMENT; }
   
   // Erasing. Can only erase unlinked statements.
   virtual void L1_Erase();
@@ -179,7 +179,7 @@ struct Expression : public StaticElement {
   Expression();
   static Expression * Parse(const Object & o); // ad hoc parser.
   virtual string ToString() const;
-  NamedType Type() const { return EXPRESSION;}
+  Named::Type GetType() const { return Named::EXPRESSION;}
   virtual int NumExpressionChildren() const { return NumChildren();}
   virtual int NumChildren() const = 0;
   virtual int NumObjects() const { return 0;}
