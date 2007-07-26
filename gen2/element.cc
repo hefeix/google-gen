@@ -17,6 +17,7 @@
 // Author: Georges Harik and Noam Shazeer
 
 #include "element.h"
+#include "changelist.h"
 
 Link::Link(Element *parent) {
   CL.Creating(this);
@@ -25,4 +26,36 @@ Link::Link(Element *parent) {
 void Link::L1_Erase() {
   CHECK(GetChildren().size() == 0);
   CL.Destroying(this);
+}
+void MultiLink::L1_AddChild(Element *child){
+  if (!child) return;
+  CL.InsertIntoMap(&children_, child->GetMap(), child);
+  child->L1_ConnectToParentLink(this);
+}
+void MultiLink::L1_RemoveChild(Element *child){
+  CHECK(children_[child->GetMap()] == child);
+  CL.RemoveFromMap(&children_, child->GetMap());  
+  child->L1_DisconnectFromParentLink(this);
+}
+set<Element *> MultiLink::GetChildren() const {
+  set<Element *> ret;
+  forall(run, children_) ret.insert(run->second);
+  return ret;
+}
+
+void SingleLink::L1_AddChild(Element *child) {
+  if (!child) return;
+  CHECK(!child_);
+  CL.ChangeValue(&child_, child);
+  child->L1_ConnectToParentLink(this);
+}
+void SingleLink::L1_RemoveChild(Element *child){
+  CHECK(child_ == child);
+  CL.ChangeValue(&child_, (Element *)NULL);
+  child_->L1_DisconnectFromParentLink(this);
+}
+set<Element *> SingleLink::GetChildren() const {
+  set<Element *> ret;
+  ret.insert(child_);
+  return ret;
 }

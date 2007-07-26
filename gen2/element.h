@@ -16,14 +16,17 @@
 //
 // Author: Georges Harik and Noam Shazeer
 
+#include "namer.h"
+
 struct Link;
 
 struct Element : public Named {
   Link * parent_;
   virtual bool IsDynamic() const = 0;
   virtual void L1_ConnectToParentLink (Link * link) = 0;
-  virtual OMap GetMap() const { CHECK(false); }
-  Element() :parent_(NULL);
+  virtual void L1_DisconnectFromParentLink(Link * link) = 0;
+  virtual OMap GetMap() const { CHECK(false); return NULL;}
+  Element() :parent_(NULL) {};
   // does not need an L1_Erase, since subclasses' L1_Erase skips it.
 };
 
@@ -32,48 +35,28 @@ struct Link {
   Link(Element * parent);
   void L1_Erase();
   Element * GetParent() { return parent_;}
-  virtual set<Element *> GetChildren() = 0;
+  virtual set<Element *> GetChildren() const = 0;
   virtual void L1_AddChild(Element *child) = 0;
   virtual void L1_RemoveChild(Element *child) = 0;
+  virtual ~Link(){};
 };
 struct MultiLink : public Link {
-  MultiLink(Element *parent);
+  MultiLink(Element *parent): Link(parent){}
   map<OMap, Element *> children_;
   Element * GetChild(OMap m);
-  void L1_AddChild(Element *child){
-    if (!child) return;
-    CL.InsertIntoMap(&children_, child->GetMap(), child_);
-    child->L1_ConnectToParentLink(this);
-  }
-  void L1_RemoveChild(Element *child){
-    CHECK(children_[child->GetMap()] == child);
-    CL.RemoveFromMap(&children_, child->GetMap());  
-  }
-  set<Element *> GetChildren(){
-    set<Element *> ret;
-    forall(run, children_) ret.insert(run->second);
-    return ret;
-  }
+  void L1_AddChild(Element *child);
+  void L1_RemoveChild(Element *child);
+  set<Element *> GetChildren() const;
+  virtual ~MultiLink(){}
 };
 struct SingleLink : public Link {
   Element * child_;
-  SingleLink(Element *parent) :SingleLinkBase(parent) {}
+  SingleLink(Element *parent) :Link(parent) {}
   Element * GetChild() const { return child_;  }
-  void L1_AddChild(Element *child) {
-    if (!child) return;
-    CHECK(!child_);
-    CL.ChangeValue(&child_, child);
-    child->L1_ConnectToParentLink(this);
-  }
-  void L1_RemoveChild(Element *child){
-    CHECK(child_ == child);
-    CL.ChangeValue(&child_, NULL);
-  }
-  set<Element *> GetChildren() const {
-    set<Element *> ret;
-    ret.insert(child_);
-    return ret;
-  }
+  void L1_AddChild(Element *child);
+  void L1_RemoveChild(Element *child);
+  set<Element *> GetChildren() const;
+  virtual ~SingleLink(){}
 };
 
 /*
