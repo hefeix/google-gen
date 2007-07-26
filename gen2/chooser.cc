@@ -127,20 +127,18 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
     parent_->L1_ChangeObjectCount(object, 1);
 }
 
-Chooser::Chooser(Chooser *parent){
+Chooser::Chooser(Chooser *parent) {
   parent_ = parent;
   ln_likelihood_ = 0;
   total_ = 0;
-  CL.InsertIntoSet(&M.all_choosers_, this);
-  CL.Creating(this);
+  L1_AutomaticallyName();
 }
 
 void Chooser::L1_Erase(){
   CHECK(counts_.size()==0);
   CHECK(ln_likelihood_ == 0);
   CHECK(total_ ==0);
-  CL.RemoveFromSet(&M.all_choosers_, this);
-  CL.Destroying(this);
+  Named::L1_Erase();
 }
 
 Record Chooser::ChooserInfo(bool include_objects) {

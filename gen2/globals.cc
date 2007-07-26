@@ -22,5 +22,5 @@
 
 Changelist CL;
 Blackboard BB;
-Model M;
 Namer N;
+Model M;

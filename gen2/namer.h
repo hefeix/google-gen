@@ -21,24 +21,25 @@
 
 #include "objects.h"
 
-enum NamedType {
-  STATEMENT,
-  EXPRESSION,
-  DYNAMIC_STATEMENT,
-  DYNAMIC_EXPRESSION,
-  CHOOSER,
-  NUM_NAMED_TYPES,
-};
 
 class Named {
  public:
+  enum Type {
+    STATEMENT,
+    EXPRESSION,
+    DYNAMIC_STATEMENT,
+    DYNAMIC_EXPRESSION,
+    CHOOSER,
+    NUM_NAMED_TYPES,
+  };
+
   Named();
   Object Name() const;
   void L1_SetName(Object new_name_);
   void L1_AutomaticallyName();
-  virtual NamedType Type() const = 0;
+  virtual Type GetType() const = 0;
   virtual void L1_Erase();
-  virtual OMap GetMap() { CHECK(false); return NULL;} // overriden for dynamic
+  virtual OMap GetMap() { CHECK(false); return OMap();} // overriden for dynamic
   virtual ~Named() {};
  private:
   Object name_;
@@ -49,14 +50,14 @@ class Namer {
   Namer();
   friend class Named;
   // returns null if not found
-  Named * Lookup(NamedType type, Object name) const; 
+  Named * Lookup(Named::Type type, Object name) const; 
   // a version of the previous function that returns the subtype.
   template <class NamedClass> 
     NamedClass * Find(Object name) const {
     return dynamic_cast<NamedClass *>(Lookup(NamedClass::Type(), name));
   }
   // Get a constant index of one named type by name. 
-  const map<Object, Named *> & Index(NamedType type) const 
+  const map<Object, Named *> & Index(Named::Type type) const 
     { return index_[type];}
 
  private:

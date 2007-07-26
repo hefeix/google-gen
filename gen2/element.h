@@ -25,7 +25,7 @@ struct Element : public Named {
   virtual bool IsDynamic() const = 0;
   virtual void L1_ConnectToParentLink (Link * link) = 0;
   virtual void L1_DisconnectFromParentLink(Link * link) = 0;
-  virtual OMap GetMap() const { CHECK(false); return NULL;}
+  virtual OMap GetMap() const { CHECK(false); return OMap();}
   Element() :parent_(NULL) {};
   // does not need an L1_Erase, since subclasses' L1_Erase skips it.
 };

@@ -19,39 +19,39 @@
 #include "namer.h"
 #include "changelist.h"
 Namer::Namer() {
-  index_.resize(NUM_NAMED_TYPES);
+  index_.resize(Named::NUM_NAMED_TYPES);
 }
-Named * Namer::Lookup(NamedType type, Object name) const {
+Named * Namer::Lookup(Named::Type type, Object name) const {
   Named *const * look = Index(type) % name;
   if (look) return *look;
   return NULL;
 }
 
 void Named::L1_SetName(Object new_name) {
-  Named ** clobbered = N.index_[Type()] % new_name;
+  Named ** clobbered = N.index_[GetType()] % new_name;
   if (clobbered) {
     // we should only be clobbering automatic names, which are all integers.
     CHECK(new_name.Type() == INTEGER);
-    CL.RemoveFromMap(&N.index_[Type()], new_name);
+    CL.RemoveFromMap(&N.index_[GetType()], new_name);
   }
   CL.ChangeValue(&name_, new_name);
-  CL.InsertIntoMap(&N.index_[Type()], new_name, this);
+  CL.InsertIntoMap(&N.index_[GetType()], new_name, this);
   if (clobbered) (*clobbered)->L1_AutomaticallyName();
 }
 
 void Named::L1_AutomaticallyName() {
   // do we care if the increment of next_name_ reverts??
-  while (N.Index(Type()) % (Object)Integer::Make(N.next_name_)) N.next_name_++;
+  while (N.Index(GetType()) 
+	 % (Object)Integer::Make(N.next_name_)) N.next_name_++;
   L1_SetName(Integer::Make(N.next_name_));
 }
 
 void Named::L1_Erase() {
-  CL.RemoveFromMap(&N.index_[Type()], name_);
+  CL.RemoveFromMap(&N.index_[GetType()], name_);
   CL.Destroying(this);
 }
 
 Named::Named() {
   CL.Creating(this);
-  L1_AutomaticallyName();
 }
 

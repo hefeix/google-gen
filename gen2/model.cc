@@ -17,6 +17,7 @@
 // Author: Georges Harik and Noam Shazeer
 
 #include "model.h"
+#include "fstream.h"
 
 Model::Model(){
   global_flake_chooser_ = new Chooser(NULL);
@@ -37,4 +38,31 @@ void Model::A1_AddToLnLikelihood(LL delta) {
 }
 void Model::A1_AddToSearchWork(int64 delta) {
   CL.ChangeValue(&search_work_, search_work_+delta);
+}
+
+void Model::Load(istream &input) {
+  OTuple t;
+  input >> t;
+  vector<Statement *> v = Statement::Parse(t.Data());
+  cout << "Just loaded" << endl;
+  for (uint i=0; i<v.size(); i++) cout << v[i]->ToString(0);
+  cout << "End program" << endl;
+}
+
+string Model::ToString() const {
+  string ret = "{\n";
+  forall(run, N.Index(Named::STATEMENT)) {
+    Statement *s = dynamic_cast<Statement *>(run->second);
+    if (s->parent_ == NULL) {
+      ret += s->ToString(2);
+    }
+  }
+  ret += "}\n";
+  return ret;
+}
+
+void Model::TestLoadAndStore(string filename) {
+  ifstream input(filename.c_str());
+  input >> M;
+  cout << M;
 }
