@@ -68,6 +68,7 @@ enum ObjectType {
   OBITSEQ,
   STRING, 
   ESCAPE,
+  NULLTYPE,
   ERRORTYPE,
 };
 inline string ObjectTypeName(ObjectType t) {
@@ -142,7 +143,7 @@ class Object {
   // returns the type of the definition (which is always a subtype)
   // should only be called on a generic object. 
   ObjectType Type() const { 
-    CHECK(def_ != NULL);
+    if (def_ == NULL) return NULLTYPE;
     return def_->Type();
   }
   // returns the type of this Object object
@@ -161,7 +162,7 @@ class Object {
     return def_->DeepFingerprint(level);
   }
 
- private:
+ protected:
   ObjectDefinition * def_;
   void PointTo(ObjectDefinition *def){
     if (def_) {
@@ -256,13 +257,13 @@ class SpecificObject : public Object {
   // constructors at bottom to prevent emacs from @#($*@ing up the indentation
   SpecificObject() : Object() {}
     
-    SpecificObject(const Object & o) : Object(o) {
-      CHECK(o.Type() == OT);    
+    SpecificObject(const Object & o) : Object(o) {      
+      CHECK(def_ == NULL || o.Type() == OT);    
     }
       
       SpecificObject(ObjectDefinition *def) 
 	: Object(def) {
-	CHECK(def->Type() == OT);
+	CHECK(def == NULL || def->Type() == OT);
       }
 	
 	SpecificObject(void *null) : Object(null) {}

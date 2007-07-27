@@ -30,7 +30,7 @@ class DynamicStatement;
 class DynamicExpression;
 
 struct StaticElement : public Element {
-  StaticElement();
+  void Init();
   bool IsDynamic() const { return false; }
   void L1_ConnectToParentLink(Link *link) { parent_ = link;}
   void L1_DisconnectFromParentLink(Link *link) { 
@@ -47,7 +47,6 @@ struct StaticElement : public Element {
   Statement * GetStatementChild(int which) const;// which < NumStatementChildren
   Expression * GetExpressionChild(int which) const;
   vector<Statement *> GetStatementChildren() const;
-  void CreateChildren(int num);
   void L1_LinkChild(int where, StaticElement *child);
   void L1_UnlinkChild(int where);
   Object GetObject(int which) const;
@@ -65,7 +64,7 @@ struct StaticElement : public Element {
 struct Statement : public StaticElement{
   
   // Constructors etc.
-  Statement();
+  void Init(); // shadow constructor
   virtual ~Statement(){}
   Named::Type GetType() const { return Named::STATEMENT; }
   
@@ -78,6 +77,7 @@ struct Statement : public StaticElement{
   static vector<Statement *> Parse(const Tuple & t); // ad hoc parser.
   string ToString(int indent) const; // includes the subtree
   string ToStringSingle() const;
+  static Statement * MakeStatement(Keyword type);
 
   protected:
 };
@@ -103,7 +103,7 @@ struct OnStatement : public Statement {
   //friend class SubType;
   void Update(const QueryUpdate &update, SubType *sub);
 
-  OnStatement();
+  void Init();
   void L1_Subscribe(); // subscribe to the appropriate query.
   SubType * subscription_;
 };
@@ -124,7 +124,7 @@ struct RepeatStatement : public Statement {
   Variable GetRepetitionVariable() { return GetObject(REPETITION_VARIABLE);}
   Keyword TypeKeyword() const;
 
-  RepeatStatement();
+  void Init();
   // this variable is useless except to preserve the property that a dynamic
   // node is associated with a unique (static node, substitution) pair.
   // assigned automatically in the constructor.
@@ -140,7 +140,7 @@ struct DelayStatement : public Statement {
   int NumChildren() const { return NUM_CHILDREN;}
   Keyword TypeKeyword() const;
   
-  DelayStatement();
+  void Init();
 };
   
 struct LetStatement : public Statement {
@@ -160,7 +160,7 @@ struct LetStatement : public Statement {
   Variable GetVariable() { return GetObject(VARIABLE);}
   Keyword TypeKeyword() const;
 
-  LetStatement();
+  void Init();
 };
 
 struct OutputStatement : public Statement {
@@ -171,18 +171,32 @@ struct OutputStatement : public Statement {
   int NumExpressionChildren() const { return NUM_CHILDREN;}
   int NumChildren() const { return NUM_CHILDREN;}
   Keyword TypeKeyword() const;
-
-  OutputStatement();
+  void Init();
 };
 
+struct IfStatement : public Statement {
+  enum {
+    CONDITION,
+    IF,
+    ELSE,
+    NUM_CHILDREN,
+  };
+  int NumExpressionChildren() const { return IF;}
+  int NumChildren() const { return NUM_CHILDREN;}
+  Keyword TypeKeyword() const;
+  void Init();
+};
+
+
 struct Expression : public StaticElement {  
-  Expression();
+  void Init();
   static Expression * Parse(const Object & o); // ad hoc parser.
   virtual string ToString() const;
   Named::Type GetType() const { return Named::EXPRESSION;}
   virtual int NumExpressionChildren() const { return NumChildren();}
   virtual int NumChildren() const = 0;
   virtual int NumObjects() const { return 0;}
+  static Expression * MakeExpression(Keyword type);
 };
 
 struct SubstituteExpression : public Expression {
@@ -192,7 +206,7 @@ struct SubstituteExpression : public Expression {
   };
   int NumChildren() const { return NUM_CHILDREN;}
   Keyword TypeKeyword() const;
-  SubstituteExpression();
+  void Init() {Expression::Init();}
 };
 
 struct FlakeChoiceExpression : public Expression { 
@@ -202,7 +216,7 @@ struct FlakeChoiceExpression : public Expression {
   };
   int NumChildren() const { return NUM_CHILDREN;}
   Keyword TypeKeyword() const;
-  FlakeChoiceExpression();
+  void Init() {Expression::Init();}
 };
 
 struct ConstantExpression : public Expression {
@@ -215,10 +229,11 @@ struct ConstantExpression : public Expression {
   };
   int NumChildren() const { return NUM_CHILDREN;}
   int NumObjects() const { return NUM_OBJECTS;}
-  ConstantExpression();
+  void Init() {Expression::Init();}
   Keyword TypeKeyword() const;
   string ToString() const;
 };
+
 
 /*
 struct MatchCombineExpression : public Expression {
@@ -230,12 +245,6 @@ struct MatchCombineExpression : public Expression {
 
 
 
-
-struct IfStatement : public Statement {
-  Expression * expression_;
-  Statement * child_;
-  Statement * else_;
-};
 
 struct ParallelStatement : public Statement {
   // These have to be implemented differently

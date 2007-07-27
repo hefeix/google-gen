@@ -127,11 +127,14 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
     parent_->L1_ChangeObjectCount(object, 1);
 }
 
-Chooser::Chooser(Chooser *parent) {
-  parent_ = parent;
+void Chooser::Init() {
+  Named::Init();
+  parent_ = NULL;
   ln_likelihood_ = 0;
   total_ = 0;
-  L1_AutomaticallyName();
+}
+void Chooser::L1_SetParent(Chooser *parent) {
+  CL.ChangeValue(&parent_, parent);
 }
 
 void Chooser::L1_Erase(){

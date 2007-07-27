@@ -51,7 +51,8 @@ void Named::L1_Erase() {
   CL.Destroying(this);
 }
 
-Named::Named() {
+void Named::Init() {
   CL.Creating(this);
+  L1_AutomaticallyName();
 }
 

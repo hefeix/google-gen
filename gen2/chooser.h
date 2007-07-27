@@ -42,7 +42,8 @@ struct Chooser : public Named {
   LL ln_likelihood_;
   map<int, int> counts_;
   int64 total_;
-  Chooser(Chooser *parent);
+  void Init();
+  void L1_SetParent(Chooser *parent);
   virtual ~Chooser() {}
   void L1_Erase();
   Named::Type GetType() const { return Named::CHOOSER;}
@@ -58,7 +59,7 @@ struct Chooser : public Named {
   Record ChooserInfo(bool include_objects);
 };
 struct UintChooser : public Chooser {
-  UintChooser() : Chooser(NULL) {}
+  void Init() { Chooser::Init();}
   virtual LL ComputeLLDelta(int object,
 			    int old_count, int new_count, 
 			    int old_num_objects,  int new_num_objects, 
