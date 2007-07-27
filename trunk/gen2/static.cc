@@ -19,10 +19,12 @@
 #include "static.h"
 #include "model.h"
 
-
-
-StaticElement::StaticElement() {
+void StaticElement::Init() {
+  Named::Init();
   dynamic_children_ = new MultiLink(this);
+  for (int i=0; i<NumChildren(); i++) 
+    static_children_.push_back(new SingleLink(this));  
+  objects_.resize(NumObjects());
 }
 void StaticElement::L1_Erase() {
   for (uint i=0; i<static_children_.size(); i++) 
@@ -54,10 +56,6 @@ void StaticElement::L1_SetObject(int which, Object new_value) {
   CHECK(which < (int)objects_.size());
   CL.ChangeValue(&(objects_[which]), new_value);
 }
-void StaticElement::CreateChildren(int num) {
-  CHECK(static_children_.size() == 0);
-  for (int i=0; i<num; i++) static_children_.push_back(new SingleLink(this));  
-}
 void StaticElement::L1_LinkChild(int where, StaticElement *child){
   CHECK(where < (int)static_children_.size());
   static_children_[where]->L1_AddChild(child);
@@ -67,9 +65,8 @@ void StaticElement::L1_UnlinkChild(int where){
   static_children_[where]->L1_RemoveChild(GetChild(where));
 }
 
-Statement::Statement() {  
-  L1_AutomaticallyName();
-  // don't call CL.Creating(this) because it's called by the superclass Named.
+void Statement::Init() {
+  StaticElement::Init();
 }
 
 // Can't erase statements that are linked
@@ -78,7 +75,8 @@ void Statement::L1_Erase() {
   Named::L1_Erase();
 }
 
-OnStatement::OnStatement() {
+void OnStatement::Init() {
+  Statement::Init();
 }
 
 void OnStatement::L1_Subscribe() {
@@ -91,49 +89,56 @@ void OnStatement::Update(const QueryUpdate &update, SubType *sub) {
   cout << "TODO: implement on statement update";
 }
 
-RepeatStatement::RepeatStatement() {
+void RepeatStatement::Init() {
   L1_SetObject(REPETITION_VARIABLE, M.L1_GetNextUniqueVariable());
 }
 
-DelayStatement::DelayStatement() {}
-
-LetStatement::LetStatement() {}
-
-OutputStatement::OutputStatement() {}
-
-Expression::Expression() {
-  L1_AutomaticallyName();
+void DelayStatement::Init() {
+  Statement::Init();
+}
+void LetStatement::Init() {
+  Statement::Init();
+}
+void OutputStatement::Init() {
+  Statement::Init();
+}
+void IfStatement::Init() {
+  Statement::Init();
 }
 
-FlakeChoiceExpression::FlakeChoiceExpression() {}
+void Expression::Init() {
+  StaticElement::Init();
+}
 
-SubstituteExpression::SubstituteExpression() {}
-
-ConstantExpression::ConstantExpression() {}
+Statement * Statement::MakeStatement(Keyword type) {
+  if (type.Data() == "on") return Make<OnStatement>();
+  if (type.Data() == "repeat") return Make<RepeatStatement>();
+  if (type.Data() == "delay") return Make<DelayStatement>();
+  if (type.Data() == "let") return Make<LetStatement>();
+  if (type.Data() == "output") return Make<OutputStatement>();
+  if (type.Data() == "if") return Make<IfStatement>();
+  CHECK(false);
+  return NULL;
+}
 
 Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
-  Statement * ret;
-  Keyword stype = t[*position++];
-  if (stype.Data() == "on") ret = new OnStatement();
-  else if (stype.Data() == "repeat") ret = new RepeatStatement();
-  else if (stype.Data() == "delay") ret = new DelayStatement();
-  else if (stype.Data() == "let") ret = new LetStatement();
-  else if (stype.Data() == "output") ret = new OutputStatement();
-  else CHECK(false);
+  cout << "ParseSingle pos=" << *position << " t=" << OTuple::Make(t) << endl;
+  Keyword stype = t[(*position)++];
+  if (stype == NULL) return NULL;
+  Statement * ret = MakeStatement(stype);
   for (int i=0; i<ret->NumObjects(); i++) {
     CHECK(*position < t.size());
-    Object o = t[*position++];
+    Object o = t[(*position)++];
     ret->L1_SetObject(i, o);
   }
   for (int i=0; i<ret->NumExpressionChildren(); i++) {
     CHECK(*position < t.size());
-    Object o = t[*position++];
+    Object o = t[(*position)++];
     Expression * e = Expression::Parse(o);
     ret->L1_LinkChild(i, e);
   }
-  
   if (*position < t.size()  && t[*position].Type() == OMAP) {
-    OMap m = t[*(position++)];
+    OMap m = t[(*position)++];
     forall(run, m.Data()) {
       Keyword key = run->first;
       Object value = run->second;
@@ -149,6 +154,7 @@ Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
 }
 
 vector<Statement *> Statement::Parse(const Tuple & t) {
+  cout << "Statement::Parse " << OTuple::Make(t) << endl;
   uint position = 0;
   Statement * parent = NULL;
   vector<Statement *> ret;
@@ -169,6 +175,8 @@ vector<Statement *> Statement::Parse(const Tuple & t) {
     } else {
       Statement * s = ParseSingle(t, &position);
       if (parent) {
+	cout << "Hooking up child " << s->ToString(0) << endl;
+	cout << "To parent " << parent->ToString(0) << endl;
 	CHECK(parent->NumStatementChildren() == 1);
 	parent->L1_LinkChild(parent->NumExpressionChildren(), s);
       } else {
@@ -181,23 +189,21 @@ vector<Statement *> Statement::Parse(const Tuple & t) {
 }
 
 Expression * Expression::Parse(const Object & o){
+  cout << "Expression::Parse " << o << endl;
+  if (o == NULL) return NULL;
   Tuple t;
-  if (o.Type() != OTUPLE) {
-    if (o != NULL) t.push_back(o);
-  } else {
-    t = OTuple(o).Data();
+  Expression *ret;
+  if (o.Type() == OTUPLE) t = OTuple(o).Data();
+  if (o.Type() != OTUPLE 
+      || t.size() == 0
+      || t[0].Type() != KEYWORD) {
+    ret = Make<ConstantExpression>();
+    ret->L1_SetObject(0, o);
+    return ret;
   }
-  if (t.size() == 0) 
-    return NULL;
-  Expression * ret;
-  if (t.size() == 1) {
-    ret = new ConstantExpression();
-  } else {
-    Keyword type = t[0];
-    if (type.Data() == "substitute") ret = new FlakeChoiceExpression();
-    else if (type.Data() == "flake_choice") ret = new FlakeChoiceExpression();
-    else CHECK(false);
-  }
+  Keyword type = t[0];
+  ret = MakeExpression(type);
+  
   CHECK((int)t.size()-1 == ret->NumObjects() + ret->NumChildren());
   for (int i=0; i<ret->NumObjects(); i++) {
     ret->L1_SetObject(i, t[1+i]);
@@ -211,6 +217,7 @@ Expression * Expression::Parse(const Object & o){
 
 string Statement::ToString(int indent) const {
   string ret(indent, ' ');
+  if (this == NULL) return ret + "null\n";
   ret += ToStringSingle();
   vector<Statement *> children = GetStatementChildren();
   if (children.size() == 0) {
@@ -237,11 +244,23 @@ string Expression::ToString() const {
   ret += ")";
   return ret;
 }
+
+Expression * Expression::MakeExpression(Keyword type) {
+  if (type.Data() == "substitute") return Make<SubstituteExpression>();
+  if (type.Data() == "constant") return Make<ConstantExpression>();
+  if (type.Data() == "flake_choice") return Make<FlakeChoiceExpression>();
+  CHECK(false);
+  return NULL;
+}
+
 string ConstantExpression::ToString() const {
   Object o = GetObject(OBJECT);
   if (o==NULL) return "null";
   if (o.Type() == OTUPLE) {
-    return "[" + o.ToString() + "]";
+    Tuple t = OTuple(o).Data();
+    if (t.size() > 0 && t[0].Type() == KEYWORD) {
+      return "(constant " + o.ToString() + ")";
+    }
   }
   return o.ToString();
 }
@@ -272,6 +291,9 @@ Keyword LetStatement::TypeKeyword() const {
 }
 Keyword OutputStatement::TypeKeyword() const {
   return Keyword::Make("output");
+}
+Keyword IfStatement::TypeKeyword() const {
+  return Keyword::Make("if");
 }
 
 Keyword ConstantExpression::TypeKeyword() const {

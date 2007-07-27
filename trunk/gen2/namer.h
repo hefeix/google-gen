@@ -33,7 +33,8 @@ class Named {
     NUM_NAMED_TYPES,
   };
 
-  Named();
+  //Named();
+  void Init(); // shadow constructor
   Object Name() const;
   void L1_SetName(Object new_name_);
   void L1_AutomaticallyName();
@@ -44,6 +45,12 @@ class Named {
  private:
   Object name_;
 };
+
+template<class T> T * Make() {
+  T *t = new T;
+  t->Init();
+  return t;
+}
 
 class Namer {
  public:

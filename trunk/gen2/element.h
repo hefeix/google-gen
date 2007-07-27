@@ -51,7 +51,7 @@ struct MultiLink : public Link {
 };
 struct SingleLink : public Link {
   Element * child_;
-  SingleLink(Element *parent) :Link(parent) {}
+  SingleLink(Element *parent) :Link(parent), child_(NULL) {}
   Element * GetChild() const { return child_;  }
   void L1_AddChild(Element *child);
   void L1_RemoveChild(Element *child);

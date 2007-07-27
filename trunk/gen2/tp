@@ -1,0 +1,16 @@
+{
+  on pattern ((S a b))
+  delay #0101010
+  output (substitute (C a 0) );
+  if true {
+     null
+     output (IsFlake Noam);
+  }
+  on pattern ()
+  null
+  on pattern ()
+  null
+  on pattern ()
+  null
+
+}
