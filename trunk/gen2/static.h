@@ -187,6 +187,13 @@ struct IfStatement : public Statement {
   void Init();
 };
 
+struct ParallelStatement : public Statement {
+  int NumExpressionChildren() const { return 0;}
+  int NumChildren() const { return static_children_.size(); }
+  Keyword TypeKeyword() const { return Keyword::Make("parallel");}
+  void Init() { Statement::Init();}
+};
+
 
 struct Expression : public StaticElement {  
   void Init();

@@ -117,6 +117,7 @@ Statement * Statement::MakeStatement(Keyword type) {
   if (type.Data() == "let") return Make<LetStatement>();
   if (type.Data() == "output") return Make<OutputStatement>();
   if (type.Data() == "if") return Make<IfStatement>();
+  if (type.Data() == "parallel") return Make<ParallelStatement>();
   CHECK(false);
   return NULL;
 }
@@ -166,7 +167,15 @@ vector<Statement *> Statement::Parse(const Tuple & t) {
       position++;
     } else if (o.Type() == OTUPLE) {
       vector<Statement *> subs = Parse(OTuple(o).Data());
-      CHECK((int)subs.size() == parent->NumStatementChildren());
+      if (parent->TypeKeyword().Data() == "parallel") {
+	CHECK((int)parent->static_children_.size() 
+	      == parent->NumExpressionChildren());
+	while (parent->static_children_.size() < 
+	       parent->NumExpressionChildren() + subs.size()) {
+	  parent->static_children_.push_back(new SingleLink(parent));
+	}
+      }
+      CHECK(parent->NumStatementChildren() == (int)subs.size());      
       for (uint i=0; i<subs.size(); i++) {
 	parent->L1_LinkChild(parent->NumExpressionChildren()+i, subs[i]);
       }
@@ -220,17 +229,18 @@ string Statement::ToString(int indent) const {
   if (this == NULL) return ret + "null\n";
   ret += ToStringSingle();
   vector<Statement *> children = GetStatementChildren();
+  if (children.size() > 1 || TypeKeyword().Data() == "parallel") {
+    ret += " {\n";
+    for (uint i=0; i<children.size(); i++) 
+      ret += children[i]->ToString(indent+2);
+    ret += string(indent, ' ') + "}\n";
+    return ret;
+  }
   if (children.size() == 0) {
     return ret + " ;\n";
   }
-  if (children.size() == 1) {
-    return ret + "\n" + children[0]->ToString(indent+2);
-  }
-  ret += " {\n";
-  for (uint i=0; i<children.size(); i++) 
-    ret += children[i]->ToString(indent+2);
-  ret += string(indent, ' ') + "}\n";
-  return ret;
+  CHECK(children.size() == 1);
+  return ret + "\n" + children[0]->ToString(indent+2);
 }
 string Statement::ToStringSingle() const {
   string ret = TypeKeyword().ToString();
@@ -305,4 +315,4 @@ Keyword SubstituteExpression::TypeKeyword() const {
 Keyword FlakeChoiceExpression::TypeKeyword() const {
   return Keyword::Make("flake_choice");
 }
-
+ 
