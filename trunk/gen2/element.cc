@@ -43,6 +43,10 @@ set<Element *> MultiLink::GetChildren() const {
   return ret;
 }
 
+SinSingleLink::SingleLink(Element *parent) :
+  Link(parent), child_(NULL), violation_(new MissingLinkViolation(this)){
+}
+
 void SingleLink::L1_AddChild(Element *child) {
   if (!child) return;
   CHECK(!child_);

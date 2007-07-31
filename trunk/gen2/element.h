@@ -30,6 +30,7 @@ struct Element : public Named {
   // does not need an L1_Erase, since subclasses' L1_Erase skips it.
 };
 
+// we use the convention that parents own all links.
 struct Link {
   Element * parent_;
   Link(Element * parent);
@@ -51,8 +52,9 @@ struct MultiLink : public Link {
 };
 struct SingleLink : public Link {
   Element * child_;
-  SingleLink(Element *parent) :Link(parent), child_(NULL) {}
+  SingleLink(Element *parent);
   Element * GetChild() const { return child_;  }
+  MissingLinkViolation * violation_;
   void L1_AddChild(Element *child);
   void L1_RemoveChild(Element *child);
   set<Element *> GetChildren() const;
