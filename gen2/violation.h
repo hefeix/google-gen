@@ -33,14 +33,12 @@ enum ViolationType{
 
 // base class for all violations.
 struct Violation {
-  Violation();
-  void L1_Erase() {
+  virtual void Init();
+  virtual void L1_Erase() {
     // remove from the model's set of violations
     L1_RemoveFromGlobalMap();
-    L1_EraseSubclass();
     CL.Destroying(this);
   }
-  virtual void L1_EraseSubclass() {};
   virtual ~Violation(){}
   virtual ViolationType GetType() = 0;
   void L1_InsertIntoGlobalMap();
@@ -48,18 +46,26 @@ struct Violation {
 };
 
 struct RequirementViolation : public Violation {  
-  RequirementViolation(Requirement * requirement);
+  void Init(Requirement * requirement);
   Requirement * requirement_;
   ViolationType GetType() { return REQUIREMENT_VIOLATION;}
+  
 };
 
 struct ProhibitionViolation : public Violation {
-  ProhibitionViolation(Prohibition * prohibition, 
-		       OTuple tuple);
+  void Init(Prohibition * prohibition, 
+	    OTuple tuple);
   Prohibition *prohibition_;
   OTuple tuple_;
   ViolationType GetType() { return PROHIBITION_VIOLATION;}
+
 };
 
+class SingleLink;
+struct MissingLinkViolation {
+  Void Init(SingleLink * link);
+  SingleLink *link_;
+  ViolationType GetType() { return MISSING_LINK_VIOLATION;}
+};
 
 #endif

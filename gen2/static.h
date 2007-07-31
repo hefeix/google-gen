@@ -39,6 +39,7 @@ struct StaticElement : public Element {
   }
   void L1_Erase();
 
+  // these links (like all links) are owned by the parent
   MultiLink * dynamic_children_;
   vector<SingleLink *> static_children_; // statements and expressions
   vector<Object> objects_;

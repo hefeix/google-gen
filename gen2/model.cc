@@ -20,8 +20,8 @@
 #include "fstream.h"
 
 Model::Model(){
-  global_flake_chooser_ = Make<Chooser>();
-  global_uint_chooser_ = Make<UintChooser>();
+  global_flake_chooser_ = New<Chooser>();
+  global_uint_chooser_ = New<UintChooser>();
   ln_likelihood_ = 0;
   next_name_ = 0;
   next_unique_variable_ = -1;

@@ -111,13 +111,13 @@ void Expression::Init() {
 }
 
 Statement * Statement::MakeStatement(Keyword type) {
-  if (type.Data() == "on") return Make<OnStatement>();
-  if (type.Data() == "repeat") return Make<RepeatStatement>();
-  if (type.Data() == "delay") return Make<DelayStatement>();
-  if (type.Data() == "let") return Make<LetStatement>();
-  if (type.Data() == "output") return Make<OutputStatement>();
-  if (type.Data() == "if") return Make<IfStatement>();
-  if (type.Data() == "parallel") return Make<ParallelStatement>();
+  if (type.Data() == "on") return New<OnStatement>();
+  if (type.Data() == "repeat") return New<RepeatStatement>();
+  if (type.Data() == "delay") return New<DelayStatement>();
+  if (type.Data() == "let") return New<LetStatement>();
+  if (type.Data() == "output") return New<OutputStatement>();
+  if (type.Data() == "if") return New<IfStatement>();
+  if (type.Data() == "parallel") return New<ParallelStatement>();
   CHECK(false);
   return NULL;
 }
@@ -206,7 +206,7 @@ Expression * Expression::Parse(const Object & o){
   if (o.Type() != OTUPLE 
       || t.size() == 0
       || t[0].Type() != KEYWORD) {
-    ret = Make<ConstantExpression>();
+    ret = New<ConstantExpression>();
     ret->L1_SetObject(0, o);
     return ret;
   }
@@ -256,9 +256,9 @@ string Expression::ToString() const {
 }
 
 Expression * Expression::MakeExpression(Keyword type) {
-  if (type.Data() == "substitute") return Make<SubstituteExpression>();
-  if (type.Data() == "constant") return Make<ConstantExpression>();
-  if (type.Data() == "flake_choice") return Make<FlakeChoiceExpression>();
+  if (type.Data() == "substitute") return New<SubstituteExpression>();
+  if (type.Data() == "constant") return New<ConstantExpression>();
+  if (type.Data() == "flake_choice") return New<FlakeChoiceExpression>();
   CHECK(false);
   return NULL;
 }
@@ -294,7 +294,7 @@ Keyword RepeatStatement::TypeKeyword() const {
   return Keyword::Make("repeat");
 }
 Keyword DelayStatement::TypeKeyword() const {
-  return Keyword::Make("delay ");
+  return Keyword::Make("delay");
 }
 Keyword LetStatement::TypeKeyword() const {
   return Keyword::Make("let");

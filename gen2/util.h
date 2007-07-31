@@ -303,5 +303,45 @@ int ConnectedComponents(int num_objects,
 			const map<int, set<int> > & adjancency_matrix,
 			vector<int> * components);
 
+// We don't want to use C++'s constructors, since they don't know about 
+// subclasses, so we use Init() to construct class hierarchies.  New is a 
+// factory method that constructs objects using new and calls Init() on them.
+template<class T> T * New() {
+  T *t = new T;
+  t->Init();
+  return t;
+}
+template<class T, class P1> T * New(const P1 & p1) {
+  T *t = new T;
+  t->Init(p1);
+  return t;
+}
+template<class T, class P1, class P2> T * New(const P1 & p1, const P2 & p2) {
+  T *t = new T;
+  t->Init(p1, p2);
+  return t;
+}
+template<class T, class P1, class P2, class P3> T * New(const P1 & p1, 
+							const P2 & p2,
+							const P3 & p3) {
+  T *t = new T;
+  t->Init(p1, p2, p3);
+  return t;
+}
 
+
+
+/*
+Statement * st = New<Statement>()->Init(param1, param2, param3)
+
+template<class T>
+class New {
+
+  
+  template<O0> Init() {}
+  template<O1> Init(const O1& o1) {}
+  operator T* () { return ptr_; }
+  T* ptr_;
+}
+*/
 #endif

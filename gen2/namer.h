@@ -46,12 +46,6 @@ class Named {
   Object name_;
 };
 
-template<class T> T * Make() {
-  T *t = new T;
-  t->Init();
-  return t;
-}
-
 class Namer {
  public:
   Namer();
