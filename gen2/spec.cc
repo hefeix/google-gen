@@ -44,12 +44,11 @@ void Requirement::Update(const QueryUpdate &update, SubType * sub){
 }
 void Requirement::L1_AddViolation() {
   CHECK(violation_ == 0);
-  CL.ChangeValue(&violation_, new RequirementViolation(this));
+  New<RequirementViolation>(this);
 }
 void Requirement::L1_RemoveViolation() {
   CHECK(violation_);
   violation_->L1_Erase();
-  CL.ChangeValue(&violation_, (RequirementViolation*)NULL);
 }
 
 Prohibition::Prohibition(OTuple tuple) {
@@ -88,7 +87,7 @@ void Prohibition::Update(const QueryUpdate &update, SubType * sub){
   }
 }
 void Prohibition::L1_AddViolation(OTuple t) {
-  CL.InsertIntoMap(&violations_, t, new ProhibitionViolation(this, t));
+  New<ProhibitionViolation>(this, t);
 }
 void Prohibition::L1_RemoveViolation(OTuple t) {
   ProhibitionViolation * violation  = violations_[t];

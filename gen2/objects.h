@@ -53,65 +53,49 @@ a-z(otherwise)   It's a keyword, except for the following exceptions:
 #include "hash.h"
 #include "numbers.h"
 
-enum ObjectType {
-  OBJECT,
-  FLAKE,
-  KEYWORD,
-  VARIABLE,
-  OTUPLE,
-  OMAP,
-  OPATTERN,
-  BOOLEAN,
-  INTEGER,
-  REAL,
-  OTIME, 
-  OBITSEQ,
-  STRING, 
-  ESCAPE,
-  NULLTYPE,
-  ERRORTYPE,
-};
-inline string ObjectTypeName(ObjectType t) {
-  switch(t) {
-  case FLAKE: return "FLAKE";
-  case KEYWORD: return "KEYWORD";
-  case VARIABLE: return "VARIABLE";
-  case OTUPLE: return "OTUPLE";
-  case OMAP: return "OMAP";
-  case OPATTERN: return "OPATTERN";
-  case BOOLEAN: return "BOOLEAN";
-  case INTEGER: return "INTEGER";
-  case REAL: return "REAL";
-  case OTIME: return "OTIME";
-  case OBITSEQ: return "OBITSEQ";
-  case STRING: return "STRING";
-  case ESCAPE: return "ESCAPE";
-  case ERRORTYPE: return "ERRORTYPE";
-  default: CHECK(false); return "ERROR";
-  }
-}
-
-// There will exist no two identical ObjectDefinition objects.
-struct ObjectDefinition {
-  virtual ObjectType Type() const = 0;
-  string ToString(bool verbose = false) const {
-    string ret = ToStringSpecific(verbose);
-    if (verbose) ret = "<" + ObjectTypeName(Type()) + " rc=" 
-      + itoa(reference_count_) + "> " + ret;
-    return ret;
-  }
-  virtual string ToStringSpecific(bool verbose) const {
-    return "ERROR";
-  }
-  virtual ~ObjectDefinition(){}
-  int reference_count_;
-  ObjectDefinition() {
-    reference_count_ = 0;
-  }
-  virtual uint64 DeepFingerprint(uint64 level = 0) const = 0;
-};
+class ObjectDefinition;
 
 class Object {
+
+  enum ObjectType {
+    OBJECT,
+    FLAKE,
+    KEYWORD,
+    VARIABLE,
+    OTUPLE,
+    OMAP,
+    OPATTERN,
+    BOOLEAN,
+    INTEGER,
+    REAL,
+    OTIME, 
+    OBITSEQ,
+    STRING, 
+    ESCAPE,
+    NULLTYPE,
+    ERRORTYPE,
+  };
+
+  static inline string ObjectTypeName(ObjectType t) {
+    switch(t) {
+    case FLAKE: return "FLAKE";
+    case KEYWORD: return "KEYWORD";
+    case VARIABLE: return "VARIABLE";
+    case OTUPLE: return "OTUPLE";
+    case OMAP: return "OMAP";
+    case OPATTERN: return "OPATTERN";
+    case BOOLEAN: return "BOOLEAN";
+    case INTEGER: return "INTEGER";
+    case REAL: return "REAL";
+    case OTIME: return "OTIME";
+    case OBITSEQ: return "OBITSEQ";
+    case STRING: return "STRING";
+    case ESCAPE: return "ESCAPE";
+    case ERRORTYPE: return "ERRORTYPE";
+    default: CHECK(false); return "ERROR";
+    }
+  }
+
  public:
   Object() {
     def_ = NULL;
@@ -177,6 +161,27 @@ class Object {
     }
   }
 };
+
+// There will exist no two identical ObjectDefinition objects.
+struct ObjectDefinition {
+  virtual Object::ObjectType Type() const = 0;
+  string ToString(bool verbose = false) const {
+    string ret = ToStringSpecific(verbose);
+    if (verbose) ret = "<" + Object::ObjectTypeName(Type()) + " rc=" 
+      + itoa(reference_count_) + "> " + ret;
+    return ret;
+  }
+  virtual string ToStringSpecific(bool verbose) const {
+    return "ERROR";
+  }
+  virtual ~ObjectDefinition(){}
+  int reference_count_;
+  ObjectDefinition() {
+    reference_count_ = 0;
+  }
+  virtual uint64 DeepFingerprint(uint64 level = 0) const = 0;
+};
+
 
 
 inline bool operator ==(const Object & o1, const Object & o2) {

@@ -94,8 +94,11 @@ void Add(Map *m, Object key, Object value);
 // union=
 void Add(Map *m, const Map & m2);
 
-// Provide a restricted substitution to a set of terms
-Map Restrict(const Map & m, const set<Object> & keys);
+// Provide a restricted substitution to a set of keys.  The keys are objects
+template<class OType>
+OMap Restrict(const OMap & m, const set<OType> & keys){
+  return OMap::Make(Restrict(m.Data(), keys));  
+}
 
 Map Reverse(const Map & m);
 
@@ -109,6 +112,7 @@ bool IsSubsetOf(const Map  & m1, const Map & m2);
 
 set<Variable> GetVariables(const Tuple & t);
 set<Variable> GetVariables(const MPattern & v);
+set<Variable> GetVariables(const Pattern & v);
 
 // find ths connected components of the pattern.  
 // Two tuples are connected if they share variables
