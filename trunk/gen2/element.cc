@@ -17,49 +17,352 @@
 // Author: Georges Harik and Noam Shazeer
 
 #include "element.h"
+#include "link.h"
 #include "changelist.h"
 
-Link::Link(Element *parent) {
-  CL.Creating(this);
-  parent_ = parent;
+
+
+void StaticElement::Init() {
+  Named::Init();
+  dynamic_children_ = new MultiLink(this);
+  for (int i=0; i<NumChildren(); i++) 
+    static_children_.push_back(new SingleLink(this));  
+  objects_.resize(NumObjects());
 }
-void Link::L1_Erase() {
-  CHECK(GetChildren().size() == 0);
-  CL.Destroying(this);
+void StaticElement::L1_Erase() {
+  for (uint i=0; i<static_children_.size(); i++) 
+    static_children_[i]->L1_Erase();
+  dynamic_children_->L1_Erase();
+  Named::L1_Erase();
 }
-void MultiLink::L1_AddChild(Element *child){
-  if (!child) return;
-  CL.InsertIntoMap(&children_, child->GetMap(), child);
-  child->L1_ConnectToParentLink(this);
+set<Variable> StaticElement::GetVariables() const { 
+  if (!parent_) return set<Variable>();
+  return Union(parent_->GetVariables(), parent_->GetIntroducedVariables());
 }
-void MultiLink::L1_RemoveChild(Element *child){
-  CHECK(children_[child->GetMap()] == child);
-  CL.RemoveFromMap(&children_, child->GetMap());  
-  child->L1_DisconnectFromParentLink(this);
+
+set<Variable> StaticElement::GetIntroducedVariables() const {
+  return set<Variable>();
 }
-set<Element *> MultiLink::GetChildren() const {
-  set<Element *> ret;
-  forall(run, children_) ret.insert(run->second);
+
+Element * StaticElement::GetChild(int which) const { 
+  return static_children_[which]->GetChild();
+}
+Statement * StaticElement::GetStatementChild(int which) const {
+  CHECK(which < NumStatementChildren());
+  return dynamic_cast<Statement *>(GetChild(which + NumExpressionChildren()));
+}
+vector<Statement *> StaticElement::GetStatementChildren() const {
+  vector<Statement *> ret;
+  for (int i=0; i<NumStatementChildren(); i++) {
+    ret.push_back(GetStatementChild(i));
+  }
+  return ret;
+}
+Expression * StaticElement::GetExpressionChild(int which) const{
+  return dynamic_cast<Expression *>(GetChild(which));
+}
+Object StaticElement::GetObject(int which) const{
+  return objects_[which];
+}
+void StaticElement::L1_SetObject(int which, Object new_value) {
+  CHECK(which < (int)objects_.size());
+  CL.ChangeValue(&(objects_[which]), new_value);
+}
+void StaticElement::L1_LinkChild(int where, StaticElement *child){
+  CHECK(where < (int)static_children_.size());
+  static_children_[where]->L1_AddChild(child);
+}
+void StaticElement::L1_UnlinkChild(int where){
+  CHECK(where < (int)static_children_.size());
+  static_children_[where]->L1_RemoveChild(GetChild(where));
+}
+
+void Statement::Init() {
+  StaticElement::Init();
+}
+
+// Can't erase statements that are linked
+void Statement::L1_Erase() {
+  CHECK(parent_ == NULL);
+  Named::L1_Erase();
+}
+
+void OnStatement::Init() {
+  Statement::Init();
+}
+set<Variable> OnStatement::GetIntroducedVariables() const {
+  return GetVariables(pattern_.Data());
+}
+void OnStatement::L1_Subscribe() {
+  Query * q = BB.L1_GetExecuteQuery(GetPattern(), SamplingInfo(), NULL);
+  subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH | UPDATE_TIME,
+			      this);
+  subscription_->L1_SendCurrentAsUpdates();
+}
+void OnStatement::Update(const QueryUpdate &update, SubType *sub) {
+  
+  cout << "TODO: implement on statement update";
+}
+
+void RepeatStatement::Init() {
+  L1_SetObject(REPETITION_VARIABLE, M.L1_GetNextUniqueVariable());
+}
+
+void DelayStatement::Init() {
+  Statement::Init();
+}
+void LetStatement::Init() {
+  Statement::Init();
+}
+void OutputStatement::Init() {
+  Statement::Init();
+}
+void IfStatement::Init() {
+  Statement::Init();
+}
+
+void Expression::Init() {
+  StaticElement::Init();
+}
+
+Statement * Statement::MakeStatement(Keyword type) {
+  if (type.Data() == "pass") return New<PassStatement>();
+  if (type.Data() == "on") return New<OnStatement>();
+  if (type.Data() == "repeat") return New<RepeatStatement>();
+  if (type.Data() == "delay") return New<DelayStatement>();
+  if (type.Data() == "let") return New<LetStatement>();
+  if (type.Data() == "output") return New<OutputStatement>();
+  if (type.Data() == "if") return New<IfStatement>();
+  if (type.Data() == "parallel") return New<ParallelStatement>();
+  CHECK(false);
+  return NULL;
+}
+
+Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
+  cout << "ParseSingle pos=" << *position << " t=" << OTuple::Make(t) << endl;
+  Keyword stype = t[(*position)++];
+  if (stype == NULL) return NULL;
+  Statement * ret = MakeStatement(stype);
+  for (int i=0; i<ret->NumObjects(); i++) {
+    CHECK(*position < t.size());
+    Object o = t[(*position)++];
+    ret->L1_SetObject(i, o);
+  }
+  for (int i=0; i<ret->NumExpressionChildren(); i++) {
+    CHECK(*position < t.size());
+    Object o = t[(*position)++];
+    Expression * e = Expression::Parse(o);
+    ret->L1_LinkChild(i, e);
+  }
+  if (*position < t.size()  && t[*position].Type() == OMAP) {
+    OMap m = t[(*position)++];
+    forall(run, m.Data()) {
+      Keyword key = run->first;
+      Object value = run->second;
+      if (key.Data() == "name") {
+	ret->L1_SetName(value);	
+      }
+      if (key.Data() == "parent") {
+	// TODO
+      }
+    }
+  }  
   return ret;
 }
 
-SinSingleLink::SingleLink(Element *parent) :
-  Link(parent), child_(NULL), violation_(new MissingLinkViolation(this)){
+vector<Statement *> Statement::Parse(const Tuple & t) {
+  cout << "Statement::Parse " << OTuple::Make(t) << endl;
+  uint position = 0;
+  Statement * parent = NULL;
+  vector<Statement *> ret;
+  while (position < t.size()) {
+    Object o = t[position];
+    if (o == SEMICOLON) {
+      CHECK(parent != NULL);
+      parent = NULL;
+      position++;
+    } else if (o.Type() == OTUPLE) {
+      vector<Statement *> subs = Parse(OTuple(o).Data());
+      if (parent->TypeKeyword().Data() == "parallel") {
+	CHECK((int)parent->static_children_.size() 
+	      == parent->NumExpressionChildren());
+	while (parent->static_children_.size() < 
+	       parent->NumExpressionChildren() + subs.size()) {
+	  parent->static_children_.push_back(new SingleLink(parent));
+	}
+      }
+      CHECK(parent->NumStatementChildren() == (int)subs.size());      
+      for (uint i=0; i<subs.size(); i++) {
+	parent->L1_LinkChild(parent->NumExpressionChildren()+i, subs[i]);
+      }
+      parent = NULL;
+      position++;
+    } else {
+      Statement * s = ParseSingle(t, &position);
+      if (parent) {
+	cout << "Hooking up child " << s->ToString(0) << endl;
+	cout << "To parent " << parent->ToString(0) << endl;
+	CHECK(parent->NumStatementChildren() == 1);
+	parent->L1_LinkChild(parent->NumExpressionChildren(), s);
+      } else {
+	ret.push_back(s);
+      }
+      parent = s;
+    }
+  }
+  return ret;
 }
 
-void SingleLink::L1_AddChild(Element *child) {
-  if (!child) return;
-  CHECK(!child_);
-  CL.ChangeValue(&child_, child);
-  child->L1_ConnectToParentLink(this);
-}
-void SingleLink::L1_RemoveChild(Element *child){
-  CHECK(child_ == child);
-  CL.ChangeValue(&child_, (Element *)NULL);
-  child_->L1_DisconnectFromParentLink(this);
-}
-set<Element *> SingleLink::GetChildren() const {
-  set<Element *> ret;
-  ret.insert(child_);
+Expression * Expression::Parse(const Object & o){
+  cout << "Expression::Parse " << o << endl;
+  if (o == NULL) return NULL;
+  Tuple t;
+  Expression *ret;
+  if (o.Type() == OTUPLE) t = OTuple(o).Data();
+  if (o.Type() != OTUPLE 
+      || t.size() == 0
+      || t[0].Type() != KEYWORD) {
+    ret = New<ConstantExpression>();
+    ret->L1_SetObject(0, o);
+    return ret;
+  }
+  Keyword type = t[0];
+  ret = MakeExpression(type);
+  
+  CHECK((int)t.size()-1 == ret->NumObjects() + ret->NumChildren());
+  for (int i=0; i<ret->NumObjects(); i++) {
+    ret->L1_SetObject(i, t[1+i]);
+  }
+  for (int i=0; i<ret->NumChildren(); i++) {
+    Expression * sub = Expression::Parse(t[1+ret->NumObjects()+i]);
+    ret->L1_LinkChild(i, sub);
+  }
   return ret;
+}
+
+string Statement::ToString(int indent) const {
+  string ret(indent, ' ');
+  if (this == NULL) return ret + "null\n";
+  ret += ToStringSingle();
+  vector<Statement *> children = GetStatementChildren();
+  if (children.size() > 1 || TypeKeyword().Data() == "parallel") {
+    ret += " {\n";
+    for (uint i=0; i<children.size(); i++) 
+      ret += children[i]->ToString(indent+2);
+    ret += string(indent, ' ') + "}\n";
+    return ret;
+  }
+  if (children.size() == 0) {
+    return ret + " ;\n";
+  }
+  CHECK(children.size() == 1);
+  return ret + "\n" + children[0]->ToString(indent+2);
+}
+string Statement::ToStringSingle() const {
+  string ret = TypeKeyword().ToString();
+  ret += ParameterListToString();
+  return ret;
+}
+string Expression::ToString() const {
+  string ret = "(";
+  ret += TypeKeyword().ToString();
+  ret += ParameterListToString();
+  ret += ")";
+  return ret;
+}
+
+Expression * Expression::MakeExpression(Keyword type) {
+  if (type.Data() == "substitute") return New<SubstituteExpression>();
+  if (type.Data() == "constant") return New<ConstantExpression>();
+  if (type.Data() == "flake_choice") return New<FlakeChoiceExpression>();
+  CHECK(false);
+  return NULL;
+}
+
+string ConstantExpression::ToString() const {
+  Object o = GetObject(OBJECT);
+  if (o==NULL) return "null";
+  if (o.Type() == OTUPLE) {
+    Tuple t = OTuple(o).Data();
+    if (t.size() > 0 && t[0].Type() == KEYWORD) {
+      return "(constant " + o.ToString() + ")";
+    }
+  }
+  return o.ToString();
+}
+string StaticElement::ParameterListToString() const {
+  string ret;
+  for (int i=0; i<NumObjects(); i++) {
+    ret += " " + GetObject(i).ToString();
+  }
+  for (int i=0; i<NumExpressionChildren(); i++) {
+    Expression * expr = GetExpressionChild(i);
+    if (expr) ret += " " + expr->ToString();
+    else ret += " null";
+  }
+  return ret;
+}
+
+Keyword OnStatement::TypeKeyword() const {
+  return Keyword::Make("on");
+}
+Keyword RepeatStatement::TypeKeyword() const {
+  return Keyword::Make("repeat");
+}
+Keyword DelayStatement::TypeKeyword() const {
+  return Keyword::Make("delay");
+}
+Keyword LetStatement::TypeKeyword() const {
+  return Keyword::Make("let");
+}
+Keyword OutputStatement::TypeKeyword() const {
+  return Keyword::Make("output");
+}
+Keyword IfStatement::TypeKeyword() const {
+  return Keyword::Make("if");
+}
+
+Keyword ConstantExpression::TypeKeyword() const {
+  return Keyword::Make("output");
+}
+Keyword SubstituteExpression::TypeKeyword() const {
+  return Keyword::Make("substitute");
+}
+Keyword FlakeChoiceExpression::TypeKeyword() const {
+  return Keyword::Make("flake_choice");
+}
+ 
+void DynamicElement::Init(Link * static_parent, Link *parent, OMap binding) {
+  Element::Init();
+  binding_ = binding;
+  static_parent_ = parent_ = NULL;
+  CHECK(static_parent);
+  static_parent->L1_AddChild(this);
+  CHECK(static_parent_ == static_parent);
+  if (parent) {
+    parent->L1_AddChild(this);
+    CHECK(parent_ == parent);
+  } else {
+    // This is ok for example for an on statement
+    // Check that the static parent has no parent
+    CHECK(GetStatic()->parent_ == NULL);
+  }
+ 
+  // L1_ComputeSetTime(); may belong here
+  for (int i=0; i<NumChildren(); i++) {
+    Link * child;
+    if (IsMultilink(i)) {
+      child = New<MultiLink>(this);
+    } else {
+      child = New<SingleLink>(this);
+    }
+    children_.push_back(child);    
+  }
+};
+
+void DynamicElement::FindParent() const {
+  CHECK(static_parent_);
+  CHECK(static_parent_->parent_);
+  return static_parent_->GetParent()->dynamic_children_->GetChild
+    (Restrict(bindings_, static_parent_->GetParent()->GetVariables()));
 }

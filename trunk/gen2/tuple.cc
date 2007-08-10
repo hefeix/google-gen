@@ -201,6 +201,13 @@ set<Variable> GetVariables(const MPattern & v) {
       if (IsVariable(v[i][j])) ret.insert(v[i][j]);
   return ret;
 }
+set<Variable> GetVariables(const Pattern & v) {
+  set<Variable> ret;
+  for (uint i=0; i<v.size(); i++) 
+    for (uint j=0; j<v[i].size(); j++)
+      if (IsVariable(v[i].Data()[j])) ret.insert(v[i].Data()[j]);
+  return ret;
+}
 
 // If a pattern's variables are connected
 bool IsConnectedPattern(const Pattern& v) {

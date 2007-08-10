@@ -329,19 +329,23 @@ template<class T, class P1, class P2, class P3> T * New(const P1 & p1,
   return t;
 }
 
-
-
-/*
-Statement * st = New<Statement>()->Init(param1, param2, param3)
-
-template<class T>
-class New {
-
-  
-  template<O0> Init() {}
-  template<O1> Init(const O1& o1) {}
-  operator T* () { return ptr_; }
-  T* ptr_;
+template<class T> set<T> SingletonSet(const T & t) {
+  set<T> ret;
+  ret.insert(t);
+  return ret;
 }
+
+template <class K, class V> map<K, V> Restrict(const Map<K,V> & m, 
+					       const set<K> & s) {
+  Map<K, V> ret;
+  forall(run, m) {
+    if (s % run->first) ret[run->first] = run->second;
+  }
+  return ret;
+}
+
+/* Usage of the New paradigm that calls Init
+   Statement * st = New<Statement>(param1, param2, param3)
 */
+
 #endif

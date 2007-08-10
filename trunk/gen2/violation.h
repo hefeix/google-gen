@@ -28,7 +28,8 @@ class Prohibition;
 enum ViolationType{
   REQUIREMENT_VIOLATION,
   PROHIBITION_VIOLATION, 
-  
+  MISSING_LINK_VIOLATION,
+  MISSING_MULTILINK_VIOLATION,
 };
 
 // base class for all violations.
@@ -41,8 +42,12 @@ struct Violation {
   }
   virtual ~Violation(){}
   virtual ViolationType GetType() = 0;
+  Time GetTime() { return time_; }
   void L1_InsertIntoGlobalMap();
   void L1_RemoveFromGlobalMap();
+  bool Exists();
+
+  Time time_;
 };
 
 struct RequirementViolation : public Violation {  
@@ -61,11 +66,28 @@ struct ProhibitionViolation : public Violation {
 
 };
 
+// the SingleLink has no child
 class SingleLink;
-struct MissingLinkViolation {
-  Void Init(SingleLink * link);
+struct MissingLinkViolation : public Violation {
+  void Init(SingleLink * link);
+  void L1_Erase();
   SingleLink *link_;
   ViolationType GetType() { return MISSING_LINK_VIOLATION;}
 };
 
+// the MultiLink should have a child for the given OMap, but doesn't 
+struct MissingMultiLinkViolation : public Violation {
+  void Init(MultiLink *link, OMap m);
+  void L1_Erase();
+  MultiLink *link_;
+  OMap map_;
+  ViolationType GetType() { return MISSING_MULTILINK_VIOLATION;}
+};
+
+// the time on a dynamic element may not be equal to its computed time.
+struct TimeViolation : public Violation {
+  void Init(DynamicElement *element);
+  DynamicElement *element_;
+  ViolationType GetType() { return TIME_VIOLATION; }
+};
 #endif
