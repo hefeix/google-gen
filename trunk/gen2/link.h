@@ -34,6 +34,10 @@ struct Link {
   // Accessors
   Element * GetParent() { return parent_;}
   virtual set<Element *> GetChildren() const = 0;
+  // assumes this is the parent_ link of the child. 
+  OTime ComputeChildTime(Element *child) const {
+    return parent_->ComputeChildTime(this, child);
+  }
 
   // Just to make the compiler happy
   virtual ~Link() {}
@@ -63,21 +67,19 @@ struct MultiLink : public Link {
 
 // this is a multilink where the children should exactly match the
 // satisfactions of a pattern.  Violations are created automatically. 
-struct PatternMultilink : public Multilink {
+struct OnMultilink : public Multilink {
   // Init and Erase
   void Init(Element *parent, OPattern p);
 
   // Modifiers
   void L1_AddChild(Element *child);
   void L1_RemoveChild(Element *child);
-  
-  
-  typedef UpdateSubscription<QueryUpdate, Query, PatternMultilink> SubType;
-  friend class UpdateSubscription<QueryUpdate, Query, OnStatement>;
-  //friend class SubType;
+
+  typedef UpdateSubscription<QueryUpdate, Query, OnMultilink> SubType;
+  friend class UpdateSubscription<QueryUpdate, Query, OnMultilink>;
   void Update(const QueryUpdate &update, SubType *sub);
-
-
+  map<OMap, MissingMultiLinkViolation *> missing_;
+  map<OMap, ExtraMultiLinkViolation *> extra_;
 };
 
 struct SingleLink : public Link {

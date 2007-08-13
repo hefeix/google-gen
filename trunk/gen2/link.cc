@@ -81,3 +81,47 @@ set<Element *> SingleLink::GetChildren() const {
   return ret;
 }
 
+void OnMultilink::Init() {
+  Multilink::Init();
+  Query * q = BB.L1_GetExecuteQuery(GetPattern(), SamplingInfo(), NULL);
+  subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH | UPDATE_TIME,
+			      this);
+  subscription_->L1_SendCurrentAsUpdates();  
+}
+void OnMultilink::Update(const QueryUpdate &update, SubType *sub) {
+  forall(run, update.changes_) {
+    SingleQueryUpdate s = *run;
+    // if there were any bindings_ at the parent, we would have to union 
+    // them here. Luckily, with an on statement, there are none. 
+    OMap m = s.data_;
+    if (action_ == UPDATE_CREATE) {
+      if (extra_ % m) {
+	ExtraMultiLinkViolation * v = extra_[m];
+	v->L1_Erase();
+	CL.RemoveFromMap(&extra_, m);
+      } else {
+	CL.InsertIntoMap
+	  (&missing_, m, New<MissingMultiLinkViolation>(this, m, s.new_time_));
+      }
+    }
+    if (action_ == UPDATE_DESTROY) {
+      if (missing_ % m) {
+	missing_[m]->L1_Erase();
+	CL.RemoveFromMap(&missing_, m);
+      } else {
+	CHECK(children_ % m);
+	CL.InsertIntoMap
+	  (&extra_, m, 
+	   new<ExtraMultiLinkViolation>(this, m, children_[m]->time_));
+      }
+    }
+    if (action == UPDATE_CHANGE_TIME) {
+      if (children_ % m) {
+	children_[m]->L1_NewTimeShouldBe(s.new_time_);
+      } else {
+	CHECK(missing_ % m);
+	missing_[m]->L1_ChangeTime(s.new_time_);
+      }
+    }
+  }
+}

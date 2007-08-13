@@ -1,0 +1,3 @@
+- create violations when various things are made
+- start working on a fixer
+- implement Element::L1_NewTimeShouldBe(), which 

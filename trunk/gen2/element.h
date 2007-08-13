@@ -33,6 +33,10 @@ struct Element : public Named {
   virtual OMap GetBinding() const { CHECK(false); return OMap();}
   virtual void Init() { Named::Init(); }
   Element() :parent_(NULL){};
+  OTime time_;
+  virtual OTime ComputeChildTime(Link * link, Element *child) {
+    return time_;
+  }
   // does not need an L1_Erase, since subclasses' L1_Erase skips it.
 };
 
@@ -101,7 +105,6 @@ struct DynamicElement : public Element{
   Link * static_parent_;
   vector<Link *> children_;
   OMap binding_; // if parent_ is a multilink, always matches it. 
-  OTime time_;
   virtual void Init(Link * static_parent, Link *parent, OMap binding);
   TimeViolation * time_violation_;
   BindingViolation * binding_violation_; // don't know what this means currently
@@ -177,11 +180,6 @@ struct OnStatement : public Statement {
   Keyword TypeKeyword() const;
   set<Variable> GetIntroducedVariables() const;
   
-  typedef UpdateSubscription<QueryUpdate, Query, OnStatement> SubType;
-  friend class UpdateSubscription<QueryUpdate, Query, OnStatement>;
-  //friend class SubType;
-  void Update(const QueryUpdate &update, SubType *sub);
-
   void Init();
   void L1_Subscribe(); // subscribe to the appropriate query.
   SubType * subscription_;
@@ -232,6 +230,12 @@ struct DelayStatement : public Statement {
   void Init();
 
   struct Dynamic : public DynamicStatement {
+    virtual OTime ComputeChildTime(Link * link, Element *child) {
+      if (link_ == children_[CHILD]) {
+	return OTime::Make(time_.Data() + GetChild
+      }
+      return time_;
+    }
   };
 };
   
