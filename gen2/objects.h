@@ -348,6 +348,12 @@ inline Pattern MPatternToPattern(const MPattern &p) {
   return ret;
 }
 
+template <class T> class DataCompare{
+  bool operator()(const T& t1, const T& t2) {
+    return (t1.Data() < t2.Data());
+  }
+};
+
 
 void InitKeywords();
 void DestroyKeywords();

@@ -93,16 +93,6 @@ void OnStatement::Init() {
 set<Variable> OnStatement::GetIntroducedVariables() const {
   return GetVariables(pattern_.Data());
 }
-void OnStatement::L1_Subscribe() {
-  Query * q = BB.L1_GetExecuteQuery(GetPattern(), SamplingInfo(), NULL);
-  subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH | UPDATE_TIME,
-			      this);
-  subscription_->L1_SendCurrentAsUpdates();
-}
-void OnStatement::Update(const QueryUpdate &update, SubType *sub) {
-  
-  cout << "TODO: implement on statement update";
-}
 
 void RepeatStatement::Init() {
   L1_SetObject(REPETITION_VARIABLE, M.L1_GetNextUniqueVariable());
