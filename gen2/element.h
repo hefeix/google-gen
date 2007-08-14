@@ -56,7 +56,11 @@ struct StaticElement : public Element {
   vector<SingleLink *> static_children_; // statements and expressions
   vector<Object> objects_;
 
-  Element * GetChild(int which) const;
+  StaticElement * GetParent() const { 
+    if (!parent_) return NULL;
+    return dynamic_cast<StaticElement *>(parent_->GetParent());
+  }
+  StaticElement * GetChild(int which) const;
   Statement * GetStatementChild(int which) const;// which < NumStatementChildren
   Expression * GetExpressionChild(int which) const;
   vector<Statement *> GetStatementChildren() const;
@@ -82,6 +86,10 @@ struct StaticElement : public Element {
 
 struct DynamicElement : public Element{
   bool IsDynamic() const { return true; }
+  StaticElement * GetParent() const { 
+    if (!parent_) return NULL;
+    return dynamic_cast<StaticElement *>(parent_->GetParent());
+  }
   void L1_ConnectToParentLink(Link *link) {
     if (link->parent_->IsDynamic())
       parent_ = link;
@@ -94,9 +102,13 @@ struct DynamicElement : public Element{
   int NumChildren() { return GetStatic()->NumChildren();}
   int NumStatementChildren() { return GetStatic()->NumStatementChildren();}
   int NumObjects() { return GetStatic()->NumObjects();}  
+  DynamicElement * GetSingleChild(int which) const;
   OMap GetBinding() const { return binding_;}
   DynamicElement * FindParent() const; // finds parent based on bindings.
-  virtual bool IsMultilink(int which_child) { return false;}
+  virtual Link::Type LinkType(int which_child) { return Link::SINGLE;}
+  // this gets called when the value of a child expression changes, 
+  // or when a child expresison is created(Init) or destroyed(L1_Erase). 
+  virtual void ChildExpressionChanged();
 
   OMap ComputeBinding() const;
   OTime ComputeTime() const;
@@ -105,7 +117,8 @@ struct DynamicElement : public Element{
   Link * static_parent_;
   vector<Link *> children_;
   OMap binding_; // if parent_ is a multilink, always matches it. 
-  virtual void Init(Link * static_parent, Link *parent, OMap binding);
+  void Init(Link * static_parent, Link *parent, OMap binding);
+  void L1_Erase() { Element::L1_Erase();}
   TimeViolation * time_violation_;
   BindingViolation * binding_violation_; // don't know what this means currently
 };
@@ -146,12 +159,18 @@ struct Expression : public StaticElement {
 
 
 struct DynamicStatement : public DynamicElement {
+  void L1_Erase() { DynamicElement::L1_Erase();}
 };
 
 struct DynamicExpression : public DynamicElement {
+  void L1_Erase();
   virtual Object ComputeValue() const;
+  void ChildExpressionChanged() { CheckSetValueViolation();}
+  void SetValue(Object new_value);
+  // checks whether the value is correct, and creates/removes a violation.
+  void CheckSetValueViolation();
   Object value_;
-  WrongValueViolation * wrong_value_violation_;
+  ValueViolation * value_violation_;
 };
 
 
@@ -181,12 +200,16 @@ struct OnStatement : public Statement {
   set<Variable> GetIntroducedVariables() const;
   
   void Init();
+  void L1_Erase();
   void L1_Subscribe(); // subscribe to the appropriate query.
   SubType * subscription_;
 
   struct Dynamic : public DynamicStatement {
-    virtual bool IsMultilink(int which_child) { return true;}
+    void Init(OnStatement *static_parent);
+    virtual bool LinkType(int which_child) { return Link::ON;}
+    void GetPattern() { return GetStatic()->GetPattern();}
   };
+  MissingDynamicOnViolation * missing_dynamic_;
 };
 
 struct RepeatStatement : public Statement {
@@ -213,7 +236,9 @@ struct RepeatStatement : public Statement {
   // assigned automatically in the constructor.
 
   struct Dynamic : public DynamicStatement {
-    virtual bool IsMultilink(int which_child) { return (which_child==CHILD);}
+    virtual bool LinkType(int which_child) { 
+      return (which_child==CHILD)?Link::MULTI:Link::SINGLE;
+    }
   };
 };
 
@@ -232,7 +257,7 @@ struct DelayStatement : public Statement {
   struct Dynamic : public DynamicStatement {
     virtual OTime ComputeChildTime(Link * link, Element *child) {
       if (link_ == children_[CHILD]) {
-	return OTime::Make(time_.Data() + GetChild
+	return OTime::Make(time_.Data() + GetSingleChild(DELAY)->value_);
       }
       return time_;
     }
@@ -274,6 +299,16 @@ struct OutputStatement : public Statement {
   void Init();
 
   struct Dynamic : public DynamicStatement {
+    bool IsPerfect() const;
+    // see if it's perfect, then create or remove violation if necessary.
+    void CheckSetPostingViolation();
+    void ChildExpressionChanged() { CheckSetPostingViolation();}    
+    DynamicExpression * GetTupleExpression() const {
+      return dynamic_cast<DynamicExpression *>(GetSingleChild(TUPLE));
+    }
+    
+    Posting * posting_;
+    PostingViolation * posting_violation_;
   };
 };
 

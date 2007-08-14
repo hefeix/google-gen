@@ -112,7 +112,7 @@ void OnMultilink::Update(const QueryUpdate &update, SubType *sub) {
 	CHECK(children_ % m);
 	CL.InsertIntoMap
 	  (&extra_, m, 
-	   new<ExtraMultiLinkViolation>(this, m, children_[m]->time_));
+	   New<ExtraMultiLinkViolation>(this, m, children_[m]->time_));
       }
     }
     if (action == UPDATE_CHANGE_TIME) {
