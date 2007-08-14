@@ -243,6 +243,9 @@ class SpecificObject : public Object {
     Definition * new_def = new Definition(data);
     return SpecificObject<OT, D>(new_def);
   }
+  static SpecificObject<OT, D> Default() {
+    return Make(D());
+  }
   ObjectType ReferenceType() const{
     return OT;
   }

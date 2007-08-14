@@ -44,8 +44,8 @@ set<Variable> StaticElement::GetIntroducedVariables() const {
   return set<Variable>();
 }
 
-Element * StaticElement::GetChild(int which) const { 
-  return static_children_[which]->GetChild();
+StaticElement * StaticElement::GetChild(int which) const { 
+  return dynamic_cast<StaticElement *>(static_children_[which]->GetChild());
 }
 Statement * StaticElement::GetStatementChild(int which) const {
   CHECK(which < NumStatementChildren());
@@ -77,6 +77,12 @@ void StaticElement::L1_UnlinkChild(int where){
   static_children_[where]->L1_RemoveChild(GetChild(where));
 }
 
+DynamicElement * DynamicElement::GetSingleChild(int which) const { 
+  SingleLink * l = dynamic_cast<SingleLink *>(children_[which]);
+  return dynamic_cast<DynamicElement *>(l->GetChild());
+}
+
+
 void Statement::Init() {
   StaticElement::Init();
 }
@@ -87,12 +93,50 @@ void Statement::L1_Erase() {
   Named::L1_Erase();
 }
 
+void DynamicExpression::L1_Erase() {
+  if (value_violation_) value_violation_->L1_Erase();
+  DynamicElement * parent = GetParent();
+  DynamicElement::L1_Erase();
+  parent->ChildExpressionChanged();
+}
+void DynamicExpression::CheckSetValueViolation() {
+  bool perfect = (value_ == ComputeValue());
+  if (perfect && value_violation_) {
+    value_violation_->L1_Erase(); 
+    return;
+  }
+  if (!perfect && !value_violation_) {
+    New<ValueViolation>(this, time_);
+    return;
+  }
+}
+
+
+
 void OnStatement::Init() {
   Statement::Init();
+  missing_dynamic_ = NULL;
+  New<MissingDynamicOnViolation>(this, CREATION);
 }
 set<Variable> OnStatement::GetIntroducedVariables() const {
   return GetVariables(pattern_.Data());
 }
+void OnStatement::L1_Erase() {
+  if (missing_dynamic_) missing_dynamic_->L1_Erase();
+  Statement::L1_Erase();
+}
+void OnStatement::Dynamic::Init(OnStatement *static_parent) {
+  DynamicElement::Init(static_parent, NULL, OMap::Default());
+  CHECK(GetStatic()->missing_dynamic_);
+  GetStatic()->missing_dynamic_->L1_Erase();
+}
+void OnStatement::Dynamic::L1_Erase(){
+  CHECK(GetStatic());
+  CHECK(GetStatic()->missing_dynamic_ == NULL);
+  New<MissingDynamicOnViolation>(GetStatic(), CREATION);
+  DynamicStatement::L1_Erase();
+}
+
 
 void RepeatStatement::Init() {
   L1_SetObject(REPETITION_VARIABLE, M.L1_GetNextUniqueVariable());
@@ -107,6 +151,28 @@ void LetStatement::Init() {
 void OutputStatement::Init() {
   Statement::Init();
 }
+void OutputStatement::Dynamic::IsPerfect() {
+  DynamicExpression * expr = GetTupleExpression();
+  if (!expr) return false;
+  if (!posting_) return false;
+  if (posting_->tuple_ != expr->value_) return false;
+  if (posting_->time_ != time_.Data()) return false;
+  return true;
+}
+void OutputStatement::Dynamic::CheckSetPostingViolation() {
+  bool perfect = IsPerfect();
+  if (perfect && posting_violation_) {
+    posting_violation_->L1_Erase(); 
+    return;
+  }
+  if (!perfect && !posting_violation_) {
+    Time time = time_;
+    if (posting_) time = min(time, posting_->time_);
+    New<PostingViolation>(this, OTime::Make(time));
+    return;
+  }
+}
+
 void IfStatement::Init() {
   Statement::Init();
 }
@@ -341,10 +407,20 @@ void DynamicElement::Init(Link * static_parent, Link *parent, OMap binding) {
   // L1_ComputeSetTime(); may belong here
   for (int i=0; i<NumChildren(); i++) {
     Link * child;
-    if (IsMultilink(i)) {
+    switch (LinkType(i)) {
+    case Link::MULTI:
       child = New<MultiLink>(this);
-    } else {
+      break;
+    case Link::SINGLE:
       child = New<SingleLink>(this);
+      break;
+    case Link::ON:
+      chid = New<OnMultilink>(this, dynamic_cast<OnStatement::Dynamic *>(this)
+			      ->GetPattern());
+      break;
+    default:
+      CHECK(false);
+      break;
     }
     children_.push_back(child);    
   }

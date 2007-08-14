@@ -23,6 +23,12 @@ class MissingMultiLinkViolation;
 
 // we use the convention that parents own all links.
 struct Link {
+  enum Type{
+    SINGLE,
+    MULTI,
+    ON,
+  };
+
   // Init & Erase
   virtual void Init(Element * parent);
   virtual void L1_Erase();

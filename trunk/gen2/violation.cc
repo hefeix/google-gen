@@ -98,3 +98,12 @@ void TimeViolation::L1_Erase() {
   Violation::L1_Erase();
 }
 
+void MissingDynamicOnViolation::Init(OnStatement *on, OTime time) {
+  Violation::Init(time);
+  on_ = on;
+  CL.ChangeValue(&on_->missing_dynamic_, this);
+}
+void MissingDynamicOnViolation::L1_Erase() {
+  CL.ChangeValue(&on->missing_dynamic_, NULL);
+  Violation::L1_Erase();
+}

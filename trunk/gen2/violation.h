@@ -25,15 +25,18 @@
 class Requirement;
 class Prohibition;
 
-enum ViolationType{
-  REQUIREMENT_VIOLATION,
-  PROHIBITION_VIOLATION, 
-  MISSING_LINK_VIOLATION,
-  MISSING_MULTILINK_VIOLATION,
-};
 
 // base class for all violations.
 struct Violation {
+  enum Type{
+    REQUIREMENT,
+    PROHIBITION, 
+    MISSING_LINK,
+    MISSING_MULTILINK,
+    MISSING_DYNAMIC_ON,
+  };
+
+
   virtual void Init(OTime time);
   virtual void L1_Erase() {
     // remove from the model's set of violations
@@ -42,7 +45,7 @@ struct Violation {
   }
   void L1_ChangeTime(time new_time);
   virtual ~Violation(){}
-  virtual ViolationType GetType() = 0;
+  virtual Type GetType() = 0;
   OTime GetTime() { return time_; }
   void L1_InsertIntoGlobalMap();
   void L1_RemoveFromGlobalMap();
@@ -54,7 +57,7 @@ struct Violation {
 struct RequirementViolation : public Violation {  
   void Init(Requirement * requirement);
   Requirement * requirement_;
-  ViolationType GetType() { return REQUIREMENT_VIOLATION;}  
+  Violation::Type GetType() { return REQUIREMENT;}  
 };
 
 struct ProhibitionViolation : public Violation {
@@ -62,7 +65,7 @@ struct ProhibitionViolation : public Violation {
 	    OTuple tuple, OTime time);
   Prohibition *prohibition_;
   OTuple tuple_;
-  ViolationType GetType() { return PROHIBITION_VIOLATION;}
+  Violation::Type GetType() { return PROHIBITION;}
 
 };
 
@@ -72,7 +75,7 @@ struct MissingLinkViolation : public Violation {
   void Init(SingleLink * link);
   void L1_Erase();
   SingleLink *link_;
-  ViolationType GetType() { return MISSING_LINK_VIOLATION;}
+  Violation::Type GetType() { return MISSING_LINK;}
 };
 
 // the MultiLink should have a child for the given OMap, but doesn't 
@@ -81,7 +84,7 @@ struct MissingMultiLinkViolation : public Violation {
   void L1_Erase();
   MultiLink *link_;
   OMap map_;
-  ViolationType GetType() { return MISSING_MULTILINK_VIOLATION;}
+  Violation::Type GetType() { return MISSING_MULTILINK;}
 };
 
 struct ExtraMultiLinkViolation : public Violation {
@@ -89,13 +92,22 @@ struct ExtraMultiLinkViolation : public Violation {
   void L1_Erase();
   MultiLink *link_;
   OMap map_;
-  ViolationType GetType() { return EXTRA_MULTILINK_VIOLATION;}
+  Violation::Type GetType() { return EXTRA_MULTILINK;}
 };
 
 // the time on a dynamic element may not be equal to its computed time.
 struct TimeViolation : public Violation {
   void Init(DynamicElement *element, OTime time);
   DynamicElement *element_;
-  ViolationType GetType() { return TIME_VIOLATION; }
+  Violation::Type GetType() { return TIME; }
 };
+
+
+struct MissingDynamicOnViolation :public Violation {
+  void Init(OnStatement *on, OTime time);
+  OnStatement *on_;
+  Violation::Type GetType() { reurn MISSING_DYNAMIC_ON;}
+};
+
+
 #endif
