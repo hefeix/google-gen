@@ -30,6 +30,7 @@ Link::Init(Element *parent) {
 // Then is called back on the way up, destroying at the end
 void Link::L1_Erase() {
   CHECK(GetChildren().size() == 0);
+  EraseOwnedViolations(this);
   CL.Destroying(this);
 }
 void MultiLink::L1_AddChild(Element *child){
@@ -56,11 +57,10 @@ void Multilink::Init(Element * parent) {
 void SingleLink::Init(Element *parent) {
   Link::Init(parent);
   child_ = NULL;
-  violation_ = new MissingLinkViolation(this);
+  New<MissingLinkViolation>(this);
 }
 
 void SingleLink::L1_Erase() {
-  violation_->L1_Erase();
   Link::L1_Erase();
 }
 
@@ -98,21 +98,16 @@ void OnMultilink::Update(const QueryUpdate &update, SubType *sub) {
       if (extra_ % m) {
 	ExtraMultiLinkViolation * v = extra_[m];
 	v->L1_Erase();
-	CL.RemoveFromMap(&extra_, m);
       } else {
-	CL.InsertIntoMap
-	  (&missing_, m, New<MissingMultiLinkViolation>(this, m, s.new_time_));
+	New<MissingMultiLinkViolation>(this, m, s.new_time_);
       }
     }
     if (action_ == UPDATE_DESTROY) {
       if (missing_ % m) {
 	missing_[m]->L1_Erase();
-	CL.RemoveFromMap(&missing_, m);
       } else {
 	CHECK(children_ % m);
-	CL.InsertIntoMap
-	  (&extra_, m, 
-	   New<ExtraMultiLinkViolation>(this, m, children_[m]->time_));
+	New<ExtraMultiLinkViolation>(this, m, children_[m]->time_);
       }
     }
     if (action == UPDATE_CHANGE_TIME) {

@@ -33,6 +33,7 @@ void StaticElement::L1_Erase() {
   for (uint i=0; i<static_children_.size(); i++) 
     static_children_[i]->L1_Erase();
   dynamic_children_->L1_Erase();
+  EraseOwnedViolations(this);
   Named::L1_Erase();
 }
 set<Variable> StaticElement::GetVariables() const { 
@@ -93,19 +94,32 @@ void Statement::L1_Erase() {
   Named::L1_Erase();
 }
 
+void DynamicExpression::Init(Link * static_parent, Link *parent, OMap binding){
+  DynamicElement::Init(static_parent, parent, binding);
+  value_ = NULL;
+  CheckSetValueViolation();
+  // there should already be a violation at the parent
+  // if (GetParent()) GetParent()->ChildExpressionChanged();
+}
+void DynamicExpression::SetValue(Object new_value) {
+  CL.ChangeValue(&value_, new_value);
+  CheckSetValueViolation();
+  if (GetParent()) GetParent()->ChildExpressionChanged();
+}
+
 void DynamicExpression::L1_Erase() {
-  if (value_violation_) value_violation_->L1_Erase();
   DynamicElement * parent = GetParent();
   DynamicElement::L1_Erase();
   parent->ChildExpressionChanged();
 }
 void DynamicExpression::CheckSetValueViolation() {
-  bool perfect = (value_ == ComputeValue());
-  if (perfect && value_violation_) {
-    value_violation_->L1_Erase(); 
+  bool perfect = (value != NULL) && (value_ == ComputeValue());
+  Violation * value_violation = FindViolation(this, Violation::VALUE);
+  if (perfect && value_violation) {
+    value_violation->L1_Erase(); 
     return;
   }
-  if (!perfect && !value_violation_) {
+  if (!perfect && !value_violation) {
     New<ValueViolation>(this, time_);
     return;
   }
@@ -113,26 +127,26 @@ void DynamicExpression::CheckSetValueViolation() {
 
 
 
-void OnStatement::Init() {
+void OnStatement::Init(){
   Statement::Init();
-  missing_dynamic_ = NULL;
   New<MissingDynamicOnViolation>(this, CREATION);
 }
 set<Variable> OnStatement::GetIntroducedVariables() const {
   return GetVariables(pattern_.Data());
 }
 void OnStatement::L1_Erase() {
-  if (missing_dynamic_) missing_dynamic_->L1_Erase();
   Statement::L1_Erase();
 }
+// this thing has no dynamic parent. 
 void OnStatement::Dynamic::Init(OnStatement *static_parent) {
-  DynamicElement::Init(static_parent, NULL, OMap::Default());
-  CHECK(GetStatic()->missing_dynamic_);
-  GetStatic()->missing_dynamic_->L1_Erase();
+  DynamicStatement::Init(static_parent, NULL, OMap::Default());
+  Violation * missing_dynamic = FindViolation(GetStatic(), Violation::MISSING_DYNAMIC);
+  CHECK(missing_dynamic);
+  missing_dynamic->L1_Erase();
 }
 void OnStatement::Dynamic::L1_Erase(){
   CHECK(GetStatic());
-  CHECK(GetStatic()->missing_dynamic_ == NULL);
+  CHECK(!FindViolation(GetStatic(), Violation::MISSING_DYNAMIC));
   New<MissingDynamicOnViolation>(GetStatic(), CREATION);
   DynamicStatement::L1_Erase();
 }
@@ -161,11 +175,12 @@ void OutputStatement::Dynamic::IsPerfect() {
 }
 void OutputStatement::Dynamic::CheckSetPostingViolation() {
   bool perfect = IsPerfect();
-  if (perfect && posting_violation_) {
-    posting_violation_->L1_Erase(); 
+  Violation * posting_violation = FindViolation(this, Violation::POSTING);
+  if (perfect && posting_violation) {
+    posting_violation->L1_Erase(); 
     return;
   }
-  if (!perfect && !posting_violation_) {
+  if (!perfect && !posting_violation) {
     Time time = time_;
     if (posting_) time = min(time, posting_->time_);
     New<PostingViolation>(this, OTime::Make(time));
@@ -345,6 +360,9 @@ string ConstantExpression::ToString() const {
     }
   }
   return o.ToString();
+}
+Object ConstantExpression::Dynamic::ComputeValue() {
+  return GetObject(OBJECT);
 }
 string StaticElement::ParameterListToString() const {
   string ret;

@@ -29,26 +29,26 @@ Requirement::Requirement(OTuple tuple) {
 }
 void Requirement::L1_Erase() {
   subscription_->L1_Erase();
-  if (violation_) L1_RemoveViolation();
-  CL.RemoveFromSet(&M.requirements_, this);
+  EraseOwnedViolations(this);
+  CL.RemoveFromSet(&M.requirements_, this);  
   CL.Destroying(this);
 }
 void Requirement::Update(const QueryUpdate &update, SubType * sub){
   int count = subscription_->subscribee_->GetCount();
-  if (violation_ && count != 0) {
+  Violation * violation = FindViolation(this, Violation::REQUIREMENT);
+  if (violation && count != 0) {
     L1_RemoveViolation();
   }
-  if (!violation_ && count == 0) {
+  if (!violation && count == 0) {
     L1_AddViolation();
   }
 }
 void Requirement::L1_AddViolation() {
-  CHECK(violation_ == 0);
   New<RequirementViolation>(this);
 }
 void Requirement::L1_RemoveViolation() {
-  CHECK(violation_);
-  violation_->L1_Erase();
+  Violation * violation = FindViolation(this, Violation::REQUIREMENT);
+  violation->L1_Erase();
 }
 
 Prohibition::Prohibition(OTuple tuple) {
@@ -93,7 +93,6 @@ void Prohibition::L1_RemoveViolation(OTuple t) {
   ProhibitionViolation * violation  = violations_[t];
   CHECK(violation);
   violation->L1_Erase();
-  CL.RemoveFromMap(&violations_, t);
 }
 void Prohibition::L1_AddException(OTuple t) {
   CHECK(!(exceptions_ % t));

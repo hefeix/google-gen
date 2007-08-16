@@ -21,6 +21,8 @@
 #include "changelist.h"
 #include "element.h"
 
+map<void *, set<Violation *> > Violation::owned_violations_
+
 void Violation::Init(OTime time) {  
   CL.Creating(this);
   time_ = time;

@@ -102,6 +102,7 @@ struct DynamicElement : public Element{
   int NumChildren() { return GetStatic()->NumChildren();}
   int NumStatementChildren() { return GetStatic()->NumStatementChildren();}
   int NumObjects() { return GetStatic()->NumObjects();}  
+  Object GetObject(int which) const{ return GetStatic()->GetObject(which);}
   DynamicElement * GetSingleChild(int which) const;
   OMap GetBinding() const { return binding_;}
   DynamicElement * FindParent() const; // finds parent based on bindings.
@@ -117,10 +118,12 @@ struct DynamicElement : public Element{
   Link * static_parent_;
   vector<Link *> children_;
   OMap binding_; // if parent_ is a multilink, always matches it. 
+  // we probably only need two of these parameters, since we can figure out 
+  // the third, but we'd rather pass all three here than worry about the corner
+  // cases at this point. 
   void Init(Link * static_parent, Link *parent, OMap binding);
   void L1_Erase() { Element::L1_Erase();}
-  TimeViolation * time_violation_;
-  BindingViolation * binding_violation_; // don't know what this means currently
+  // TimeViolation * time_violation_; TODO
 };
 
 struct Statement : public StaticElement{
@@ -160,9 +163,13 @@ struct Expression : public StaticElement {
 
 struct DynamicStatement : public DynamicElement {
   void L1_Erase() { DynamicElement::L1_Erase();}
+  void Init(Link * static_parent, Link *parent, OMap binding){
+    DynamicElement::Init(static_parent, parent, binding);
+  }
 };
 
 struct DynamicExpression : public DynamicElement {
+  void Init(Link * static_parent, Link *parent, OMap binding);
   void L1_Erase();
   virtual Object ComputeValue() const;
   void ChildExpressionChanged() { CheckSetValueViolation();}
@@ -170,7 +177,6 @@ struct DynamicExpression : public DynamicElement {
   // checks whether the value is correct, and creates/removes a violation.
   void CheckSetValueViolation();
   Object value_;
-  ValueViolation * value_violation_;
 };
 
 
@@ -209,7 +215,6 @@ struct OnStatement : public Statement {
     virtual bool LinkType(int which_child) { return Link::ON;}
     void GetPattern() { return GetStatic()->GetPattern();}
   };
-  MissingDynamicOnViolation * missing_dynamic_;
 };
 
 struct RepeatStatement : public Statement {
@@ -308,7 +313,6 @@ struct OutputStatement : public Statement {
     }
     
     Posting * posting_;
-    PostingViolation * posting_violation_;
   };
 };
 
