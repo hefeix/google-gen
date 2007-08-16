@@ -16,10 +16,12 @@
 //
 // Author: Georges Harik and Noam Shazeer
 
-#include "element.h"
+#include "query.h"
+#include "violation.h"
 
-class MissingLinkViolation;
-class MissingMultiLinkViolation;
+class Element;
+class DynamicElement;
+class StaticElement;
 
 // we use the convention that parents own all links.
 struct Link {
@@ -41,9 +43,7 @@ struct Link {
   Element * GetParent() { return parent_;}
   virtual set<Element *> GetChildren() const = 0;
   // assumes this is the parent_ link of the child. 
-  OTime ComputeChildTime(Element *child) const {
-    return parent_->ComputeChildTime(this, child);
-  }
+  OTime ComputeChildTime(Element *child) const;
 
   // Just to make the compiler happy
   virtual ~Link() {}
@@ -73,7 +73,7 @@ struct MultiLink : public Link {
 
 // this is a multilink where the children should exactly match the
 // satisfactions of a pattern.  Violations are created automatically. 
-struct OnMultilink : public Multilink {
+struct OnMultiLink : public MultiLink {
   // Init and Erase
   void Init(Element *parent, OPattern p);
 
@@ -81,8 +81,8 @@ struct OnMultilink : public Multilink {
   void L1_AddChild(Element *child);
   void L1_RemoveChild(Element *child);
 
-  typedef UpdateSubscription<QueryUpdate, Query, OnMultilink> SubType;
-  friend class UpdateSubscription<QueryUpdate, Query, OnMultilink>;
+  typedef UpdateSubscription<QueryUpdate, Query, OnMultiLink> SubType;
+  friend class UpdateSubscription<QueryUpdate, Query, OnMultiLink>;
   void Update(const QueryUpdate &update, SubType *sub);
   map<OTuple, Violation *> * GetViolationMap(Violation::Type vtype) {
     if (vtype == Violation::MISSING_ON_MATCH) return &missing_;

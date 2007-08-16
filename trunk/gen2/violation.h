@@ -32,14 +32,15 @@ struct Violation {
     REQUIREMENT,
     PROHIBITION, 
     MISSING_LINK,
-    MISSING_MULTILINK,
     MISSING_DYNAMIC_ON,
+    MISSING_ON_MATCH,
+    EXTRA_ON_MATCH,
     VALUE,
     POSTING,
     TIME,
   };
 
-  extern map<void *, Violation *> owned_violations_;
+  static map<void *, set<Violation *> > owned_violations_;
 
   
   virtual void Init(OTime time);
@@ -48,7 +49,7 @@ struct Violation {
     L1_RemoveFromGlobalMap();
     CL.Destroying(this);
   }
-  void L1_ChangeTime(time new_time);
+  void L1_ChangeTime(OTime new_time);
   virtual ~Violation(){}
   virtual Type GetType() = 0;
   OTime GetTime() { return time_; }
@@ -62,7 +63,7 @@ struct Violation {
 // Find all OwnedViolations of this type with this owner. 
 set<Violation *> FindViolations(void *owner, Violation::Type type) {
   set<Violation *> ret;
-  set<Violation *> * s = Violation::owned_violations_ % owner_;
+  set<Violation *> * s = Violation::owned_violations_ % owner;
   if (!s) return ret;
   forall(run, *s) if ((*run)->GetType() == type) ret.insert(*run);
   return ret;
@@ -105,7 +106,7 @@ class OwnedViolation : public Violation {
   Owner GetOwner() { return owner_;}
   Violation::Type GetType() const {return VType;}
   Owner *owner_;
-}
+};
 
 
 // This is a violation that is owned by an owner_, and indexed by the owner
@@ -127,7 +128,15 @@ class OwnedViolationWithData : public Violation {
   Owner GetOwner() { return owner_;}
   Violation::Type GetType() const {return VType;}
   Owner *owner_;
-}
+  DataType data_;
+};
+
+class SingleLink;
+class OnMultiLink;
+class DynamicElement;
+class OnStatement;
+class DynamicExpression;
+class OutputStatement;
 
 // A required tuple is not present on the blackboard
 typedef OwnedViolation<Requirement, Violation::REQUIREMENT>
@@ -139,10 +148,10 @@ typedef OwnedViolationWithData<Prohibition, OTuple, Violation::PROHIBITION>
 typedef OwnedViolation<SingleLink, Violation::MISSING_LINK>
   MissingLinkViolation;
 // An on statement lacks a child for a binding which matches the blackboard.
-typedef OwnedViolationWithData<OnMultilink, OMap, Violation::MISSING_ON_MATCH>
+typedef OwnedViolationWithData<OnMultiLink, OMap, Violation::MISSING_ON_MATCH>
   MissingOnMatchViolation;
 // An on statement has a child whose binding does not match the blackboard.
-typedef OwnedViolationWithData<OnMultilink, OMap, Violation::EXTRA_ON_MATCH>
+typedef OwnedViolationWithData<OnMultiLink, OMap, Violation::EXTRA_ON_MATCH>
   ExtraOnMatchViolation;
 // the time on a dynamic element may not be equal to its computed time.
 typedef OwnedViolation<DynamicElement, Violation::TIME>
@@ -153,10 +162,14 @@ typedef OwnedViolation<OnStatement, Violation::MISSING_DYNAMIC_ON>
 // the value of a dynamic expression doesn't match its computed value. 
 typedef OwnedViolation<DynamicExpression, Violation::VALUE>
   ValueViolation;
+
+// This one is actually declared in element.h, since we can't forward declare
+// OutputStatement::Dynamic :(
 // Something is wrong with a dynamic output statement. This could be that the
 // posting is missing, the posting does not match the computed tuple or the 
 // computed time. The expression link could also be missing. 
-typedef OwnedViolation<OutputStatement::Dynamic, Violation::POSTING>
-  PostingViolation;
+// typedef OwnedViolation<OutputStatement::Dynamic, Violation::POSTING>
+//  PostingViolation;
+
 
 #endif
