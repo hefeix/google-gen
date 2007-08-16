@@ -20,12 +20,13 @@
 #define _ELEMENT_H_
 
 #include "namer.h"
+#include "link.h"
 
 
 
-struct Link;
+/*struct Link;
 struct MultiLink;
-struct SingleLink;
+struct SingleLink;*/
 
 struct Element : public Named {
   Link * parent_;
@@ -96,7 +97,7 @@ struct DynamicElement : public Element{
       parent_ = link;
     else static_parent_ = link;
   }
-  StaticElement * GetStatic() {
+  StaticElement * GetStatic() const {
     return dynamic_cast<StaticElement *>(static_parent_->parent_); 
   }
   int NumExpressionChildren() { return GetStatic()->NumExpressionChildren();}
@@ -316,6 +317,8 @@ struct OutputStatement : public Statement {
     Posting * posting_;
   };
 };
+typedef OwnedViolation<OutputStatement::Dynamic, Violation::POSTING>
+  PostingViolation;
 
 struct IfStatement : public Statement {
   enum {

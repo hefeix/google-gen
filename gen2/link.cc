@@ -1,4 +1,4 @@
-/ Copyright (C) 2007 Google Inc. and Georges Harik
+// Copyright (C) 2007 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,6 +33,12 @@ void Link::L1_Erase() {
   EraseOwnedViolations(this);
   CL.Destroying(this);
 }
+
+OTime Link::ComputeChildTime(Element *child) const {
+  return parent_->ComputeChildTime(this, child);
+}
+
+
 void MultiLink::L1_AddChild(Element *child){
   if (!child) return;
   CL.InsertIntoMap(&children_, child->GetBinding(), 
@@ -50,7 +56,7 @@ set<Element *> MultiLink::GetChildren() const {
   return ret;
 }
 
-void Multilink::Init(Element * parent) {
+void MultiLink::Init(Element * parent) {
   Link::Init(parent);
 }
 
@@ -81,14 +87,14 @@ set<Element *> SingleLink::GetChildren() const {
   return ret;
 }
 
-void OnMultilink::Init() {
-  Multilink::Init();
+void OnMultiLink::Init() {
+  MultiLink::Init();
   Query * q = BB.L1_GetExecuteQuery(GetPattern(), SamplingInfo(), NULL);
   subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH | UPDATE_TIME,
 			      this);
   subscription_->L1_SendCurrentAsUpdates();  
 }
-void OnMultilink::Update(const QueryUpdate &update, SubType *sub) {
+void OnMultiLink::Update(const QueryUpdate &update, SubType *sub) {
   forall(run, update.changes_) {
     SingleQueryUpdate s = *run;
     // if there were any bindings_ at the parent, we would have to union 
