@@ -20,7 +20,7 @@
 #define _MODEL_H_
 
 #include "blackboard.h"
-#include "static.h"
+#include "element.h"
 #include "chooser.h"
 #include "violation.h"
 

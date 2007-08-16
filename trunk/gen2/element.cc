@@ -36,6 +36,11 @@ void StaticElement::L1_Erase() {
   EraseOwnedViolations(this);
   Named::L1_Erase();
 }
+StaticElement * StaticElement::GetParent() const { 
+  if (!parent_) return NULL;
+  return dynamic_cast<StaticElement *>(parent_->GetParent());
+}
+
 set<Variable> StaticElement::GetVariables() const { 
   if (!parent_) return set<Variable>();
   return Union(parent_->GetVariables(), parent_->GetIntroducedVariables());

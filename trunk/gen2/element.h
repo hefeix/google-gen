@@ -17,13 +17,15 @@
 // Author: Georges Harik and Noam Shazeer
 
 #ifndef _ELEMENT_H_
-#include _ELEMENT_H_
+#define _ELEMENT_H_
 
 #include "namer.h"
 
 
 
 struct Link;
+struct MultiLink;
+struct SingleLink;
 
 struct Element : public Named {
   Link * parent_;
@@ -40,6 +42,8 @@ struct Element : public Named {
   // does not need an L1_Erase, since subclasses' L1_Erase skips it.
 };
 
+struct Statement;
+struct Expression;
 
 struct StaticElement : public Element {
   void Init();
@@ -56,10 +60,7 @@ struct StaticElement : public Element {
   vector<SingleLink *> static_children_; // statements and expressions
   vector<Object> objects_;
 
-  StaticElement * GetParent() const { 
-    if (!parent_) return NULL;
-    return dynamic_cast<StaticElement *>(parent_->GetParent());
-  }
+  StaticElement * GetParent() const;
   StaticElement * GetChild(int which) const;
   Statement * GetStatementChild(int which) const;// which < NumStatementChildren
   Expression * GetExpressionChild(int which) const;

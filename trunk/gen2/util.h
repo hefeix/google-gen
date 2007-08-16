@@ -335,9 +335,9 @@ template<class T> set<T> SingletonSet(const T & t) {
   return ret;
 }
 
-template <class K, class V> map<K, V> Restrict(const Map<K,V> & m, 
-					       const set<K> & s) {
-  Map<K, V> ret;
+template<class K, class V> map<K, V> Restrict(const map<K,V> & m, 
+					      const set<K> & s) {
+  map<K, V> ret;
   forall(run, m) {
     if (s % run->first) ret[run->first] = run->second;
   }
