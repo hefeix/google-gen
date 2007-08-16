@@ -21,7 +21,7 @@ void DestroyKeywords() {
 }
 
 // There must be some black magic going on here, but the compiler is happy.
-template<ObjectType OT, class D>
+template<Object::Type OT, class D>
 map<D, class SpecificObject<OT, D>::Definition *> 
 SpecificObject<OT, D>::unique_;
 

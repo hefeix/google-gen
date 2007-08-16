@@ -53,11 +53,9 @@ a-z(otherwise)   It's a keyword, except for the following exceptions:
 #include "hash.h"
 #include "numbers.h"
 
-class ObjectDefinition;
-
 class Object {
-
-  enum ObjectType {
+ public:
+  enum Type {
     OBJECT,
     FLAKE,
     KEYWORD,
@@ -76,7 +74,28 @@ class Object {
     ERRORTYPE,
   };
 
-  static inline string ObjectTypeName(ObjectType t) {
+  // There will exist no two identical ObjectDefinition objects.
+  struct Definition {
+    virtual Object::Type GetType() const = 0;
+    string ToString(bool verbose = false) const{
+      string ret = ToStringSpecific(verbose);
+      if (verbose) ret = "<" + Object::TypeName(GetType()) + " rc=" 
+	+ itoa(reference_count_) + "> " + ret;
+      return ret;
+    };
+    virtual string ToStringSpecific(bool verbose) const {
+      return "ERROR";
+    }
+    virtual ~Definition(){}
+    int reference_count_;
+    Definition() {
+      reference_count_ = 0;
+    }
+    virtual uint64 DeepFingerprint(uint64 level = 0) const = 0;
+  };
+  
+  
+  static inline string TypeName(Type t) {
     switch(t) {
     case FLAKE: return "FLAKE";
     case KEYWORD: return "KEYWORD";
@@ -96,11 +115,10 @@ class Object {
     }
   }
 
- public:
   Object() {
     def_ = NULL;
   }
-  Object(ObjectDefinition * def) {
+  Object(Definition * def) {
     def_ = NULL;
     PointTo(def);
   };
@@ -126,15 +144,15 @@ class Object {
   };
   // returns the type of the definition (which is always a subtype)
   // should only be called on a generic object. 
-  ObjectType Type() const { 
+  Type GetType() const { 
     if (def_ == NULL) return NULLTYPE;
-    return def_->Type();
+    return def_->GetType();
   }
   // returns the type of this Object object
-  virtual ObjectType ReferenceType() const{
+  virtual Type GetReferenceType() const{
     return OBJECT;
   }
-  const ObjectDefinition * GetObjectDefinition() const {
+  const Definition * GetDefinition() const {
     return def_;
   }
   string ToString(bool verbose=false) const 
@@ -147,8 +165,8 @@ class Object {
   }
 
  protected:
-  ObjectDefinition * def_;
-  void PointTo(ObjectDefinition *def){
+  Definition * def_;
+  void PointTo(Definition *def){
     if (def_) {
       def_->reference_count_--;
       if (def_->reference_count_==0) delete def_;
@@ -156,45 +174,26 @@ class Object {
     def_ = def;
     if (def_) {
       // run-time type checking.
-      CHECK(ReferenceType()==OBJECT || ReferenceType() == def_->Type());
+      CHECK(GetReferenceType()==OBJECT || GetReferenceType() == def_->GetType());
       def_->reference_count_++;
     }
   }
 };
 
-// There will exist no two identical ObjectDefinition objects.
-struct ObjectDefinition {
-  virtual Object::ObjectType Type() const = 0;
-  string ToString(bool verbose = false) const {
-    string ret = ToStringSpecific(verbose);
-    if (verbose) ret = "<" + Object::ObjectTypeName(Type()) + " rc=" 
-      + itoa(reference_count_) + "> " + ret;
-    return ret;
-  }
-  virtual string ToStringSpecific(bool verbose) const {
-    return "ERROR";
-  }
-  virtual ~ObjectDefinition(){}
-  int reference_count_;
-  ObjectDefinition() {
-    reference_count_ = 0;
-  }
-  virtual uint64 DeepFingerprint(uint64 level = 0) const = 0;
-};
 
 
 
 inline bool operator ==(const Object & o1, const Object & o2) {
-  return (o1.GetObjectDefinition()==o2.GetObjectDefinition());
+  return (o1.GetDefinition()==o2.GetDefinition());
 }
 inline bool operator <(const Object & o1, const Object & o2) {
-  return (o1.GetObjectDefinition()<o2.GetObjectDefinition());
+  return (o1.GetDefinition()<o2.GetDefinition());
 }
 inline bool operator !=(const Object &o1, const Object &o2){
   return !(o1==o2);
 }
 inline bool operator ==(const Object & o, void *p) {
-  return o.GetObjectDefinition() == p;
+  return o.GetDefinition() == p;
 }
 inline bool operator !=(const Object & o, void *p) {
   return (!(o==p));
@@ -203,10 +202,10 @@ inline bool operator !=(const Object & o, void *p) {
 // TODO: we could make some types of objects that own their definitions.  
 // We would have to change object comparison to first be by type.  
 
-template <ObjectType OT, class D>
+template <Object::Type OT, class D>
 class SpecificObject : public Object {
  public:
-  class Definition : public ObjectDefinition 
+  class Definition : public Object::Definition 
   {
   public:
     D data_;
@@ -219,7 +218,7 @@ class SpecificObject : public Object {
     ~Definition() {
       unique_.erase(data_);
     }
-    ObjectType Type() const { 
+    Object::Type GetType() const { 
       return OT;
     }
     string ToStringSpecific(bool verbose) const;
@@ -246,12 +245,12 @@ class SpecificObject : public Object {
   static SpecificObject<OT, D> Default() {
     return Make(D());
   }
-  ObjectType ReferenceType() const{
+  Object::Type GetReferenceType() const{
     return OT;
   }
   
   const Definition * GetDefinition() const{
-    return dynamic_cast<const Definition *>(GetObjectDefinition());
+    return dynamic_cast<const Definition *>(GetDefinition());
   }
 
   const D & Data() const{ return GetDefinition()->Data();}
@@ -266,12 +265,12 @@ class SpecificObject : public Object {
   SpecificObject() : Object() {}
     
     SpecificObject(const Object & o) : Object(o) {      
-      CHECK(def_ == NULL || o.Type() == OT);    
+      CHECK(def_ == NULL || o.GetType() == OT);    
     }
       
-      SpecificObject(ObjectDefinition *def) 
+      SpecificObject(Object::Definition *def) 
 	: Object(def) {
-	CHECK(def == NULL || def->Type() == OT);
+	CHECK(def == NULL || def->GetType() == OT);
       }
 	
 	SpecificObject(void *null) : Object(null) {}
@@ -288,20 +287,20 @@ typedef vector<Object> Tuple;
 typedef map<Object, Object> Map;
 typedef vector<Tuple> MPattern; // mutable 2 levels down
 
-typedef SpecificObject<FLAKE, string> Flake;
-typedef SpecificObject<KEYWORD, string> Keyword;
-typedef SpecificObject<VARIABLE, int> Variable;
-typedef SpecificObject<OTUPLE, Tuple > OTuple;
-typedef SpecificObject<OMAP, Map> OMap;
-typedef SpecificObject<BOOLEAN, bool> Boolean;
-typedef SpecificObject<INTEGER, int> Integer;
-typedef SpecificObject<REAL, double> Real;
-typedef SpecificObject<OTIME, Time> OTime;
+typedef SpecificObject<Object::FLAKE, string> Flake;
+typedef SpecificObject<Object::KEYWORD, string> Keyword;
+typedef SpecificObject<Object::VARIABLE, int> Variable;
+typedef SpecificObject<Object::OTUPLE, Tuple > OTuple;
+typedef SpecificObject<Object::OMAP, Map> OMap;
+typedef SpecificObject<Object::BOOLEAN, bool> Boolean;
+typedef SpecificObject<Object::INTEGER, int> Integer;
+typedef SpecificObject<Object::REAL, double> Real;
+typedef SpecificObject<Object::OTIME, Time> OTime;
 typedef vector<OTuple> Pattern;
-typedef SpecificObject<OPATTERN, Pattern> OPattern;
-typedef SpecificObject<OBITSEQ, BitSeq> OBitSeq;
-typedef SpecificObject<STRING, string> String;
-typedef SpecificObject<ESCAPE, Object> Escape;
+typedef SpecificObject<Object::OPATTERN, Pattern> OPattern;
+typedef SpecificObject<Object::OBITSEQ, BitSeq> OBitSeq;
+typedef SpecificObject<Object::STRING, string> String;
+typedef SpecificObject<Object::ESCAPE, Object> Escape;
 
 inline const Object * operator %(const OMap & m, Object key) {
   return m.Data() % key;
@@ -365,8 +364,12 @@ extern Keyword WILDCARD;
 extern Keyword SEMICOLON;
 extern OTime NEVER;
 
-inline bool IsVariable(const Object & o) {  return (o.Type()==VARIABLE); }
-inline bool IsWildcard(const Object & o) {  return (o == WILDCARD); }
+inline bool IsVariable(const Object & o) { 
+  return (o.GetType()==Object::VARIABLE); 
+}
+inline bool IsWildcard(const Object & o) {  
+  return (o == WILDCARD); 
+}
 
 void ObjectsShell();
 
