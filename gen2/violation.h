@@ -34,9 +34,14 @@ struct Violation {
     MISSING_LINK,
     MISSING_MULTILINK,
     MISSING_DYNAMIC_ON,
+    VALUE,
+    POSTING,
+    TIME,
   };
 
+  extern map<void *, Violation *> owned_violations_;
 
+  
   virtual void Init(OTime time);
   virtual void L1_Erase() {
     // remove from the model's set of violations
@@ -54,60 +59,104 @@ struct Violation {
   OTime time_;
 };
 
-struct RequirementViolation : public Violation {  
-  void Init(Requirement * requirement);
-  Requirement * requirement_;
-  Violation::Type GetType() { return REQUIREMENT;}  
-};
+// Find all OwnedViolations of this type with this owner. 
+set<Violation *> FindViolations(void *owner, Violation::Type type) {
+  set<Violation *> ret;
+  set<Violation *> * s = Violation::owned_violations_ % owner_;
+  if (!s) return ret;
+  forall(run, *s) if ((*run)->GetType() == type) ret.insert(*run);
+  return ret;
+}
 
-struct ProhibitionViolation : public Violation {
-  void Init(Prohibition * prohibition, 
-	    OTuple tuple, OTime time);
-  Prohibition *prohibition_;
-  OTuple tuple_;
-  Violation::Type GetType() { return PROHIBITION;}
+// returns a single violation, or null. Checks that there are at most one.
+// TODO, this is inefficient in that it creates a set. 
+Violation * FindViolation(void *owner, Violation::Type type) {
+  set<Violation *> s = FindViolations(owner, type);
+  CHECK(s.size() <= 1);
+  if (s.size()==1) return *s.begin();
+  return NULL;
+}
 
-};
+// Delete all OwnedViolations with this owner
+void EraseOwnedViolations(void *owner) {
+  // L1_Eraseing the violation removes it from the index, so this is a way
+  // to avoid invalidating iterators. 
+  while(Violation::owned_violations_ % owner) {
+    (*Violation::owned_violations_[owner].begin())->L1_Erase();
+  }
+}
 
-// the SingleLink has no child
-class SingleLink;
-struct MissingLinkViolation : public Violation {
-  void Init(SingleLink * link);
-  void L1_Erase();
-  SingleLink *link_;
-  Violation::Type GetType() { return MISSING_LINK;}
-};
 
-// the MultiLink should have a child for the given OMap, but doesn't 
-struct MissingMultiLinkViolation : public Violation {
-  void Init(MultiLink *link, OMap m, OTime time);
-  void L1_Erase();
-  MultiLink *link_;
-  OMap map_;
-  Violation::Type GetType() { return MISSING_MULTILINK;}
-};
+// This is a violation that is owned by a c object called owner_.  It indexes
+// itself in the global map Violation::owned_violations_.  
+// To find the violation by owner and type you can call 
+// FindViolations(owner, Type).  The owner when dying must call 
+// EraseOwnedViolations(owner) to erase any violations it owns. 
+template <class Owner, Violation::Type VType>
+class OwnedViolation : public Violation { 
+  void Init(Owner *owner, OTime time) {
+    owner_ = owner;
+    Violation::Init(time);
+    CL.InsertIntoMapOfSets(&Violation::owned_violations_, owner_, this);
+  }
+  void L1_Erase() {
+    CL.RemoveFromMapOfSets(&Violation::owned_violations_, owner_, this);
+  }
+  Owner GetOwner() { return owner_;}
+  Violation::Type GetType() const {return VType;}
+  Owner *owner_;
+}
 
-struct ExtraMultiLinkViolation : public Violation {
-  void Init(MultiLink *link, OMap m, OTime time);
-  void L1_Erase();
-  MultiLink *link_;
-  OMap map_;
-  Violation::Type GetType() { return EXTRA_MULTILINK;}
-};
 
+// This is a violation that is owned by an owner_, and indexed by the owner
+// by some data. The owner has a map from DataType to Violation *, and 
+// makes it accessible to the violation by having a function
+// map<DataType, Violation *> * GetViolationMap(Violation::Type);
+// The owner must also L1_Erase() all of these violations upon erasing itself. 
+template <class Owner, class DataType, Violation::Type VType>
+class OwnedViolationWithData : public Violation { 
+  void Init(Owner *owner, DataType data, OTime time) {
+    owner_ = owner;
+    Violation::Init(time);
+    data_ = data;
+    CL.InsertIntoMap(owner_->GetViolationMap(VType), data_, this);
+  }
+  void L1_Erase() {
+    CL.RemoveFromMap(owner_->GetViolationMap(VType), data_);
+  }
+  Owner GetOwner() { return owner_;}
+  Violation::Type GetType() const {return VType;}
+  Owner *owner_;
+}
+
+// A required tuple is not present on the blackboard
+typedef OwnedViolation<Requirement, Violation::REQUIREMENT>
+  RequirementViolation;
+// a tuple on the blackboard matches a prohibited pattern
+typedef OwnedViolationWithData<Prohibition, OTuple, Violation::PROHIBITION>
+  ProhibitionViolation;
+// a SingleLink has no child.
+typedef OwnedViolation<SingleLink, Violation::MISSING_LINK>
+  MissingLinkViolation;
+// An on statement lacks a child for a binding which matches the blackboard.
+typedef OwnedViolationWithData<OnMultilink, OMap, Violation::MISSING_ON_MATCH>
+  MissingOnMatchViolation;
+// An on statement has a child whose binding does not match the blackboard.
+typedef OwnedViolationWithData<OnMultilink, OMap, Violation::EXTRA_ON_MATCH>
+  ExtraOnMatchViolation;
 // the time on a dynamic element may not be equal to its computed time.
-struct TimeViolation : public Violation {
-  void Init(DynamicElement *element, OTime time);
-  DynamicElement *element_;
-  Violation::Type GetType() { return TIME; }
-};
-
-
-struct MissingDynamicOnViolation :public Violation {
-  void Init(OnStatement *on, OTime time);
-  OnStatement *on_;
-  Violation::Type GetType() { reurn MISSING_DYNAMIC_ON;}
-};
-
+typedef OwnedViolation<DynamicElement, Violation::TIME>
+  TimeViolation;
+// a static on statement has no dynamic node
+typedef OwnedViolation<OnStatement, Violation::MISSING_DYNAMIC_ON>
+  MissingDynamicOnViolation;
+// the value of a dynamic expression doesn't match its computed value. 
+typedef OwnedViolation<DynamicExpression, Violation::VALUE>
+  ValueViolation;
+// Something is wrong with a dynamic output statement. This could be that the
+// posting is missing, the posting does not match the computed tuple or the 
+// computed time. The expression link could also be missing. 
+typedef OwnedViolation<OutputStatement::Dynamic, Violation::POSTING>
+  PostingViolation;
 
 #endif

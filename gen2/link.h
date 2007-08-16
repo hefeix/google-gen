@@ -84,8 +84,14 @@ struct OnMultilink : public Multilink {
   typedef UpdateSubscription<QueryUpdate, Query, OnMultilink> SubType;
   friend class UpdateSubscription<QueryUpdate, Query, OnMultilink>;
   void Update(const QueryUpdate &update, SubType *sub);
-  map<OMap, MissingMultiLinkViolation *> missing_;
-  map<OMap, ExtraMultiLinkViolation *> extra_;
+  map<OTuple, Violation *> * GetViolationMap(Violation::Type vtype) {
+    if (vtype == Violation::MISSING_ON_MATCH) return &missing_;
+    if (vtype == Violation::EXTRA_ON_MATCH) return &extra_;
+    CHECK(false);
+    return NULL;
+  }
+  map<OMap, Violation *> missing_;
+  map<OMap, Violation *> extra_;
 };
 
 struct SingleLink : public Link {
@@ -105,8 +111,6 @@ struct SingleLink : public Link {
   virtual ~SingleLink(){}
 
   // Data
-  // If the link points to nothing, there is a violation. 
-  MissingLinkViolation * violation_;
   Element * child_;
 };
 

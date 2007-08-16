@@ -45,7 +45,6 @@ class Requirement {
   void L1_AddViolation();
   void L1_RemoveViolation();
   void Update(const QueryUpdate &update, SubType * sub);
-  RequirementViolation * violation_;
   SubType * subscription_;
   OTuple tuple_;
 };
@@ -54,14 +53,19 @@ class Prohibition {
  public:
   Prohibition(OTuple tuple);  
   void L1_Erase();
-  void L1_AddException(OTuple t);    
+  void L1_AddException(OTuple t);
+  map<OTuple, Violation *> * GetViolationMap(Violation::Type vtype) {
+    CHECK(vtype == Violation::PROHIBITION);
+    return &violations_;
+  }
+  
   typedef UpdateSubscription<QueryUpdate, Query, Prohibition> SubType;
   friend class UpdateSubscription<QueryUpdate, Query, Prohibition>;
  private:
   OTuple tuple_;
   SubType * subscription_;
   set<OTuple> exceptions_;
-  map<OTuple, ProhibitionViolation *> violations_;
+  map<OTuple, Violation *> violations_;
   void Update(const QueryUpdate &update, SubType * sub);
   void L1_AddViolation(OTuple t);
   void L1_RemoveViolation(OTuple t);
