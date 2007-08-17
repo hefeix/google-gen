@@ -88,6 +88,14 @@ DynamicElement * DynamicElement::GetSingleChild(int which) const {
   return dynamic_cast<DynamicElement *>(l->GetChild());
 }
 
+DynamicExpression * DynamicElement::GetSingleExpressionChild(int which) const {
+  return dynamic_cast<DynamicExpression *>(GetSingleChild(which));
+}
+DynamicExpression * DynamicElement::GetSingleStatementChild(int which) const{
+    return dynamic_cast<DynamicStatement *>(GetSingleChild(which));
+}
+
+
 
 void Statement::Init() {
   StaticElement::Init();

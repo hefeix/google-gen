@@ -1,3 +1,5 @@
+- declare crusade on inner classes. 
+
 - create violations when various things are made
   // create a violation if a static on gets added.
 - start working on a fixer

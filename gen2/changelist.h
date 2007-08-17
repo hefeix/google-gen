@@ -182,37 +182,38 @@ template <class K, class V> class MapRemoveChange : public Change {
 // Inserts a key/value pair into a map of sets.
 // might need to create a map entry and remove it on rollback.
 // MK is map key, SV is the set value type
-template <class MK, class SV> class MapOfSetsInsertChange : public Change {
+template <class MK, class SV, class MapComp = less<MK> > 
+  class MapOfSetsInsertChange : public Change {
  public:
-  MapOfSetsInsertChange(map<MK, set<SV> > * location, const MK & key, 
-			    const SV & value) {
-    location_ = location;
-    key_ = key;
-    value_ = value;
-    CHECK(!((*location_)[key_] % value_));
-    (*location_)[key_].insert(value_);
-  }
-  void Undo(){
-    (*location_)[key_].erase(value_);
-    if ((*location_)[key_].size()==0) location_->erase(key_);
-  }
-  string ToString() const {
-    ostringstream out;
+    MapOfSetsInsertChange(map<MK, set<SV>, MapComp> * location, const MK & key, 
+			  const SV & value) {
+      location_ = location;
+      key_ = key;
+      value_ = value;
+      CHECK(!((*location_)[key_] % value_));
+      (*location_)[key_].insert(value_);
+    }
+    void Undo(){
+      (*location_)[key_].erase(value_);
+      if ((*location_)[key_].size()==0) location_->erase(key_);
+    }
+    string ToString() const {
+      ostringstream out;
     out << "MapOfSetsInsertChange " << location_;
     return out.str();
-  }
+    }
  private:
-  map<MK,set<SV> > * location_;
-  MK key_;
-  SV value_;
-};
+    map<MK,set<SV>, MapComp > * location_;
+    MK key_;
+    SV value_;
+  };
 
 // Removes a key/value pair into a map of sets.
 // Removes the map entry when the set is empty.
 // MK is map key, SV is the set value type
-template <class MK, class SV> class MapOfSetsRemoveChange : public Change {
+template <class MK, class SV, class MapComp = less<MK> > class MapOfSetsRemoveChange : public Change {
  public:
-  MapOfSetsRemoveChange(map<MK, set<SV> > * location, 
+  MapOfSetsRemoveChange(map<MK, set<SV>, MapComp > * location, 
 			const MK & key, 
 			const SV & value) {
     location_ = location;
@@ -231,7 +232,7 @@ template <class MK, class SV> class MapOfSetsRemoveChange : public Change {
     return out.str();
   }
  private:
-  map<MK,set<SV> > * location_;
+  map<MK,set<SV>, MapComp > * location_;
   MK key_;
   SV value_;
 };
@@ -429,15 +430,15 @@ class Changelist {
 						 const V&new_val) {
     Make(new MapValueChange<K,V>(location, key, new_val));
   }
-  template <class MK, class SV> 
-    void InsertIntoMapOfSets(map<MK, set<SV> > * location, const MK & key, 
+  template <class MK, class SV, class MapComp> 
+    void InsertIntoMapOfSets(map<MK, set<SV>, MapComp> * location, const MK & key, 
 			     const SV & value) {
-    Make(new MapOfSetsInsertChange<MK, SV>(location, key, value));
+    Make(new MapOfSetsInsertChange<MK, SV, MapComp>(location, key, value));
   }
-  template <class MK, class SV> 
-    void RemoveFromMapOfSets(map<MK, set<SV> > * location, const MK & key, 
+  template <class MK, class SV, class MapComp> 
+    void RemoveFromMapOfSets(map<MK, set<SV>, MapComp> * location, const MK & key, 
 			     const SV & value) {
-    Make(new MapOfSetsRemoveChange<MK, SV>(location, key, value));
+    Make(new MapOfSetsRemoveChange<MK, SV, MapComp>(location, key, value));
   }
 
 };
