@@ -16,6 +16,9 @@
 //
 // Author: Georges Harik and Noam Shazeer
 
+#ifndef _LINK_H_
+#define _LINK_H_
+
 #include "query.h"
 #include "violation.h"
 
@@ -40,7 +43,7 @@ struct Link {
   virtual void L1_RemoveChild(Element *child) = 0;
 
   // Accessors
-  Element * GetParent() { return parent_;}
+  Element * GetParent() const { return parent_;}
   virtual set<Element *> GetChildren() const = 0;
   // assumes this is the parent_ link of the child. 
   OTime ComputeChildTime(Element *child) const;
@@ -77,6 +80,10 @@ struct OnMultiLink : public MultiLink {
   // Init and Erase
   void Init(Element *parent, OPattern p);
 
+  // Accessors
+  // casts GetParent() to an OnStatement::Dynamic
+  OnStatement::Dynamic * GetDynamicOnParent() const;
+
   // Modifiers
   void L1_AddChild(Element *child);
   void L1_RemoveChild(Element *child);
@@ -84,7 +91,7 @@ struct OnMultiLink : public MultiLink {
   typedef UpdateSubscription<QueryUpdate, Query, OnMultiLink> SubType;
   friend class UpdateSubscription<QueryUpdate, Query, OnMultiLink>;
   void Update(const QueryUpdate &update, SubType *sub);
-  map<OTuple, Violation *> * GetViolationMap(Violation::Type vtype) {
+  map<OMap, Violation *> * GetViolationMap(Violation::Type vtype) {
     if (vtype == Violation::MISSING_ON_MATCH) return &missing_;
     if (vtype == Violation::EXTRA_ON_MATCH) return &extra_;
     CHECK(false);
@@ -114,3 +121,4 @@ struct SingleLink : public Link {
   Element * child_;
 };
 
+#endif

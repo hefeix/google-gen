@@ -21,7 +21,7 @@
 #include "changelist.h"
 #include "element.h"
 
-map<void *, set<Violation *> > Violation::owned_violations_
+map<void *, set<Violation *> > Violation::owned_violations_;
 
 void Violation::Init(OTime time) {  
   CL.Creating(this);
@@ -44,68 +44,8 @@ void Violation::L1_ChangeTime(OTime new_time) {
 }
 
 bool Violation::Exists() {
-  if (!M.violations_by_time_ % time_) return false;
+  if (!(M.violations_by_time_ % time_)) return false;
   if (M.violations_by_time_[time_] % this) return true;
   return false;
 }
 
-void RequirementViolation::Init(Requirement *requirement) {
-  Violation::Init(CREATION);
-  requirement_ = requirement;
-  CL.ChangeValue(&requirement_->violation_, this);
-}
-void RequirementViolation::L1_Erase() {
-  CL.ChangeValue(&requirement_->violation_, NULL);
-  Violation::L1_Erase();
-}
-void ProhibitionViolation::Init(Prohibition *prohibition,
-				OTuple tuple, OTime time) {
-  Violation::Init(time);
-  prohibition_ = prohibition;
-  tuple_ = tuple;
-  CL.InsertIntoMap(&prohibition_->violations_, tuple_, this);
-}
-void ProhibitionViolation::L1_Erase(){
-  CL.RemoveFromMap(&prohibition_->violations_, tuple_);
-}
-void MissingLinkViolation::Init(SingleLink *link, OTime time) {
-  Violation::Init(time);
-  link_ = link;
-  CHECK(link_->violation_ == NULL);
-  CL.ChangeValue(link_->violation_, this);
-}
-MissingLinkViolation::L1_Erase() {
-  CHECK(link_->violation_ == this);
-  CL.ChangeValue(link_->violation_, NULL);
-  Violation::L1_Erase();
-}
-void MissingMultiLinkViolation::Init(MultiLink *link, OMap m, OTime time) {
-  Violation::Init(time);
-  link_ = link;
-  map_ = m;
-  CL.InsertIntoMap(&link_->violations_, m, this);  
-}
-void MissingMultiLinkViolation::L1_Erase() {
-  CL.RemoveFromMap(&link_->violations_, m);
-  Violation::L1_Erase();
-}
-void TimeViolation::Init(DynamicElement *element,OTime time) {
-  Violation::Init(time);
-  element_ = element;
-  CHECK(element_->time_violation_ == NULL);
-  CL.ChangeValue(&element_->time_violation_, this);
-}
-void TimeViolation::L1_Erase() {
-  CL.ChangeValue(&element_->time_violation_, NULL);
-  Violation::L1_Erase();
-}
-
-void MissingDynamicOnViolation::Init(OnStatement *on, OTime time) {
-  Violation::Init(time);
-  on_ = on;
-  CL.ChangeValue(&on_->missing_dynamic_, this);
-}
-void MissingDynamicOnViolation::L1_Erase() {
-  CL.ChangeValue(&on->missing_dynamic_, NULL);
-  Violation::L1_Erase();
-}

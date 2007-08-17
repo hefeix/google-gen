@@ -17,10 +17,11 @@
 // Author: Georges Harik and Noam Shazeer
 
 #include "link.h"
+#include "element.h"
 #include "changelist.h"
 
 
-Link::Init(Element *parent) {
+void Link::Init(Element *parent) {
   // Creating called at the beginning of the base class
   CL.Creating(this);
   parent_ = parent;
@@ -87,9 +88,14 @@ set<Element *> SingleLink::GetChildren() const {
   return ret;
 }
 
-void OnMultiLink::Init() {
-  MultiLink::Init();
-  Query * q = BB.L1_GetExecuteQuery(GetPattern(), SamplingInfo(), NULL);
+OnStatement::Dynamic * OnMultiLink::GetDynamicOnParent() const {
+  return dynamic_cast<OnStatement::Dynamic>(GetParent());
+}
+
+void OnMultiLink::Init(Element *parent) {
+  MultiLink::Init(parent);
+  Query * q = BB.L1_GetExecuteQuery(GetDynamicOnParent()->GetPattern(), 
+				    SamplingInfo(), NULL);
   subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH | UPDATE_TIME,
 			      this);
   subscription_->L1_SendCurrentAsUpdates();  

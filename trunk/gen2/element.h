@@ -37,7 +37,7 @@ struct Element : public Named {
   virtual void Init() { Named::Init(); }
   Element() :parent_(NULL){};
   OTime time_;
-  virtual OTime ComputeChildTime(Link * link, Element *child) {
+  virtual OTime ComputeChildTime(const Link * link, const Element *child) {
     return time_;
   }
   // does not need an L1_Erase, since subclasses' L1_Erase skips it.
@@ -45,6 +45,8 @@ struct Element : public Named {
 
 struct Statement;
 struct Expression;
+struct DynamicStatement;
+struct DynamicExpression;
 
 struct StaticElement : public Element {
   void Init();
@@ -106,6 +108,9 @@ struct DynamicElement : public Element{
   int NumObjects() { return GetStatic()->NumObjects();}  
   Object GetObject(int which) const{ return GetStatic()->GetObject(which);}
   DynamicElement * GetSingleChild(int which) const;
+  DynamicExpression * GetSingleExpressionChild(int which) const;
+  DynamicExpression * GetSingleStatementChild(int which) const;
+
   OMap GetBinding() const { return binding_;}
   DynamicElement * FindParent() const; // finds parent based on bindings.
   virtual Link::Type LinkType(int which_child) { return Link::SINGLE;}
@@ -209,13 +214,14 @@ struct OnStatement : public Statement {
   
   void Init();
   void L1_Erase();
-  void L1_Subscribe(); // subscribe to the appropriate query.
-  SubType * subscription_;
 
   struct Dynamic : public DynamicStatement {
     void Init(OnStatement *static_parent);
-    virtual bool LinkType(int which_child) { return Link::ON;}
-    void GetPattern() { return GetStatic()->GetPattern();}
+    Link::Type LinkType(int which_child) { return Link::ON;}
+    OnStatement *GetOnStatement() const { 
+      return dynamic_cast<OnStatement*>(GetStatic());
+    }
+    OPattern GetPattern() { return GetOnStatement()->GetPattern();}
   };
 };
 
@@ -232,7 +238,8 @@ struct RepeatStatement : public Statement {
   int NumExpressionChildren() const { return CHILD;}
   int NumChildren() const { return NUM_CHILDREN;}
   int NumObjects() const { return NUM_OBJECTS;}
-  Variable GetRepetitionVariable() { return GetObject(REPETITION_VARIABLE);}
+  Variable GetRepetitionVariable() const { 
+    return GetObject(REPETITION_VARIABLE);}
   Keyword TypeKeyword() const;
   set<Variable> GetIntroducedVariables() const {
     return SingletonSet(GetRepetitionVariable()); }
@@ -243,7 +250,7 @@ struct RepeatStatement : public Statement {
   // assigned automatically in the constructor.
 
   struct Dynamic : public DynamicStatement {
-    virtual bool LinkType(int which_child) { 
+    virtual Link::Type LinkType(int which_child) { 
       return (which_child==CHILD)?Link::MULTI:Link::SINGLE;
     }
   };
@@ -262,9 +269,11 @@ struct DelayStatement : public Statement {
   void Init();
 
   struct Dynamic : public DynamicStatement {
-    virtual OTime ComputeChildTime(Link * link, Element *child) {
-      if (link_ == children_[CHILD]) {
-	return OTime::Make(time_.Data() + GetSingleChild(DELAY)->value_);
+    virtual OTime ComputeChildTime(const Link * link, const Element *child) {
+      if (link == children_[CHILD]) {
+	return OTime::Make
+	  (time_.Data() 
+	   + OBitSeq(GetSingleExpressionChild(DELAY)->value_).Data());
       }
       return time_;
     }
@@ -285,7 +294,7 @@ struct LetStatement : public Statement {
   int NumExpressionChildren() const { return CHILD;}
   int NumChildren() const { return NUM_CHILDREN;}
   int NumObjects() const { return NUM_OBJECTS;}
-  Variable GetVariable() { return GetObject(VARIABLE);}
+  Variable GetVariable() const { return GetObject(VARIABLE);}
   Keyword TypeKeyword() const;
   set<Variable> GetIntroducedVariables() const {
     return SingletonSet(GetVariable());}
@@ -356,7 +365,7 @@ struct SubstituteExpression : public Expression {
   Keyword TypeKeyword() const;
   void Init() {Expression::Init();}
 
-  struct Dynamic : public DymamicExpression() {
+  struct Dynamic : public DynamicExpression {
   };
 };
 
@@ -369,7 +378,7 @@ struct FlakeChoiceExpression : public Expression {
   Keyword TypeKeyword() const;
   void Init() {Expression::Init();}
 
-  struct Dynamic : public DymamicExpression() {
+  struct Dynamic : public DynamicExpression {
   };
 };
 
@@ -387,7 +396,7 @@ struct ConstantExpression : public Expression {
   Keyword TypeKeyword() const;
   string ToString() const;
 
-  struct Dynamic : public DymamicExpression() {
+  struct Dynamic : public DynamicExpression {
   };
 };
 

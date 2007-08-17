@@ -68,8 +68,8 @@ if (bar) { ...
 
 */
 
-template<class A, class B> const B * operator %(const map<A, B> & m, 
-						const A & a){
+template<class A, class B, class Comp> const B * operator %(const map<A, B, Comp> & m, 
+							    const A & a){
   typedef typeof(m.begin()) iter_type;
   iter_type look = m.find(a);
   if (look != m.end()) return &(look->second);
@@ -82,7 +82,7 @@ template <class A, class B> const B * operator %(const hash_map<A, B> & m,
   if (look != m.end()) return &(look->second);
   return 0;
   }
-template <class A, class B> B * operator %(map<A, B> & m, const A & a){
+template <class A, class B, class Comp> B * operator %(map<A, B, Comp> & m, const A & a){
   typedef typeof(m.begin()) iter_type;
   iter_type look = m.find(a);
   if (look != m.end()) return &(look->second);
