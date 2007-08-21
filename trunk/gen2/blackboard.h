@@ -355,6 +355,9 @@ class Blackboard {
       (GetAddIndexRow(wildcard_tuple), needs, subscriber);
   }
 
+  // These funtions crash if the tuples are not on the blackboard. 
+  Time FindTupleTime(OTuple t) const;
+  Time FindLastTime(const Pattern & p) const; // pattern is fully substituted
 
   void L1_AddSearchToFlush(Search * s);
   void Verify() const; // for debugging
@@ -363,7 +366,7 @@ class Blackboard {
   // returns null on failure
   IndexRow * GetIndexRow(OTuple wildcard_tuple);
   IndexRow * GetAddIndexRow(OTuple wildcard_tuple);
-  TupleInfo * GetTupleInfo(OTuple tuple);
+  TupleInfo * GetTupleInfo(OTuple tuple) const;
 
   map<OTuple, IndexRow *> index_;
   map<OTuple, TupleInfo *> tuple_info_;

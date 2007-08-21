@@ -31,7 +31,7 @@ void Named::L1_SetName(Object new_name) {
   Named ** clobbered = N.index_[GetType()] % new_name;
   if (clobbered) {
     // we should only be clobbering automatic names, which are all integers.
-    CHECK(new_name.Type() == INTEGER);
+    CHECK(new_name.GetType() == Object::INTEGER);
     CL.RemoveFromMap(&N.index_[GetType()], new_name);
   }
   CL.ChangeValue(&name_, new_name);

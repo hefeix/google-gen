@@ -362,6 +362,7 @@ void DestroyKeywords();
 // keywords that need to be created in InitKeywords
 extern Keyword WILDCARD;
 extern Keyword SEMICOLON;
+extern OTime CREATION;
 extern OTime NEVER;
 
 inline bool IsVariable(const Object & o) { 
