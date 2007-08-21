@@ -328,8 +328,8 @@ void Blackboard::L1_DeletingQuery(Query *q){
     CL.RemoveFromMap(&queries_, p);
   }
 }
-TupleInfo * Blackboard::GetTupleInfo(OTuple t){
-  TupleInfo ** find = tuple_info_ % t;
+TupleInfo * Blackboard::GetTupleInfo(OTuple t) const{
+  TupleInfo *const * find = tuple_info_ % t;
   if (find) return *find;
   return NULL;
 }
@@ -412,6 +412,18 @@ UpdateNeeds RandomUpdateNeeds() {
   }
   return 1;
 }
+Time Blackboard::FindTupleTime(OTuple t) const{
+  TupleInfo * ti = GetTupleInfo(t);
+  CHECK(ti);
+  return ti->FirstTime();
+}
+Time Blackboard::FindLastTime(const Pattern & p) const {
+  Time last;
+  for (uint i=0; i<p.size(); i++) last = max(last, FindTupleTime(p[i]));
+  return last;
+}
+
+
 void Blackboard::RandomTest() {
   CL.MakeChangesPermanent();
   rankset<Posting *> postings;

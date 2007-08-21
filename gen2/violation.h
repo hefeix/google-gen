@@ -51,7 +51,7 @@ struct Violation {
   }
   void L1_ChangeTime(OTime new_time);
   virtual ~Violation(){}
-  virtual Type GetType() = 0;
+  virtual Type GetType() const = 0;
   OTime GetTime() { return time_; }
   void L1_InsertIntoGlobalMap();
   void L1_RemoveFromGlobalMap();
@@ -61,31 +61,14 @@ struct Violation {
 };
 
 // Find all OwnedViolations of this type with this owner. 
-set<Violation *> FindViolations(void *owner, Violation::Type type) {
-  set<Violation *> ret;
-  set<Violation *> * s = Violation::owned_violations_ % owner;
-  if (!s) return ret;
-  forall(run, *s) if ((*run)->GetType() == type) ret.insert(*run);
-  return ret;
-}
+set<Violation *> FindViolations(void *owner, Violation::Type type);
 
 // returns a single violation, or null. Checks that there are at most one.
 // TODO, this is inefficient in that it creates a set. 
-Violation * FindViolation(void *owner, Violation::Type type) {
-  set<Violation *> s = FindViolations(owner, type);
-  CHECK(s.size() <= 1);
-  if (s.size()==1) return *s.begin();
-  return NULL;
-}
+Violation * FindViolation(void *owner, Violation::Type type);
 
 // Delete all OwnedViolations with this owner
-void EraseOwnedViolations(void *owner) {
-  // L1_Eraseing the violation removes it from the index, so this is a way
-  // to avoid invalidating iterators. 
-  while(Violation::owned_violations_ % owner) {
-    (*Violation::owned_violations_[owner].begin())->L1_Erase();
-  }
-}
+void EraseOwnedViolations(void *owner);
 
 
 // This is a violation that is owned by a c object called owner_.  It indexes
@@ -94,14 +77,16 @@ void EraseOwnedViolations(void *owner) {
 // FindViolations(owner, Type).  The owner when dying must call 
 // EraseOwnedViolations(owner) to erase any violations it owns. 
 template <class Owner, Violation::Type VType>
-class OwnedViolation : public Violation { 
+struct OwnedViolation : public Violation { 
   void Init(Owner *owner, OTime time) {
     owner_ = owner;
     Violation::Init(time);
-    CL.InsertIntoMapOfSets(&Violation::owned_violations_, owner_, this);
+    CL.InsertIntoMapOfSets(&Violation::owned_violations_, (void *)owner_, 
+			   (Violation *)this);
   }
   void L1_Erase() {
-    CL.RemoveFromMapOfSets(&Violation::owned_violations_, owner_, this);
+    CL.RemoveFromMapOfSets(&Violation::owned_violations_, (void *)owner_, 
+			   (Violation *)this);
   }
   Owner GetOwner() { return owner_;}
   Violation::Type GetType() const {return VType;}
@@ -115,12 +100,12 @@ class OwnedViolation : public Violation {
 // map<DataType, Violation *> * GetViolationMap(Violation::Type);
 // The owner must also L1_Erase() all of these violations upon erasing itself. 
 template <class Owner, class DataType, Violation::Type VType>
-class OwnedViolationWithData : public Violation { 
+struct OwnedViolationWithData : public Violation { 
   void Init(Owner *owner, DataType data, OTime time) {
     owner_ = owner;
     Violation::Init(time);
     data_ = data;
-    CL.InsertIntoMap(owner_->GetViolationMap(VType), data_, this);
+    CL.InsertIntoMap(owner_->GetViolationMap(VType), data_, (Violation*)this);
   }
   void L1_Erase() {
     CL.RemoveFromMap(owner_->GetViolationMap(VType), data_);
@@ -133,7 +118,7 @@ class OwnedViolationWithData : public Violation {
 
 class SingleLink;
 class OnMultiLink;
-class DynamicElement;
+class Element;
 class OnStatement;
 class DynamicExpression;
 class OutputStatement;
@@ -154,7 +139,7 @@ typedef OwnedViolationWithData<OnMultiLink, OMap, Violation::MISSING_ON_MATCH>
 typedef OwnedViolationWithData<OnMultiLink, OMap, Violation::EXTRA_ON_MATCH>
   ExtraOnMatchViolation;
 // the time on a dynamic element may not be equal to its computed time.
-typedef OwnedViolation<DynamicElement, Violation::TIME>
+typedef OwnedViolation<Element, Violation::TIME>
   TimeViolation;
 // a static on statement has no dynamic node
 typedef OwnedViolation<OnStatement, Violation::MISSING_DYNAMIC_ON>
@@ -162,14 +147,14 @@ typedef OwnedViolation<OnStatement, Violation::MISSING_DYNAMIC_ON>
 // the value of a dynamic expression doesn't match its computed value. 
 typedef OwnedViolation<DynamicExpression, Violation::VALUE>
   ValueViolation;
-
-// This one is actually declared in element.h, since we can't forward declare
-// OutputStatement::Dynamic :(
 // Something is wrong with a dynamic output statement. This could be that the
 // posting is missing, the posting does not match the computed tuple or the 
 // computed time. The expression link could also be missing. 
 // typedef OwnedViolation<OutputStatement::Dynamic, Violation::POSTING>
 //  PostingViolation;
+class DynamicOutput;
+typedef OwnedViolation<DynamicOutput, Violation::POSTING>
+  PostingViolation;
 
 
 #endif

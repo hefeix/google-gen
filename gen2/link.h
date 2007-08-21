@@ -46,7 +46,7 @@ struct Link {
   Element * GetParent() const { return parent_;}
   virtual set<Element *> GetChildren() const = 0;
   // assumes this is the parent_ link of the child. 
-  OTime ComputeChildTime(Element *child) const;
+  OTime ComputeChildTime(const Element *child) const;
 
   // Just to make the compiler happy
   virtual ~Link() {}
@@ -74,15 +74,17 @@ struct MultiLink : public Link {
   map<OMap, DynamicElement *> children_;
 };
 
+class DynamicOn;
+
 // this is a multilink where the children should exactly match the
 // satisfactions of a pattern.  Violations are created automatically. 
 struct OnMultiLink : public MultiLink {
   // Init and Erase
-  void Init(Element *parent, OPattern p);
+  void Init(DynamicOn *parent);
 
   // Accessors
-  // casts GetParent() to an OnStatement::Dynamic
-  OnStatement::Dynamic * GetDynamicOnParent() const;
+  // casts GetParent() to a DynamicOn
+  DynamicOn * GetDynamicOnParent() const;
 
   // Modifiers
   void L1_AddChild(Element *child);
@@ -99,6 +101,7 @@ struct OnMultiLink : public MultiLink {
   }
   map<OMap, Violation *> missing_;
   map<OMap, Violation *> extra_;
+  SubType * subscription_;
 };
 
 struct SingleLink : public Link {

@@ -35,7 +35,7 @@ void Link::L1_Erase() {
   CL.Destroying(this);
 }
 
-OTime Link::ComputeChildTime(Element *child) const {
+OTime Link::ComputeChildTime(const Element *child) const {
   return parent_->ComputeChildTime(this, child);
 }
 
@@ -64,7 +64,7 @@ void MultiLink::Init(Element * parent) {
 void SingleLink::Init(Element *parent) {
   Link::Init(parent);
   child_ = NULL;
-  New<MissingLinkViolation>(this);
+  New<MissingLinkViolation>(this, CREATION);
 }
 
 void SingleLink::L1_Erase() {
@@ -88,11 +88,11 @@ set<Element *> SingleLink::GetChildren() const {
   return ret;
 }
 
-OnStatement::Dynamic * OnMultiLink::GetDynamicOnParent() const {
-  return dynamic_cast<OnStatement::Dynamic>(GetParent());
+DynamicOn * OnMultiLink::GetDynamicOnParent() const {
+  return dynamic_cast<DynamicOn *>(GetParent());
 }
 
-void OnMultiLink::Init(Element *parent) {
+void OnMultiLink::Init(DynamicOn *parent) {
   MultiLink::Init(parent);
   Query * q = BB.L1_GetExecuteQuery(GetDynamicOnParent()->GetPattern(), 
 				    SamplingInfo(), NULL);
@@ -106,28 +106,32 @@ void OnMultiLink::Update(const QueryUpdate &update, SubType *sub) {
     // if there were any bindings_ at the parent, we would have to union 
     // them here. Luckily, with an on statement, there are none. 
     OMap m = s.data_;
-    if (action_ == UPDATE_CREATE) {
+    if (s.action_ == UPDATE_CREATE) {
       if (extra_ % m) {
-	ExtraMultiLinkViolation * v = extra_[m];
+	ExtraOnMatchViolation * v 
+	  = dynamic_cast<ExtraOnMatchViolation*>(extra_[m]);
 	v->L1_Erase();
       } else {
-	New<MissingMultiLinkViolation>(this, m, s.new_time_);
+	New<MissingOnMatchViolation>
+	  (this, m, OTime::Make(max(parent_->time_.Data(), s.new_time_)));
       }
     }
-    if (action_ == UPDATE_DESTROY) {
+    if (s.action_ == UPDATE_DESTROY) {
       if (missing_ % m) {
 	missing_[m]->L1_Erase();
       } else {
 	CHECK(children_ % m);
-	New<ExtraMultiLinkViolation>(this, m, children_[m]->time_);
+	New<ExtraOnMatchViolation>(this, m, children_[m]->time_);
       }
     }
-    if (action == UPDATE_CHANGE_TIME) {
+    if (s.action_ == UPDATE_CHANGE_TIME) {
       if (children_ % m) {
-	children_[m]->L1_NewTimeShouldBe(s.new_time_);
+	// Note - We could use max(parent_->time_, s.new_time_)
+	// instead of computing it again. That would be an optimization
+	children_[m]->L1_TimeMayHaveChanged();
       } else {
 	CHECK(missing_ % m);
-	missing_[m]->L1_ChangeTime(s.new_time_);
+	missing_[m]->L1_ChangeTime(OTime::Make(s.new_time_));
       }
     }
   }

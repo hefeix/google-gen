@@ -29,18 +29,25 @@ struct MultiLink;
 struct SingleLink;*/
 
 struct Element : public Named {
+  virtual void Init() { Named::Init(); }
+  void L1_Erase() { Named::L1_Erase();}
+
   Link * parent_;
   virtual bool IsDynamic() const = 0;
   virtual void L1_ConnectToParentLink (Link * link) = 0;
   virtual void L1_DisconnectFromParentLink(Link * link) = 0;
   virtual OMap GetBinding() const { CHECK(false); return OMap();}
-  virtual void Init() { Named::Init(); }
   Element() :parent_(NULL){};
   OTime time_;
-  virtual OTime ComputeChildTime(const Link * link, const Element *child) {
+  // computes the proper time of this element. 
+  virtual OTime ComputeTime() const = 0;
+  // call this if the computed time may have changed. 
+  // creates a time violation (or destroys one) as necessary. 
+  void L1_TimeMayHaveChanged(); 
+  // computes the proper time of a child element. 
+  virtual OTime ComputeChildTime(const Link * link, const Element *child) const{
     return time_;
   }
-  // does not need an L1_Erase, since subclasses' L1_Erase skips it.
 };
 
 struct Statement;
@@ -58,6 +65,7 @@ struct StaticElement : public Element {
   }
   void L1_Erase();
 
+  OTime ComputeTime() const { return CREATION;}
   // these links (like all links) are owned by the parent
   MultiLink * dynamic_children_;
   vector<SingleLink *> static_children_; // statements and expressions
@@ -89,10 +97,13 @@ struct StaticElement : public Element {
 };
 
 struct DynamicElement : public Element{
+  void Init(StaticElement * static_parent, Link *parent, OMap binding);
+  void L1_Erase() { Element::L1_Erase();}
+
   bool IsDynamic() const { return true; }
-  StaticElement * GetParent() const { 
+  DynamicElement * GetParent() const { 
     if (!parent_) return NULL;
-    return dynamic_cast<StaticElement *>(parent_->GetParent());
+    return dynamic_cast<DynamicElement *>(parent_->GetParent());
   }
   void L1_ConnectToParentLink(Link *link) {
     if (link->parent_->IsDynamic())
@@ -128,9 +139,6 @@ struct DynamicElement : public Element{
   // we probably only need two of these parameters, since we can figure out 
   // the third, but we'd rather pass all three here than worry about the corner
   // cases at this point. 
-  void Init(Link * static_parent, Link *parent, OMap binding);
-  void L1_Erase() { Element::L1_Erase();}
-  // TimeViolation * time_violation_; TODO
 };
 
 struct Statement : public StaticElement{
@@ -170,13 +178,13 @@ struct Expression : public StaticElement {
 
 struct DynamicStatement : public DynamicElement {
   void L1_Erase() { DynamicElement::L1_Erase();}
-  void Init(Link * static_parent, Link *parent, OMap binding){
+  void Init(Statement * static_parent, Link *parent, OMap binding){
     DynamicElement::Init(static_parent, parent, binding);
   }
 };
 
 struct DynamicExpression : public DynamicElement {
-  void Init(Link * static_parent, Link *parent, OMap binding);
+  void Init(Expression * static_parent, Link *parent, OMap binding);
   void L1_Erase();
   virtual Object ComputeValue() const;
   void ChildExpressionChanged() { CheckSetValueViolation();}
@@ -187,16 +195,16 @@ struct DynamicExpression : public DynamicElement {
 };
 
 
-struct PassStatement : public Statement {
+struct StaticPass : public Statement {
   int NumExpressionChildren() const { return 0;}
   int NumChildren() const { return 0;}
   int NumObjects() const { return 0;}
   Keyword TypeKeyword() const { return Keyword::Make("pass");}
-  struct Dynamic : public DynamicStatement {
-  };
+};
+struct DynamicPass : public DynamicStatement {
 };
 
-struct OnStatement : public Statement {
+struct StaticOn : public Statement {
   enum {
     CHILD,
     NUM_CHILDREN,
@@ -214,18 +222,21 @@ struct OnStatement : public Statement {
   
   void Init();
   void L1_Erase();
-
-  struct Dynamic : public DynamicStatement {
-    void Init(OnStatement *static_parent);
-    Link::Type LinkType(int which_child) { return Link::ON;}
-    OnStatement *GetOnStatement() const { 
-      return dynamic_cast<OnStatement*>(GetStatic());
-    }
-    OPattern GetPattern() { return GetOnStatement()->GetPattern();}
-  };
 };
 
-struct RepeatStatement : public Statement {
+struct DynamicOn : public DynamicStatement {
+  void Init(StaticOn* parent);
+  void L1_Erase();
+  Link::Type LinkType(int which_child) { return Link::ON;}
+  StaticOn *GetStaticOn() const { 
+    return dynamic_cast<StaticOn*>(GetStatic());
+  }
+  OPattern GetPattern() const { return GetStaticOn()->GetPattern();}
+  OTime ComputeChildTime(const Link * link, const Element *child) const;
+};
+
+
+struct StaticRepeat : public Statement {
   enum {
     REPETITIONS,
     CHILD,
@@ -248,15 +259,15 @@ struct RepeatStatement : public Statement {
   // this variable is useless except to preserve the property that a dynamic
   // node is associated with a unique (static node, substitution) pair.
   // assigned automatically in the constructor.
-
-  struct Dynamic : public DynamicStatement {
-    virtual Link::Type LinkType(int which_child) { 
-      return (which_child==CHILD)?Link::MULTI:Link::SINGLE;
-    }
-  };
+};
+struct DynamicRepeat : public DynamicStatement {
+  virtual Link::Type LinkType(int which_child) { 
+    return (which_child==StaticRepeat::CHILD)?Link::MULTI:Link::SINGLE;
+  }
 };
 
-struct DelayStatement : public Statement { 
+
+struct StaticDelay : public Statement { 
   enum {
     DELAY,
     CHILD,
@@ -267,20 +278,20 @@ struct DelayStatement : public Statement {
   Keyword TypeKeyword() const;
   
   void Init();
-
-  struct Dynamic : public DynamicStatement {
-    virtual OTime ComputeChildTime(const Link * link, const Element *child) {
-      if (link == children_[CHILD]) {
-	return OTime::Make
-	  (time_.Data() 
-	   + OBitSeq(GetSingleExpressionChild(DELAY)->value_).Data());
+};
+struct DynamicDelay : public DynamicStatement {
+  OTime ComputeChildTime(const Link * link, const Element *child) const {
+    if (link == children_[StaticDelay::CHILD]) {
+      return OTime::Make
+	(time_.Data() 
+	 + OBitSeq
+	 (GetSingleExpressionChild(StaticDelay::DELAY)->value_).Data());
       }
-      return time_;
-    }
-  };
+    return time_;
+  }
 };
   
-struct LetStatement : public Statement {
+struct StaticLet : public Statement {
   enum {
     VALUE,
     CHILD,
@@ -299,12 +310,11 @@ struct LetStatement : public Statement {
   set<Variable> GetIntroducedVariables() const {
     return SingletonSet(GetVariable());}
   void Init();
-
-  struct Dynamic : public DynamicStatement {
-  };
+};
+struct DynamicLet : public DynamicStatement {
 };
 
-struct OutputStatement : public Statement {
+struct StaticOutput : public Statement {
   enum {
     TUPLE,
     NUM_CHILDREN,
@@ -314,22 +324,20 @@ struct OutputStatement : public Statement {
   Keyword TypeKeyword() const;
   void Init();
 
-  struct Dynamic : public DynamicStatement {
-    bool IsPerfect() const;
-    // see if it's perfect, then create or remove violation if necessary.
-    void CheckSetPostingViolation();
-    void ChildExpressionChanged() { CheckSetPostingViolation();}    
-    DynamicExpression * GetTupleExpression() const {
-      return dynamic_cast<DynamicExpression *>(GetSingleChild(TUPLE));
-    }
-    
-    Posting * posting_;
-  };
 };
-typedef OwnedViolation<OutputStatement::Dynamic, Violation::POSTING>
-  PostingViolation;
+struct DynamicOutput : public DynamicStatement {
+  bool IsPerfect() const;
+  // see if it's perfect, then create or remove violation if necessary.
+  void CheckSetPostingViolation();
+  void ChildExpressionChanged() { CheckSetPostingViolation();}    
+  DynamicExpression * GetTupleExpression() const {
+    return dynamic_cast<DynamicExpression *>(GetSingleChild(StaticOutput::TUPLE));
+  }
+  
+  Posting * posting_;
+};
 
-struct IfStatement : public Statement {
+struct StaticIf : public Statement {
   enum {
     CONDITION,
     IF,
@@ -340,23 +348,22 @@ struct IfStatement : public Statement {
   int NumChildren() const { return NUM_CHILDREN;}
   Keyword TypeKeyword() const;
   void Init();
-
-  struct Dynamic : public DynamicStatement {
-  };
+};
+struct DynamicIf : public DynamicStatement {
 };
 
-struct ParallelStatement : public Statement {
+struct StaticParallel : public Statement {
   int NumExpressionChildren() const { return 0;}
   int NumChildren() const { return static_children_.size(); }
   Keyword TypeKeyword() const { return Keyword::Make("parallel");}
   void Init() { Statement::Init();}
+};
 
-  struct Dynamic : public DynamicStatement {
-  };
+struct DynamicParallel : public DynamicStatement {
 };
 
 
-struct SubstituteExpression : public Expression {
+struct StaticSubstitute : public Expression {
   enum {
     CHILD,
     NUM_CHILDREN,
@@ -365,11 +372,11 @@ struct SubstituteExpression : public Expression {
   Keyword TypeKeyword() const;
   void Init() {Expression::Init();}
 
-  struct Dynamic : public DynamicExpression {
-  };
+};
+struct DynamicSubstitute : public DynamicExpression {
 };
 
-struct FlakeChoiceExpression : public Expression { 
+struct StaticFlakeChoice : public Expression { 
   enum {
     CHOOSER, // if the chooser is null, use the global flake chooser
     NUM_CHILDREN,
@@ -377,12 +384,11 @@ struct FlakeChoiceExpression : public Expression {
   int NumChildren() const { return NUM_CHILDREN;}
   Keyword TypeKeyword() const;
   void Init() {Expression::Init();}
-
-  struct Dynamic : public DynamicExpression {
-  };
+};
+struct DynamicFlakeChoice : public DynamicExpression {
 };
 
-struct ConstantExpression : public Expression {
+struct StaticConstant : public Expression {
   enum {
     NUM_CHILDREN,
   };
@@ -396,8 +402,8 @@ struct ConstantExpression : public Expression {
   Keyword TypeKeyword() const;
   string ToString() const;
 
-  struct Dynamic : public DynamicExpression {
-  };
+};
+struct DynamicConstant : public DynamicExpression {
 };
 
 
@@ -412,7 +418,7 @@ struct MatchCombineExpression : public Expression {
 
 
 
-struct ParallelStatement : public Statement {
+struct StaticParallel : public Statement {
   // These have to be implemented differently
   virtual void LinkToChild(Statement * child);
   virtual void UnlinkChild(Statement * child);

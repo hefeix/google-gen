@@ -44,7 +44,7 @@ void Requirement::Update(const QueryUpdate &update, SubType * sub){
   }
 }
 void Requirement::L1_AddViolation() {
-  New<RequirementViolation>(this);
+  New<RequirementViolation>(this, CREATION);
 }
 void Requirement::L1_RemoveViolation() {
   Violation * violation = FindViolation(this, Violation::REQUIREMENT);
@@ -62,7 +62,7 @@ Prohibition::Prohibition(OTuple tuple) {
 void Prohibition::L1_Erase() {
   subscription_->L1_Erase();
   while (violations_.size()) {
-    L1_RemoveViolation(violations_.begin()->first);    
+    violations_.begin()->second->L1_Erase();    
   }
   CL.RemoveFromSet(&M.prohibitions_, this);
   CL.Destroying(this);
@@ -73,7 +73,7 @@ void Prohibition::Update(const QueryUpdate &update, SubType * sub){
       OTuple t = Substitute(run->data_.Data(), tuple_);
       if (exceptions_ % t) continue;
       CHECK(!(violations_ % t));
-      L1_AddViolation(t);
+      New<ProhibitionViolation>(this, t, OTime::Make(run->new_time_));
     }
     if (run->action_ == UPDATE_DESTROY) {
       OTuple t = Substitute(run->data_.Data(), tuple_);
@@ -81,22 +81,22 @@ void Prohibition::Update(const QueryUpdate &update, SubType * sub){
 	CHECK(!(violations_ % t));
 	continue;
       }
-      CHECK(violations_ % t);
-      L1_RemoveViolation(t);
+      Violation ** v = violations_ % t;
+      CHECK(v);
+      (*v)->L1_Erase();
+    }
+    if (run->action_ == UPDATE_CHANGE_TIME) {
+      OTuple t = Substitute(run->data_.Data(), tuple_);
+      Violation ** v = violations_ % t;
+      CHECK(v);
+      (*v)->L1_ChangeTime(OTime::Make(run->new_time_));
     }
   }
-}
-void Prohibition::L1_AddViolation(OTuple t) {
-  New<ProhibitionViolation>(this, t);
-}
-void Prohibition::L1_RemoveViolation(OTuple t) {
-  ProhibitionViolation * violation  = violations_[t];
-  CHECK(violation);
-  violation->L1_Erase();
 }
 void Prohibition::L1_AddException(OTuple t) {
   CHECK(!(exceptions_ % t));
   CL.InsertIntoSet(&exceptions_, t);
-  if (violations_ % t) L1_RemoveViolation(t);
+  Violation ** v = violations_ % t;
+  if (v) (*v)->L1_Erase();
 }
 

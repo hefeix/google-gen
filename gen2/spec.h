@@ -29,9 +29,7 @@
 
 #include "blackboard.h"
 #include "query.h"
-
-class RequirementViolation;
-class ProhibitionViolation;
+#include "violation.h"
 
 class Requirement {
  public:
@@ -67,8 +65,6 @@ class Prohibition {
   set<OTuple> exceptions_;
   map<OTuple, Violation *> violations_;
   void Update(const QueryUpdate &update, SubType * sub);
-  void L1_AddViolation(OTuple t);
-  void L1_RemoveViolation(OTuple t);
 };
 
 #endif

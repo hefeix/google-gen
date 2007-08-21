@@ -4,6 +4,7 @@
 
 Keyword SEMICOLON;
 Keyword WILDCARD;
+OTime CREATION;
 OTime NEVER;
 
 void InitKeywords(){
@@ -11,6 +12,7 @@ void InitKeywords(){
   WILDCARD = Keyword::Make("*");
   SEMICOLON = Keyword::Make(";");
   NEVER = OTime::Make(Time::Never());
+  CREATION = OTime::Make(Time());
 };
 
 void DestroyKeywords() {
