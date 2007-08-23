@@ -68,6 +68,9 @@ set<Variable> StaticElement::GetIntroducedVariables() const {
 StaticElement * StaticElement::GetChild(int which) const { 
   return dynamic_cast<StaticElement *>(static_children_[which]->GetChild());
 }
+DynamicElement * StaticElement::GetDynamic(OMap binding) const {
+  return dynamic_cast<DynamicElement *>(dynamic_children_->GetChild(binding));
+}
 Statement * StaticElement::GetStatementChild(int which) const {
   CHECK(which < NumStatementChildren());
   return dynamic_cast<Statement *>(GetChild(which + NumExpressionChildren()));
@@ -136,13 +139,13 @@ void DynamicExpression::Init(Expression * static_parent,
 void DynamicExpression::SetValue(Object new_value) {
   CL.ChangeValue(&value_, new_value);
   CheckSetValueViolation();
-  if (GetParent()) GetParent()->ChildExpressionChanged();
+  if (GetParent()) GetParent()->ChildExpressionChanged(parent_);
 }
 
 void DynamicExpression::L1_Erase() {
   DynamicElement * parent = GetParent();
   DynamicElement::L1_Erase();
-  parent->ChildExpressionChanged();
+  parent->ChildExpressionChanged(parent_);
 }
 void DynamicExpression::CheckSetValueViolation() {
   bool perfect = (value_ != NULL) && (value_ == ComputeValue());
@@ -180,7 +183,7 @@ void DynamicOn::Init(StaticOn *static_parent) {
 void DynamicOn::L1_Erase(){
   CHECK(GetStatic());
   CHECK(!FindViolation(GetStatic(), Violation::MISSING_DYNAMIC_ON));
-  New<MissingDynamicOnViolation>(GetStatic(), CREATION);
+  New<MissingDynamicOnViolation>(GetStaticOn(), CREATION);
   DynamicStatement::L1_Erase();
 }
 
@@ -203,10 +206,10 @@ void StaticDelay::Init() {
 void StaticLet::Init() {
   Statement::Init();
 }
-void OutputStatement::Init() {
+void StaticOutput::Init() {
   Statement::Init();
 }
-void DynamicOutput::IsPerfect() {
+bool DynamicOutput::IsPerfect() const {
   DynamicExpression * expr = GetTupleExpression();
   if (!expr) return false;
   if (!posting_) return false;
@@ -222,7 +225,7 @@ void DynamicOutput::CheckSetPostingViolation() {
     return;
   }
   if (!perfect && !posting_violation) {
-    Time time = time_;
+    Time time = time_.Data();
     if (posting_) time = min(time, posting_->time_);
     New<PostingViolation>(this, OTime::Make(time));
     return;
@@ -238,12 +241,12 @@ void Expression::Init() {
 }
 
 Statement * Statement::MakeStatement(Keyword type) {
-  if (type.Data() == "pass") return New<PassStatement>();
+  if (type.Data() == "pass") return New<StaticPass>();
   if (type.Data() == "on") return New<StaticOn>();
   if (type.Data() == "repeat") return New<StaticRepeat>();
   if (type.Data() == "delay") return New<StaticDelay>();
   if (type.Data() == "let") return New<StaticLet>();
-  if (type.Data() == "output") return New<OutputStatement>();
+  if (type.Data() == "output") return New<StaticOutput>();
   if (type.Data() == "if") return New<StaticIf>();
   if (type.Data() == "parallel") return New<StaticParallel>();
   CHECK(false);
@@ -266,7 +269,7 @@ Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
     Expression * e = Expression::Parse(o);
     ret->L1_LinkChild(i, e);
   }
-  if (*position < t.size()  && t[*position].Type() == OMAP) {
+  if (*position < t.size()  && t[*position].GetType() == Object::OMAP) {
     OMap m = t[(*position)++];
     forall(run, m.Data()) {
       Keyword key = run->first;
@@ -293,7 +296,7 @@ vector<Statement *> Statement::Parse(const Tuple & t) {
       CHECK(parent != NULL);
       parent = NULL;
       position++;
-    } else if (o.Type() == OTUPLE) {
+    } else if (o.GetType() == Object::OTUPLE) {
       vector<Statement *> subs = Parse(OTuple(o).Data());
       if (parent->TypeKeyword().Data() == "parallel") {
 	CHECK((int)parent->static_children_.size() 
@@ -330,10 +333,10 @@ Expression * Expression::Parse(const Object & o){
   if (o == NULL) return NULL;
   Tuple t;
   Expression *ret;
-  if (o.Type() == OTUPLE) t = OTuple(o).Data();
-  if (o.Type() != OTUPLE 
+  if (o.GetType() == Object::OTUPLE) t = OTuple(o).Data();
+  if (o.GetType() != Object::OTUPLE 
       || t.size() == 0
-      || t[0].Type() != KEYWORD) {
+      || t[0].GetType() != Object::KEYWORD) {
     ret = New<StaticConstant>();
     ret->L1_SetObject(0, o);
     return ret;
@@ -394,16 +397,16 @@ Expression * Expression::MakeExpression(Keyword type) {
 string StaticConstant::ToString() const {
   Object o = GetObject(OBJECT);
   if (o==NULL) return "null";
-  if (o.Type() == OTUPLE) {
+  if (o.GetType() == Object::OTUPLE) {
     Tuple t = OTuple(o).Data();
-    if (t.size() > 0 && t[0].Type() == KEYWORD) {
+    if (t.size() > 0 && t[0].GetType() == Object::KEYWORD) {
       return "(constant " + o.ToString() + ")";
     }
   }
   return o.ToString();
 }
-Object DynamicConstant::ComputeValue() {
-  return GetObject(OBJECT);
+Object DynamicConstant::ComputeValue() const {
+  return GetObject(StaticConstant::OBJECT);
 }
 string StaticElement::ParameterListToString() const {
   string ret;
@@ -430,7 +433,7 @@ Keyword StaticDelay::TypeKeyword() const {
 Keyword StaticLet::TypeKeyword() const {
   return Keyword::Make("let");
 }
-Keyword OutputStatement::TypeKeyword() const {
+Keyword StaticOutput::TypeKeyword() const {
   return Keyword::Make("output");
 }
 Keyword StaticIf::TypeKeyword() const {
@@ -446,7 +449,21 @@ Keyword StaticSubstitute::TypeKeyword() const {
 Keyword StaticFlakeChoice::TypeKeyword() const {
   return Keyword::Make("flake_choice");
 }
- 
+Object DynamicFlakeChoice::ComputeValue const { 
+  return choice_;
+}
+void DynamicFlakeChoice::L1_ChangeChooser(Object new_chooser_id){
+  L1_RemoveFromChooser();
+  CL.ChangeValue(&chooser_id_, new_chooser_id);
+  L1_AddToChooser();
+}
+void DynamicFlakeChoice::L1_ChangeChoice(Flake new_choice){
+  L1_RemoveFromChooser();
+  CL.ChangeValue(&choice_, new_choice_);
+  L1_AddToChooser();  
+}
+
+
 void DynamicElement::Init(StaticElement * static_parent, 
 			  Link *parent, OMap binding) {
   Element::Init();
@@ -454,7 +471,7 @@ void DynamicElement::Init(StaticElement * static_parent,
   static_parent_ = parent_ = NULL;
   CHECK(static_parent);
   static_parent->dynamic_children_->L1_AddChild(this);
-  CHECK(static_parent_ == static_parent);
+  CHECK(static_parent_ == static_parent->dynamic_children_);
   if (parent) {
     parent->L1_AddChild(this);
     CHECK(parent_ == parent);
@@ -475,8 +492,7 @@ void DynamicElement::Init(StaticElement * static_parent,
       child = New<SingleLink>(this);
       break;
     case Link::ON:
-      chid = New<OnMultilink>(this, dynamic_cast<DynamicOn *>(this)
-			      ->GetPattern());
+      child = New<OnMultiLink>(dynamic_cast<DynamicOn *>(this));
       break;
     default:
       CHECK(false);
@@ -486,9 +502,18 @@ void DynamicElement::Init(StaticElement * static_parent,
   }
 };
 
-void DynamicElement::FindParent() const {
+DynamicElement * DynamicElement::FindParent() const {
   CHECK(static_parent_);
   CHECK(static_parent_->parent_);
-  return static_parent_->GetParent()->dynamic_children_->GetChild
-    (Restrict(bindings_, static_parent_->GetParent()->GetVariables()));
+  return GetStatic()->GetParent()->GetDynamic
+    (Restrict(GetBinding(), GetStatic()->GetVariables()));
+}
+void DynamicElement::ChildExpressionChanged(Link * child_link) {
+  for (uint i=0; i<children_.size(); i++) {
+    if (children_[i] == child_link) {
+      ChildExpressionChanged(i);
+      return;
+    }
+  }
+  CHECK(false);
 }

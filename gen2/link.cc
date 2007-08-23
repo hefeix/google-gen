@@ -56,6 +56,11 @@ set<Element *> MultiLink::GetChildren() const {
   forall(run, children_) ret.insert(run->second);
   return ret;
 }
+Element * MultiLink::GetChild(OMap m) const {
+  DynamicElement *const * look = children_ % m;
+  if (look) return *look;
+  return NULL;
+}
 
 void MultiLink::Init(Element * parent) {
   Link::Init(parent);

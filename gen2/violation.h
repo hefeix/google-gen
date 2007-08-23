@@ -119,7 +119,7 @@ struct OwnedViolationWithData : public Violation {
 class SingleLink;
 class OnMultiLink;
 class Element;
-class OnStatement;
+class StaticOn;
 class DynamicExpression;
 class OutputStatement;
 
@@ -142,7 +142,7 @@ typedef OwnedViolationWithData<OnMultiLink, OMap, Violation::EXTRA_ON_MATCH>
 typedef OwnedViolation<Element, Violation::TIME>
   TimeViolation;
 // a static on statement has no dynamic node
-typedef OwnedViolation<OnStatement, Violation::MISSING_DYNAMIC_ON>
+typedef OwnedViolation<StaticOn, Violation::MISSING_DYNAMIC_ON>
   MissingDynamicOnViolation;
 // the value of a dynamic expression doesn't match its computed value. 
 typedef OwnedViolation<DynamicExpression, Violation::VALUE>

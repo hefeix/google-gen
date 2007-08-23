@@ -66,3 +66,21 @@ void Model::TestLoadAndStore(string filename) {
   input >> M;
   cout << M;
 }
+
+void Model::L1_AddChoiceToFlakeChooser(Object chooser_name, 
+				       Flake f, int count_delta){
+  Chooser * c;
+  if (flake_choosers_ % chooser_name) {
+    c = flake_choosers_[chooser_name];
+  } else {
+    c = New<Chooser>();
+    c->L1_SetParent(global_flake_chooser_);
+    CL.InsertIntoMap(&flake_choosers_, chooser_name, c);
+  }
+  c->L1_ChangeObjectCount(f, count_delta);
+  CHECK(c->GetCount(f) >= 0);
+  if (c->total_ == 0) {
+    c->L1_Erase();
+    CL.RemoveFromMap(&flake_choosers_, chooser_name);
+  }
+}

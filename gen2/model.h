@@ -32,6 +32,8 @@ class Model {
   void Load(istream & input); // turns into statements.
   string ToString() const;
   static void TestLoadAndStore(string filename);
+  // erases the chooser if it becomes empty.
+  void L1_AddChoiceToFlakeChooser(Object chooser, Flake f, int count_delta);
 
   // The problem specification
   set<Requirement *> requirements_;
@@ -47,6 +49,8 @@ class Model {
   // Global Choosers
   Chooser * global_flake_chooser_;
   UintChooser * global_uint_chooser_;
+
+  map<Object, Chooser *> flake_choosers_;
 
   // all named objects by name
   map<Object, Named *> name_index_;
