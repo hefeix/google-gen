@@ -62,7 +62,7 @@ LL Chooser::ComputeLnLikelihood() const {
 LL UintChooser::ComputeLnLikelihood() const{
   LL total = 0;
   forall(run, counts_) {
-    int object = run->first;
+    Integer object = run->first;
     int count = run->second;
     total += count * uintQuadraticLnProb(object);
   }
@@ -75,7 +75,7 @@ void Chooser::L1_AddToLnLikelihood(LL delta) {
   M.A1_AddToLnLikelihood(delta);
 }
 
-LL Chooser::ComputeLLDelta(int object,
+LL Chooser::ComputeLLDelta(Object object,
 			   int old_count, int new_count, 
 			   int old_num_objects, int new_num_objects, 
 			   int old_total, int new_total) {
@@ -90,14 +90,14 @@ LL Chooser::ComputeLLDelta(int object,
   return ll_delta;
 }
 
-LL UintChooser::ComputeLLDelta(int object, 
+LL UintChooser::ComputeLLDelta(Object object, 
 			       int old_count, int new_count,
 			       int old_num_objects, int new_num_objects,
 			       int old_total, int new_total){
   return (new_count-old_count) * uintQuadraticLnProb(object);
 }
 
-void Chooser::L1_ChangeObjectCount(int object, int delta) {
+void Chooser::L1_ChangeObjectCount(Object object, int delta) {
 
   CHECK (delta != 0);
   int * look = counts_ % object;
@@ -108,7 +108,7 @@ void Chooser::L1_ChangeObjectCount(int object, int delta) {
   int old_num_objects = counts_.size();
   int64 old_total = total_;
   
-  CL.Make(new MapOfCountsAddChange<int, int>(&counts_, object, delta));
+  CL.Make(new MapOfCountsAddChange<Object, int>(&counts_, object, delta));
   CL.ChangeValue(&total_, delta + old_total);
   
   int new_num_objects = counts_.size();
@@ -160,7 +160,7 @@ Record Chooser::ChooserInfo(bool include_objects) {
   return r;
 }
 
-int Chooser::GetCount(int object) const {
+int Chooser::GetCount(Object object) const {
   const int * find = counts_ % object;
   if (!find) return 0;
   return *find;

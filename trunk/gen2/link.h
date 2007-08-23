@@ -64,7 +64,7 @@ struct MultiLink : public Link {
   void L1_RemoveChild(Element *child);
 
   // Accessors
-  Element * GetChild(OMap m);
+  Element * GetChild(OMap m) const;
   set<Element *> GetChildren() const;
 
   // To make the compiler happy

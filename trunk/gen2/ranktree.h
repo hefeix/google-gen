@@ -207,6 +207,8 @@ class RankTree {
     Data * operator->() {
       return &(**this);
     }
+    bool operator ==(const iterator o) { return current_==o.current_;}
+    bool operator !=(const iterator o) { return current_!=o.current_;}
   };
   struct const_iterator {
     Node * current_;
@@ -219,6 +221,8 @@ class RankTree {
     const Data * operator->() {
       return &(**this);
     }
+    bool operator ==(const const_iterator & o) { return current_==o.current_;}
+    bool operator !=(const const_iterator & o) { return current_!=o.current_;}
   };
 
   Node* _begin() const {
@@ -567,17 +571,6 @@ class RankTree {
     }
   }
 };
-
-template<class Iterator>
-bool operator ==(const Iterator & i1,
-		 const Iterator & i2){
-  return i1.current_ == i2.current_;
-}
-template<class Iterator>
-bool operator !=(const Iterator & i1,
-		 const Iterator & i2){
-  return i1.current_ != i2.current_;
-}
 
 template <class T> 
 class rankset : public RankTree<IdentityProjection<T> >{

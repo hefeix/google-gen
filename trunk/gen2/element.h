@@ -73,6 +73,7 @@ struct StaticElement : public Element {
 
   StaticElement * GetParent() const;
   StaticElement * GetChild(int which) const;
+  DynamicElement * GetDynamic(OMap binding) const;
   Statement * GetStatementChild(int which) const;// which < NumStatementChildren
   Expression * GetExpressionChild(int which) const;
   vector<Statement *> GetStatementChildren() const;
@@ -125,14 +126,15 @@ struct DynamicElement : public Element{
   OMap GetBinding() const { return binding_;}
   DynamicElement * FindParent() const; // finds parent based on bindings.
   virtual Link::Type LinkType(int which_child) { return Link::SINGLE;}
+
   // this gets called when the value of a child expression changes, 
-  // or when a child expresison is created(Init) or destroyed(L1_Erase). 
-  virtual void ChildExpressionChanged();
+  // or when a child expresison is created(Init) or destroyed(L1_Erase).   
+  void ChildExpressionChanged(Link * child_link);
+  // the previous function is called externally and calls the following function
+  virtual void ChildExpressionChanged(int which_child) = 0;
 
-  OMap ComputeBinding() const;
-  OTime ComputeTime() const;
+  // OTime ComputeTime() const;
 
-  virtual OMap ChildBinding() const;
   Link * static_parent_;
   vector<Link *> children_;
   OMap binding_; // if parent_ is a multilink, always matches it. 
@@ -186,8 +188,8 @@ struct DynamicStatement : public DynamicElement {
 struct DynamicExpression : public DynamicElement {
   void Init(Expression * static_parent, Link *parent, OMap binding);
   void L1_Erase();
-  virtual Object ComputeValue() const;
-  void ChildExpressionChanged() { CheckSetValueViolation();}
+  virtual Object ComputeValue() const = 0;
+  void ChildExpressionChanged(int which_child) { CheckSetValueViolation();}
   void SetValue(Object new_value);
   // checks whether the value is correct, and creates/removes a violation.
   void CheckSetValueViolation();
@@ -202,10 +204,13 @@ struct StaticPass : public Statement {
   Keyword TypeKeyword() const { return Keyword::Make("pass");}
 };
 struct DynamicPass : public DynamicStatement {
+  void ChildExpressionChanged(int which_child) { CHECK(false);}
 };
 
 struct StaticOn : public Statement {
   enum {
+    // expressions
+    // statements
     CHILD,
     NUM_CHILDREN,
   };
@@ -233,12 +238,15 @@ struct DynamicOn : public DynamicStatement {
   }
   OPattern GetPattern() const { return GetStaticOn()->GetPattern();}
   OTime ComputeChildTime(const Link * link, const Element *child) const;
+  void ChildExpressionChanged(int which_child) { CHECK(false); }
 };
 
 
 struct StaticRepeat : public Statement {
   enum {
+    // expressions
     REPETITIONS,
+    // statements
     CHILD,
     NUM_CHILDREN,
   };
@@ -264,12 +272,18 @@ struct DynamicRepeat : public DynamicStatement {
   virtual Link::Type LinkType(int which_child) { 
     return (which_child==StaticRepeat::CHILD)?Link::MULTI:Link::SINGLE;
   }
+  void ChildExpressionChanged(int which_child) { 
+    // todo: check whether the number of repetitions is correct
+    CHECK(false);
+  }
 };
 
 
 struct StaticDelay : public Statement { 
   enum {
+    // expressions
     DELAY,
+    // statements
     CHILD,
     NUM_CHILDREN,
   };
@@ -289,11 +303,17 @@ struct DynamicDelay : public DynamicStatement {
       }
     return time_;
   }
+  void ChildExpressionChanged(int which_child) { 
+    // todo: check whether the times are right on the children
+    CHECK(false);
+  }
 };
   
 struct StaticLet : public Statement {
   enum {
+    // expressions
     VALUE,
+    // statements
     CHILD,
     NUM_CHILDREN,
   };
@@ -312,11 +332,17 @@ struct StaticLet : public Statement {
   void Init();
 };
 struct DynamicLet : public DynamicStatement {
+  void ChildExpressionChanged(int which_child) { 
+    // todo: check the bindings on the children
+    CHECK(false);
+  }
 };
 
 struct StaticOutput : public Statement {
   enum {
+    // expressions
     TUPLE,
+    // statements
     NUM_CHILDREN,
   };
   int NumExpressionChildren() const { return NUM_CHILDREN;}
@@ -329,17 +355,19 @@ struct DynamicOutput : public DynamicStatement {
   bool IsPerfect() const;
   // see if it's perfect, then create or remove violation if necessary.
   void CheckSetPostingViolation();
-  void ChildExpressionChanged() { CheckSetPostingViolation();}    
+  void ChildExpressionChanged(int which_child) { CheckSetPostingViolation();}    
   DynamicExpression * GetTupleExpression() const {
-    return dynamic_cast<DynamicExpression *>(GetSingleChild(StaticOutput::TUPLE));
-  }
-  
+    return dynamic_cast<DynamicExpression *>
+      (GetSingleChild(StaticOutput::TUPLE));
+  }  
   Posting * posting_;
 };
 
 struct StaticIf : public Statement {
   enum {
+    //expressions
     CONDITION,
+    // statements
     IF,
     ELSE,
     NUM_CHILDREN,
@@ -350,6 +378,13 @@ struct StaticIf : public Statement {
   void Init();
 };
 struct DynamicIf : public DynamicStatement {
+  void ChildExpressionChanged(int which_child) { 
+    // todo: check that the correct child is instantiated
+    // todo: what state of the world means that a child is not instantiated?
+    //       does the link just point to null. If so, then MISSING_LINK
+    //       violations are not violations
+    CHECK(false);
+  }    
 };
 
 struct StaticParallel : public Statement {
@@ -360,6 +395,7 @@ struct StaticParallel : public Statement {
 };
 
 struct DynamicParallel : public DynamicStatement {
+  void ChildExpressionChanged(int which_child) { CHECK(false); }
 };
 
 
@@ -378,7 +414,7 @@ struct DynamicSubstitute : public DynamicExpression {
 
 struct StaticFlakeChoice : public Expression { 
   enum {
-    CHOOSER, // if the chooser is null, use the global flake chooser
+    CHOOSER, 
     NUM_CHILDREN,
   };
   int NumChildren() const { return NUM_CHILDREN;}
@@ -386,6 +422,17 @@ struct StaticFlakeChoice : public Expression {
   void Init() {Expression::Init();}
 };
 struct DynamicFlakeChoice : public DynamicExpression {
+  Object ComputeValue() const;
+  void L1_ChangeChooser(Object new_chooser_id);
+  void L1_ChangeChoice(Flake new_choice);
+  // Both of the following can be set to NULL, which is a violation,
+  //  but can be used to avoid creating unnecessary transient c_objects. 
+  Object chooser_id_; // which of the model's flake_choosers_ do we use. 
+  Flake choice_; // The current choice.    
+  private:
+  // these functions are called only from L1_ChangeChooser and L1_ChangeChoice
+  void L1_RemoveFromChooser();
+  void L1_AddToChooser();
 };
 
 struct StaticConstant : public Expression {
@@ -404,6 +451,7 @@ struct StaticConstant : public Expression {
 
 };
 struct DynamicConstant : public DynamicExpression {
+  Object ComputeValue() const;
 };
 
 

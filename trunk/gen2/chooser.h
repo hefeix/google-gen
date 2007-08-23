@@ -40,27 +40,27 @@
 struct Chooser : public Named {
   Chooser *parent_;
   LL ln_likelihood_;
-  map<int, int> counts_;
+  map<Object, int> counts_;
   int64 total_;
   void Init();
   void L1_SetParent(Chooser *parent);
   virtual ~Chooser() {}
   void L1_Erase();
   Named::Type GetType() const { return Named::CHOOSER;}
-  virtual LL ComputeLLDelta(int object,
+  virtual LL ComputeLLDelta(Object object,
 			    int old_count, int new_count, 
 			    int old_num_objects,  int new_num_objects, 
 			    int old_total, int new_total);
-  void L1_ChangeObjectCount(int object, int delta);
+  void L1_ChangeObjectCount(Object object, int delta);
   //  update the ln likelihood of this object and of the model.
   void L1_AddToLnLikelihood(LL delta); 
   virtual LL ComputeLnLikelihood() const; // from scratch for verification.
-  int GetCount(int object) const;
+  int GetCount(Object object) const;
   Record ChooserInfo(bool include_objects);
 };
 struct UintChooser : public Chooser {
   void Init() { Chooser::Init();}
-  virtual LL ComputeLLDelta(int object,
+  virtual LL ComputeLLDelta(Object object,
 			    int old_count, int new_count, 
 			    int old_num_objects,  int new_num_objects, 
 			    int old_total, int new_total);

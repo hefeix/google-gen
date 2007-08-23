@@ -335,11 +335,13 @@ template<class T> set<T> SingletonSet(const T & t) {
   return ret;
 }
 
-template<class K, class V> map<K, V> Restrict(const map<K,V> & m, 
-					      const set<K> & s) {
-  map<K, V> ret;
+// In general SK and MK are identical, but we should at least be able to
+// cast an MK to an SK
+template<class SK, class MK, class V> map<MK, V> Restrict(const map<MK,V> & m, 
+							  const set<SK> & s) {
+  map<MK, V> ret;
   forall(run, m) {
-    if (s % run->first) ret[run->first] = run->second;
+    if (s % SK(run->first)) ret[run->first] = run->second;
   }
   return ret;
 }
