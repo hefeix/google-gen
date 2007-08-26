@@ -141,3 +141,28 @@ void OnMultiLink::Update(const QueryUpdate &update, SubType *sub) {
     }
   }
 }
+
+OnMultiLink::~OnMultiLink() {}
+
+void OnMultiLink::L1_AddChild(Element * child) {
+  // L1_Erase leaves the bindings anyways when called on the child
+  OMap binding = child->GetBinding();
+  if (missing_ % binding) {
+    missing_[binding]->L1_Erase();
+  } else {
+    New<ExtraOnMatchViolation>(this, binding, child->time_);
+  }
+  MultiLink::L1_AddChild(child);
+}
+
+void OnMultiLink::L1_RemoveChild(Element * child) {
+  OMap binding = child->GetBinding();
+  if (extra_ % binding) {
+    extra_[binding]->L1_Erase();
+  } else {
+    // Compute the violation's time
+    OTime t = GetDynamicOnParent()->ComputeChildTime(this, child);
+    New<MissingOnMatchViolation>(this, binding, t);
+  }
+  MultiLink::L1_RemoveChild(child);
+}

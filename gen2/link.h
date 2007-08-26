@@ -57,8 +57,8 @@ struct Link {
 struct MultiLink : public Link {
   // Init & Erase
   void Init(Element *parent);
-  // Doesn't need to L1_Erase, children checked in Link::L1_Erase
-
+  void L1_Erase() { Link::L1_Erase();}
+  
   // Modifiers
   void L1_AddChild(Element *child);
   void L1_RemoveChild(Element *child);
@@ -81,12 +81,13 @@ class DynamicOn;
 struct OnMultiLink : public MultiLink {
   // Init and Erase
   void Init(DynamicOn *parent);
+  void L1_Erase() { MultiLink::L1_Erase();}
+  ~OnMultiLink();
 
   // Accessors
   // casts GetParent() to a DynamicOn
   DynamicOn * GetDynamicOnParent() const;
 
-  // Modifiers
   void L1_AddChild(Element *child);
   void L1_RemoveChild(Element *child);
 

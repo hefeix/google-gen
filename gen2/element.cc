@@ -132,13 +132,13 @@ void DynamicExpression::Init(Expression * static_parent,
 			     Link *parent, OMap binding){
   DynamicElement::Init(static_parent, parent, binding);
   value_ = NULL;
-  CheckSetValueViolation();
+  L1_CheckSetValueViolation();
   // there should already be a violation at the parent
   // if (GetParent()) GetParent()->ChildExpressionChanged();
 }
 void DynamicExpression::SetValue(Object new_value) {
   CL.ChangeValue(&value_, new_value);
-  CheckSetValueViolation();
+  L1_CheckSetValueViolation();
   if (GetParent()) GetParent()->ChildExpressionChanged(parent_);
 }
 
@@ -147,7 +147,7 @@ void DynamicExpression::L1_Erase() {
   DynamicElement::L1_Erase();
   parent->ChildExpressionChanged(parent_);
 }
-void DynamicExpression::CheckSetValueViolation() {
+void DynamicExpression::L1_CheckSetValueViolation() {
   bool perfect = (value_ != NULL) && (value_ == ComputeValue());
   Violation * value_violation = FindViolation(this, Violation::VALUE);
   if (perfect && value_violation) {
@@ -449,18 +449,24 @@ Keyword StaticSubstitute::TypeKeyword() const {
 Keyword StaticFlakeChoice::TypeKeyword() const {
   return Keyword::Make("flake_choice");
 }
-Object DynamicFlakeChoice::ComputeValue const { 
+Object DynamicFlakeChoice::ComputeValue() const { 
   return choice_;
 }
-void DynamicFlakeChoice::L1_ChangeChooser(Object new_chooser_id){
-  L1_RemoveFromChooser();
-  CL.ChangeValue(&chooser_id_, new_chooser_id);
-  L1_AddToChooser();
+void DynamicFlakeChoice::L1_AddToChooser(int count_delta) {
+  if (chooser_name_ != NULL && choice_ != NULL) {
+    M.L1_AddChoiceToFlakeChooser(chooser_name_, choice_, count_delta);
+  }
+}
+void DynamicFlakeChoice::L1_ChangeChooser(Object new_chooser_name){
+  L1_AddToChooser(-1);
+  CL.ChangeValue(&chooser_name_, new_chooser_name);
+  L1_AddToChooser(1);
 }
 void DynamicFlakeChoice::L1_ChangeChoice(Flake new_choice){
-  L1_RemoveFromChooser();
-  CL.ChangeValue(&choice_, new_choice_);
-  L1_AddToChooser();  
+  L1_AddToChooser(-1);
+  CL.ChangeValue(&choice_, new_choice);
+  L1_AddToChooser(1);
+  L1_CheckSetValueViolation();
 }
 
 
