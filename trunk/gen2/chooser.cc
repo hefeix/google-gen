@@ -64,7 +64,7 @@ LL UintChooser::ComputeLnLikelihood() const{
   forall(run, counts_) {
     Integer object = run->first;
     int count = run->second;
-    total += count * uintQuadraticLnProb(object);
+    total += count * uintQuadraticLnProb(object.Data());
   }
   return total;  
 }
@@ -94,7 +94,7 @@ LL UintChooser::ComputeLLDelta(Object object,
 			       int old_count, int new_count,
 			       int old_num_objects, int new_num_objects,
 			       int old_total, int new_total){
-  return (new_count-old_count) * uintQuadraticLnProb(object);
+  return (new_count-old_count) * uintQuadraticLnProb(Integer(object).Data());
 }
 
 void Chooser::L1_ChangeObjectCount(Object object, int delta) {

@@ -133,7 +133,7 @@ struct DynamicElement : public Element{
   // the previous function is called externally and calls the following function
   virtual void ChildExpressionChanged(int which_child) = 0;
 
-  // OTime ComputeTime() const;
+  OTime ComputeTime() const;
 
   Link * static_parent_;
   vector<Link *> children_;
@@ -189,10 +189,10 @@ struct DynamicExpression : public DynamicElement {
   void Init(Expression * static_parent, Link *parent, OMap binding);
   void L1_Erase();
   virtual Object ComputeValue() const = 0;
-  void ChildExpressionChanged(int which_child) { CheckSetValueViolation();}
+  void ChildExpressionChanged(int which_child) { L1_CheckSetValueViolation();}
   void SetValue(Object new_value);
   // checks whether the value is correct, and creates/removes a violation.
-  void CheckSetValueViolation();
+  void L1_CheckSetValueViolation();
   Object value_;
 };
 
@@ -423,16 +423,16 @@ struct StaticFlakeChoice : public Expression {
 };
 struct DynamicFlakeChoice : public DynamicExpression {
   Object ComputeValue() const;
-  void L1_ChangeChooser(Object new_chooser_id);
+  void L1_ChangeChooser(Object new_chooser_name);
   void L1_ChangeChoice(Flake new_choice);
   // Both of the following can be set to NULL, which is a violation,
   //  but can be used to avoid creating unnecessary transient c_objects. 
-  Object chooser_id_; // which of the model's flake_choosers_ do we use. 
+  Object chooser_name_; // which of the model's flake_choosers_ do we use. 
   Flake choice_; // The current choice.    
   private:
   // these functions are called only from L1_ChangeChooser and L1_ChangeChoice
-  void L1_RemoveFromChooser();
-  void L1_AddToChooser();
+  // and add/remove the current choice to the current chooser
+  void L1_AddToChooser(int count_delta);
 };
 
 struct StaticConstant : public Expression {
