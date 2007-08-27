@@ -48,6 +48,7 @@ Running ws_main() in webserver.cc is also useful to see the webserver working.
 #include "shorthand.h"
 #include <map>
 #include <netinet/in.h>
+#include <pthread.h>
 
 struct RequestHandler{
   virtual string Handle(const map<string, string> & params) = 0;
@@ -61,6 +62,8 @@ struct WebServer {
   }
   // returns true if it worked
   bool Start();
+  void StartInThread();
+  void HandleRequest(int fd);
   static void Test(int port);
   RequestHandler * handler_;
   static void WebServer::Parse(string request, 
@@ -69,7 +72,7 @@ struct WebServer {
   
   private:
   int port_;
-  void Die(int fd); // make the request die.
+  pthread_t server_thread_;
 };
 
 string SimpleHTMLHeader() {

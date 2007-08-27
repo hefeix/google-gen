@@ -20,6 +20,27 @@
 #include "webserver.h"
 #include <sstream>
 
+void * StartWebServerHelper(void *ws) {
+  ((WebServer *)ws)->Start();
+  return NULL;
+}
+void WebServer::StartInThread() {
+  pthread_create(&server_thread_, NULL, StartWebServerHelper, (void*)this);
+}
+
+struct WebServerRequest {
+  WebServer *ws_;
+  int fd_;
+  WebServerRequest(WebServer *ws, int fd) :ws_(ws), fd_(fd){}
+};
+void* HandleRequestHelper(void *req) {
+  WebServerRequest * request = (WebServerRequest *)req;
+  request->ws_->HandleRequest(request->fd_);
+  delete request;
+  return NULL;
+}
+
+
 bool WebServer::Start(){
   // Bind to the server port
   int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -50,23 +71,27 @@ bool WebServer::Start(){
       cerr << "couldn't accept connection" << endl;
       return false;
     }
-    int fk = fork();
-    if (fk != 0) continue; // you're the parent
+    pthread_t request_thread;
+    pthread_create(&request_thread, NULL, HandleRequestHelper, 
+		   new WebServerRequest(this, fd));
     
-    // parse the command and call Handle.    
-    char inbuffer[9910];
-    if (recv(fd, inbuffer, sizeof(inbuffer), 0) == -1) {
-      cerr << "Error receiving" << endl;
-      Die(fd);
-    }
+  }
+};
+void WebServer::HandleRequest(int fd) {
+  // parse the command and call Handle.    
+  char inbuffer[9910];
+  if (recv(fd, inbuffer, sizeof(inbuffer), 0) == -1) {
+    cerr << "Error receiving" << endl;
+  } else {
     map<string, string> params;
     Parse(inbuffer, &params);
     string result = 
       handler_->Handle(params);
     send(fd, result.c_str(), result.size(), 0);
-    Die(fd);
   }
-};
+  shutdown(fd, SHUT_RDWR);
+  close(fd);
+}
 
 // gets a line terminated by "\r\n"
 string GetTerminatedLine(istream & input) {
@@ -178,15 +203,15 @@ void WebServer::Parse(string request,
   params->insert(contentparams.begin(), contentparams.end());  
 }
 
-void WebServer::Die(int fd) {
-    shutdown(fd, SHUT_RDWR);
-    close(fd);
-    _exit(0);
-}
 
 void WebServer::Test(int port){
   WebServer ws(new EchoHandler(), port);
-  ws.Start();
+  ws.StartInThread();
+  for (int i=0; true; i++) {
+    sleep(1);
+    if (!(i & (i-1))) 
+      cout << i << " web server running in the other thread" << endl;
+  }
 }
 
 int ws_main(int argc, char ** argv) {
