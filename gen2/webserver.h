@@ -95,6 +95,11 @@ string HTMLLink(string URL, string anchor);
 string URLEscape(string s);
 string URLUnescape(string s);
 
+string HTMLEscape(string s);
+// string HTMLUnescape(string s);
+
+string GetSpace(bool html);
+string GetNewLine(bool html);
 
 string URLUnquote(string s);
 string URLQuote(string s);

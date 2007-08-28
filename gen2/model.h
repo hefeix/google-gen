@@ -33,7 +33,9 @@ class Model : public RequestHandler{
 
   // Reading things in from an object
   void Load(istream & input); // turns into statements.
-  string ToString() const;
+  // produces machine and human readable version of the static program.
+  // if html is set, produces html
+  string ToString(bool html) const;
   static void TestLoadAndStore(string filename);
   // erases the chooser if it becomes empty.
   void L1_AddChoiceToFlakeChooser(Object chooser, Flake f, int count_delta);
@@ -95,7 +97,7 @@ inline istream & operator >> (istream & input, Model &m) {
   return input;
 }
 inline ostream & operator << (ostream & output, Model &m) {
-  output << m.ToString();
+  output << m.ToString(false);
   return output;
 }
 

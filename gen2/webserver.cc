@@ -124,6 +124,43 @@ string URLUnescape(string s) {
 string URLEscape(string s) {
   return Space2Plus(URLQuote(s));
 }
+string HTMLEscape(string s) {
+  ostringstream output;
+  for (unsigned int i=0; i<s.size(); i++) {
+    unsigned char c = s[i];
+    if (c>=128) {
+      output << "&#" << int(c) << ";";
+      continue;
+    }
+    switch(c) {
+    case '&':
+      output << "&amp;";
+      break;
+    case '<':
+      output << "&lt;";
+      break;
+    case '>':
+      output << "&gt;";
+      break;
+    case ' ':
+      output << "&nbsp;";
+      break;
+    case '\n':
+      output << "<br>";
+      break;
+    default:
+      output << c;
+    }
+  }
+  return output.str();
+}
+string GetSpace(bool html) {
+  return html?"&nbsp;":" ";
+}
+string GetNewLine(bool html) {
+  return html?"<br>\n":"\n";
+}
+
 
 string URLUnquote(string s) {
   string ret;

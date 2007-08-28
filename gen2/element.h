@@ -48,6 +48,7 @@ struct Element : public Named {
   virtual OTime ComputeChildTime(const Link * link, const Element *child) const{
     return time_;
   }
+  Record GetRecordForDisplay() const;
 };
 
 struct Statement;
@@ -88,13 +89,18 @@ struct StaticElement : public Element {
     return NumChildren() - NumExpressionChildren(); }
   virtual int NumObjects() const { return 0;}
   virtual Keyword TypeKeyword() const = 0;
-  string ParameterListToString() const; // the objects and expression children
+  // the objects and expression children
+  string ParameterListToString(bool html) const; 
   // What new variables are introduced by this node
   virtual set<Variable> GetIntroducedVariables() const;
   // What variables exist at this node. 
   // This is the union of GetIntroducedVariables() up the static tree, 
   // not including this node. 
   virtual set<Variable> GetVariables() const;
+  
+  // a human and machine readable version of the static subtree
+  virtual string ToString(bool html) const = 0;
+  Record GetRecordForDisplay() const;
 };
 
 struct DynamicElement : public Element{
@@ -157,8 +163,9 @@ struct Statement : public StaticElement{
   // to the end of what was parsed.
   static Statement * ParseSingle(const Tuple & t, uint * position);
   static vector<Statement *> Parse(const Tuple & t); // ad hoc parser.
-  string ToString(int indent) const; // includes the subtree
-  string ToStringSingle() const;
+  string ToString(bool html) const { return ToString(0, html);}
+  string ToString(int indent, bool html) const; // includes the subtree
+  string ToStringSingle(bool html) const;
   static Statement * MakeStatement(Keyword type);
 
   protected:
@@ -167,7 +174,7 @@ struct Statement : public StaticElement{
 struct Expression : public StaticElement {  
   void Init();
   static Expression * Parse(const Object & o); // ad hoc parser.
-  virtual string ToString() const;
+  string ToString(bool html) const;
   Named::Type GetType() const { return Named::EXPRESSION;}
   virtual int NumExpressionChildren() const { return NumChildren();}
   virtual int NumChildren() const = 0;
@@ -447,7 +454,7 @@ struct StaticConstant : public Expression {
   int NumObjects() const { return NUM_OBJECTS;}
   void Init() {Expression::Init();}
   Keyword TypeKeyword() const;
-  string ToString() const;
+  string ToString(bool html) const;
 
 };
 struct DynamicConstant : public DynamicExpression {
