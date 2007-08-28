@@ -49,6 +49,9 @@ struct Element : public Named {
     return time_;
   }
   Record GetRecordForDisplay() const;
+  virtual Element * GetParent() const = 0;
+  // a human and machine readable version of the static subtree
+  virtual string ToString(bool html) const = 0;  
 };
 
 struct Statement;
@@ -98,8 +101,6 @@ struct StaticElement : public Element {
   // not including this node. 
   virtual set<Variable> GetVariables() const;
   
-  // a human and machine readable version of the static subtree
-  virtual string ToString(bool html) const = 0;
   Record GetRecordForDisplay() const;
 };
 
@@ -141,12 +142,15 @@ struct DynamicElement : public Element{
 
   OTime ComputeTime() const;
 
+  string ToString(bool html) const;
+
   Link * static_parent_;
   vector<Link *> children_;
   OMap binding_; // if parent_ is a multilink, always matches it. 
   // we probably only need two of these parameters, since we can figure out 
   // the third, but we'd rather pass all three here than worry about the corner
   // cases at this point. 
+  
 };
 
 struct Statement : public StaticElement{
