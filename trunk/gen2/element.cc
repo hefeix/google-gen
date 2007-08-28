@@ -315,8 +315,8 @@ vector<Statement *> Statement::Parse(const Tuple & t) {
     } else {
       Statement * s = ParseSingle(t, &position);
       if (parent) {
-	cout << "Hooking up child " << s->ToString(0) << endl;
-	cout << "To parent " << parent->ToString(0) << endl;
+	cout << "Hooking up child " << s->ToString(0, false) << endl;
+	cout << "To parent " << parent->ToString(0, false) << endl;
 	CHECK(parent->NumStatementChildren() == 1);
 	parent->L1_LinkChild(parent->NumExpressionChildren(), s);
       } else {
@@ -355,33 +355,38 @@ Expression * Expression::Parse(const Object & o){
   return ret;
 }
 
-string Statement::ToString(int indent) const {
-  string ret(indent, ' ');
-  if (this == NULL) return ret + "null\n";
-  ret += ToStringSingle();
+string Statement::ToString(int indent, bool html) const {
+  string indentstring;
+  for (int i=0; i<indent; i++) indentstring += GetSpace(html);
+  string ret = indentstring;
+  if (this == NULL) return ret + "null" + GetNewLine(html);
+  ret += ToStringSingle(html);
   vector<Statement *> children = GetStatementChildren();
   if (children.size() > 1 || TypeKeyword().Data() == "parallel") {
-    ret += " {\n";
+    ret += " {" + GetNewLine(html);
     for (uint i=0; i<children.size(); i++) 
-      ret += children[i]->ToString(indent+2);
-    ret += string(indent, ' ') + "}\n";
+      ret += children[i]->ToString(indent+2, html);
+    ret += indentstring + "}" + GetNewLine(html);
     return ret;
   }
   if (children.size() == 0) {
-    return ret + " ;\n";
+    return ret + " ;" + GetNewLine(html);
   }
   CHECK(children.size() == 1);
-  return ret + "\n" + children[0]->ToString(indent+2);
+  return ret + GetNewLine(html) + children[0]->ToString(indent+2, html);
 }
-string Statement::ToStringSingle() const {
-  string ret = TypeKeyword().ToString();
-  ret += ParameterListToString();
+string Statement::ToStringSingle(bool html) const {
+  string ret;
+  string tkw = TypeKeyword().ToString();
+  ret += html?GetLink(tkw):tkw;
+  ret += ParameterListToString(html);
   return ret;
 }
-string Expression::ToString() const {
+string Expression::ToString(bool html) const {
   string ret = "(";
-  ret += TypeKeyword().ToString();
-  ret += ParameterListToString();
+  string tkw = TypeKeyword().ToString();
+  ret += html?GetLink(tkw):tkw;
+  ret += ParameterListToString(html);
   ret += ")";
   return ret;
 }
@@ -394,28 +399,31 @@ Expression * Expression::MakeExpression(Keyword type) {
   return NULL;
 }
 
-string StaticConstant::ToString() const {
+string StaticConstant::ToString(bool html) const {
   Object o = GetObject(OBJECT);
   if (o==NULL) return "null";
+  string ret = o.ToString();
+  if (html) ret = HTMLEscape(ret);
   if (o.GetType() == Object::OTUPLE) {
     Tuple t = OTuple(o).Data();
     if (t.size() > 0 && t[0].GetType() == Object::KEYWORD) {
-      return "(constant " + o.ToString() + ")";
+      return "(constant " + ret + ")";
     }
   }
-  return o.ToString();
+  return ret;
 }
 Object DynamicConstant::ComputeValue() const {
   return GetObject(StaticConstant::OBJECT);
 }
-string StaticElement::ParameterListToString() const {
+string StaticElement::ParameterListToString(bool html) const {
   string ret;
   for (int i=0; i<NumObjects(); i++) {
     ret += " " + GetObject(i).ToString();
   }
+  if (html) ret = HTMLEscape(ret);
   for (int i=0; i<NumExpressionChildren(); i++) {
     Expression * expr = GetExpressionChild(i);
-    if (expr) ret += " " + expr->ToString();
+    if (expr) ret += " " + expr->ToString(html);
     else ret += " null";
   }
   return ret;
@@ -522,4 +530,15 @@ void DynamicElement::ChildExpressionChanged(Link * child_link) {
     }
   }
   CHECK(false);
+}
+
+Record Element::GetRecordForDisplay() const {
+  Record ret = Named::GetRecordForDisplay();
+  return ret;
+}
+
+Record StaticElement::GetRecordForDisplay() const {
+  Record ret = Element::GetRecordForDisplay();
+  ret["program"] = "<tt>" + ToString(true) + "</tt>";
+  return ret;
 }

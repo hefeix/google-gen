@@ -48,19 +48,20 @@ void Model::Load(istream &input) {
   input >> t;
   vector<Statement *> v = Statement::Parse(t.Data());
   cout << "Just loaded" << endl;
-  for (uint i=0; i<v.size(); i++) cout << v[i]->ToString(0);
+  for (uint i=0; i<v.size(); i++) cout << v[i]->ToString(0, false);
   cout << "End program" << endl;
 }
 
-string Model::ToString() const {
-  string ret = "{\n";
+string Model::ToString(bool html) const {
+  string ret = "{" + GetNewLine(html); 
   forall(run, N.Index(Named::STATEMENT)) {
     Statement *s = dynamic_cast<Statement *>(run->second);
     if (s->parent_ == NULL) {
-      ret += s->ToString(2);
+      ret += s->ToString(2, html);
     }
   }
-  ret += "}\n";
+  ret += "}" + GetNewLine(html);
+  if (html) ret = "<tt>" + ret + "</tt>";
   return ret;
 }
 
@@ -129,11 +130,12 @@ string Model::Handle(Record params) {
     } else {
       ret += "Object not found";
     }
-  }
-  if (command == "topnav") {
+    return ret;
   }
   if (command == "typelist") {
     ret += TypeListHTML(Named::StringToType(params["type"]));
+    return ret;
   }
+  ret += ToString(true);
   return ret;
 }
