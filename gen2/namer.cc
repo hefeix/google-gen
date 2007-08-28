@@ -18,6 +18,27 @@
 
 #include "namer.h"
 #include "changelist.h"
+#include "webserver.h"
+
+string TypeNames[] = {
+  "STATEMENT",
+  "EXPRESSION",
+  "DYNAMIC_STATEMENT",
+  "DYNAMIC_EXPRESSION",
+  "CHOOSER",
+  "NUM_NAMED_TYPES",
+};
+
+string Named::TypeToString(Named::Type t) {
+  return TypeNames[t];
+}
+Named::Type Named::StringToType(string s) {
+  for(int i=0; i<NUM_NAMED_TYPES; i++) {
+    if (TypeNames[i]==s) return Type(i);
+  }
+  return NUM_NAMED_TYPES;
+}
+
 Namer::Namer() {
   index_.resize(Named::NUM_NAMED_TYPES);
 }
@@ -56,3 +77,16 @@ void Named::Init() {
   L1_AutomaticallyName();
 }
 
+Record Named::GetRecordForDisplay() const { 
+  Record ret;
+  ret["name"] = name_.ToString();
+  ret["type"] = TypeToString(GetType());
+  return ret;
+}
+string Named::GetURL() const { 
+  return "getobject?type=" + URLEscape(TypeToString(GetType())) 
+    + "&name=" + URLEscape(name_.ToString());
+}
+string Named::GetLink(string anchortext) const {
+  return "<a href=\"" + GetURL() + "\">" + anchortext + "</a>";
+}

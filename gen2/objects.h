@@ -250,7 +250,7 @@ class SpecificObject : public Object {
   }
   
   const Definition * GetDefinition() const{
-    return dynamic_cast<const Definition *>(GetDefinition());
+    return dynamic_cast<const Definition *>(Object::GetDefinition());
   }
 
   const D & Data() const{ return GetDefinition()->Data();}
@@ -277,6 +277,12 @@ class SpecificObject : public Object {
 };
 
 istream & operator >>(istream & input, Object & o);
+inline Object StringToObject(string s) {
+  istringstream istr(s);
+  Object o;
+  istr >> o;
+  return o;
+}
 
 inline ostream & operator <<(ostream & output, const Object & o) {
   output << o.ToString();

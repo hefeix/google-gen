@@ -20,6 +20,8 @@
 #include "webserver.h"
 #include <sstream>
 
+RequestHandler::~RequestHandler() {}
+
 void * StartWebServerHelper(void *ws) {
   ((WebServer *)ws)->Start();
   return NULL;
@@ -48,6 +50,7 @@ bool WebServer::Start(){
     cerr << "couldn't create socket";
     return false;
   }
+  
   sockaddr_in my_addr;
   my_addr.sin_family = AF_INET;
   my_addr.sin_port = htons(port_);
@@ -111,7 +114,18 @@ int CharToHex(char c) {
   if (islower(c)) return c-'a'+10;
   return -1;
 }
-string Unquote(string s) {
+char HexToChar(int i) {
+  if (i<10) return '0'+i;
+  return 'A'+(i-10);
+}
+string URLUnescape(string s) {
+  return URLUnquote(Plus2Space(s));
+}
+string URLEscape(string s) {
+  return Space2Plus(URLQuote(s));
+}
+
+string URLUnquote(string s) {
   string ret;
   istringstream input(s);
   char c;
@@ -124,6 +138,20 @@ string Unquote(string s) {
     } else {
       ret += c;
     }
+  }
+  return ret;
+}
+string URLQuote(string s) {
+  string ret;
+  for (uint i=0; i<s.size(); i++) {
+    unsigned char c = s[i];
+    //if (string("$&+,/:;=?@\"<>#%{}|\\^~[]`").find(c)!==string::npos) {
+    if (!isalnum(c)) {
+      ret += '%';
+      ret += HexToChar(c/16);
+      ret += HexToChar(c%16);
+    }
+    else ret+=c;
   }
   return ret;
 }
@@ -146,6 +174,11 @@ string Plus2Space(string s){
   for (unsigned int i=0; i<s.size(); i++) if (ret[i]=='+') ret[i]=' ';
   return ret;
 }
+string Space2Plus(string s){
+  string ret = s;
+  for (unsigned int i=0; i<s.size(); i++) if (ret[i]==' ') ret[i]='+';
+  return ret;
+}
 map<string, string> ParseQSL(string s) {
   map<string, string> ret;
   vector<string> parts = SplitString(s, ";&");
@@ -153,8 +186,8 @@ map<string, string> ParseQSL(string s) {
     string part = parts[i];
     unsigned int equalpos = part.find("=");
     if (equalpos == string::npos) continue;
-    string key = Unquote(Plus2Space(part.substr(0, equalpos)));
-    string value = Unquote(Plus2Space(part.substr(equalpos+1)));
+    string key = URLUnescape(part.substr(0, equalpos));
+    string value = URLUnescape(Plus2Space(part.substr(equalpos+1)));
     ret[key] = value;
   }
   return ret;
@@ -203,6 +236,9 @@ void WebServer::Parse(string request,
   params->insert(contentparams.begin(), contentparams.end());  
 }
 
+string HTMLLink(string URL, string anchor) {
+  return "<a href=\"" + URL + "\">" + anchor + "</a>";
+}
 
 void WebServer::Test(int port){
   WebServer ws(new EchoHandler(), port);
