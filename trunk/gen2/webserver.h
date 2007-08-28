@@ -24,7 +24,7 @@ one packet.  A SelectServer loop would be better.
 
 To use this class, create a subclass of RequestHandler.  
 You need to override the following function:
-string Handle(const map<string, string> & params);
+string Handle(map<string, string> params);
   parms will contain the parameters parsed from the HTTP request. 
   In addition it will contain the following (key,value) pairs.
     _command : whatever follows the final slash and preceeds ? in the URL
@@ -51,8 +51,8 @@ Running ws_main() in webserver.cc is also useful to see the webserver working.
 #include <pthread.h>
 
 struct RequestHandler{
-  virtual string Handle(const map<string, string> & params) = 0;
-  virtual ~RequestHandler(){};
+  virtual string Handle(map<string, string> params) = 0;
+  virtual ~RequestHandler();
 };
 
 struct WebServer {
@@ -75,12 +75,12 @@ struct WebServer {
   pthread_t server_thread_;
 };
 
-string SimpleHTMLHeader() {
+inline string SimpleHTMLHeader() {
   return "HTTP/1.0 200 OK\r\nContent-Type: text/html;\r\n\r\n";
 }
 
 struct EchoHandler : public RequestHandler {
-  string Handle(const map<string, string> & params) {
+  string Handle(map<string, string> params) {
     string ret = SimpleHTMLHeader();
     ret += "<pre>\n";
     forall(run, params) 
@@ -90,10 +90,18 @@ struct EchoHandler : public RequestHandler {
   }
 };
 
-string Unquote(string s);
+string HTMLLink(string URL, string anchor);
+
+string URLEscape(string s);
+string URLUnescape(string s);
+
+
+string URLUnquote(string s);
+string URLQuote(string s);
 int CharToHex(char c);
 vector<string> SplitString(string s, string delimiters);
 string Plus2Space(string s);
+string Space2Plus(string s);
 map<string, string> ParseQSL(string s);
 
 

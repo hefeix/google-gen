@@ -23,10 +23,13 @@
 #include "element.h"
 #include "chooser.h"
 #include "violation.h"
+#include "record.h"
+#include "webserver.h"
 
-class Model {
+class Model : public RequestHandler{
  public:
   Model();
+  ~Model();
 
   // Reading things in from an object
   void Load(istream & input); // turns into statements.
@@ -34,6 +37,13 @@ class Model {
   static void TestLoadAndStore(string filename);
   // erases the chooser if it becomes empty.
   void L1_AddChoiceToFlakeChooser(Object chooser, Flake f, int count_delta);
+  
+  // handle a web request
+  string Handle(Record params);
+
+  // various html output routines
+  string TopNavHTML() const;
+  string TypeListHTML(Named::Type type) const;
 
   // The problem specification
   set<Requirement *> requirements_;
@@ -74,6 +84,9 @@ class Model {
   // ln_likelihood_ of the model (in nats).  Guess: make this number about 
   // 1/1000
   LL work_penalty_;
+
+  // webserver
+  WebServer * webserver_;
 
 };
 

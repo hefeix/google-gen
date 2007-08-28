@@ -20,6 +20,7 @@
 #define _NAMER_H_
 
 #include "objects.h"
+#include "record.h"
 
 
 class Named {
@@ -32,16 +33,23 @@ class Named {
     CHOOSER,
     NUM_NAMED_TYPES,
   };
+  static string TypeToString(Type t);
+  static Type StringToType(string s);
 
   //Named();
   void Init(); // shadow constructor
   Object Name() const;
   void L1_SetName(Object new_name_);
   void L1_AutomaticallyName();
+  virtual Record GetRecordForDisplay() const;
+  string GetURL() const; // link to object view
+  string GetLink(string anchortext) const;
+
+
   virtual Type GetType() const = 0;
   virtual void L1_Erase();
   virtual OMap GetMap() { CHECK(false); return OMap();} // overriden for dynamic
-  virtual ~Named() {};
+  virtual ~Named() {};  
  private:
   Object name_;
 };

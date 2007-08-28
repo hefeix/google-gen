@@ -25,7 +25,10 @@ Model::Model(){
   ln_likelihood_ = 0;
   next_name_ = 0;
   next_unique_variable_ = -1;
+  webserver_ = new WebServer(this);
+  webserver_->StartInThread();
 }
+Model::~Model(){}
 
 Variable Model::L1_GetNextUniqueVariable() {
   Variable ret = Variable::Make(next_unique_variable_);
@@ -65,6 +68,7 @@ void Model::TestLoadAndStore(string filename) {
   ifstream input(filename.c_str());
   input >> M;
   cout << M;
+  sleep(10000);
 }
 
 void Model::L1_AddChoiceToFlakeChooser(Object chooser_name, 
@@ -83,4 +87,53 @@ void Model::L1_AddChoiceToFlakeChooser(Object chooser_name,
     c->L1_Erase();
     CL.RemoveFromMap(&flake_choosers_, chooser_name);
   }
+}
+
+string Model::TopNavHTML() const {
+  string ret;
+  for (uint i=0; i<Named::NUM_NAMED_TYPES; i++) {
+    Named::Type t = Named::Type(i);
+    string url = "typelist?type=" 
+      + URLEscape(Named::TypeToString(t));
+    string anchor = Named::TypeToString(t) 
+      + "(" + itoa(N.Index(t).size()) + ") ";
+    ret += HTMLLink(url, anchor) + " ";
+  }
+  ret += "<br>";
+  return ret;
+}
+
+string Model::TypeListHTML(Named::Type type) const {
+  string ret;
+  if (type < 0 || type >= Named::NUM_NAMED_TYPES) {
+    return "unkown type " + itoa(type);
+  }
+  vector<Record> v;
+  forall(run, N.Index(type)) {
+    v.push_back(run->second->GetRecordForDisplay());
+  }
+  ret += RecordVectorToHTMLTable(v);
+  return ret;
+}
+
+string Model::Handle(Record params) {
+  string ret = SimpleHTMLHeader() + TopNavHTML();
+  string command = params["_command"];
+  if (command == "getobject") {
+    string sname = params["name"];
+    Object name = StringToObject(sname);
+    Named::Type type = Named::StringToType(params["type"]);
+    Named * named = N.Lookup(type, name);
+    if (named) {
+      ret += RecordToHTMLTable(named->GetRecordForDisplay());
+    } else {
+      ret += "Object not found";
+    }
+  }
+  if (command == "topnav") {
+  }
+  if (command == "typelist") {
+    ret += TypeListHTML(Named::StringToType(params["type"]));
+  }
+  return ret;
 }
