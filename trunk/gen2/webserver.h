@@ -96,6 +96,9 @@ string URLEscape(string s);
 string URLUnescape(string s);
 
 string HTMLEscape(string s);
+inline string MaybeHTMLEscape(string s, bool escape) {
+  return escape?HTMLEscape(s):s;
+}
 // string HTMLUnescape(string s);
 
 string GetSpace(bool html);

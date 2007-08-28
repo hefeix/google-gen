@@ -116,6 +116,11 @@ OTime DynamicElement::ComputeTime() const {
   if (!parent_) return CREATION;
   return parent_->ComputeChildTime(this);
 }
+string DynamicElement::ToString(bool html) const{
+  return GetStatic()->ToString(html) + GetNewLine(html)
+    + MaybeHTMLEscape(GetBinding().ToString(), html);
+}
+
 
 
 void Statement::Init() {
@@ -407,9 +412,10 @@ string StaticConstant::ToString(bool html) const {
   if (o.GetType() == Object::OTUPLE) {
     Tuple t = OTuple(o).Data();
     if (t.size() > 0 && t[0].GetType() == Object::KEYWORD) {
-      return "(constant " + ret + ")";
+      ret =  "(constant " + ret + ")";
     }
   }
+  if (html) return GetLink(ret);
   return ret;
 }
 Object DynamicConstant::ComputeValue() const {
@@ -449,7 +455,7 @@ Keyword StaticIf::TypeKeyword() const {
 }
 
 Keyword StaticConstant::TypeKeyword() const {
-  return Keyword::Make("output");
+  return Keyword::Make("constant");
 }
 Keyword StaticSubstitute::TypeKeyword() const {
   return Keyword::Make("substitute");
@@ -534,11 +540,22 @@ void DynamicElement::ChildExpressionChanged(Link * child_link) {
 
 Record Element::GetRecordForDisplay() const {
   Record ret = Named::GetRecordForDisplay();
+  Element * parent = GetParent();
+  if (parent) ret["parent"] = parent->ToString(true);
   return ret;
 }
 
 Record StaticElement::GetRecordForDisplay() const {
   Record ret = Element::GetRecordForDisplay();
   ret["program"] = "<tt>" + ToString(true) + "</tt>";
+  set<Element *> dynamic_children = dynamic_children_->GetChildren();
+  int count =0;
+  forall(run, dynamic_children) {
+    if (count==10) {
+      ret["dynamic"] += "... " + itoa(dynamic_children.size()) + " total";
+      break;
+    };
+    ret["dynamic"] += HTMLEscape((*run)->GetBinding().ToString()) + "<br>";
+  }
   return ret;
 }
