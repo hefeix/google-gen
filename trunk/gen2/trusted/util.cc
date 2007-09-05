@@ -254,3 +254,7 @@ int ConnectedComponents(int num_objects,
   return num_components;
 }
 
+string Downcase(string s) {
+  for (uint i=0; i<s.size(); i++) s[i] = tolower(s[i]);
+  return s;
+}
