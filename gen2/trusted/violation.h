@@ -108,7 +108,14 @@ struct OwnedViolation : public Violation {
     CL.RemoveFromMapOfSets(&Violation::owned_violations_, (void *)owner_, 
 			   (Violation *)this);
   }
-
+  static void L1_CreateIfAbsent(Owner *owner, OTime time) {
+    if (FindViolation(owner, VType)) return;
+    New<OwnedViolation<Owner, VType> >(owner, time);
+  }
+  static void L1_RemoveIfPresent(Owner *owner) {
+    Violation *v = FindViolation(owner, VType);
+    if (v) v->L1_Erase();
+  }
   // ---------- data ----------
   Owner *owner_;
 };
@@ -152,7 +159,7 @@ class DynamicExpression;
 class OutputStatement;
 
 // The static program has changed somewhere involving this node (inlcuding its
-// inlinks and outlinks) or one of its ancestors.  The dynamic network may
+// parent link and outlinks) or one of its ancestors.  The dynamic network may
 // be really messed up.  
 typedef OwnedViolation<StaticElement, Violation::STATIC_CHANGED>
   StaticChangedViolation;

@@ -21,6 +21,17 @@
 #include "changelist.h"
 #include "model.h"
 
+#undef ITEM
+#define ITEM(x) #x
+
+CLASS_ENUM_DEFINE(Element, Function);
+
+
+void Element::L1_Erase() {
+  if (parent_) parent_->L1_RemoveChild(this);
+  Named::L1_Erase();
+}
+
 void Element::L1_TimeMayHaveChanged() {
   OTime proper_time = ComputeTime();
   Violation * violation = FindViolation(this, Violation::TIME);
@@ -35,6 +46,34 @@ void Element::L1_TimeMayHaveChanged() {
   }
 }
 
+void StaticElement::UnlinkFromParent() {
+  CHECK(parent_);
+  GetParent()->L1_MarkStaticNodeChanged();
+  parent_->L1_RemoveChild(this);
+  if (GetFunction() != ON) NoParentViolation::L1_CreateIfAbsent(this, CREATION);
+  L1_MarkStaticSubtreeChanged();
+}
+void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
+  CHECK(!parent_);
+  CHECK(new_parent->ChildType(which_child) == GetType());
+  new_parent->L1_MarkStaticNodeChanged();
+  new_parent->static_children_[which_child]->L1_AddChild(this);
+  NoParentViolation::L1_RemoveIfPresent(this);
+  L1_MarkStaticSubtreeChanged();  
+}
+void StaticElement::EraseTree() {
+  L1_Erase();
+}
+
+void StaticElement::L1_MarkStaticNodeChanged() {
+  StaticChangedViolation::L1_CreateIfAbsent(this, CREATION);
+}
+void StaticElement::L1_MarkStaticSubtreeChanged() {
+  for (int i=0; i<NumChildren(); i++) {
+    if (GetChild(i)) GetChild(i)->L1_MarkStaticSubtreeChanged();
+  }
+  L1_MarkStaticNodeChanged();
+}
 
 void StaticElement::L1_Init() {
   Named::L1_Init();
@@ -42,12 +81,22 @@ void StaticElement::L1_Init() {
   for (int i=0; i<NumChildren(); i++) 
     static_children_.push_back(New<SingleLink>(this));  
   objects_.resize(NumObjects());
+  L1_MarkStaticNodeChanged();
+  if (GetFunction() != ON) NoParentViolation::L1_CreateIfAbsent(this, CREATION);
 }
 void StaticElement::L1_Erase() {
-  for (uint i=0; i<static_children_.size(); i++) 
+  for (uint i=0; i<static_children_.size(); i++) {
+    StaticElement *child = GetChild(i);
+    if (child) child->L1_Erase();
     static_children_[i]->L1_Erase();
+  }
+  set<Element *> dc = dynamic_children_->GetChildren();
+  forall(run, dc) (*run)->L1_Erase();
   dynamic_children_->L1_Erase();
   L1_EraseOwnedViolations(this);
+  StaticElement * p = GetParent();
+  if (p) p->L1_MarkStaticNodeChanged();
+  
   Element::L1_Erase();
 }
 StaticElement * StaticElement::GetParent() const { 
@@ -303,7 +352,7 @@ vector<Statement *> Statement::Parse(const Tuple & t) {
       position++;
     } else if (o.GetType() == Object::OTUPLE) {
       vector<Statement *> subs = Parse(OTuple(o).Data());
-      if (parent->TypeKeyword().Data() == "parallel") {
+      if (parent->GetFunction() == PARALLEL) {
 	CHECK((int)parent->static_children_.size() 
 	      == parent->NumExpressionChildren());
 	while (parent->static_children_.size() < 
@@ -367,7 +416,7 @@ string Statement::ToString(int indent, bool html) const {
   if (this == NULL) return ret + "null" + GetNewLine(html);
   ret += ToStringSingle(html);
   vector<Statement *> children = GetStatementChildren();
-  if (children.size() > 1 || TypeKeyword().Data() == "parallel") {
+  if (children.size() > 1 || GetFunction() == PARALLEL) {
     ret += " {" + GetNewLine(html);
     for (uint i=0; i<children.size(); i++) 
       ret += children[i]->ToString(indent+2, html);
@@ -382,14 +431,14 @@ string Statement::ToString(int indent, bool html) const {
 }
 string Statement::ToStringSingle(bool html) const {
   string ret;
-  string tkw = TypeKeyword().ToString();
+  string tkw = FunctionKeyword().ToString();
   ret += html?GetLink(tkw):tkw;
   ret += ParameterListToString(html);
   return ret;
 }
 string Expression::ToString(bool html) const {
   string ret = "(";
-  string tkw = TypeKeyword().ToString();
+  string tkw = FunctionKeyword().ToString();
   ret += html?GetLink(tkw):tkw;
   ret += ParameterListToString(html);
   ret += ")";
@@ -435,34 +484,6 @@ string StaticElement::ParameterListToString(bool html) const {
   return ret;
 }
 
-Keyword StaticOn::TypeKeyword() const {
-  return Keyword::Make("on");
-}
-Keyword StaticRepeat::TypeKeyword() const {
-  return Keyword::Make("repeat");
-}
-Keyword StaticDelay::TypeKeyword() const {
-  return Keyword::Make("delay");
-}
-Keyword StaticLet::TypeKeyword() const {
-  return Keyword::Make("let");
-}
-Keyword StaticOutput::TypeKeyword() const {
-  return Keyword::Make("output");
-}
-Keyword StaticIf::TypeKeyword() const {
-  return Keyword::Make("if");
-}
-
-Keyword StaticConstant::TypeKeyword() const {
-  return Keyword::Make("constant");
-}
-Keyword StaticSubstitute::TypeKeyword() const {
-  return Keyword::Make("substitute");
-}
-Keyword StaticFlakeChoice::TypeKeyword() const {
-  return Keyword::Make("flake_choice");
-}
 Object DynamicFlakeChoice::ComputeValue() const { 
   return choice_;
 }

@@ -23,8 +23,23 @@
 #include "link.h"
 
 
-struct Element : public Named {
+struct Element : public Named {  
   public:
+
+  #define ElementFunctionList {			\
+      ITEM(PASS),					\
+	ITEM(ON),					\
+	ITEM(REPEAT),					\
+	ITEM(DELAY),					\
+	ITEM(LET),					\
+	ITEM(OUTPUT),					\
+	ITEM(IF),					\
+	ITEM(PARALLEL),					\
+	ITEM(SUBSTITUTE),				\
+	ITEM(FLAKE_CHOICE),				\
+	ITEM(CONSTANT),					\
+	};
+  CLASS_ENUM_DECLARE(Element, Function);
 
   // ---------- L2 functions ----------  
 
@@ -36,17 +51,21 @@ struct Element : public Named {
   virtual OTime ComputeTime() const = 0;
   // computes the proper time of a child element. 
   virtual OTime ComputeChildTime(const Link * link, const Element *child) const{
-    return time_;
+    return time_;    
   }
   Record GetRecordForDisplay() const;
   virtual Element * GetParent() const = 0;
   // a human and machine readable version of the static subtree
   virtual string ToString(bool html) const = 0;  
+  virtual Function GetFunction() const = 0;
+  virtual Keyword FunctionKeyword() const { 
+    return Keyword::Make(Downcase(FunctionToString(GetFunction())));
+  }
 
   // ---------- L1 functions ----------  
   Element() :parent_(NULL){};
   virtual void L1_Init() { Named::L1_Init(); }
-  void L1_Erase() { Named::L1_Erase();}
+  void L1_Erase();
 
   // these functions are only called by the link. 
   // Outsiders should call Link::L1_AddChild() or Link::L1_RemoveChild().
@@ -78,8 +97,8 @@ struct StaticElement : public Element {
   // ---------- L2 functions ----------
 
   // TODO: implement these functions
-  void UnhookFromParent();
-  void LinkToParent(int which_child);
+  void UnlinkFromParent();
+  void LinkToParent(StaticElement *parent, int which_child);
   void EraseTree();  
 
   // ---------- const functions ----------  
@@ -94,10 +113,14 @@ struct StaticElement : public Element {
   Object GetObject(int which) const;
   virtual int NumExpressionChildren() const = 0;
   virtual int NumChildren() const = 0;
-  virtual int NumStatementChildren()  const{ 
+  int NumStatementChildren()  const{ 
     return NumChildren() - NumExpressionChildren(); }
+  Named::Type ChildType(int which) {
+    CHECK(which>=0 && which < NumChildren());
+    return (which < NumExpressionChildren())
+      ?Named::EXPRESSION:Named::STATEMENT;
+  }
   virtual int NumObjects() const { return 0;}
-  virtual Keyword TypeKeyword() const = 0;
   // the objects and expression children
   string ParameterListToString(bool html) const; 
   // What new variables are introduced by this node
@@ -111,6 +134,12 @@ struct StaticElement : public Element {
   // ---------- L1 functions ----------  
   void L1_Init();
   void L1_Erase();
+  // creates a StaticChangedViolation (if one doesn't exist already)
+  // Such a violation needs to exist if the static structure has changed, since
+  // the dynamic network will be messed up. 
+  void L1_MarkStaticNodeChanged();
+  // does so for every static node in the subtree.
+  void L1_MarkStaticSubtreeChanged();
   //This should only be called from Link::L1_AddChild()
   void L1_ConnectToParentLink(Link *link) { CL.ChangeValue(&parent_, link);}
   //This should only be called from Link::L1_RemoveChild()
@@ -160,6 +189,8 @@ struct DynamicElement : public Element{
   virtual Link::Type LinkType(int which_child) const { return Link::SINGLE;}
   OTime ComputeTime() const;
   string ToString(bool html) const;
+  virtual Function GetFunction() const { return GetStatic()->GetFunction();}
+
 
   // ---------- L1 functions ----------  
   // we probably only need two of these parameters, since we can figure out 
@@ -274,7 +305,7 @@ struct StaticPass : public Statement {
   int NumExpressionChildren() const { return 0;}
   int NumChildren() const { return 0;}
   int NumObjects() const { return 0;}
-  Keyword TypeKeyword() const { return Keyword::Make("pass");}
+  virtual Function GetFunction() const { return PASS;}
   // ---------- L1 functions ----------  
   // ---------- data ----------  
 };
@@ -304,7 +335,7 @@ struct StaticOn : public Statement {
   int NumChildren() const { return NUM_CHILDREN;}
   int NumObjects() const { return NUM_OBJECTS;}
   OPattern GetPattern() const { return GetObject(PATTERN);}
-  Keyword TypeKeyword() const;
+  virtual Function GetFunction() const { return ON;}
   set<Variable> GetIntroducedVariables() const;
   // ---------- L1 functions ----------  
   void L1_Init();
@@ -350,7 +381,7 @@ struct StaticRepeat : public Statement {
   int NumObjects() const { return NUM_OBJECTS;}
   Variable GetRepetitionVariable() const { 
     return GetObject(REPETITION_VARIABLE);}
-  Keyword TypeKeyword() const;
+  virtual Function GetFunction() const { return REPEAT;}
   set<Variable> GetIntroducedVariables() const {
     return SingletonSet(GetRepetitionVariable()); }
 
@@ -375,7 +406,7 @@ struct DynamicRepeat : public DynamicStatement {
 struct StaticDelay : public Statement { 
   enum {
     // expressions
-    DELAY,
+    DIMENSION,
     // statements
     CHILD,
     NUM_CHILDREN,
@@ -384,7 +415,8 @@ struct StaticDelay : public Statement {
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return CHILD;}
   int NumChildren() const { return NUM_CHILDREN;}
-  Keyword TypeKeyword() const;
+  Function GetFunction() const { return DELAY;}
+
   // ---------- L1 functions ----------  
   void L1_Init();
   // ---------- data ----------    
@@ -397,7 +429,7 @@ struct DynamicDelay : public DynamicStatement {
       return OTime::Make
 	(time_.Data() 
 	 + OBitSeq
-	 (GetSingleExpressionChild(StaticDelay::DELAY)->value_).Data());
+	 (GetSingleExpressionChild(StaticDelay::DIMENSION)->value_).Data());
       }
     return time_;
   }
@@ -427,7 +459,8 @@ struct StaticLet : public Statement {
   int NumChildren() const { return NUM_CHILDREN;}
   int NumObjects() const { return NUM_OBJECTS;}
   Variable GetVariable() const { return GetObject(VARIABLE);}
-  Keyword TypeKeyword() const;
+  virtual Function GetFunction() const { return LET;}
+
   set<Variable> GetIntroducedVariables() const {
     return SingletonSet(GetVariable());}
   // ---------- L1 functions ----------  
@@ -456,7 +489,7 @@ struct StaticOutput : public Statement {
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return NUM_CHILDREN;}
   int NumChildren() const { return NUM_CHILDREN;}
-  Keyword TypeKeyword() const;
+  virtual Function GetFunction() const { return OUTPUT;}
   // ---------- L1 functions ----------  
   void L1_Init();
   // ---------- data ----------  
@@ -484,15 +517,15 @@ struct StaticIf : public Statement {
     //expressions
     CONDITION,
     // statements
-    IF,
-    ELSE,
+    ON_TRUE,
+    ON_FALSE,
     NUM_CHILDREN,
   };
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
-  int NumExpressionChildren() const { return IF;}
+  int NumExpressionChildren() const { return ON_TRUE;}
   int NumChildren() const { return NUM_CHILDREN;}
-  Keyword TypeKeyword() const;
+  Function GetFunction() const { return IF;}
   // ---------- L1 functions ----------  
   void L1_Init();
   // ---------- data ----------  
@@ -516,7 +549,8 @@ struct StaticParallel : public Statement {
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return 0;}
   int NumChildren() const { return static_children_.size(); }
-  Keyword TypeKeyword() const { return Keyword::Make("parallel");}
+  virtual Function GetFunction() const { return PARALLEL;}
+
   // ---------- L1 functions ----------  
   void L1_Init() { Statement::L1_Init();}
   // ---------- data ----------  
@@ -539,7 +573,8 @@ struct StaticSubstitute : public Expression {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   int NumChildren() const { return NUM_CHILDREN;}
-  Keyword TypeKeyword() const;
+  virtual Function GetFunction() const { return SUBSTITUTE;}
+
   // ---------- L1 functions ----------  
   void L1_Init() {Expression::L1_Init();}
   // ---------- data ----------  
@@ -560,7 +595,8 @@ struct StaticFlakeChoice : public Expression {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   int NumChildren() const { return NUM_CHILDREN;}
-  Keyword TypeKeyword() const;
+  virtual Function GetFunction() const { return FLAKE_CHOICE;}
+
   // ---------- L1 functions ----------  
   void L1_Init() {Expression::L1_Init();}
   // ---------- data ----------  
@@ -599,8 +635,9 @@ struct StaticConstant : public Expression {
   // ---------- const functions ----------  
   int NumChildren() const { return NUM_CHILDREN;}
   int NumObjects() const { return NUM_OBJECTS;}
-  Keyword TypeKeyword() const;
   string ToString(bool html) const;
+  virtual Function GetFunction() const { return CONSTANT;}
+
   // ---------- L1 functions ----------  
   void L1_Init() {Expression::L1_Init();}
   // ---------- data ----------  

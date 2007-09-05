@@ -35,7 +35,8 @@
   This stuff helps you more simply declare enums which convert to and 
   from string values. The enums are class members. 
 
-  for example, in the .h you can put 
+  for example, if we have a class called Object and want to define an enum
+  Object::Type, in the .h we put 
   
   class Object {
     #define ObjectTypeList {				\
@@ -398,5 +399,7 @@ template<class SK, class MK, class V> map<MK, V> Restrict(const map<MK,V> & m,
 /* Usage of the New paradigm that calls Init
    Statement * st = New<Statement>(param1, param2, param3)
 */
+
+string Downcase(string s);
 
 #endif
