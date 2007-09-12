@@ -49,6 +49,8 @@ struct Element : public Named {
   virtual OMap GetBinding() const { CHECK(false); return OMap();}
   // computes the proper time of this element. 
   virtual OTime ComputeTime() const = 0;
+  // gets the current time of an element.
+  OTime GetTime() const { return time_;}
   // computes the proper time of a child element. 
   virtual OTime ComputeChildTime(const Link * link, const Element *child) const{
     return time_;    
@@ -61,7 +63,8 @@ struct Element : public Named {
   virtual Keyword FunctionKeyword() const { 
     return Keyword::Make(Downcase(FunctionToString(GetFunction())));
   }
-
+  int WhichChild() { if (parent_) return parent_->WhichChild(); return -1; }
+  
   // ---------- L1 functions ----------  
   Element() :parent_(NULL){};
   virtual void L1_Init() { Named::L1_Init(); }
@@ -74,7 +77,7 @@ struct Element : public Named {
 
   // call this if the computed time may have changed. 
   // creates a time violation (or destroys one) as necessary. 
-  void L1_TimeMayHaveChanged(); 
+  void N1_TimeMayHaveChanged(); 
 
   // ---------- data ----------  
 
@@ -100,6 +103,7 @@ struct StaticElement : public Element {
   void UnlinkFromParent();
   void LinkToParent(StaticElement *parent, int which_child);
   void EraseTree();  
+  void SetObject(int which, Object new_value);
 
   // ---------- const functions ----------  
   bool IsDynamic() const { return false; }
@@ -120,6 +124,7 @@ struct StaticElement : public Element {
     return (which < NumExpressionChildren())
       ?Named::EXPRESSION:Named::STATEMENT;
   }
+  int NumDynamicChildren() const { return dynamic_children_->children_.size();}
   virtual int NumObjects() const { return 0;}
   // the objects and expression children
   string ParameterListToString(bool html) const; 
@@ -134,12 +139,11 @@ struct StaticElement : public Element {
   // ---------- L1 functions ----------  
   void L1_Init();
   void L1_Erase();
-  // creates a StaticChangedViolation (if one doesn't exist already)
-  // Such a violation needs to exist if the static structure has changed, since
-  // the dynamic network will be messed up. 
-  void L1_MarkStaticNodeChanged();
-  // does so for every static node in the subtree.
-  void L1_MarkStaticSubtreeChanged();
+
+  void L1_LinkChild(int where, StaticElement *child);
+  void L1_UnlinkChild(int where);
+  void L1_SetObject(int which, Object new_value);
+
   //This should only be called from Link::L1_AddChild()
   void L1_ConnectToParentLink(Link *link) { CL.ChangeValue(&parent_, link);}
   //This should only be called from Link::L1_RemoveChild()
@@ -147,9 +151,8 @@ struct StaticElement : public Element {
     CHECK(parent_ == link);
     CL.ChangeValue(&parent_, (Link *) NULL);
   }
-  void L1_LinkChild(int where, StaticElement *child);
-  void L1_UnlinkChild(int where);
-  void L1_SetObject(int which, Object new_value);
+  // ---------- N1 notifiers ----------  
+  virtual void N1_ObjectChanged(int which) {}
 
   // ---------- data ----------  
 
@@ -164,6 +167,12 @@ struct StaticElement : public Element {
 struct DynamicElement : public Element{
 
   // ---------- L2 functions ----------  
+  bool SetBinding(OMap new_binding); // returns false on failure
+  // it can figure out the parent from the static node and the bindings.
+  // returns false on failure.
+  bool LinkToParent(); 
+  void UnlinkFromParent();
+
 
   // ---------- const functions ----------  
   bool IsDynamic() const { return true; }
@@ -183,43 +192,56 @@ struct DynamicElement : public Element{
   Object GetObject(int which) const { return GetStatic()->GetObject(which);}
   DynamicElement * GetSingleChild(int which) const;
   DynamicExpression * GetSingleExpressionChild(int which) const;
-  DynamicExpression * GetSingleStatementChild(int which) const;
+  DynamicStatement * GetSingleStatementChild(int which) const;
   OMap GetBinding() const { return binding_;}
   DynamicElement * FindParent() const; // finds parent based on bindings.
   virtual Link::Type LinkType(int which_child) const { return Link::SINGLE;}
   OTime ComputeTime() const;
   string ToString(bool html) const;
   virtual Function GetFunction() const { return GetStatic()->GetFunction();}
-
+  virtual OMap ComputeNewBinding() { return OMap::Default(); }
+  // static parent and binding need to exist. binding needs to be correct
+  // when restricted to the variables of the parent of the static parent. 
+  Link * FindDynamicParentLink();
 
   // ---------- L1 functions ----------  
   // we probably only need two of these parameters, since we can figure out 
   // the third, but we'd rather pass all three here than worry about the corner
   // cases at this point. 
-  void L1_Init(StaticElement * static_parent, Link *parent, OMap binding);
+  void L1_Init(StaticElement * static_parent, OMap binding);
   void L1_Erase() { Element::L1_Erase();}
   // should only be called by Link::L1_AddChild();
   void L1_ConnectToParentLink(Link *link) {
     if (link->parent_->IsDynamic())
       parent_ = link;
-    else static_parent_ = link;
+    else static_parent_ = dynamic_cast<MultiLink*>(link);
   }
   // should only be caled by Link::L1_RemoveChild()
   void L1_DisconnectFromParentLink(Link *link) { 
-    Link ** parent_ptr 
-      = (link->parent_->IsDynamic() ? &parent_ : &static_parent_);
-    CHECK(*parent_ptr == link);
-    CL.ChangeValue(parent_ptr, (Link *) NULL);
+    if (link->parent_->IsDynamic())
+      CL.ChangeValue(&parent_, (Link *)NULL);
+    else 
+      CL.ChangeValue(&static_parent_, (MultiLink *)NULL);
   }
+
+
+  // checks for violations
+  void L1_CheckSetParentAndBindingViolations();
+  
+  // ---------- N1 notifiers ----------  
 
   // this gets called when the value of a child expression changes, 
   // or when a child expresison is created(Init) or destroyed(L1_Erase).   
-  void L1_ChildExpressionChanged(Link * child_link);
-  // the previous function is called externally and calls the following function
-  virtual void L1_ChildExpressionChanged(int which_child) = 0;
+  virtual void N1_ChildExpressionChanged(int which_child) = 0;
+
+  // The following are called externally when a child is connected to
+  // or disconnected from this parent node. 
+  virtual void N1_ChildConnected(Link *child_link, DynamicElement *child);
+  virtual void N1_ChildDisconnected(Link *child_link, DynamicElement *child);
+
 
   // ---------- data ----------  
-  Link * static_parent_;
+  MultiLink * static_parent_;
   vector<Link *> children_;
   OMap binding_; // if parent_ is a multilink, always matches it. 
   
@@ -227,15 +249,9 @@ struct DynamicElement : public Element{
 
 struct Statement : public StaticElement{
   // ---------- L2 functions ----------  
-  // TODO: Make this L2
+  // TODO: actually make this thing L2
   static Statement * MakeStatement(Keyword type);
   
-  // TODO: make these untrusted
-  // position points to where to start parsing, and is changed by the function
-  // to the end of what was parsed.
-  static Statement * ParseSingle(const Tuple & t, uint * position);
-  static vector<Statement *> Parse(const Tuple & t); // ad hoc parser.
-
   // ---------- const functions ----------  
   Named::Type GetType() const { return Named::STATEMENT; }
   string ToString(bool html) const { return ToString(0, html);}
@@ -253,10 +269,8 @@ struct Statement : public StaticElement{
 
 struct Expression : public StaticElement {  
   // ---------- L2 functions ----------  
-  // TODO: actually make this things L2
+  // TODO: actually make this thing L2
   static Expression * MakeExpression(Keyword type);
-  // TODO: make this untrusted
-  static Expression * Parse(const Object & o); // ad hoc parser.
   // ---------- const functions ----------  
   string ToString(bool html) const;
   Named::Type GetType() const { return Named::EXPRESSION;}
@@ -276,8 +290,8 @@ struct DynamicStatement : public DynamicElement {
   // ---------- const functions ----------  
   // ---------- L1 functions ----------  
   void L1_Erase() { DynamicElement::L1_Erase();}
-  void L1_Init(Statement * static_parent, Link *parent, OMap binding){
-    DynamicElement::L1_Init(static_parent, parent, binding);
+  void L1_Init(Statement * static_parent, OMap binding){
+    DynamicElement::L1_Init(static_parent, binding);
   }
   // ---------- data ----------  
 };
@@ -287,10 +301,11 @@ struct DynamicExpression : public DynamicElement {
   void SetValue(Object new_value);
   // ---------- const functions ----------  
   virtual Object ComputeValue() const = 0;
+  Object GetValue() const { return value_;}
   // ---------- L1 functions ----------  
-  void L1_Init(Expression * static_parent, Link *parent, OMap binding);
+  void L1_Init(Expression * static_parent, OMap binding);
   void L1_Erase();
-  void L1_ChildExpressionChanged(int which_child) { 
+  void N1_ChildExpressionChanged(int which_child) { 
     L1_CheckSetValueViolation();}
   // checks whether the value is correct, and creates/removes a violation.
   void L1_CheckSetValueViolation();
@@ -313,7 +328,7 @@ struct DynamicPass : public DynamicStatement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   // ---------- L1 functions ----------  
-  void L1_ChildExpressionChanged(int which_child) { CHECK(false);}
+  void N1_ChildExpressionChanged(int which_child) { CHECK(false);}
   // ---------- data ----------  
 };
 
@@ -340,6 +355,8 @@ struct StaticOn : public Statement {
   // ---------- L1 functions ----------  
   void L1_Init();
   void L1_Erase();
+  // ---------- N1 notifiers ----------  
+  void N1_ObjectChanged(int which){CHECK(NumDynamicChildren() == 0);}
 
   // ---------- data ----------  
   
@@ -357,7 +374,7 @@ struct DynamicOn : public DynamicStatement {
   // ---------- L1 functions ----------  
   void L1_Init(StaticOn* parent);
   void L1_Erase();
-  void L1_ChildExpressionChanged(int which_child) { CHECK(false); }
+  void N1_ChildExpressionChanged(int which_child) { CHECK(false); }
   // ---------- data ----------  
 };
 
@@ -384,10 +401,13 @@ struct StaticRepeat : public Statement {
   virtual Function GetFunction() const { return REPEAT;}
   set<Variable> GetIntroducedVariables() const {
     return SingletonSet(GetRepetitionVariable()); }
-
   // ---------- L1 functions ----------  
   void L1_Init();
+
+  // ---------- N1 notifiers ----------  
+  void N1_ObjectChanged(int which){CHECK(NumDynamicChildren() == 0);}
 };
+
 struct DynamicRepeat : public DynamicStatement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
@@ -395,7 +415,7 @@ struct DynamicRepeat : public DynamicStatement {
     return (which_child==StaticRepeat::CHILD)?Link::MULTI:Link::SINGLE;
   }
   // ---------- L1 functions ----------  
-  void L1_ChildExpressionChanged(int which_child) { 
+  void N1_ChildExpressionChanged(int which_child) { 
     // todo: check whether the number of repetitions is correct
     CHECK(false);
   }
@@ -434,7 +454,7 @@ struct DynamicDelay : public DynamicStatement {
     return time_;
   }
   // ---------- L1 functions ----------  
-  void L1_ChildExpressionChanged(int which_child) { 
+  void N1_ChildExpressionChanged(int which_child) { 
     // todo: check whether the times are right on the children
     CHECK(false);
   }
@@ -465,16 +485,19 @@ struct StaticLet : public Statement {
     return SingletonSet(GetVariable());}
   // ---------- L1 functions ----------  
   void L1_Init();
+  // ---------- N1 notifiers ----------  
+  void N1_ObjectChanged(int which){CHECK(NumDynamicChildren() == 0);}
   // ---------- data ----------  
 };
 struct DynamicLet : public DynamicStatement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
+  bool HasLetViolation() const; // a let violation should exist.
   // ---------- L1 functions ----------  
-  void L1_ChildExpressionChanged(int which_child) { 
-    // todo: check the bindings on the children
-    CHECK(false);
+  void N1_ChildExpressionChanged(int which_child) { 
+    L1_CheckSetLetViolation();
   }
+  void L1_CheckSetLetViolation(); // (programming with Dr. Seuss)
   // ---------- data ----------  
 };
 
@@ -505,7 +528,7 @@ struct DynamicOutput : public DynamicStatement {
   // ---------- L1 functions ----------  
   // see if it's perfect, then create or remove violation if necessary.
   void L1_CheckSetPostingViolation();
-  void L1_ChildExpressionChanged(int which_child) { 
+  void N1_ChildExpressionChanged(int which_child) { 
     L1_CheckSetPostingViolation();
   }
   // ---------- data ----------  
@@ -534,7 +557,7 @@ struct DynamicIf : public DynamicStatement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   // ---------- L1 functions ----------  
-  void L1_ChildExpressionChanged(int which_child) { 
+  void N1_ChildExpressionChanged(int which_child) { 
     // todo: check that the correct child is instantiated
     // todo: what state of the world means that a child is not instantiated?
     //       does the link just point to null. If so, then MISSING_LINK
@@ -560,7 +583,7 @@ struct DynamicParallel : public DynamicStatement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   // ---------- L1 functions ----------  
-  void L1_ChildExpressionChanged(int which_child) { CHECK(false); }
+  void N1_ChildExpressionChanged(int which_child) { CHECK(false); }
   // ---------- data ----------  
 };
 
@@ -640,6 +663,10 @@ struct StaticConstant : public Expression {
 
   // ---------- L1 functions ----------  
   void L1_Init() {Expression::L1_Init();}
+
+  // ---------- N1 notifiers ----------  
+  void N1_ObjectChanged(int which);
+
   // ---------- data ----------  
 
 };
@@ -650,6 +677,15 @@ struct DynamicConstant : public DynamicExpression {
   // ---------- L1 functions ----------  
   // ---------- data ----------  
 };
+
+template <class T> T * MakeStatement() {
+  CHECK(static_cast<Statement *>((T *)NULL) == NULL);
+  return New<T>();
+}
+template <class T> T * MakeExpression() {
+  CHECK(static_cast<Expression *>((T *)NULL) == NULL);
+  return New<T>();
+}
 
 
 /*

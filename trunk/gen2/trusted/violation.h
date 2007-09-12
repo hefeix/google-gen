@@ -38,8 +38,11 @@ struct Violation {
       ITEM(VALUE),				\
       ITEM(POSTING),				\
       ITEM(TIME),				\
-      ITEM(NO_PARENT),				\
-      ITEM(STATIC_CHANGED),			\
+      ITEM(STATIC_NO_PARENT),				\
+      ITEM(DYNAMIC_NO_PARENT),				\
+      ITEM(BINDING_VARIABLES),			\
+      ITEM(BINDING_OLD_VALUES),			\
+      ITEM(LET),				\
       };
   CLASS_ENUM_DECLARE(Violation, Type);
 
@@ -47,12 +50,13 @@ struct Violation {
 
   // ---------- const functions ----------  
   virtual Type GetType() const = 0;
+  virtual OTime ComputeTime() const = 0;
   OTime GetTime() const { return time_; }
   bool Exists() const;
 
   // ---------- L1 functions ----------  
   virtual ~Violation(){}
-  virtual void L1_Init(OTime time);
+  virtual void L1_Init();
   virtual void L1_Erase() {
     // remove from the model's set of violations
     L1_RemoveFromGlobalMap();
@@ -62,6 +66,8 @@ struct Violation {
   void L1_InsertIntoGlobalMap();
   void L1_RemoveFromGlobalMap();
 
+  // ---------- N1 notifiers ----------  
+  void N1_TimeMayHaveChanged();
 
   // ---------- data ----------  
   static map<void *, set<Violation *> > owned_violations_;
@@ -96,11 +102,12 @@ struct OwnedViolation : public Violation {
   // ---------- const functions ----------
   Owner GetOwner() const { return owner_;}
   Violation::Type GetType() const {return VType;}
+  OTime ComputeTime() const { return owner_->GetTime();}
 
   // ---------- L1 functions ----------
-  void L1_Init(Owner *owner, OTime time) {
+  void L1_Init(Owner *owner) {
     owner_ = owner;
-    Violation::L1_Init(time);
+    Violation::L1_Init();
     CL.InsertIntoMapOfSets(&Violation::owned_violations_, (void *)owner_, 
 			   (Violation *)this);
   }
@@ -108,9 +115,9 @@ struct OwnedViolation : public Violation {
     CL.RemoveFromMapOfSets(&Violation::owned_violations_, (void *)owner_, 
 			   (Violation *)this);
   }
-  static void L1_CreateIfAbsent(Owner *owner, OTime time) {
+  static void L1_CreateIfAbsent(Owner *owner) {
     if (FindViolation(owner, VType)) return;
-    New<OwnedViolation<Owner, VType> >(owner, time);
+    New<OwnedViolation<Owner, VType> >(owner);
   }
   static void L1_RemoveIfPresent(Owner *owner) {
     Violation *v = FindViolation(owner, VType);
@@ -119,6 +126,7 @@ struct OwnedViolation : public Violation {
   // ---------- data ----------
   Owner *owner_;
 };
+
 
 
 // This is a violation that is owned by an owner_, and indexed by the owner
@@ -133,11 +141,12 @@ struct OwnedViolationWithData : public Violation {
   // ---------- const functions ----------
   Owner GetOwner() const { return owner_;}
   Violation::Type GetType() const {return VType;}
+  OTime ComputeTime() const { return owner_->GetTime();}
 
   // ---------- L1 functions ----------
-  void L1_Init(Owner *owner, DataType data, OTime time) {
+  void L1_Init(Owner *owner, DataType data) {
     owner_ = owner;
-    Violation::L1_Init(time);
+    Violation::L1_Init();
     data_ = data;
     CL.InsertIntoMap(owner_->GetViolationMap(VType), data_, (Violation*)this);
   }
@@ -161,11 +170,29 @@ class OutputStatement;
 // The static program has changed somewhere involving this node (inlcuding its
 // parent link and outlinks) or one of its ancestors.  The dynamic network may
 // be really messed up.  
-typedef OwnedViolation<StaticElement, Violation::STATIC_CHANGED>
-  StaticChangedViolation;
+//typedef OwnedViolation<StaticElement, Violation::STATIC_CHANGED>
+//  StaticChangedViolation;
+
+
 // A static node other than an ON statement has no parent.
-typedef OwnedViolation<StaticElement, Violation::NO_PARENT>
-  NoParentViolation;
+typedef OwnedViolation<StaticElement, Violation::STATIC_NO_PARENT>
+  StaticNoParentViolation;
+// A dynamic node other than an ON statement has no parent.
+typedef OwnedViolation<DynamicElement, Violation::DYNAMIC_NO_PARENT>
+  DynamicNoParentViolation;
+// A dynamic node's binding contains the wrong set of variables
+// This violation is not present if there is a DynamicNoParentViolation
+typedef OwnedViolation<DynamicElement, Violation::BINDING_VARIABLES>
+  BindingVariablesViolation;
+// A dynamic node's binding has values for the old variables that 
+// differ from those of its parent
+// This violation is never present if there is a BindingVariablesViolation
+// or a DynamicNoParentViolation
+typedef OwnedViolation<DynamicElement, Violation::BINDING_OLD_VALUES>
+  BindingOldValuesViolation;
+// A let statement's value doesn't match it's child's binding.
+typedef OwnedViolation<DynamicElement, Violation::LET>
+  LetViolation;
 // A required tuple is not present on the blackboard
 typedef OwnedViolation<Requirement, Violation::REQUIREMENT>
   RequirementViolation;

@@ -247,6 +247,12 @@ template<class A, class B> pair<A,B> operator -(const pair<A,B>& p1,
   return make_pair(p1.first-p2.first, p1.second-p2.second);
 }
 
+template<class A, class B> set<A> Domain(const map<A, B> & m) {
+  set<A> ret;
+  forall(run, m) ret.insert(run->first);
+  return ret;
+}
+
 inline int atoi(const string & s){return atoi(s.c_str());}
 // strips whitespace from the ends of a string
 string StripWhiteEnds(const string & s);

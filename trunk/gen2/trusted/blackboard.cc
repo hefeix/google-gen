@@ -412,14 +412,14 @@ UpdateNeeds RandomUpdateNeeds() {
   }
   return 1;
 }
-Time Blackboard::FindTupleTime(OTuple t) const{
+OTime Blackboard::FindTupleTime(OTuple t) const{
   TupleInfo * ti = GetTupleInfo(t);
   CHECK(ti);
-  return ti->FirstTime();
+  return OTime::Make(ti->FirstTime());
 }
-Time Blackboard::FindLastTime(const Pattern & p) const {
-  Time last;
-  for (uint i=0; i<p.size(); i++) last = max(last, FindTupleTime(p[i]));
+OTime Blackboard::FindLastTime(const Pattern & p) const {
+  OTime last = CREATION;
+  for (uint i=0; i<p.size(); i++) last = DataMax(last, FindTupleTime(p[i]));
   return last;
 }
 

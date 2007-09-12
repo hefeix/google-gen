@@ -58,9 +58,9 @@ void L1_EraseOwnedViolations(void *owner) {
 
 
 
-void Violation::L1_Init(OTime time) {  
+void Violation::L1_Init() {  
   CL.Creating(this);
-  time_ = time;
+  time_ = ComputeTime();
   // add to the model's set of violations
   L1_InsertIntoGlobalMap();
 }
@@ -72,6 +72,10 @@ void Violation::L1_RemoveFromGlobalMap(){
   CL.RemoveFromMapOfSets(&M.violations_by_type_, GetType(), this);
   CL.RemoveFromMapOfSets(&M.violations_by_time_, GetTime(), this);
 }
+void Violation::N1_TimeMayHaveChanged() {
+  OTime new_time = ComputeTime();
+  if (new_time != time_) L1_ChangeTime(new_time);
+}
 void Violation::L1_ChangeTime(OTime new_time) {
   CL.RemoveFromMapOfSets(&M.violations_by_time_, GetTime(), this);
   CL.ChangeValue(&time_, new_time);
@@ -82,4 +86,36 @@ bool Violation::Exists() const {
   set<Violation *> * s = M.violations_by_time_ % time_;
   return (s && ((*s) % (Violation *)this) );
 }
+
+template<>
+OTime ProhibitionViolation::ComputeTime() const {
+  return BB.FindTupleTime(data_);
+}
+template<>
+OTime MissingOnMatchViolation::ComputeTime() const {
+  return 
+    DataMax(owner_->GetDynamicOnParent()->GetTime(), 	    
+	    BB.FindLastTime
+	    (Substitute
+	     (data_.Data(), 
+	      owner_->GetDynamicOnParent()
+	      ->GetStaticOn()->GetPattern().Data())));
+}
+
+template<>
+OTime ExtraOnMatchViolation::ComputeTime() const {
+  CHECK(owner_->children_ % data_);
+  return owner_->children_[data_]->GetTime();
+}
+template<>
+OTime TimeViolation::ComputeTime() const {
+  return DataMin(owner_->ComputeTime(), owner_->GetTime());
+}
+template<>
+OTime PostingViolation::ComputeTime() const {
+  if (owner_->posting_ == NULL) return owner_->GetTime();
+  return DataMin(owner_->GetTime(), OTime::Make(owner_->posting_->time_));
+}
+
+
 

@@ -35,8 +35,29 @@ void Link::L1_Erase() {
   CL.Destroying(this);
 }
 
+// needed by various violations.
+OTime Link::GetTime() const {
+  return GetParent()->GetTime();
+}
+
 OTime Link::ComputeChildTime(const Element *child) const {
   return parent_->ComputeChildTime(this, child);
+}
+int Link::WhichChild() const { 
+  Named::Type pt = GetParent()->GetType();
+  if (pt == Named::STATEMENT
+      || pt == Named::EXPRESSION) {
+    StaticElement *parent = dynamic_cast<StaticElement *>(GetParent());
+    for (uint i=0; i<parent->static_children_.size(); i++) 
+      if (this == parent->static_children_[i]) return i;
+  }
+  if (pt == Named::DYNAMIC_STATEMENT
+      || pt == Named::DYNAMIC_EXPRESSION) {
+    DynamicElement *parent = dynamic_cast<DynamicElement *>(GetParent());
+    for (uint i=0; i<parent->children_.size(); i++) 
+      if (this == parent->children_[i]) return i;
+  }
+  return -1;
 }
 
 
@@ -53,7 +74,10 @@ void MultiLink::L1_RemoveChild(Element *child){
 }
 set<Element *> MultiLink::GetChildren() const {
   set<Element *> ret;
-  forall(run, children_) ret.insert(run->second);
+  forall(run, children_) {
+    CHECK(run->second);
+    ret.insert(run->second);
+  }
   return ret;
 }
 Element * MultiLink::GetChild(OMap m) const {
@@ -69,7 +93,7 @@ void MultiLink::L1_Init(Element * parent) {
 void SingleLink::L1_Init(Element *parent) {
   Link::L1_Init(parent);
   child_ = NULL;
-  New<MissingLinkViolation>(this, CREATION);
+  New<MissingLinkViolation>(this);
 }
 
 void SingleLink::L1_Erase() {
@@ -89,7 +113,7 @@ void SingleLink::L1_RemoveChild(Element *child){
 }
 set<Element *> SingleLink::GetChildren() const {
   set<Element *> ret;
-  ret.insert(child_);
+  if (child_) ret.insert(child_);
   return ret;
 }
 
@@ -117,8 +141,7 @@ void OnMultiLink::Update(const QueryUpdate &update, SubType *sub) {
 	  = dynamic_cast<ExtraOnMatchViolation*>(extra_[m]);
 	v->L1_Erase();
       } else {
-	New<MissingOnMatchViolation>
-	  (this, m, OTime::Make(max(parent_->time_.Data(), s.new_time_)));
+	New<MissingOnMatchViolation>(this, m);
       }
     }
     if (s.action_ == UPDATE_DESTROY) {
@@ -126,17 +149,18 @@ void OnMultiLink::Update(const QueryUpdate &update, SubType *sub) {
 	missing_[m]->L1_Erase();
       } else {
 	CHECK(children_ % m);
-	New<ExtraOnMatchViolation>(this, m, children_[m]->time_);
+	New<ExtraOnMatchViolation>(this, m);
       }
     }
     if (s.action_ == UPDATE_CHANGE_TIME) {
       if (children_ % m) {
 	// Note - We could use max(parent_->time_, s.new_time_)
 	// instead of computing it again. That would be an optimization
-	children_[m]->L1_TimeMayHaveChanged();
+	children_[m]->N1_TimeMayHaveChanged();
       } else {
-	CHECK(missing_ % m);
-	missing_[m]->L1_ChangeTime(OTime::Make(s.new_time_));
+	CHECK(missing_ % m);	
+	// if we want to optimize ... use the time from the update.
+	missing_[m]->N1_TimeMayHaveChanged();
       }
     }
   }
@@ -150,7 +174,7 @@ void OnMultiLink::L1_AddChild(Element * child) {
   if (missing_ % binding) {
     missing_[binding]->L1_Erase();
   } else {
-    New<ExtraOnMatchViolation>(this, binding, child->time_);
+    New<ExtraOnMatchViolation>(this, binding);
   }
   MultiLink::L1_AddChild(child);
 }
@@ -160,9 +184,7 @@ void OnMultiLink::L1_RemoveChild(Element * child) {
   if (extra_ % binding) {
     extra_[binding]->L1_Erase();
   } else {
-    // Compute the violation's time
-    OTime t = GetDynamicOnParent()->ComputeChildTime(this, child);
-    New<MissingOnMatchViolation>(this, binding, t);
+    New<MissingOnMatchViolation>(this, binding);
   }
   MultiLink::L1_RemoveChild(child);
 }

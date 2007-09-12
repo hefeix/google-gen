@@ -44,7 +44,7 @@ void Requirement::Update(const QueryUpdate &update, SubType * sub){
   }
 }
 void Requirement::L1_AddViolation() {
-  New<RequirementViolation>(this, CREATION);
+  New<RequirementViolation>(this);
 }
 void Requirement::L1_RemoveViolation() {
   Violation * violation = FindViolation(this, Violation::REQUIREMENT);
@@ -73,7 +73,7 @@ void Prohibition::Update(const QueryUpdate &update, SubType * sub){
       OTuple t = Substitute(run->data_.Data(), tuple_);
       if (exceptions_ % t) continue;
       CHECK(!(violations_ % t));
-      New<ProhibitionViolation>(this, t, OTime::Make(run->new_time_));
+      New<ProhibitionViolation>(this, t);
     }
     if (run->action_ == UPDATE_DESTROY) {
       OTuple t = Substitute(run->data_.Data(), tuple_);
@@ -89,11 +89,11 @@ void Prohibition::Update(const QueryUpdate &update, SubType * sub){
       OTuple t = Substitute(run->data_.Data(), tuple_);
       Violation ** v = violations_ % t;
       CHECK(v);
-      (*v)->L1_ChangeTime(OTime::Make(run->new_time_));
+      (*v)->N1_TimeMayHaveChanged();
     }
   }
 }
-void Prohibition::L1_AddException(OTuple t) {
+void Prohibition::AddException(OTuple t) {
   CHECK(!(exceptions_ % t));
   CL.InsertIntoSet(&exceptions_, t);
   Violation ** v = violations_ % t;
