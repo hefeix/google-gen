@@ -29,17 +29,18 @@ CLASS_ENUM_DEFINE(Element, Function);
 
 void Element::L1_Erase() {
   if (parent_) parent_->L1_RemoveChild(this);
+  L1_EraseOwnedViolations(this);
   Named::L1_Erase();
 }
 
-void Element::L1_TimeMayHaveChanged() {
+void Element::N1_TimeMayHaveChanged() {
   OTime proper_time = ComputeTime();
   Violation * violation = FindViolation(this, Violation::TIME);
   if (proper_time != time_) {
     if (!violation) {
-      New<TimeViolation>(this, min(time_, proper_time));
+      New<TimeViolation>(this);
     } else {
-      violation->L1_ChangeTime(min(time_, proper_time));
+      violation->N1_TimeMayHaveChanged();
     }
   } else {
     if (violation) violation->L1_Erase();
@@ -48,31 +49,29 @@ void Element::L1_TimeMayHaveChanged() {
 
 void StaticElement::UnlinkFromParent() {
   CHECK(parent_);
-  GetParent()->L1_MarkStaticNodeChanged();
+  // First unlink the dynamic nodes.
+  forall(run, dynamic_children_->children_) {
+    run->second->UnlinkFromParent();
+  }
   parent_->L1_RemoveChild(this);
-  if (GetFunction() != ON) NoParentViolation::L1_CreateIfAbsent(this, CREATION);
-  L1_MarkStaticSubtreeChanged();
+  if (GetFunction() != ON) 
+    StaticNoParentViolation::L1_CreateIfAbsent(this);
 }
 void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
   CHECK(!parent_);
   CHECK(new_parent->ChildType(which_child) == GetType());
-  new_parent->L1_MarkStaticNodeChanged();
   new_parent->static_children_[which_child]->L1_AddChild(this);
-  NoParentViolation::L1_RemoveIfPresent(this);
-  L1_MarkStaticSubtreeChanged();  
+  StaticNoParentViolation::L1_RemoveIfPresent(this);
 }
 void StaticElement::EraseTree() {
-  L1_Erase();
-}
-
-void StaticElement::L1_MarkStaticNodeChanged() {
-  StaticChangedViolation::L1_CreateIfAbsent(this, CREATION);
-}
-void StaticElement::L1_MarkStaticSubtreeChanged() {
-  for (int i=0; i<NumChildren(); i++) {
-    if (GetChild(i)) GetChild(i)->L1_MarkStaticSubtreeChanged();
+  for (uint i=0; i<static_children_.size(); i++) {
+    StaticElement *child = GetChild(i);
+    CHECK(child);
+    if (child) child->EraseTree();
   }
-  L1_MarkStaticNodeChanged();
+  set<Element *> dc = dynamic_children_->GetChildren();
+  forall(run, dc) (*run)->L1_Erase();
+  L1_Erase();
 }
 
 void StaticElement::L1_Init() {
@@ -81,22 +80,15 @@ void StaticElement::L1_Init() {
   for (int i=0; i<NumChildren(); i++) 
     static_children_.push_back(New<SingleLink>(this));  
   objects_.resize(NumObjects());
-  L1_MarkStaticNodeChanged();
-  if (GetFunction() != ON) NoParentViolation::L1_CreateIfAbsent(this, CREATION);
+  //L1_MarkStaticNodeChanged();
+  if (GetFunction() != ON) 
+    StaticNoParentViolation::L1_CreateIfAbsent(this);
 }
 void StaticElement::L1_Erase() {
   for (uint i=0; i<static_children_.size(); i++) {
-    StaticElement *child = GetChild(i);
-    if (child) child->L1_Erase();
     static_children_[i]->L1_Erase();
   }
-  set<Element *> dc = dynamic_children_->GetChildren();
-  forall(run, dc) (*run)->L1_Erase();
   dynamic_children_->L1_Erase();
-  L1_EraseOwnedViolations(this);
-  StaticElement * p = GetParent();
-  if (p) p->L1_MarkStaticNodeChanged();
-  
   Element::L1_Erase();
 }
 StaticElement * StaticElement::GetParent() const { 
@@ -137,6 +129,10 @@ Expression * StaticElement::GetExpressionChild(int which) const{
 Object StaticElement::GetObject(int which) const{
   return objects_[which];
 }
+void StaticElement::SetObject(int which, Object new_value) {
+  L1_SetObject(which, new_value);
+  N1_ObjectChanged(which);
+}
 void StaticElement::L1_SetObject(int which, Object new_value) {
   CHECK(which < (int)objects_.size());
   CL.ChangeValue(&(objects_[which]), new_value);
@@ -150,6 +146,50 @@ void StaticElement::L1_UnlinkChild(int where){
   static_children_[where]->L1_RemoveChild(GetChild(where));
 }
 
+bool DynamicElement::SetBinding(OMap new_binding) {
+  // check to see that we will not cause a conflict.
+  if (static_parent_->children_ % new_binding) {
+    cerr << "couldn't change binding because of conflict" << endl;
+    return false;
+  }
+  static_parent_->L1_RemoveChild(this);
+  if (parent_) parent_->L1_RemoveChild(this);
+  CL.ChangeValue(&binding_, new_binding);
+  static_parent_->L1_AddChild(this);
+  if (parent_) parent_->L1_AddChild(this);
+  L1_CheckSetParentAndBindingViolations();
+  return true;
+}
+void DynamicElement::L1_CheckSetParentAndBindingViolations() {
+  // first check that there's a parent if there needs to be.
+  if (GetParent() == NULL && GetFunction() != ON) {
+    DynamicNoParentViolation::L1_CreateIfAbsent(this);
+    BindingVariablesViolation::L1_RemoveIfPresent(this);
+    BindingOldValuesViolation::L1_RemoveIfPresent(this);
+    return;
+  }
+  DynamicNoParentViolation::L1_RemoveIfPresent(this);
+
+  // Check that the binding variables are correct
+  if (GetStatic()->GetVariables()
+      != GetDomainVariables(binding_)) {
+    BindingVariablesViolation::L1_CreateIfAbsent(this);
+    BindingOldValuesViolation::L1_RemoveIfPresent(this);
+    return;
+  }
+  BindingVariablesViolation::L1_RemoveIfPresent(this);
+
+  // Check that the values of the old variables are correct
+  DynamicElement * parent = GetParent();
+  if (parent && (Restrict(GetBinding(), parent->GetStatic()->GetVariables())
+		 != parent->GetBinding()))
+    BindingOldValuesViolation::L1_CreateIfAbsent(this);
+  else BindingOldValuesViolation::L1_RemoveIfPresent(this);
+
+  if (parent && parent->GetFunction() == LET) 
+    dynamic_cast<DynamicLet *>(parent)->L1_CheckSetLetViolation();
+}
+
 DynamicElement * DynamicElement::GetSingleChild(int which) const { 
   SingleLink * l = dynamic_cast<SingleLink *>(children_[which]);
   return dynamic_cast<DynamicElement *>(l->GetChild());
@@ -158,8 +198,8 @@ DynamicElement * DynamicElement::GetSingleChild(int which) const {
 DynamicExpression * DynamicElement::GetSingleExpressionChild(int which) const {
   return dynamic_cast<DynamicExpression *>(GetSingleChild(which));
 }
-DynamicExpression * DynamicElement::GetSingleStatementChild(int which) const{
-    return dynamic_cast<DynamicExpression *>(GetSingleChild(which));
+DynamicStatement * DynamicElement::GetSingleStatementChild(int which) const{
+    return dynamic_cast<DynamicStatement *>(GetSingleChild(which));
 }
 OTime DynamicElement::ComputeTime() const { 
   if (!parent_) return CREATION;
@@ -183,8 +223,8 @@ void Statement::L1_Erase() {
 }
 
 void DynamicExpression::L1_Init(Expression * static_parent, 
-			     Link *parent, OMap binding){
-  DynamicElement::L1_Init(static_parent, parent, binding);
+				OMap binding){
+  DynamicElement::L1_Init(static_parent, binding);
   value_ = NULL;
   L1_CheckSetValueViolation();
   // there should already be a violation at the parent
@@ -193,13 +233,13 @@ void DynamicExpression::L1_Init(Expression * static_parent,
 void DynamicExpression::SetValue(Object new_value) {
   CL.ChangeValue(&value_, new_value);
   L1_CheckSetValueViolation();
-  if (GetParent()) GetParent()->L1_ChildExpressionChanged(parent_);
+  if (GetParent()) GetParent()->N1_ChildExpressionChanged(WhichChild());
 }
 
 void DynamicExpression::L1_Erase() {
   DynamicElement * parent = GetParent();
   DynamicElement::L1_Erase();
-  parent->L1_ChildExpressionChanged(parent_);
+  parent->N1_ChildExpressionChanged(WhichChild());
 }
 void DynamicExpression::L1_CheckSetValueViolation() {
   bool perfect = (value_ != NULL) && (value_ == ComputeValue());
@@ -209,7 +249,7 @@ void DynamicExpression::L1_CheckSetValueViolation() {
     return;
   }
   if (!perfect && !value_violation) {
-    New<ValueViolation>(this, time_);
+    New<ValueViolation>(this);
     return;
   }
 }
@@ -218,7 +258,7 @@ void DynamicExpression::L1_CheckSetValueViolation() {
 
 void StaticOn::L1_Init(){
   Statement::L1_Init();
-  New<MissingDynamicOnViolation>(this, CREATION);
+  New<MissingDynamicOnViolation>(this);
 }
 set<Variable> StaticOn::GetIntroducedVariables() const {
   return ::GetVariables(GetPattern().Data());
@@ -228,7 +268,7 @@ void StaticOn::L1_Erase() {
 }
 // this thing has no dynamic parent. 
 void DynamicOn::L1_Init(StaticOn *static_parent) {
-  DynamicStatement::L1_Init(static_parent, NULL, OMap::Default());
+  DynamicStatement::L1_Init(static_parent, OMap::Default());
   Violation * missing_dynamic 
     = FindViolation(GetStatic(), Violation::MISSING_DYNAMIC_ON);
   CHECK(missing_dynamic);
@@ -237,17 +277,15 @@ void DynamicOn::L1_Init(StaticOn *static_parent) {
 void DynamicOn::L1_Erase(){
   CHECK(GetStatic());
   CHECK(!FindViolation(GetStatic(), Violation::MISSING_DYNAMIC_ON));
-  New<MissingDynamicOnViolation>(GetStaticOn(), CREATION);
+  New<MissingDynamicOnViolation>(GetStaticOn());
   DynamicStatement::L1_Erase();
 }
 
 OTime DynamicOn::ComputeChildTime(const Link * link, 
 				  const Element * child) const{
-  Time ret = time_.Data();
-  OPattern p = GetPattern();
-  ret = max(ret, BB.FindLastTime(Substitute(child->GetBinding().Data(), 
-					    p.Data())));
-  return OTime::Make(ret);
+  return DataMax(time_,
+		 BB.FindLastTime(Substitute(child->GetBinding().Data(), 
+					    GetPattern().Data())));
 }
 
 void StaticRepeat::L1_Init() {
@@ -260,6 +298,22 @@ void StaticDelay::L1_Init() {
 void StaticLet::L1_Init() {
   Statement::L1_Init();
 }
+bool DynamicLet::HasLetViolation() const {
+  DynamicExpression *value_child = GetSingleExpressionChild(StaticLet::VALUE);
+  if (!value_child) return false;
+  DynamicStatement *child = GetSingleStatementChild(StaticLet::CHILD);
+  if (!child) return false;
+  if (FindViolation(child, Violation::BINDING_VARIABLES)) return false;
+  const Object * binding_value = child->GetBinding().Data()
+    % GetStatic()->GetObject(StaticLet::VARIABLE);
+  CHECK(binding_value);
+  return (value_child->GetValue() != *binding_value);
+}
+void DynamicLet::L1_CheckSetLetViolation() {
+  if (HasLetViolation()) LetViolation::L1_CreateIfAbsent(this);
+  else LetViolation::L1_RemoveIfPresent(this);
+}
+
 void StaticOutput::L1_Init() {
   Statement::L1_Init();
 }
@@ -279,10 +333,7 @@ void DynamicOutput::L1_CheckSetPostingViolation() {
     return;
   }
   if (!perfect && !posting_violation) {
-    Time time = time_.Data();
-    if (posting_) time = min(time, posting_->time_);
-    New<PostingViolation>(this, OTime::Make(time));
-    return;
+    New<PostingViolation>(this);
   }
 }
 
@@ -292,121 +343,6 @@ void StaticIf::L1_Init() {
 
 void Expression::L1_Init() {
   StaticElement::L1_Init();
-}
-
-Statement * Statement::MakeStatement(Keyword type) {
-  if (type.Data() == "pass") return New<StaticPass>();
-  if (type.Data() == "on") return New<StaticOn>();
-  if (type.Data() == "repeat") return New<StaticRepeat>();
-  if (type.Data() == "delay") return New<StaticDelay>();
-  if (type.Data() == "let") return New<StaticLet>();
-  if (type.Data() == "output") return New<StaticOutput>();
-  if (type.Data() == "if") return New<StaticIf>();
-  if (type.Data() == "parallel") return New<StaticParallel>();
-  CHECK(false);
-  return NULL;
-}
-
-Statement * Statement::ParseSingle(const Tuple & t, uint * position) {
-  cout << "ParseSingle pos=" << *position << " t=" << OTuple::Make(t) << endl;
-  Keyword stype = t[(*position)++];
-  if (stype == NULL) return NULL;
-  Statement * ret = MakeStatement(stype);
-  for (int i=0; i<ret->NumObjects(); i++) {
-    CHECK(*position < t.size());
-    Object o = t[(*position)++];
-    ret->L1_SetObject(i, o);
-  }
-  for (int i=0; i<ret->NumExpressionChildren(); i++) {
-    CHECK(*position < t.size());
-    Object o = t[(*position)++];
-    Expression * e = Expression::Parse(o);
-    ret->L1_LinkChild(i, e);
-  }
-  if (*position < t.size()  && t[*position].GetType() == Object::OMAP) {
-    OMap m = t[(*position)++];
-    forall(run, m.Data()) {
-      Keyword key = run->first;
-      Object value = run->second;
-      if (key.Data() == "name") {
-	ret->L1_SetName(value);	
-      }
-      if (key.Data() == "parent") {
-	// TODO
-      }
-    }
-  }  
-  return ret;
-}
-
-vector<Statement *> Statement::Parse(const Tuple & t) {
-  cout << "Statement::Parse " << OTuple::Make(t) << endl;
-  uint position = 0;
-  Statement * parent = NULL;
-  vector<Statement *> ret;
-  while (position < t.size()) {
-    Object o = t[position];
-    if (o == SEMICOLON) {
-      CHECK(parent != NULL);
-      parent = NULL;
-      position++;
-    } else if (o.GetType() == Object::OTUPLE) {
-      vector<Statement *> subs = Parse(OTuple(o).Data());
-      if (parent->GetFunction() == PARALLEL) {
-	CHECK((int)parent->static_children_.size() 
-	      == parent->NumExpressionChildren());
-	while (parent->static_children_.size() < 
-	       parent->NumExpressionChildren() + subs.size()) {
-	  parent->static_children_.push_back(New<SingleLink>(parent));
-	}
-      }
-      CHECK(parent->NumStatementChildren() == (int)subs.size());      
-      for (uint i=0; i<subs.size(); i++) {
-	parent->L1_LinkChild(parent->NumExpressionChildren()+i, subs[i]);
-      }
-      parent = NULL;
-      position++;
-    } else {
-      Statement * s = ParseSingle(t, &position);
-      if (parent) {
-	cout << "Hooking up child " << s->ToString(0, false) << endl;
-	cout << "To parent " << parent->ToString(0, false) << endl;
-	CHECK(parent->NumStatementChildren() == 1);
-	parent->L1_LinkChild(parent->NumExpressionChildren(), s);
-      } else {
-	ret.push_back(s);
-      }
-      parent = s;
-    }
-  }
-  return ret;
-}
-
-Expression * Expression::Parse(const Object & o){
-  cout << "Expression::Parse " << o << endl;
-  if (o == NULL) return NULL;
-  Tuple t;
-  Expression *ret;
-  if (o.GetType() == Object::OTUPLE) t = OTuple(o).Data();
-  if (o.GetType() != Object::OTUPLE 
-      || t.size() == 0
-      || t[0].GetType() != Object::KEYWORD) {
-    ret = New<StaticConstant>();
-    ret->L1_SetObject(0, o);
-    return ret;
-  }
-  Keyword type = t[0];
-  ret = MakeExpression(type);
-  
-  CHECK((int)t.size()-1 == ret->NumObjects() + ret->NumChildren());
-  for (int i=0; i<ret->NumObjects(); i++) {
-    ret->L1_SetObject(i, t[1+i]);
-  }
-  for (int i=0; i<ret->NumChildren(); i++) {
-    Expression * sub = Expression::Parse(t[1+ret->NumObjects()+i]);
-    ret->L1_LinkChild(i, sub);
-  }
-  return ret;
 }
 
 string Statement::ToString(int indent, bool html) const {
@@ -451,6 +387,13 @@ Expression * Expression::MakeExpression(Keyword type) {
   if (type.Data() == "flake_choice") return New<StaticFlakeChoice>();
   CHECK(false);
   return NULL;
+}
+
+void StaticConstant::N1_ObjectChanged(int which) {
+  CHECK(which == OBJECT);
+  forall(run, dynamic_children_->children_) {
+    dynamic_cast<DynamicExpression *>(run->second)->L1_CheckSetValueViolation();
+  }
 }
 
 string StaticConstant::ToString(bool html) const {
@@ -504,23 +447,52 @@ void DynamicFlakeChoice::L1_ChangeChoice(Flake new_choice){
   L1_CheckSetValueViolation();
 }
 
+Link * DynamicElement::FindDynamicParentLink() {
+  StaticElement * st = GetStatic();
+  CHECK(st);
+  Link * spl = st->parent_;
+  if (!spl) return NULL;
+  StaticElement * sp = dynamic_cast<StaticElement *>(spl->GetParent());
+  int childnum = -1;
+  for (uint i=0; i<sp->static_children_.size(); i++) {
+    if (sp->static_children_[i] == spl) childnum = i;
+  }
+  CHECK(childnum != -1);
+  DynamicElement * dp 
+    = sp->GetDynamic(Restrict(binding_, sp->GetVariables()));
+  CHECK(dp);
+  return dp->children_[childnum];  
+}
+
+bool DynamicElement::LinkToParent() {
+  Link * parent = FindDynamicParentLink();
+  if (!parent) return false;
+  parent->L1_AddChild(this);
+  CHECK(parent_ == parent);
+  L1_CheckSetParentAndBindingViolations();
+  GetParent()->N1_ChildConnected(parent_, this);
+  return true;
+}
+void DynamicElement::UnlinkFromParent() {
+  DynamicElement * dynamic_parent = GetParent();
+  Link * parent_link = parent_;
+  CHECK(parent_);
+  parent_->L1_RemoveChild(this);
+  dynamic_parent->N1_ChildDisconnected(parent_link, this);
+  L1_CheckSetParentAndBindingViolations();
+}
+
 
 void DynamicElement::L1_Init(StaticElement * static_parent, 
-			  Link *parent, OMap binding) {
+			     OMap binding) {
   Element::L1_Init();
+  static_parent_ = NULL;
+  parent_ = NULL;
   binding_ = binding;
-  static_parent_ = parent_ = NULL;
   CHECK(static_parent);
   static_parent->dynamic_children_->L1_AddChild(this);
   CHECK(static_parent_ == static_parent->dynamic_children_);
-  if (parent) {
-    parent->L1_AddChild(this);
-    CHECK(parent_ == parent);
-  } else {
-    // This is ok for example for an on statement
-    // Check that the static parent has no parent
-    CHECK(GetStatic()->parent_ == NULL);
-  }
+  LinkToParent();
  
   // L1_ComputeSetTime(); may belong here
   for (int i=0; i<NumChildren(); i++) {
@@ -549,15 +521,20 @@ DynamicElement * DynamicElement::FindParent() const {
   return GetStatic()->GetParent()->GetDynamic
     (Restrict(GetBinding(), GetStatic()->GetVariables()));
 }
-void DynamicElement::L1_ChildExpressionChanged(Link * child_link) {
-  for (uint i=0; i<children_.size(); i++) {
-    if (children_[i] == child_link) {
-      L1_ChildExpressionChanged(i);
-      return;
-    }
-  }
-  CHECK(false);
+
+// The following are called externally when a child is connected to
+// or disconnected from this parent node. 
+void DynamicElement::N1_ChildConnected(Link *child_link, 
+				       DynamicElement *child) {
+  if (child->GetType() == DYNAMIC_EXPRESSION) 
+    N1_ChildExpressionChanged(child_link->WhichChild());  
 }
+void DynamicElement::N1_ChildDisconnected(Link *child_link, 
+					  DynamicElement *child) {
+  if (child->GetType() == DYNAMIC_EXPRESSION) 
+    N1_ChildExpressionChanged(child_link->WhichChild());  
+}
+
 
 Record Element::GetRecordForDisplay() const {
   Record ret = Named::GetRecordForDisplay();

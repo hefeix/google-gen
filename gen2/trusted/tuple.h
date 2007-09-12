@@ -89,6 +89,8 @@ OTuple Substitute(Map m, OTuple t);
 Pattern Substitute(Map m, const Pattern& p);
 OPattern Substitute(Map m, OPattern p);
 
+set<Variable> GetDomainVariables(OMap m);
+
 // Adds a key-value pair to a Map.
 void Add(Map *m, Object key, Object value);
 // union=

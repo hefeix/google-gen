@@ -7,7 +7,7 @@ CXXMOSTFLAGS = -Wall -Wno-deprecated
 SRC = main.cc objects.cc hash.cc util.cc changelist.cc tuple.cc \
     numbers.cc blackboard.cc query.cc probutil.cc ranktree.cc \
     violation.cc link.cc spec.cc record.cc chooser.cc globals.cc model.cc \
-    namer.cc element.cc webserver.cc
+    namer.cc element.cc webserver.cc parser.cc
 INC = $(addsuffix .h, $(basename $(SRC)))
 OBJ = $(addsuffix .o, $(basename $(SRC)))
 

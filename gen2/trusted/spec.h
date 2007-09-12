@@ -33,38 +33,62 @@
 
 class Requirement {
  public:
-  Requirement(OTuple tuple);  
-  void L1_Erase();
-  typedef UpdateSubscription<QueryUpdate, Query, Requirement> SubType;
-  friend class UpdateSubscription<QueryUpdate, Query, Requirement>;
+  // ---------- L2 functions ----------
+  static Requirement * Make(OTuple tuple) {
+    return new Requirement(tuple);
+  }
 
+  // ---------- const functions ----------
+  OTime GetTime() const { return CREATION;} // needed for violation
+
+  // ---------- L1 functions ----------
+  Requirement(OTuple tuple);
+  void L1_Erase();
  private:
   // null if not violated
   void L1_AddViolation();
   void L1_RemoveViolation();
+  typedef UpdateSubscription<QueryUpdate, Query, Requirement> SubType;
   void Update(const QueryUpdate &update, SubType * sub);
+
+  // ---------- data ----------
+  friend class UpdateSubscription<QueryUpdate, Query, Requirement>;
   SubType * subscription_;
   OTuple tuple_;
 };
 
 class Prohibition {
  public:
-  Prohibition(OTuple tuple);  
-  void L1_Erase();
-  void L1_AddException(OTuple t);
+
+  // ---------- L2 functions ----------
+  static Prohibition * Make(OTuple tuple) {
+    return new Prohibition(tuple);
+  }
+  void AddException(OTuple t);
+
+  // ---------- const functions ----------
+  // needed for ProhibitionViolation, but shouldn't actually be called, 
+  // since ProhibitionViolation has its own ComputeTime().
+  OTime GetTime() const { CHECK(false); return CREATION;} 
+  // also needed by ProhibitionViolation
   map<OTuple, Violation *> * GetViolationMap(Violation::Type vtype) {
     CHECK(vtype == Violation::PROHIBITION);
     return &violations_;
   }
-  
+
+  // ---------- L1 functions ----------
+  Prohibition(OTuple tuple);  
+  void L1_Erase();
   typedef UpdateSubscription<QueryUpdate, Query, Prohibition> SubType;
   friend class UpdateSubscription<QueryUpdate, Query, Prohibition>;
+  void Update(const QueryUpdate &update, SubType * sub);
+
+  // ---------- data ----------  
  private:
   OTuple tuple_;
   SubType * subscription_;
   set<OTuple> exceptions_;
   map<OTuple, Violation *> violations_;
-  void Update(const QueryUpdate &update, SubType * sub);
 };
 
 #endif

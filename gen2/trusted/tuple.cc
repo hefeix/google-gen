@@ -128,6 +128,15 @@ int GeneralizationIterator::GeneralizeMask() const{
   return generalize_mask_;
 }
 
+set<Variable> GetDomainVariables(OMap m) {
+  set<Variable> ret;
+  forall(run, m.Data()) {
+    ret.insert(Variable(run->first));
+  }
+  return ret;
+}
+
+
 void Substitute(Map m, Tuple *t) {
   for (uint i=0; i<t->size(); i++) (*t)[i] = Replacement(m, (*t)[i]);
 };

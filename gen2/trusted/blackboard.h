@@ -356,8 +356,8 @@ class Blackboard {
   }
 
   // These funtions crash if the tuples are not on the blackboard. 
-  Time FindTupleTime(OTuple t) const;
-  Time FindLastTime(const Pattern & p) const; // pattern is fully substituted
+  OTime FindTupleTime(OTuple t) const;
+  OTime FindLastTime(const Pattern & p) const; // pattern is fully substituted
 
   void L1_AddSearchToFlush(Search * s);
   void Verify() const; // for debugging

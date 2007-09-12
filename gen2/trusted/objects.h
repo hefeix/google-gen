@@ -341,6 +341,15 @@ template <class T> struct DataCompare{
   }
 };
 
+template <class T> const T & DataMax(const T & t1, const T & t2) {
+  if (t2.Data() < t1.Data()) return t1;
+  return t2;
+}
+template <class T> const T & DataMin(const T & t1, const T & t2) {
+  if (t1.Data() < t2.Data()) return t1;
+  return t2;
+}
+
 
 void InitKeywords();
 void DestroyKeywords();

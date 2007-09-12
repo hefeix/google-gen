@@ -44,9 +44,12 @@ struct Link {
 
   // Accessors
   Element * GetParent() const { return parent_;}
+  // needed by various violations
+  OTime GetTime() const;
   virtual set<Element *> GetChildren() const = 0;
   // assumes this is the parent_ link of the child. 
   OTime ComputeChildTime(const Element *child) const;
+  int WhichChild() const;
 
   // Just to make the compiler happy
   virtual ~Link() {}

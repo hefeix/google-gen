@@ -18,6 +18,7 @@
 
 #include "model.h"
 #include "fstream.h"
+#include "parser.h"
 
 Model::Model(){
   // for now, we only allow one model to exist. 
@@ -50,7 +51,7 @@ void Model::A1_AddToSearchWork(int64 delta) {
 void Model::Load(istream &input) {
   OTuple t;
   input >> t;
-  vector<Statement *> v = Statement::Parse(t.Data());
+  vector<Statement *> v = ParseStatements(t.Data());
   cout << "Just loaded" << endl;
   for (uint i=0; i<v.size(); i++) cout << v[i]->ToString(0, false);
   cout << "End program" << endl;
