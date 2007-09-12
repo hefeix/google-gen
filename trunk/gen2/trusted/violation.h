@@ -37,6 +37,7 @@ struct Violation {
       ITEM(EXTRA_ON_MATCH),			\
       ITEM(VALUE),				\
       ITEM(POSTING),				\
+      ITEM(IF),				\
       ITEM(TIME),				\
       ITEM(STATIC_NO_PARENT),				\
       ITEM(DYNAMIC_NO_PARENT),				\
@@ -225,6 +226,9 @@ typedef OwnedViolation<DynamicExpression, Violation::VALUE>
 class DynamicOutput;
 typedef OwnedViolation<DynamicOutput, Violation::POSTING>
   PostingViolation;
+class DynamicIf;
+typedef OwnedViolation<DynamicIf, Violation::IF>
+  IfViolation;
 
 
 #endif
