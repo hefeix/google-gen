@@ -374,6 +374,7 @@ struct DynamicOn : public DynamicStatement {
   // ---------- L1 functions ----------  
   void L1_Init(StaticOn* parent);
   void L1_Erase();
+  // --------- N1 notifiers ----------
   void N1_ChildExpressionChanged(int which_child) { CHECK(false); }
   // ---------- data ----------  
 };
@@ -415,6 +416,7 @@ struct DynamicRepeat : public DynamicStatement {
     return (which_child==StaticRepeat::CHILD)?Link::MULTI:Link::SINGLE;
   }
   // ---------- L1 functions ----------  
+  // ---------- N1 notifiers ----------
   void N1_ChildExpressionChanged(int which_child) { 
     // todo: check whether the number of repetitions is correct
     CHECK(false);
@@ -454,6 +456,7 @@ struct DynamicDelay : public DynamicStatement {
     return time_;
   }
   // ---------- L1 functions ----------  
+  // ---------- N1 notifiers ----------
   void N1_ChildExpressionChanged(int which_child) { 
     // todo: check whether the times are right on the children
     CHECK(false);
@@ -494,10 +497,15 @@ struct DynamicLet : public DynamicStatement {
   // ---------- const functions ----------  
   bool HasLetViolation() const; // a let violation should exist.
   // ---------- L1 functions ----------  
+  void L1_CheckSetLetViolation(); // (programming with Dr. Seuss)
+  void L1_Init(StaticLet * static_parent, OMap binding) {
+    DynamicStatement::L1_Init(static_parent, binding);
+    L1_CheckSetLetViolation();
+  }
+  // ---------- N1 notifiers ----------
   void N1_ChildExpressionChanged(int which_child) { 
     L1_CheckSetLetViolation();
   }
-  void L1_CheckSetLetViolation(); // (programming with Dr. Seuss)
   // ---------- data ----------  
 };
 
@@ -526,8 +534,13 @@ struct DynamicOutput : public DynamicStatement {
       (GetSingleChild(StaticOutput::TUPLE));
   }  
   // ---------- L1 functions ----------  
+  void L1_Init(StaticLet * static_parent, OMap binding) {
+    DynamicStatement::L1_Init(static_parent, binding);
+    L1_CheckSetPostingViolation();
+  }
   // see if it's perfect, then create or remove violation if necessary.
   void L1_CheckSetPostingViolation();
+  // ---------- N1 notifiers ----------
   void N1_ChildExpressionChanged(int which_child) { 
     L1_CheckSetPostingViolation();
   }
@@ -556,14 +569,27 @@ struct StaticIf : public Statement {
 struct DynamicIf : public DynamicStatement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
+  DynamicExpression * GetConditionExpression() const {
+    return dynamic_cast<DynamicExpression *>
+      (GetSingleChild(StaticIf::CONDITION));
+  }  
+  bool IsPerfect() const;
   // ---------- L1 functions ----------  
-  void N1_ChildExpressionChanged(int which_child) { 
+  void L1_CheckSetIfViolation();
+  void L1_Init(StaticIf * static_parent, OMap binding) {
+    DynamicStatement::L1_Init(static_parent, binding);
+    children_[StaticIf::ON_TRUE]->L1_SetOptional(true);
+    children_[StaticIf::ON_FALSE]->L1_SetOptional(true);
+    L1_CheckSetIfViolation();
+  }
+  // ---------- N1 notifiers ----------
+  void N1_ChildExpressionChanged(int which_child) {
     // todo: check that the correct child is instantiated
     // todo: what state of the world means that a child is not instantiated?
     //       does the link just point to null. If so, then MISSING_LINK
     //       violations are not violations
     CHECK(false);
-  }    
+  }
   // ---------- data ----------  
 };
 
@@ -583,6 +609,7 @@ struct DynamicParallel : public DynamicStatement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   // ---------- L1 functions ----------  
+  // ---------- N1 notifiers ----------
   void N1_ChildExpressionChanged(int which_child) { CHECK(false); }
   // ---------- data ----------  
 };

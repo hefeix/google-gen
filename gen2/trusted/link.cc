@@ -93,10 +93,25 @@ void MultiLink::L1_Init(Element * parent) {
 void SingleLink::L1_Init(Element *parent) {
   Link::L1_Init(parent);
   child_ = NULL;
-  New<MissingLinkViolation>(this);
+  optional_ = false;
+  L1_CheckSetMissingLinkViolation();
+}
+
+void SingleLink::L1_CheckSetMissingLinkViolation() {
+  bool needs_violation = (!optional_) && (child_==NULL);
+  if (needs_violation) 
+    MissingLinkViolation::L1_CreateIfAbsent(this);
+  else 
+    MissingLinkViolation::L1_RemoveIfPresent(this);
+}
+
+void SingleLink::L1_SetOptional(bool optional) {
+  CL.ChangeValue(&optional_, optional);
+  L1_CheckSetMissingLinkViolation();
 }
 
 void SingleLink::L1_Erase() {
+  MissingLinkViolation::L1_RemoveIfPresent(this);
   Link::L1_Erase();
 }
 
@@ -105,11 +120,13 @@ void SingleLink::L1_AddChild(Element *child) {
   CHECK(!child_);
   CL.ChangeValue(&child_, child);
   child->L1_ConnectToParentLink(this);
+  L1_CheckSetMissingLinkViolation();
 }
 void SingleLink::L1_RemoveChild(Element *child){
   CHECK(child_ == child);
   CL.ChangeValue(&child_, (Element *)NULL);
   child_->L1_DisconnectFromParentLink(this);
+  L1_CheckSetMissingLinkViolation();
 }
 set<Element *> SingleLink::GetChildren() const {
   set<Element *> ret;

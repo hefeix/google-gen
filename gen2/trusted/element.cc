@@ -326,19 +326,30 @@ bool DynamicOutput::IsPerfect() const {
   return true;
 }
 void DynamicOutput::L1_CheckSetPostingViolation() {
-  bool perfect = IsPerfect();
-  Violation * posting_violation = FindViolation(this, Violation::POSTING);
-  if (perfect && posting_violation) {
-    posting_violation->L1_Erase(); 
-    return;
-  }
-  if (!perfect && !posting_violation) {
-    New<PostingViolation>(this);
-  }
+  if (IsPerfect()) 
+    PostingViolation::L1_RemoveIfPresent(this);
+  else 
+    PostingViolation::L1_CreateIfAbsent(this);
 }
 
 void StaticIf::L1_Init() {
   Statement::L1_Init();
+}
+
+bool DynamicIf::IsPerfect() const { 
+  DynamicExpression * expr = GetConditionExpression();
+  if (!expr) return false;
+  if (expr->value_->GetType() != Object::BOOLEAN) return false;
+  bool val = expr->value_->Data();
+  if (val ^ GetSingleChild(StaticIf::ON_TRUE) ) return false;
+  if ((!val) ^ GetSingleChild(StaticIf::ON_FALSE) ) return false;
+  return true;
+}
+void DynamicIf::L1_CheckSetIfViolation() {
+  if (IsPerfect()) 
+    IfViolation::L1_RemoveIfPresent(this);
+  else 
+    IfViolation::L1_CreateIfAbsent(this);
 }
 
 void Expression::L1_Init() {
