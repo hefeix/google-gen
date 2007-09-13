@@ -35,14 +35,14 @@ class Requirement {
  public:
   // ---------- L2 functions ----------
   static Requirement * Make(OTuple tuple) {
-    return new Requirement(tuple);
+    return New<Requirement>(tuple);
   }
 
   // ---------- const functions ----------
   OTime GetTime() const { return CREATION;} // needed for violation
 
   // ---------- L1 functions ----------
-  Requirement(OTuple tuple);
+  void L1_Init(OTuple tuple);
   void L1_Erase();
  private:
   // null if not violated
@@ -62,7 +62,7 @@ class Prohibition {
 
   // ---------- L2 functions ----------
   static Prohibition * Make(OTuple tuple) {
-    return new Prohibition(tuple);
+    return New<Prohibition>(tuple);
   }
   void AddException(OTuple t);
 
@@ -77,7 +77,7 @@ class Prohibition {
   }
 
   // ---------- L1 functions ----------
-  Prohibition(OTuple tuple);  
+  void L1_Init(OTuple tuple);  
   void L1_Erase();
   typedef UpdateSubscription<QueryUpdate, Query, Prohibition> SubType;
   friend class UpdateSubscription<QueryUpdate, Query, Prohibition>;
@@ -89,6 +89,13 @@ class Prohibition {
   SubType * subscription_;
   set<OTuple> exceptions_;
   map<OTuple, Violation *> violations_;
+};
+
+class Given {
+ public:
+  void L1_Init(OTuple tuple);
+  Posting * posting_;
+  void L1_Erase();
 };
 
 #endif

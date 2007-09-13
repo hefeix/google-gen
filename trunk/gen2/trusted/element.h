@@ -290,7 +290,7 @@ struct DynamicStatement : public DynamicElement {
   // ---------- const functions ----------  
   // ---------- L1 functions ----------  
   void L1_Erase() { DynamicElement::L1_Erase();}
-  void L1_Init(Statement * static_parent, OMap binding){
+  void L1_Init(StaticElement * static_parent, OMap binding){
     DynamicElement::L1_Init(static_parent, binding);
   }
   // ---------- data ----------  
@@ -578,8 +578,10 @@ struct DynamicIf : public DynamicStatement {
   void L1_CheckSetIfViolation();
   void L1_Init(StaticIf * static_parent, OMap binding) {
     DynamicStatement::L1_Init(static_parent, binding);
-    children_[StaticIf::ON_TRUE]->L1_SetOptional(true);
-    children_[StaticIf::ON_FALSE]->L1_SetOptional(true);
+    dynamic_cast<SingleLink *>(children_[StaticIf::ON_TRUE])
+      ->L1_SetOptional(true);
+    dynamic_cast<SingleLink *>(children_[StaticIf::ON_FALSE])
+      ->L1_SetOptional(true);
     L1_CheckSetIfViolation();
   }
   // ---------- N1 notifiers ----------
@@ -633,6 +635,7 @@ struct StaticSubstitute : public Expression {
 struct DynamicSubstitute : public DynamicExpression {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
+  Object ComputeValue() const;
   // ---------- L1 functions ----------  
   // ---------- data ----------  
 };
@@ -713,6 +716,18 @@ template <class T> T * MakeExpression() {
   CHECK(static_cast<Expression *>((T *)NULL) == NULL);
   return New<T>();
 }
+template <class T> T * MakeDynamicStatement(OMap binding, 
+					    Statement *static_parent) {
+  CHECK(static_cast<DynamicStatement *>((T *)NULL) == NULL);
+  return New<T>(binding, static_parent);
+}
+template <class T> T * MakeDynamicExpression(OMap binding, 
+					     Statement *static_parent) {
+  CHECK(static_cast<DynamicExpression *>((T *)NULL) == NULL);
+  return New<T>(binding, static_parent);
+}
+
+
 
 
 /*

@@ -339,10 +339,10 @@ void StaticIf::L1_Init() {
 bool DynamicIf::IsPerfect() const { 
   DynamicExpression * expr = GetConditionExpression();
   if (!expr) return false;
-  if (expr->value_->GetType() != Object::BOOLEAN) return false;
-  bool val = expr->value_->Data();
-  if (val ^ GetSingleChild(StaticIf::ON_TRUE) ) return false;
-  if ((!val) ^ GetSingleChild(StaticIf::ON_FALSE) ) return false;
+  if (expr->value_.GetType() != Object::BOOLEAN) return false;
+  bool val = Boolean(expr->value_).Data();
+  if (val ^ bool(GetSingleChild(StaticIf::ON_TRUE)) ) return false;
+  if ((!val) ^ bool(GetSingleChild(StaticIf::ON_FALSE)) ) return false;
   return true;
 }
 void DynamicIf::L1_CheckSetIfViolation() {
@@ -437,7 +437,11 @@ string StaticElement::ParameterListToString(bool html) const {
   }
   return ret;
 }
-
+Object DynamicSubstitute::ComputeValue() const { 
+  return DeepSubstitute
+    (GetBinding().Data(),  
+     GetSingleExpressionChild(StaticSubstitute::CHILD)->GetValue());
+}
 Object DynamicFlakeChoice::ComputeValue() const { 
   return choice_;
 }

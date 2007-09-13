@@ -76,18 +76,21 @@ inline static CandidateRule SplitOffLast(const MPattern & p) {
 
 // Either return the value associated with a given key, or return the key if
 // it is not in the map.  
-inline Object Replacement(Map m, const Object &o) {
-  Object * found = m%o;
+inline Object Replacement(const Map & m, const Object &o) {
+  const Object * found = m%o;
   if (found) return *found;
   return o;
 };
-void Substitute(Map m, Tuple * t);
-void Substitute(Map m,  MPattern * p);
-void Substitute(Map m, CandidateRule *r);
+void Substitute(const Map &m, Tuple * t);
+void Substitute(const Map &m,  MPattern * p);
+void Substitute(const Map &m, CandidateRule *r);
 
-OTuple Substitute(Map m, OTuple t);
-Pattern Substitute(Map m, const Pattern& p);
-OPattern Substitute(Map m, OPattern p);
+OTuple Substitute(const Map &m, OTuple t);
+Pattern Substitute(const Map &m, const Pattern& p);
+OPattern Substitute(const Map &m, OPattern p);
+
+// recursively substitutes Patterns and tuples.  
+Object DeepSubstitute(const Map & m, Object o);
 
 set<Variable> GetDomainVariables(OMap m);
 

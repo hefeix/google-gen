@@ -137,30 +137,48 @@ set<Variable> GetDomainVariables(OMap m) {
 }
 
 
-void Substitute(Map m, Tuple *t) {
+void Substitute(const Map & m, Tuple *t) {
   for (uint i=0; i<t->size(); i++) (*t)[i] = Replacement(m, (*t)[i]);
 };
-void Substitute(Map m, MPattern *p){
+void Substitute(const Map & m, MPattern *p){
   for (uint i=0; i<p->size(); i++) Substitute(m, &((*p)[i]));
 }
-void Substitute(Map m, CandidateRule *r){
+void Substitute(const Map & m, CandidateRule *r){
   Substitute(m, &(r->first));
   Substitute(m, &(r->second));
 }
-OTuple Substitute(Map m, OTuple t) {
+OTuple Substitute(const Map & m, OTuple t) {
   Tuple t2 = t.Data();
   Substitute(m, &t2);
   return OTuple::Make(t2);
 }
-Pattern Substitute(Map m, const Pattern &p) {
+Pattern Substitute(const Map & m, const Pattern &p) {
   Pattern ret;
   for (uint c=0; c<p.size(); c++) {
     ret.push_back(Substitute(m, p[c]));
   }
   return ret;
 }
-OPattern Substitute(Map m, OPattern p) {
+OPattern Substitute(const Map & m, OPattern p) {
   return OPattern::Make(Substitute(m, p.Data()));
+}
+
+Object DeepSubstitute(const Map & m, Object o) {
+  if (o.GetType() == Object::OPATTERN) {
+    Pattern ret;
+    OPattern p = o;
+    for (uint i=0; i<p.Data().size(); i++)
+      ret.push_back(OTuple(DeepSubstitute(m, p.Data()[i])));
+    return OPattern::Make(ret);
+  }
+  if (o.GetType() == Object::OTUPLE) {
+    Tuple ret;
+    OTuple t = o;
+    for (uint i=0; i<t.Data().size(); i++)
+      ret.push_back(DeepSubstitute(m, OTuple(t).Data()[i]));
+    return OTuple::Make(ret);
+  }
+  return Replacement(m, o);
 }
 
 void Add(Map * m, Object key, Object value) {
