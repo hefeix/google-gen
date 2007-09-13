@@ -16,7 +16,7 @@
 //
 // Author: Georges Harik and Noam Shazeer
 
-#include "namer.h"
+#include "named.h"
 #include "changelist.h"
 #include "webserver.h"
 
@@ -35,26 +35,26 @@ Named * Namer::Lookup(Named::Type type, Object name) const {
 }
 
 void Named::L1_SetName(Object new_name) {
-  Named ** clobbered = N.index_[GetType()] % new_name;
+  Named ** clobbered = N.index_[GetNamedType()] % new_name;
   if (clobbered) {
     // we should only be clobbering automatic names, which are all integers.
-    CHECK(new_name.GetType() == Object::INTEGER);
-    CL.RemoveFromMap(&N.index_[GetType()], new_name);
+    CHECK(new_name.GetNamedType() == Object::INTEGER);
+    CL.RemoveFromMap(&N.index_[GetNamedType()], new_name);
   }
   CL.ChangeValue(&name_, new_name);
-  CL.InsertIntoMap(&N.index_[GetType()], new_name, this);
+  CL.InsertIntoMap(&N.index_[GetNamedType()], new_name, this);
   if (clobbered) (*clobbered)->L1_AutomaticallyName();
 }
 
 void Named::L1_AutomaticallyName() {
   // do we care if the increment of next_name_ reverts??
-  while (N.Index(GetType()) 
+  while (N.Index(GetNamedType()) 
 	 % (Object)Integer::Make(N.next_name_)) N.next_name_++;
   L1_SetName(Integer::Make(N.next_name_));
 }
 
 void Named::L1_Erase() {
-  CL.RemoveFromMap(&N.index_[GetType()], name_);
+  CL.RemoveFromMap(&N.index_[GetNamedType()], name_);
   CL.Destroying(this);
 }
 
@@ -66,13 +66,17 @@ void Named::L1_Init() {
 Record Named::GetRecordForDisplay() const { 
   Record ret;
   ret["name"] = name_.ToString();
-  ret["type"] = TypeToString(GetType());
+  ret["type"] = TypeToString(GetNamedType());
   return ret;
 }
 string Named::GetURL() const { 
-  return "getobject?type=" + URLEscape(TypeToString(GetType())) 
+  return "getobject?type=" + URLEscape(TypeToString(GetNamedType())) 
     + "&name=" + URLEscape(name_.ToString());
 }
 string Named::GetLink(string anchortext) const {
   return "<a href=\"" + GetURL() + "\">" + anchortext + "</a>";
 }
+string Named::ShortDescription() const { 
+  return TypeToString(GetNamedType()) + "(" + name_.ToString() + ")";
+}
+

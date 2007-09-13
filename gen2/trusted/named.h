@@ -16,8 +16,8 @@
 //
 // Author: Georges Harik and Noam Shazeer
 
-#ifndef _NAMER_H_
-#define _NAMER_H_
+#ifndef _NAMED_H_
+#define _NAMED_H_
 
 #include "objects.h"
 #include "record.h"
@@ -31,6 +31,10 @@ class Named {
 	ITEM(DYNAMIC_STATEMENT),			\
 	ITEM(DYNAMIC_EXPRESSION),			\
 	ITEM(CHOOSER),					\
+	ITEM(REQUIREMENT),				\
+	ITEM(PROHIBITION),				\
+	ITEM(GIVEN),					\
+	ITEM(VIOLATION),					\
 	ITEM(NUM_NAMED_TYPES),				\
 	};
   CLASS_ENUM_DECLARE(Named, Type);
@@ -44,12 +48,13 @@ class Named {
   virtual Record GetRecordForDisplay() const;
   string GetURL() const; // link to object view
   string GetLink(string anchortext) const;
+  virtual string ShortDescription() const;
 
 
-  virtual Type GetType() const = 0;
+  virtual Type GetNamedType() const = 0;
   virtual void L1_Erase();
   virtual OMap GetMap() { CHECK(false); return OMap();} // overriden for dynamic
-  virtual ~Named() {};  
+  virtual ~Named() {};
  private:
   Object name_;
 };

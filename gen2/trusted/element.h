@@ -19,8 +19,9 @@
 #ifndef _ELEMENT_H_
 #define _ELEMENT_H_
 
-#include "namer.h"
+#include "named.h"
 #include "link.h"
+#include "extensions.h"
 
 
 struct Element : public Named {  
@@ -253,7 +254,7 @@ struct Statement : public StaticElement{
   static Statement * MakeStatement(Keyword type);
   
   // ---------- const functions ----------  
-  Named::Type GetType() const { return Named::STATEMENT; }
+  Named::Type GetNamedType() const { return Named::STATEMENT; }
   string ToString(bool html) const { return ToString(0, html);}
   string ToString(int indent, bool html) const; // includes the subtree
   string ToStringSingle(bool html) const;
@@ -273,7 +274,7 @@ struct Expression : public StaticElement {
   static Expression * MakeExpression(Keyword type);
   // ---------- const functions ----------  
   string ToString(bool html) const;
-  Named::Type GetType() const { return Named::EXPRESSION;}
+  Named::Type GetNamedType() const { return Named::EXPRESSION;}
   virtual int NumExpressionChildren() const { return NumChildren();}
   virtual int NumChildren() const = 0;
   virtual int NumObjects() const { return 0;}
@@ -288,6 +289,7 @@ struct Expression : public StaticElement {
 struct DynamicStatement : public DynamicElement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
+  Named::Type GetNamedType() const { return Named::DYNAMIC_STATEMENT;}
   // ---------- L1 functions ----------  
   void L1_Erase() { DynamicElement::L1_Erase();}
   void L1_Init(StaticElement * static_parent, OMap binding){
@@ -302,6 +304,7 @@ struct DynamicExpression : public DynamicElement {
   // ---------- const functions ----------  
   virtual Object ComputeValue() const = 0;
   Object GetValue() const { return value_;}
+  Named::Type GetNamedType() const { return Named::DYNAMIC_EXPRESSION;}
   // ---------- L1 functions ----------  
   void L1_Init(Expression * static_parent, OMap binding);
   void L1_Erase();
@@ -527,6 +530,9 @@ struct StaticOutput : public Statement {
 };
 struct DynamicOutput : public DynamicStatement {
   // ---------- L2 functions ----------  
+  void AddCorrectPosting();
+  void AddPosting(OTuple t);
+  void RemovePosting();
   // ---------- const functions ----------  
   bool IsPerfect() const;
   DynamicExpression * GetTupleExpression() const {
@@ -543,9 +549,9 @@ struct DynamicOutput : public DynamicStatement {
   // ---------- N1 notifiers ----------
   void N1_ChildExpressionChanged(int which_child) { 
     L1_CheckSetPostingViolation();
-  }
+  }  
   // ---------- data ----------  
-  Posting * posting_;
+  OwnedPosting * posting_;
 };
 
 struct StaticIf : public Statement {
