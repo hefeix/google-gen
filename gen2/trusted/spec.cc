@@ -19,7 +19,18 @@
 #include "spec.h"
 #include "model.h"
 
-Requirement::Requirement(OTuple tuple) {
+void Given::L1_Init(OTuple tuple) {
+  CL.Creating(this);
+  posting_ = new Posting(tuple, Time(), &BB);
+}
+
+void Given::L1_Erase() {
+  posting_->L1_Erase();
+  CL.Destroying(this);
+}
+
+void Requirement::L1_Init(OTuple tuple) {
+  CL.Creating(this);
   CL.InsertIntoSet(&M.requirements_, this);
   tuple_ = tuple;
   Query * q = BB.L1_GetExecuteQuery(OPattern::Make(Pattern(1, tuple)), 
@@ -51,7 +62,7 @@ void Requirement::L1_RemoveViolation() {
   violation->L1_Erase();
 }
 
-Prohibition::Prohibition(OTuple tuple) {
+void Prohibition::L1_Init(OTuple tuple) {
   CL.InsertIntoSet(&M.prohibitions_, this);
   tuple_ = tuple;
   Query * q = BB.L1_GetExecuteQuery(OPattern::Make(Pattern(1, tuple)), 
