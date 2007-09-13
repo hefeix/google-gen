@@ -1,7 +1,0 @@
-- declare crusade on inner classes. 
-
-- create violations when various things are made
-  // create a violation if a static on gets added.
-- start working on a fixer
-- implement Element::L1_NewTimeShouldBe(), which 
-- finish time violation code. 
