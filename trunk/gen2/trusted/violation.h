@@ -27,7 +27,7 @@ class Prohibition;
 
 
 // base class for all violations.
-struct Violation {
+struct Violation : public Named {
 #define ViolationTypeList {   \
     ITEM(REQUIREMENT),	      \
       ITEM(PROHIBITION),      \
@@ -46,13 +46,15 @@ struct Violation {
       ITEM(LET),				\
       };
   CLASS_ENUM_DECLARE(Violation, Type);
-
+  
   // ---------- L2 functions ----------  
 
   // ---------- const functions ----------  
-  virtual Type GetType() const = 0;
+  virtual Type GetNamedType() const { return Named::VIOLATION; }
+  virtual Type GetViolationType() const = 0;
   virtual OTime ComputeTime() const = 0;
   OTime GetTime() const { return time_; }
+  Record GetRecordForDisplay() const;
   bool Exists() const;
 
   // ---------- L1 functions ----------  
@@ -104,6 +106,13 @@ struct OwnedViolation : public Violation {
   Owner GetOwner() const { return owner_;}
   Violation::Type GetType() const {return VType;}
   OTime ComputeTime() const { return owner_->GetTime();}
+  Record Violation::GetRecordForDisplay() const {
+    Record ret = Violation::GetRecordForDisplay();
+    Named * owner = dynamic_cast<Named *>(owner);
+    if (owner) 
+      ret["owner"] = owner->GetLink(owner->ShortDescription());
+    return ret;
+  }
 
   // ---------- L1 functions ----------
   void L1_Init(Owner *owner) {

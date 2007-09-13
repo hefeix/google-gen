@@ -55,6 +55,10 @@ void L1_EraseOwnedViolations(void *owner) {
   }
 }
 
+Record Violation::GetRecordForDisplay() const { 
+  Record ret = Named::GetRecordForDisplay();
+  ret["Violation Type"] = StringToType(GetViolationType());
+}
 
 
 

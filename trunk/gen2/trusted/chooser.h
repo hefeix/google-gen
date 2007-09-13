@@ -22,7 +22,7 @@
 #include "util.h"
 #include "record.h"
 #include "probutil.h"
-#include "namer.h"
+#include "named.h"
 
 // Keeps track of the likelihood of a sequence of choices of objects.  
 // Doesn't actually keep track of the sequence.
@@ -46,7 +46,7 @@ struct Chooser : public Named {
   void L1_SetParent(Chooser *parent);
   virtual ~Chooser() {}
   void L1_Erase();
-  Named::Type GetType() const { return Named::CHOOSER;}
+  Named::Type GetNamedType() const { return Named::CHOOSER;}
   virtual LL ComputeLLDelta(Object object,
 			    int old_count, int new_count, 
 			    int old_num_objects,  int new_num_objects, 

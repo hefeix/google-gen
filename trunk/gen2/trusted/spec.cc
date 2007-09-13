@@ -20,17 +20,17 @@
 #include "model.h"
 
 void Given::L1_Init(OTuple tuple) {
-  CL.Creating(this);
-  posting_ = new Posting(tuple, Time(), &BB);
+  Named::L1_Init();
+  posting_ = new OwnedPosting(tuple, CREATION, this);
 }
 
 void Given::L1_Erase() {
   posting_->L1_Erase();
-  CL.Destroying(this);
+  Named::L1_Erase();
 }
 
 void Requirement::L1_Init(OTuple tuple) {
-  CL.Creating(this);
+  Named::L1_Init();
   CL.InsertIntoSet(&M.requirements_, this);
   tuple_ = tuple;
   Query * q = BB.L1_GetExecuteQuery(OPattern::Make(Pattern(1, tuple)), 
@@ -42,7 +42,7 @@ void Requirement::L1_Erase() {
   subscription_->L1_Erase();
   L1_EraseOwnedViolations(this);
   CL.RemoveFromSet(&M.requirements_, this);  
-  CL.Destroying(this);
+  Named::L1_Erase();
 }
 void Requirement::Update(const QueryUpdate &update, SubType * sub){
   int count = subscription_->subscribee_->GetCount();
@@ -63,6 +63,7 @@ void Requirement::L1_RemoveViolation() {
 }
 
 void Prohibition::L1_Init(OTuple tuple) {
+  Named::L1_Init();
   CL.InsertIntoSet(&M.prohibitions_, this);
   tuple_ = tuple;
   Query * q = BB.L1_GetExecuteQuery(OPattern::Make(Pattern(1, tuple)), 
@@ -76,7 +77,7 @@ void Prohibition::L1_Erase() {
     violations_.begin()->second->L1_Erase();    
   }
   CL.RemoveFromSet(&M.prohibitions_, this);
-  CL.Destroying(this);
+  Named::L1_Erase();
 }
 void Prohibition::Update(const QueryUpdate &update, SubType * sub){
   forall(run, update.changes_) {

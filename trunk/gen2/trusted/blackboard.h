@@ -55,8 +55,10 @@ struct SamplingInfo{
 // All Postings must be created with "new".
 struct Posting {
   Posting(OTuple tuple, Time time, Blackboard *blackboard);
-  void L1_Erase();
-  void L1_ChangeTime(Time new_time);
+  virtual ~Posting() {}
+  virtual void L1_Erase();
+  virtual void L1_ChangeTime(Time new_time);
+  virtual bool IsOwned() const {return false;}
   OTuple tuple_;
   Time time_;
   Blackboard * blackboard_;

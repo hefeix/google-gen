@@ -331,6 +331,25 @@ void DynamicOutput::L1_CheckSetPostingViolation() {
   else 
     PostingViolation::L1_CreateIfAbsent(this);
 }
+void DynamicOutput::AddCorrectPosting() {
+  DynamicExpression * expr = GetTupleExpression();
+  if (!expr) return;
+  Object t = expr->value_;
+  if (t.GetType() != Object::OTUPLE) return;
+  AddPosting(OTuple(t));
+}
+void DynamicOutput::AddPosting(OTuple t) {
+  if (posting_) {
+    if (posting_->tuple_ == t) return;
+    RemovePosting();
+  }
+  CL.ChangeValue(&posting_, new OwnedPosting(t, CREATION, this));
+}
+void DynamicOutput::RemovePosting() {
+  CHECK(posting_);
+  posting_->L1_Erase();
+  CL.ChangeValue(&posting_, (OwnedPosting *)NULL);
+}
 
 void StaticIf::L1_Init() {
   Statement::L1_Init();

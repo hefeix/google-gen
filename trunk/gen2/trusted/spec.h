@@ -27,11 +27,13 @@
 #ifndef _SPEC_H_
 #define _SPEC_H_
 
+#include "extensions.h"
 #include "blackboard.h"
 #include "query.h"
 #include "violation.h"
+#include "named.h"
 
-class Requirement {
+class Requirement : public Named {
  public:
   // ---------- L2 functions ----------
   static Requirement * Make(OTuple tuple) {
@@ -39,6 +41,7 @@ class Requirement {
   }
 
   // ---------- const functions ----------
+  Named::Type GetNamedType() const { return Named::REQUIREMENT;}
   OTime GetTime() const { return CREATION;} // needed for violation
 
   // ---------- L1 functions ----------
@@ -57,7 +60,7 @@ class Requirement {
   OTuple tuple_;
 };
 
-class Prohibition {
+class Prohibition : public Named {
  public:
 
   // ---------- L2 functions ----------
@@ -69,6 +72,7 @@ class Prohibition {
   // ---------- const functions ----------
   // needed for ProhibitionViolation, but shouldn't actually be called, 
   // since ProhibitionViolation has its own ComputeTime().
+  Named::Type GetNamedType() const { return Named::PROHIBITION;}
   OTime GetTime() const { CHECK(false); return CREATION;} 
   // also needed by ProhibitionViolation
   map<OTuple, Violation *> * GetViolationMap(Violation::Type vtype) {
@@ -91,10 +95,12 @@ class Prohibition {
   map<OTuple, Violation *> violations_;
 };
 
-class Given {
+class Given : public Named {
  public:
+  Named::Type GetNamedType() const { return Named::GIVEN;}
+
   void L1_Init(OTuple tuple);
-  Posting * posting_;
+  OwnedPosting * posting_;
   void L1_Erase();
 };
 
