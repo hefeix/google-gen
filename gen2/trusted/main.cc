@@ -24,7 +24,7 @@ int main() {
   InitKeywords();
   // ObjectsShell();
   // Blackboard::Shell();
-  Model::TestLoadAndStore("tp");
+  Model::TestLoadAndStore();
 
 
   DestroyKeywords();

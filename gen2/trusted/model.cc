@@ -74,8 +74,10 @@ string Model::ToString(bool html) const {
   return ret;
 }
 
-void Model::TestLoadAndStore(string filename) {
-  ifstream input(filename.c_str());
+void Model::TestLoadAndStore() {
+  ifstream inputspec("test_spec");
+  LoadSpecs(inputspec);
+  ifstream input("test_prog");
   input >> M;
   cout << M;
   sleep(10000);

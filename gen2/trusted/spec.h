@@ -97,11 +97,17 @@ class Prohibition : public Named {
 
 class Given : public Named {
  public:
+  static Given * Make(OTuple tuple) {
+    return New<Given>(tuple);
+  }
+
   Named::Type GetNamedType() const { return Named::GIVEN;}
 
   void L1_Init(OTuple tuple);
   OwnedPosting * posting_;
   void L1_Erase();
 };
+
+void LoadSpecs(istream & input);
 
 #endif
