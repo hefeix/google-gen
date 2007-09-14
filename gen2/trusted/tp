@@ -1,0 +1,24 @@
+{
+  on pattern()
+    parallel {
+      delay #
+   	output (COUT 42);
+      if true {
+        null
+        output (constant (my_keyword IsFlake Noam));
+      }
+    }
+  
+  on pattern ((S a b))
+  delay #0101010
+  parallel {
+  output (substitute (C a 0) );
+  }
+  on pattern () parallel {}
+  on pattern ()
+  null
+  on pattern ()
+  null
+
+}
+

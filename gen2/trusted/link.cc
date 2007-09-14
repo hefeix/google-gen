@@ -44,7 +44,7 @@ OTime Link::ComputeChildTime(const Element *child) const {
   return parent_->ComputeChildTime(this, child);
 }
 int Link::WhichChild() const { 
-  Named::Type pt = GetParent()->GetType();
+  Named::Type pt = GetParent()->GetNamedType();
   if (pt == Named::STATEMENT
       || pt == Named::EXPRESSION) {
     StaticElement *parent = dynamic_cast<StaticElement *>(GetParent());

@@ -59,7 +59,7 @@ void StaticElement::UnlinkFromParent() {
 }
 void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
   CHECK(!parent_);
-  CHECK(new_parent->ChildType(which_child) == GetType());
+  CHECK(new_parent->ChildType(which_child) == GetNamedType());
   new_parent->static_children_[which_child]->L1_AddChild(this);
   StaticNoParentViolation::L1_RemoveIfPresent(this);
 }
@@ -560,12 +560,12 @@ DynamicElement * DynamicElement::FindParent() const {
 // or disconnected from this parent node. 
 void DynamicElement::N1_ChildConnected(Link *child_link, 
 				       DynamicElement *child) {
-  if (child->GetType() == DYNAMIC_EXPRESSION) 
+  if (child->GetNamedType() == DYNAMIC_EXPRESSION) 
     N1_ChildExpressionChanged(child_link->WhichChild());  
 }
 void DynamicElement::N1_ChildDisconnected(Link *child_link, 
 					  DynamicElement *child) {
-  if (child->GetType() == DYNAMIC_EXPRESSION) 
+  if (child->GetNamedType() == DYNAMIC_EXPRESSION) 
     N1_ChildExpressionChanged(child_link->WhichChild());  
 }
 

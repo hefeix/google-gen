@@ -33,7 +33,7 @@ set<Violation *> FindViolations(void *owner, Violation::Type type) {
   set<Violation *> ret;
   set<Violation *> * s = Violation::owned_violations_ % owner;
   if (!s) return ret;
-  forall(run, *s) if ((*run)->GetType() == type) ret.insert(*run);
+  forall(run, *s) if ((*run)->GetViolationType() == type) ret.insert(*run);
   return ret;
 }
 
@@ -57,7 +57,8 @@ void L1_EraseOwnedViolations(void *owner) {
 
 Record Violation::GetRecordForDisplay() const { 
   Record ret = Named::GetRecordForDisplay();
-  ret["Violation Type"] = StringToType(GetViolationType());
+  ret["Violation Type"] = TypeToString(GetViolationType());
+  return ret;
 }
 
 
@@ -69,11 +70,11 @@ void Violation::L1_Init() {
   L1_InsertIntoGlobalMap();
 }
 void Violation::L1_InsertIntoGlobalMap(){
-  CL.InsertIntoMapOfSets(&M.violations_by_type_, GetType(), this);
+  CL.InsertIntoMapOfSets(&M.violations_by_type_, GetViolationType(), this);
   CL.InsertIntoMapOfSets(&M.violations_by_time_, GetTime(), this);
 }
 void Violation::L1_RemoveFromGlobalMap(){
-  CL.RemoveFromMapOfSets(&M.violations_by_type_, GetType(), this);
+  CL.RemoveFromMapOfSets(&M.violations_by_type_, GetViolationType(), this);
   CL.RemoveFromMapOfSets(&M.violations_by_time_, GetTime(), this);
 }
 void Violation::N1_TimeMayHaveChanged() {
