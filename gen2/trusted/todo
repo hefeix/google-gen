@@ -1,0 +1,10 @@
+Write a deterministic and random executor.
+
+viewer needs:
+blackboard indexrow
+blackboard tupleinfo
+blackboard posting
+
+test the spec stuff (like givens adding to the blackboard)
+Make the specs display themselves better.
+
