@@ -46,6 +46,11 @@ void* HandleRequestHelper(void *req) {
 bool WebServer::Start(){
   // Bind to the server port
   int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  int ign;
+  if (0>setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, 
+		   (char *)&ign, sizeof(ign))){
+    cerr << "Can't make socket reusable" << endl;    
+  }
   if (sockfd == -1) { 
     cerr << "couldn't create socket";
     return false;

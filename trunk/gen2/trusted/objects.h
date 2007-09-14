@@ -337,16 +337,18 @@ inline Pattern MPatternToPattern(const MPattern &p) {
 
 template <class T> struct DataCompare{
   bool operator()(const T& t1, const T& t2) {
+    if (t2 == NULL) return false;
+    if (t1 == NULL) return true;
     return (t1.Data() < t2.Data());
   }
 };
 
 template <class T> const T & DataMax(const T & t1, const T & t2) {
-  if (t2.Data() < t1.Data()) return t1;
+  if (DataCompare<T>()(t2, t1)) return t1;
   return t2;
 }
 template <class T> const T & DataMin(const T & t1, const T & t2) {
-  if (t1.Data() < t2.Data()) return t1;
+  if (DataCompare<T>()(t1, t2)) return t1;
   return t2;
 }
 

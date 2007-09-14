@@ -64,7 +64,7 @@ Record Violation::GetRecordForDisplay() const {
 
 
 void Violation::L1_Init() {  
-  CL.Creating(this);
+  Named::L1_Init();
   time_ = ComputeTime();
   // add to the model's set of violations
   L1_InsertIntoGlobalMap();
