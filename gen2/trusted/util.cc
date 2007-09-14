@@ -258,3 +258,7 @@ string Downcase(string s) {
   for (uint i=0; i<s.size(); i++) s[i] = tolower(s[i]);
   return s;
 }
+string Upcase(string s) {
+  for (uint i=0; i<s.size(); i++) s[i] = toupper(s[i]);
+  return s;
+}

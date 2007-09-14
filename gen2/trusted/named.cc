@@ -76,7 +76,9 @@ string Named::GetURL() const {
 string Named::GetLink(string anchortext) const {
   return "<a href=\"" + GetURL() + "\">" + anchortext + "</a>";
 }
-string Named::ShortDescription() const { 
-  return TypeToString(GetNamedType()) + "(" + name_.ToString() + ")";
+string Named::ShortDescription(bool html) const { 
+  string ret = TypeToString(GetNamedType()) + "(" + name_.ToString() + ")";
+  if (html) ret = GetLink(ret);
+  return ret;
 }
 

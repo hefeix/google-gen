@@ -48,7 +48,7 @@ class Named {
   virtual Record GetRecordForDisplay() const;
   string GetURL() const; // link to object view
   string GetLink(string anchortext) const;
-  virtual string ShortDescription() const;
+  virtual string ShortDescription(bool html) const;
 
 
   virtual Type GetNamedType() const = 0;

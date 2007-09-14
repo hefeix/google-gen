@@ -64,7 +64,7 @@ struct Violation : public Named {
   virtual void L1_Erase() {
     // remove from the model's set of violations
     L1_RemoveFromGlobalMap();
-    CL.Destroying(this);
+    Named::L1_Erase();
   }
   void L1_ChangeTime(OTime new_time);
   void L1_InsertIntoGlobalMap();
@@ -109,9 +109,7 @@ struct OwnedViolation : public Violation {
   OTime ComputeTime() const { return owner_->GetTime();}
   Record GetRecordForDisplay() const {
     Record ret = Violation::GetRecordForDisplay();
-    Named * owner = dynamic_cast<Named *>(owner);
-    if (owner) 
-      ret["owner"] = owner->GetLink(owner->ShortDescription());
+    ret["owner"] = owner_->ShortDescription(true);    
     return ret;
   }
 
@@ -125,6 +123,7 @@ struct OwnedViolation : public Violation {
   void L1_Erase() {
     CL.RemoveFromMapOfSets(&Violation::owned_violations_, (void *)owner_, 
 			   (Violation *)this);
+    Violation::L1_Erase();
   }
   static void L1_CreateIfAbsent(Owner *owner) {
     if (FindViolation(owner, VType)) return;
@@ -163,12 +162,11 @@ struct OwnedViolationWithData : public Violation {
   }
   void L1_Erase() {
     CL.RemoveFromMap(owner_->GetViolationMap(VType), data_);
+    Violation::L1_Erase();
   }
   Record GetRecordForDisplay() const {
     Record ret = Violation::GetRecordForDisplay();
-    Named * owner = dynamic_cast<Named *>(owner);
-    if (owner) 
-      ret["owner"] = owner->GetLink(owner->ShortDescription());
+    ret["owner"] = owner_->ShortDescription(true);    
     ret["data"] = data_.ToString();
     return ret;
   }

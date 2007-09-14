@@ -22,7 +22,9 @@
 // UNTRUSTED
 
 Statement * MakeStatementByKeyword(Keyword type){
-  Element::Function function = Element::StringToFunction(type.Data());
+  Element::Function function = Element::StringToFunction(Upcase(type.Data()));
+  cerr << "finding function for " << Upcase(type.Data()) << " = " << function
+       << endl;
   switch (function) {
   case Element::PASS: return MakeStatement<StaticPass>();
   case Element::ON: return MakeStatement<StaticOn>();
@@ -38,7 +40,7 @@ Statement * MakeStatementByKeyword(Keyword type){
 }
 
 Expression * MakeExpressionByKeyword(Keyword type){
-  Element::Function function = Element::StringToFunction(type.Data());
+  Element::Function function = Element::StringToFunction(Upcase(type.Data()));
   switch (function) {
   case Element::SUBSTITUTE: return MakeExpression<StaticSubstitute>();
   case Element::CONSTANT: return MakeExpression<StaticConstant>();
@@ -103,17 +105,20 @@ vector<Statement *> ParseStatements(const Tuple & t) {
       }
       CHECK(parent->NumStatementChildren() == (int)subs.size());      
       for (uint i=0; i<subs.size(); i++) {
-	subs[i]->LinkToParent(parent, parent->NumExpressionChildren()+i);
+	if (subs[i])
+	  subs[i]->LinkToParent(parent, parent->NumExpressionChildren()+i);
       }
       parent = NULL;
       position++;
     } else {
       Statement * s = ParseSingleStatement(t, &position);
       if (parent) {
-	cout << "Hooking up child " << s->ToString(0, false) << endl;
-	cout << "To parent " << parent->ToString(0, false) << endl;
-	CHECK(parent->NumStatementChildren() == 1);
-	s->LinkToParent(parent, parent->NumExpressionChildren());
+	  CHECK(parent->NumStatementChildren() == 1);
+	if (s) {
+	  cout << "Hooking up child " << s->ToString(0, false) << endl;
+	  cout << "To parent " << parent->ToString(0, false) << endl;
+	  s->LinkToParent(parent, parent->NumExpressionChildren());
+	}
       } else {
 	ret.push_back(s);
       }

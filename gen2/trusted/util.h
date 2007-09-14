@@ -407,5 +407,6 @@ template<class SK, class MK, class V> map<MK, V> Restrict(const map<MK,V> & m,
 */
 
 string Downcase(string s);
+string Upcase(string s);
 
 #endif

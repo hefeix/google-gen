@@ -59,7 +59,9 @@ int Link::WhichChild() const {
   }
   return -1;
 }
-
+string Link::ShortDescription(bool html) const {
+  return "Link from " + GetParent()->ShortDescription(html);
+}
 
 void MultiLink::L1_AddChild(Element *child){
   if (!child) return;
