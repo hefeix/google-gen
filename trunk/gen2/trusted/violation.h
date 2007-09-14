@@ -21,6 +21,7 @@
 
 #include "changelist.h"
 #include "objects.h"
+#include "named.h"
 
 class Requirement;
 class Prohibition;
@@ -50,7 +51,7 @@ struct Violation : public Named {
   // ---------- L2 functions ----------  
 
   // ---------- const functions ----------  
-  virtual Type GetNamedType() const { return Named::VIOLATION; }
+  virtual Named::Type GetNamedType() const { return Named::VIOLATION; }
   virtual Type GetViolationType() const = 0;
   virtual OTime ComputeTime() const = 0;
   OTime GetTime() const { return time_; }
@@ -104,9 +105,9 @@ struct OwnedViolation : public Violation {
 
   // ---------- const functions ----------
   Owner GetOwner() const { return owner_;}
-  Violation::Type GetType() const {return VType;}
+  Violation::Type GetViolationType() const {return VType;}
   OTime ComputeTime() const { return owner_->GetTime();}
-  Record Violation::GetRecordForDisplay() const {
+  Record GetRecordForDisplay() const {
     Record ret = Violation::GetRecordForDisplay();
     Named * owner = dynamic_cast<Named *>(owner);
     if (owner) 
@@ -150,7 +151,7 @@ struct OwnedViolationWithData : public Violation {
 
   // ---------- const functions ----------
   Owner GetOwner() const { return owner_;}
-  Violation::Type GetType() const {return VType;}
+  Violation::Type GetViolationType() const {return VType;}
   OTime ComputeTime() const { return owner_->GetTime();}
 
   // ---------- L1 functions ----------
@@ -163,6 +164,15 @@ struct OwnedViolationWithData : public Violation {
   void L1_Erase() {
     CL.RemoveFromMap(owner_->GetViolationMap(VType), data_);
   }
+  Record GetRecordForDisplay() const {
+    Record ret = Violation::GetRecordForDisplay();
+    Named * owner = dynamic_cast<Named *>(owner);
+    if (owner) 
+      ret["owner"] = owner->GetLink(owner->ShortDescription());
+    ret["data"] = data_.ToString();
+    return ret;
+  }
+
   // ---------- data ----------
   Owner *owner_;
   DataType data_;

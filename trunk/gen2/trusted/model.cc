@@ -51,6 +51,10 @@ void Model::A1_AddToSearchWork(int64 delta) {
 void Model::Load(istream &input) {
   OTuple t;
   input >> t;
+  if (t == NULL) {
+    cerr << "Input file doesn't contain a tuple" << endl;
+  }
+  cerr << "Loading from tuple " << t.ToString() << endl;
   vector<Statement *> v = ParseStatements(t.Data());
   cout << "Just loaded" << endl;
   for (uint i=0; i<v.size(); i++) cout << v[i]->ToString(0, false);
