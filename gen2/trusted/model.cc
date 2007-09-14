@@ -19,6 +19,7 @@
 #include "model.h"
 #include "fstream.h"
 #include "parser.h"
+#include "spec.h"
 
 Model::Model(){
   // for now, we only allow one model to exist. 
@@ -76,7 +77,7 @@ string Model::ToString(bool html) const {
 
 void Model::TestLoadAndStore() {
   ifstream inputspec("test_spec");
-  LoadSpecs(inputspec);
+  LoadSpec(inputspec);
   ifstream input("test_prog");
   input >> M;
   cout << M;
