@@ -38,7 +38,7 @@ class Model : public RequestHandler{
   // if html is set, produces html
   string ToString(bool html) const;
 
-  static void TestLoadAndStore(string filename);
+  static void TestLoadAndStore();
 
   // handle a web request
   string Handle(Record params);

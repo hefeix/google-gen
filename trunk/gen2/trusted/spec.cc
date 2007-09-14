@@ -112,3 +112,51 @@ void Prohibition::AddException(OTuple t) {
   if (v) (*v)->L1_Erase();
 }
 
+void LoadSpecs(istream & input) {
+  Object o;
+  OTuple t;
+  Prohibition * last_prohibition = NULL;
+  while (input >> o) {
+    if (o.GetType() == Object::KEYWORD) {
+      Keyword k = o;
+      CHECK(input >> t);
+      if (k.Data() == "prohibition") {
+	last_prohibition = Prohibition::Make(t);
+	continue;
+      }
+      if (k.Data() == "given") {
+	Given::Make(t);
+	last_prohibition = NULL;
+	continue;
+      }
+      if (k.Data() == "exception") {
+	CHECK(last_prohibition);
+	last_prohibition->AddException(t);
+	continue;
+      }
+      CHECK(false);
+    }
+    // it's a requirement/functional requirement
+    t = o;
+    last_prohibition = NULL;
+    Tuple required_tuple;
+    Tuple prohibited_tuple;
+    bool any_wildcards = false;
+    for (uint i=0; i<t.Data().size(); i++) {
+      if (t.Data()[i] == WILDCARD) {
+	any_wildcards = true;
+	prohibited_tuple.push_back(WILDCARD);
+	i++;
+	CHECK(i<t.Data().size());
+      } else {
+	prohibited_tuple.push_back(t.Data()[i]);
+      }
+      required_tuple.push_back(t.Data()[i]);
+    }
+    Requirement::Make(OTuple::Make(required_tuple));
+    if(any_wildcards) {
+      Prohibition * p = Prohibition::Make(OTuple::Make(prohibited_tuple));
+      p->AddException(OTuple::Make(required_tuple));
+    }
+  }
+}
