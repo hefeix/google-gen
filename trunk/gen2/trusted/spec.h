@@ -108,6 +108,6 @@ class Given : public Named {
   void L1_Erase();
 };
 
-void LoadSpecs(istream & input);
+void LoadSpec(istream & input);
 
 #endif

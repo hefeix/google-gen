@@ -112,7 +112,7 @@ void Prohibition::AddException(OTuple t) {
   if (v) (*v)->L1_Erase();
 }
 
-void LoadSpecs(istream & input) {
+void LoadSpec(istream & input) {
   Object o;
   OTuple t;
   Prohibition * last_prohibition = NULL;
