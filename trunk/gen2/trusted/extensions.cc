@@ -17,6 +17,8 @@
 // Author: Georges Harik and Noam Shazeer
 
 #include "extensions.h"
+#include "webserver.h"
+
 Named * GetPostingOwner(const Posting *posting){
   if (!posting->IsOwned()) return NULL;
   return dynamic_cast<const OwnedPosting *>(posting)->owner_;
@@ -25,4 +27,17 @@ Named * GetPostingOwner(const Posting *posting){
 OwnedPosting::OwnedPosting(OTuple tuple, OTime time, Named *owner) 
   :Posting(tuple, time.Data(), &BB) {
   owner_ = owner;
+}
+string OwnedPosting::GetURL() const {
+  return owner_->GetURL() + "&ownedposting=true";
+}
+string OwnedPosting::ShortDescription() const {
+  return "POSTING " + HTMLLink(GetURL(), tuple_.ToString())
+    + " owned by " + owner_->ShortDescription();
+}
+Record OwnedPosting::GetRecordForDisplay() const {
+  Record ret = Posting::GetRecordForDisplay();
+  ret["owner"] = owner_->ShortDescription();
+  ret["type"] = "OWNED_POSTING";
+  return ret;
 }

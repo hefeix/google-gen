@@ -28,7 +28,7 @@ string Time::ToString() const {
       = Integer::Make(coordinates_[i].second);
   }
   string ret = "time";
-  OTuple ot = OMap::Make(t);
+  OMap ot = OMap::Make(t);
   ret += ot.ToString();
   return ret;
 }

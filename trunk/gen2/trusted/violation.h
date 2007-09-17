@@ -109,7 +109,7 @@ struct OwnedViolation : public Violation {
   OTime ComputeTime() const { return owner_->GetTime();}
   Record GetRecordForDisplay() const {
     Record ret = Violation::GetRecordForDisplay();
-    ret["owner"] = owner_->ShortDescription(true);    
+    ret["owner"] = owner_->ShortDescription();    
     return ret;
   }
 
@@ -166,7 +166,7 @@ struct OwnedViolationWithData : public Violation {
   }
   Record GetRecordForDisplay() const {
     Record ret = Violation::GetRecordForDisplay();
-    ret["owner"] = owner_->ShortDescription(true);    
+    ret["owner"] = owner_->ShortDescription();    
     ret["data"] = data_.ToString();
     return ret;
   }

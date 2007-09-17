@@ -23,6 +23,7 @@
 #include "numbers.h"
 #include "changelist.h"
 #include "ranktree.h"
+#include "record.h"
 
 struct IndexRow;
 struct Blackboard;
@@ -59,6 +60,10 @@ struct Posting {
   virtual void L1_Erase();
   virtual void L1_ChangeTime(Time new_time);
   virtual bool IsOwned() const {return false;}
+  virtual Record GetRecordForDisplay() const;
+  virtual string ShortDescription() const;
+  OTuple GetTuple() const { return tuple_;}
+  const Time & GetTime() const { return time_;}
   OTuple tuple_;
   Time time_;
   Blackboard * blackboard_;
@@ -67,15 +72,19 @@ struct Posting {
 struct TupleInfo {
   TupleInfo(Posting *first_posting, Blackboard *blackboard);  
   void L1_Erase();
-  OTuple tuple_;
-  set<pair<Time, Posting *> > postings_; // all postings that make it true.
   Time FirstTime() const;
+  Record GetRecordForDisplay() const;
+  string ShortDescription() const;
+  string GetURL() const;
+  string ToString();
+  OTuple GetTuple() const { return tuple_;}
   void L1_ChangeTimesInIndexRows(Time old_first_time, Time new_first_time);
   void L1_ChangePostingTime(Posting *p, Time new_time);
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
   Blackboard * blackboard_;
-  string ToString();
+  OTuple tuple_;
+  set<pair<Time, Posting *> > postings_; // all postings that make it true.
 };
 
 typedef uint32 UpdateNeeds;
@@ -266,6 +275,10 @@ public Subscription<UpdateType, SubscribeeType> {
 
 
 struct IndexRow {
+  string GetURL() const;
+  Record GetRecordForDisplay() const;
+  string ShortDescription() const;
+  string GetGeneralizationLinks() const;
   IndexRow(OTuple wildcard_tuple, Blackboard *blackboard);
   void L1_Erase();
   OTuple wildcard_tuple_;
@@ -310,6 +323,8 @@ class Blackboard {
   friend class OneTupleSearch;
   friend class ConditionSearch;
   
+  string GetURL() const;
+  Record GetRecordForDisplay() const;
 
   Blackboard() {
     current_wt_update_ = NULL;
@@ -364,11 +379,15 @@ class Blackboard {
   void L1_AddSearchToFlush(Search * s);
   void Verify() const; // for debugging
 
+  const IndexRow * GetConstIndexRow(OTuple wildcard_tuple) const;
+  const TupleInfo * GetConstTupleInfo(OTuple tuple) const;
+
+
  private:
   // returns null on failure
   IndexRow * GetIndexRow(OTuple wildcard_tuple);
   IndexRow * GetAddIndexRow(OTuple wildcard_tuple);
-  TupleInfo * GetTupleInfo(OTuple tuple) const;
+  TupleInfo * GetTupleInfo(OTuple tuple);
 
   map<OTuple, IndexRow *> index_;
   map<OTuple, TupleInfo *> tuple_info_;

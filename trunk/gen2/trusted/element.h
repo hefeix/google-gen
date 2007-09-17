@@ -258,6 +258,7 @@ struct Statement : public StaticElement{
   string ToString(bool html) const { return ToString(0, html);}
   string ToString(int indent, bool html) const; // includes the subtree
   string ToStringSingle(bool html) const;
+  string TextIdentifier() const { return ToStringSingle(true);}
 
   // ---------- L1 functions ----------  
   virtual ~Statement(){}
@@ -278,6 +279,7 @@ struct Expression : public StaticElement {
   virtual int NumExpressionChildren() const { return NumChildren();}
   virtual int NumChildren() const = 0;
   virtual int NumObjects() const { return 0;}
+  string TextIdentifier() const { return ToString(true);}
   // ---------- L1 functions ----------  
   void L1_Init();
   // ---------- data ----------  
@@ -539,6 +541,7 @@ struct DynamicOutput : public DynamicStatement {
     return dynamic_cast<DynamicExpression *>
       (GetSingleChild(StaticOutput::TUPLE));
   }  
+  OwnedPosting * GetOwnedPosting() const { return posting_;}
   // ---------- L1 functions ----------  
   void L1_Init(StaticLet * static_parent, OMap binding) {
     DynamicStatement::L1_Init(static_parent, binding);

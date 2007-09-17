@@ -19,6 +19,7 @@
 #include "blackboard.h"
 #include "tuple.h"
 #include "query.h"
+#include "webserver.h"
 #include <fstream>
 
 SamplingInfo::SamplingInfo() {
@@ -87,7 +88,7 @@ void Posting::L1_ChangeTime(Time new_time) {
 }
 
 TupleInfo::TupleInfo(Posting *first_posting, Blackboard *blackboard)
-  :tuple_(first_posting->tuple_), blackboard_(blackboard) {
+  :blackboard_(blackboard), tuple_(first_posting->tuple_) {
   CL.Creating(this);
   CL.Make
     (new MapInsertChange<OTuple, TupleInfo *>
@@ -328,7 +329,7 @@ void Blackboard::L1_DeletingQuery(Query *q){
     CL.RemoveFromMap(&queries_, p);
   }
 }
-TupleInfo * Blackboard::GetTupleInfo(OTuple t) const{
+TupleInfo * Blackboard::GetTupleInfo(OTuple t){
   TupleInfo *const * find = tuple_info_ % t;
   if (find) return *find;
   return NULL;
@@ -350,6 +351,14 @@ IndexRow * Blackboard::GetAddIndexRow(OTuple wildcard_tuple){
   if (find) return *find;
   return new IndexRow(wildcard_tuple, this);
 }
+
+const IndexRow * Blackboard::GetConstIndexRow(OTuple wildcard_tuple) const {
+  return ((Blackboard *)(this))->GetIndexRow(wildcard_tuple);
+}
+const TupleInfo * Blackboard::GetConstTupleInfo(OTuple tuple) const {
+  return ((Blackboard *)(this))->GetTupleInfo(tuple);
+}
+
 
 void Blackboard::L1_FlushUpdates() {
   flushed_query_update_.clear();
@@ -413,7 +422,7 @@ UpdateNeeds RandomUpdateNeeds() {
   return 1;
 }
 OTime Blackboard::FindTupleTime(OTuple t) const{
-  TupleInfo * ti = GetTupleInfo(t);
+  const TupleInfo * ti = GetConstTupleInfo(t);
   CHECK(ti);
   return OTime::Make(ti->FirstTime());
 }
@@ -596,3 +605,87 @@ void Blackboard::Shell() {
   
 }
 
+string Posting::ShortDescription() const {
+  string ret = "POSTING " + GetTuple().ToString();
+  return ret;
+}
+Record Posting::GetRecordForDisplay() const { 
+  Record ret;
+  ret["type"] = "POSTING";
+  ret["tuple"] = HTMLLink(blackboard_->GetTupleInfo(tuple_)->GetURL(), 
+			  GetTuple().ToString());
+  ret["time"] = OTime::Make(time_).ToString();
+  return ret;
+}
+
+string TupleInfo::ShortDescription() const {
+  return "TUPLE " + HTMLLink(GetURL(), tuple_.ToString());
+}
+string TupleInfo::GetURL() const {
+  return "tupleinfo?tuple=" + URLEscape(tuple_.ToString());
+}
+Record TupleInfo::GetRecordForDisplay() const { 
+  Record ret;
+  ret["type"] = "TUPLEINFO";
+  ret["tuple"] = tuple_.ToString();
+  ret["first time"] = OTime::Make(FirstTime()).ToString();
+  ret["postings"] += "<table>";
+  forall(run, postings_) {
+    ret["postings"] += "<tr><td>" + OTime::Make(run->first).ToString()
+      + "</td><td>" + run->second->ShortDescription() + "</td></tr>\n";
+  }
+  ret["postings"] += "</table>";
+  ret["generalizations"] = blackboard_->GetIndexRow(tuple_)
+    ->GetGeneralizationLinks();
+  return ret;
+}
+string IndexRow::GetURL() const {
+  return "indexrow?tuple=" + URLEscape(wildcard_tuple_.ToString());
+}
+string IndexRow::ShortDescription() const {
+  return "INDEXROW " + HTMLLink(GetURL(), wildcard_tuple_.ToString());  
+}
+Record IndexRow::GetRecordForDisplay() const {
+  Record ret;
+  ret["type"] = "INDEXROW";
+  ret["wildcard tuple"] = wildcard_tuple_.ToString();
+  ret["tuples"] += "<table>";
+  forall(run, tuples_) {
+    ret["tuples"] += "<tr><td>" + OTime::Make(run->first).ToString()
+      + "</td><td>" + run->second->ShortDescription() + "</td></tr>\n";
+  }
+  ret["tuples"] += "</table>";
+  ret["num_tuples"] = itoa(tuples_.size());
+  ret["generalizations"] = GetGeneralizationLinks();
+  return ret;
+}
+string IndexRow::GetGeneralizationLinks() const {
+  string ret = "[ ";
+  Tuple t = wildcard_tuple_.Data();
+  for (uint i=0; i<t.size(); i++) {
+    if (t[i] == WILDCARD) {
+      ret += "* ";
+      continue;
+    }
+    Tuple generalized = t;
+    generalized[i] = WILDCARD;
+    ret += 
+      HTMLLink(blackboard_->GetIndexRow(OTuple::Make(generalized))->GetURL(),
+	       (t[i].ToString())) + " ";
+  }
+  ret += "]";
+  return ret;
+}
+
+string Blackboard::GetURL() const {
+  return "blackboard";
+}
+Record Blackboard::GetRecordForDisplay() const {
+  Record ret;
+  ret["type"] = "BLACKBOARD";
+  ret["num tuples"] = itoa(tuple_info_.size());
+  forall(run, tuple_info_) {
+    ret["tuples"] += run->second->ShortDescription() + "<br>\n";
+  }
+  return ret;
+}

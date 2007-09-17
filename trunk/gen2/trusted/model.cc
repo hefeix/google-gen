@@ -55,11 +55,11 @@ void Model::Load(istream &input) {
   if (t == NULL) {
     cerr << "Input file doesn't contain a tuple" << endl;
   }
-  cerr << "Loading from tuple " << t.ToString() << endl;
+  //cerr << "Loading from tuple " << t.ToString() << endl;
   vector<Statement *> v = ParseStatements(t.Data());
-  cout << "Just loaded" << endl;
-  for (uint i=0; i<v.size(); i++) cout << v[i]->ToString(0, false);
-  cout << "End program" << endl;
+  //cout << "Just loaded" << endl;
+  //for (uint i=0; i<v.size(); i++) cout << v[i]->ToString(0, false);
+  //cout << "End program" << endl;
 }
 
 string Model::ToString(bool html) const {
@@ -104,15 +104,16 @@ void Model::L1_AddChoiceToFlakeChooser(Object chooser_name,
 
 string Model::TopNavHTML() const {
   string ret;
+  ret += "<font size=-1>";
   for (uint i=0; i<Named::NUM_NAMED_TYPES; i++) {
     Named::Type t = Named::Type(i);
-    string url = "typelist?type=" 
-      + URLEscape(Named::TypeToString(t));
-    string anchor = Named::TypeToString(t) 
+    ret += HTMLLink("typelist?type=" 
+		    + URLEscape(Named::TypeToString(t)),
+		    Named::TypeToString(t)) 
       + "(" + itoa(N.Index(t).size()) + ") ";
-    ret += HTMLLink(url, anchor) + " ";
   }
-  ret += "<br>";
+  ret += HTMLLink(BB.GetURL(), "Blackboard");
+  ret += "</font><br><p>";
   return ret;
 }
 
@@ -132,22 +133,51 @@ string Model::TypeListHTML(Named::Type type) const {
 string Model::Handle(Record params) {
   string ret = SimpleHTMLHeader() + TopNavHTML();
   string command = params["_command"];
+  // display information about a named object. 
   if (command == "getobject") {
     string sname = params["name"];
     Object name = StringToObject(sname);
     Named::Type type = Named::StringToType(params["type"]);
     Named * named = N.Lookup(type, name);
-    if (named) {
-      ret += RecordToHTMLTable(named->GetRecordForDisplay());
-    } else {
+    if (!named) {
       ret += "Object not found";
+      return ret;
     }
+    // We are overloading the getobject command to also get owned postings.
+    // It would be more elegant to have a separate command, but instead
+    // we are just tacking on a parameter ownedposting= to signify that 
+    // we want the posting owned by the given named object.
+    if (params % string("ownedposting")) {
+      ret += 
+	RecordToHTMLTable(named->GetOwnedPosting()->GetRecordForDisplay());
+      return ret;
+    }
+    ret += RecordToHTMLTable(named->GetRecordForDisplay());
     return ret;
   }
   if (command == "typelist") {
     ret += TypeListHTML(Named::StringToType(params["type"]));
     return ret;
   }
+  if (command == "tupleinfo") {
+    const TupleInfo * ti 
+      = BB.GetConstTupleInfo(OTuple(StringToObject(params["tuple"])));
+    if (!ti) return ret + "Tuple not found on blackboard";
+    ret += RecordToHTMLTable(ti->GetRecordForDisplay());
+    return ret;
+  }
+  if (command == "indexrow") {
+    const IndexRow * ir 
+      = BB.GetConstIndexRow(OTuple(StringToObject(params["tuple"])));
+    if (!ir) return ret + "Index row not found";
+    ret += RecordToHTMLTable(ir->GetRecordForDisplay());
+    return ret;
+  }
+  if (command == "blackboard") {
+    ret += RecordToHTMLTable(BB.GetRecordForDisplay());
+    return ret;
+  }
+  
   ret += ToString(true);
   return ret;
 }

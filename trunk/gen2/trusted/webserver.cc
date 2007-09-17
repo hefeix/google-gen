@@ -58,12 +58,16 @@ bool WebServer::Start(){
   
   sockaddr_in my_addr;
   my_addr.sin_family = AF_INET;
-  my_addr.sin_port = htons(port_);
   my_addr.sin_addr.s_addr = INADDR_ANY;
   bzero(&(my_addr.sin_zero), 8);
-  if (bind(sockfd, (sockaddr*)&my_addr, sizeof(sockaddr)) == -1) {
+  while(1) {
+    my_addr.sin_port = htons(port_);
+    if (bind(sockfd, (sockaddr*)&my_addr, sizeof(sockaddr)) != -1) {
+      cerr << "Bound to port " << port_;
+      break;
+    }
     cerr << "couldn't bind to port " << port_ << endl;
-    return false;
+    port_++;
   }
   if (listen(sockfd, 10) == -1) {
     cerr << "couldn't listen" << endl;

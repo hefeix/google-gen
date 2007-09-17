@@ -112,6 +112,25 @@ void Prohibition::AddException(OTuple t) {
   if (v) (*v)->L1_Erase();
 }
 
+Record Requirement::GetRecordForDisplay() const { 
+  Record ret = Named::GetRecordForDisplay();
+  ret["tuple"] = tuple_.ToString();
+  return ret;
+}
+Record Prohibition::GetRecordForDisplay() const { 
+  Record ret = Named::GetRecordForDisplay();
+  ret["tuple"] = tuple_.ToString();
+  forall(run, exceptions_) ret["exceptions"] += run->ToString();
+  return ret;
+}
+Record Given::GetRecordForDisplay() const { 
+  Record ret = Named::GetRecordForDisplay();
+  ret["posting"] = posting_->ShortDescription();
+  return ret;
+}
+
+
+
 void LoadSpec(istream & input) {
   Object o;
   OTuple t;
