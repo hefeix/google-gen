@@ -57,7 +57,7 @@ string OTuple::Definition::ToStringSpecific(bool verbose) const {
   string ret = "(";
   for (uint i=0; i<data_.size(); i++) {
     ret += data_[i].ToString(verbose);
-    if (i+1<data_.size()) ret += ", ";
+    if (i+1<data_.size()) ret += " ";
   }
   ret += ")";
   return ret;
@@ -65,7 +65,7 @@ string OTuple::Definition::ToStringSpecific(bool verbose) const {
 
 template<>
 string OMap::Definition::ToStringSpecific(bool verbose) const {
-  if (data_.size()==0) return ":";
+  if (data_.size()==0) return "[:]";
   string ret = "[";
   forall(run, data_) {
     if (run != data_.begin()) ret += " ";
@@ -188,10 +188,6 @@ istream & operator >>(istream & input, Object & o){
   EatCommentsAndWhitespace(input);
   char firstchar;
   if (!(input >> firstchar)) return input;
-  if (firstchar == ':') {
-    o = OMap::Make(map<Object, Object>());
-    return input;
-  }
   if (IsOpenEnclosure(firstchar)) {
     bool ismap = false;
     bool isfirst = true;
@@ -200,6 +196,14 @@ istream & operator >>(istream & input, Object & o){
     Object key;
     Object value;
     EatCommentsAndWhitespace(input);
+    if (input.peek() == ':') {
+      input.get();
+      EatCommentsAndWhitespace(input);
+      CHECK(input.peek() == MatchingCloseEnclosure(firstchar));
+      input.get();
+      o = OMap::Default();
+      return input;      
+    }
     while (input.peek() != MatchingCloseEnclosure(firstchar)) {
       CHECK(input >> key);
       EatCommentsAndWhitespace(input);

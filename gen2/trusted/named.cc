@@ -74,11 +74,13 @@ string Named::GetURL() const {
     + "&name=" + URLEscape(name_.ToString());
 }
 string Named::GetLink(string anchortext) const {
-  return "<a href=\"" + GetURL() + "\">" + anchortext + "</a>";
+  return HTMLLink(GetURL(), anchortext);
 }
-string Named::ShortDescription(bool html) const { 
-  string ret = TypeToString(GetNamedType()) + "(" + name_.ToString() + ")";
-  if (html) ret = GetLink(ret);
-  return ret;
+string Named::ShortDescription() const { 
+  return GetLink(TypeToString(GetNamedType()))
+    + " " + GetName().ToString() + " " + TextIdentifier();
+}
+string Named::TextIdentifier() const { 
+  return "";// GetName().ToString();
 }
 

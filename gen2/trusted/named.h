@@ -22,6 +22,7 @@
 #include "objects.h"
 #include "record.h"
 
+class OwnedPosting;
 
 class Named {
  public:
@@ -42,13 +43,15 @@ class Named {
   
   //Named();
   void L1_Init(); // shadow constructor
-  Object Name() const;
+  Object GetName() const { return name_;}
   void L1_SetName(Object new_name_);
   void L1_AutomaticallyName();
   virtual Record GetRecordForDisplay() const;
   string GetURL() const; // link to object view
   string GetLink(string anchortext) const;
-  virtual string ShortDescription(bool html) const;
+  string ShortDescription() const;
+  virtual string TextIdentifier() const;
+  virtual OwnedPosting * GetOwnedPosting() const { return NULL;}
 
 
   virtual Type GetNamedType() const = 0;

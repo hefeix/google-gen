@@ -50,7 +50,7 @@ struct Link {
   // assumes this is the parent_ link of the child. 
   OTime ComputeChildTime(const Element *child) const;
   int WhichChild() const;
-  string ShortDescription(bool html) const;
+  string ShortDescription() const;
 
   // Just to make the compiler happy
   virtual ~Link() {}

@@ -43,6 +43,8 @@ class Requirement : public Named {
   // ---------- const functions ----------
   Named::Type GetNamedType() const { return Named::REQUIREMENT;}
   OTime GetTime() const { return CREATION;} // needed for violation
+  Record GetRecordForDisplay() const;
+  string TextIdentifier() const { return tuple_.ToString(); }
 
   // ---------- L1 functions ----------
   void L1_Init(OTuple tuple);
@@ -52,7 +54,7 @@ class Requirement : public Named {
   void L1_AddViolation();
   void L1_RemoveViolation();
   typedef UpdateSubscription<QueryUpdate, Query, Requirement> SubType;
-  void Update(const QueryUpdate &update, SubType * sub);
+  void Update(const QueryUpdate &update, SubType * sub);  
 
   // ---------- data ----------
   friend class UpdateSubscription<QueryUpdate, Query, Requirement>;
@@ -79,6 +81,8 @@ class Prohibition : public Named {
     CHECK(vtype == Violation::PROHIBITION);
     return &violations_;
   }
+  Record GetRecordForDisplay() const;
+  string TextIdentifier() const { return tuple_.ToString(); }
 
   // ---------- L1 functions ----------
   void L1_Init(OTuple tuple);  
@@ -97,15 +101,23 @@ class Prohibition : public Named {
 
 class Given : public Named {
  public:
-  static Given * Make(OTuple tuple) {
-    return New<Given>(tuple);
-  }
+  // ---------- L2 functions ----------
+  
+  static Given * Make(OTuple tuple) { return New<Given>(tuple); }
 
+  // ---------- const functions ----------
+  Record GetRecordForDisplay() const;
+  OTuple GetTuple() const { return posting_->tuple_;}
+  string TextIdentifier() const { return GetTuple().ToString(); }
   Named::Type GetNamedType() const { return Named::GIVEN;}
+  OwnedPosting * GetOwnedPosting() const { return posting_;}
 
+  // ---------- L1 functions ----------
   void L1_Init(OTuple tuple);
-  OwnedPosting * posting_;
   void L1_Erase();
+
+  // ---------- data ----------
+  OwnedPosting * posting_;
 };
 
 void LoadSpec(istream & input);

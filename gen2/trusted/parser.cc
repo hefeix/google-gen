@@ -23,8 +23,6 @@
 
 Statement * MakeStatementByKeyword(Keyword type){
   Element::Function function = Element::StringToFunction(Upcase(type.Data()));
-  cerr << "finding function for " << Upcase(type.Data()) << " = " << function
-       << endl;
   switch (function) {
   case Element::PASS: return MakeStatement<StaticPass>();
   case Element::ON: return MakeStatement<StaticOn>();
@@ -51,7 +49,6 @@ Expression * MakeExpressionByKeyword(Keyword type){
 }
 
 Statement * ParseSingleStatement(const Tuple & t, uint * position) {
-  cout << "ParseSingle pos=" << *position << " t=" << OTuple::Make(t) << endl;
   Keyword stype = t[(*position)++];
   if (stype == NULL) return NULL;
   Statement * ret = MakeStatementByKeyword(stype);
@@ -83,7 +80,6 @@ Statement * ParseSingleStatement(const Tuple & t, uint * position) {
 }
 
 vector<Statement *> ParseStatements(const Tuple & t) {
-  cout << "Statement::Parse " << OTuple::Make(t) << endl;
   uint position = 0;
   Statement * parent = NULL;
   vector<Statement *> ret;
@@ -115,8 +111,6 @@ vector<Statement *> ParseStatements(const Tuple & t) {
       if (parent) {
 	  CHECK(parent->NumStatementChildren() == 1);
 	if (s) {
-	  cout << "Hooking up child " << s->ToString(0, false) << endl;
-	  cout << "To parent " << parent->ToString(0, false) << endl;
 	  s->LinkToParent(parent, parent->NumExpressionChildren());
 	}
       } else {
@@ -129,7 +123,7 @@ vector<Statement *> ParseStatements(const Tuple & t) {
 }
 
 Expression * ParseExpression(const Object & o){
-  cout << "Expression::Parse " << o << endl;
+  //cout << "Expression::Parse " << o << endl;
   if (o == NULL) return NULL;
   Tuple t;
   Expression *ret;

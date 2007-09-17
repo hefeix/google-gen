@@ -29,6 +29,9 @@ Named * GetPostingOwner(const Posting *posting);
 struct OwnedPosting : public Posting {
   OwnedPosting(OTuple tuple, OTime time, Named *owner);
   bool IsOwned() const { return true;}
+  string GetURL() const;
+  string ShortDescription() const;
+  Record GetRecordForDisplay() const;
   Named *owner_;
 };
 
