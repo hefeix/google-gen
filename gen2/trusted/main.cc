@@ -19,13 +19,30 @@
 #include "objects.h"
 #include "blackboard.h"
 #include "model.h"
+#include "spec.h"
+#include "fixers.h"
+#include <fstream>
+
+void Shell() {
+  ifstream inputspec("test_spec");
+  LoadSpec(inputspec);
+  ifstream input("test_prog");
+  input >> M;
+  cout << M;
+  string command;
+  while ((cout << "\n?") && (cin >> command)) {
+    if (command == "q") break;
+    if (command == "execute") {
+      StaticExecute();
+    }
+  }
+}
 
 int main() {
   InitKeywords();
   // ObjectsShell();
   // Blackboard::Shell();
-  Model::TestLoadAndStore();
-
+  Shell();
 
   DestroyKeywords();
 }

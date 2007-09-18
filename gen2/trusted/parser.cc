@@ -43,6 +43,8 @@ Expression * MakeExpressionByKeyword(Keyword type){
   case Element::SUBSTITUTE: return MakeExpression<StaticSubstitute>();
   case Element::CONSTANT: return MakeExpression<StaticConstant>();
   case Element::FLAKE_CHOICE: return MakeExpression<StaticFlakeChoice>();
+  case Element::EQUAL: return MakeExpression<StaticEqual>();
+  case Element::SUM: return MakeExpression<StaticSum>();
   default: CHECK(false);
   }
   return NULL;

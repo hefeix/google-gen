@@ -1,24 +1,10 @@
 {
-  on pattern()
-    parallel {
-      delay #
-   	output (COUT 42);
-      if true {
-        null
-        output (constant (my_keyword IsFlake Noam));
+  on pattern((COUT x))
+    delay #0
+      if (equal (substitute x) 10) {
+        pass;
+	let y (sum (substitute x) 1)
+	  output (substitute (COUT y) );
       }
-    }
-  
-  on pattern ((S a b))
-  delay #0101010
-  parallel {
-  output (substitute (C a 0) );
-  }
-  on pattern () parallel {}
-  on pattern ()
-  null
-  on pattern ()
-  null
-
 }
 

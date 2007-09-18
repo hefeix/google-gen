@@ -75,15 +75,6 @@ string Model::ToString(bool html) const {
   return ret;
 }
 
-void Model::TestLoadAndStore() {
-  ifstream inputspec("test_spec");
-  LoadSpec(inputspec);
-  ifstream input("test_prog");
-  input >> M;
-  cout << M;
-  sleep(10000);
-}
-
 void Model::L1_AddChoiceToFlakeChooser(Object chooser_name, 
 				       Flake f, int count_delta){
   Chooser * c;
@@ -105,6 +96,7 @@ void Model::L1_AddChoiceToFlakeChooser(Object chooser_name,
 string Model::TopNavHTML() const {
   string ret;
   ret += "<font size=-1>";
+  ret += HTMLLink("program", "Program") + " "; 
   for (uint i=0; i<Named::NUM_NAMED_TYPES; i++) {
     Named::Type t = Named::Type(i);
     ret += HTMLLink("typelist?type=" 
@@ -177,7 +169,18 @@ string Model::Handle(Record params) {
     ret += RecordToHTMLTable(BB.GetRecordForDisplay());
     return ret;
   }
-  
-  ret += ToString(true);
+  //if (command == "program") {
+    ret += ToString(true);
+    // }
   return ret;
+}
+
+Violation * Model::GetViolationOfType(Violation::Type type) const {
+  const set<Violation *> * s = violations_by_type_ % type;
+  if (!s) return NULL;
+  return *(s->begin());
+}
+Violation * Model::GetFirstViolation() const {
+  if (violations_by_time_.size() == 0) return NULL;
+  return *(violations_by_time_.begin()->second.begin());
 }

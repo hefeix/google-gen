@@ -104,7 +104,7 @@ struct OwnedViolation : public Violation {
   // ---------- L2 functions ----------
 
   // ---------- const functions ----------
-  Owner GetOwner() const { return owner_;}
+  Owner *GetOwner() const { return owner_;}
   Violation::Type GetViolationType() const {return VType;}
   OTime ComputeTime() const { return owner_->GetTime();}
   Record GetRecordForDisplay() const {
@@ -149,15 +149,15 @@ struct OwnedViolationWithData : public Violation {
   // ---------- L2 functions ----------
 
   // ---------- const functions ----------
-  Owner GetOwner() const { return owner_;}
+  Owner *GetOwner() const { return owner_;}
   Violation::Type GetViolationType() const {return VType;}
   OTime ComputeTime() const { return owner_->GetTime();}
 
   // ---------- L1 functions ----------
   void L1_Init(Owner *owner, DataType data) {
     owner_ = owner;
-    Violation::L1_Init();
     data_ = data;
+    Violation::L1_Init();
     CL.InsertIntoMap(owner_->GetViolationMap(VType), data_, (Violation*)this);
   }
   void L1_Erase() {
