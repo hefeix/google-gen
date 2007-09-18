@@ -73,6 +73,16 @@ void StaticElement::EraseTree() {
   forall(run, dc) (*run)->L1_Erase();
   L1_Erase();
 }
+void DynamicElement::EraseTree() {
+  for (uint i=0; i<children_.size(); i++) {
+    set<Element *> children = children_[i]->GetChildren();
+    forall(run, children) {
+      DynamicElement * child = dynamic_cast<DynamicElement*>(*run);
+      child->EraseTree();
+    }
+  }
+  L1_Erase();
+}
 
 void StaticElement::L1_Init() {
   Named::L1_Init();
@@ -144,6 +154,12 @@ void StaticElement::L1_LinkChild(int where, StaticElement *child){
 void StaticElement::L1_UnlinkChild(int where){
   CHECK(where < (int)static_children_.size());
   static_children_[where]->L1_RemoveChild(GetChild(where));
+}
+
+Object DynamicElement::GetChildValue(int which) const { 
+  DynamicExpression * child = GetSingleExpressionChild(which);
+  if (!child) return Object();
+  return child->GetValue();
 }
 
 bool DynamicElement::SetBinding(OMap new_binding) {
@@ -222,7 +238,7 @@ void Statement::L1_Erase() {
   Named::L1_Erase();
 }
 
-void DynamicExpression::L1_Init(Expression * static_parent, 
+void DynamicExpression::L1_Init(StaticElement * static_parent, 
 				OMap binding){
   DynamicElement::L1_Init(static_parent, binding);
   value_ = NULL;
@@ -267,7 +283,7 @@ void StaticOn::L1_Erase() {
   Statement::L1_Erase();
 }
 // this thing has no dynamic parent. 
-void DynamicOn::L1_Init(StaticOn *static_parent) {
+void DynamicOn::L1_Init(StaticElement *static_parent, OMap dummy) {
   DynamicStatement::L1_Init(static_parent, OMap::Default());
   Violation * missing_dynamic 
     = FindViolation(GetStatic(), Violation::MISSING_DYNAMIC_ON);
@@ -279,6 +295,14 @@ void DynamicOn::L1_Erase(){
   CHECK(!FindViolation(GetStatic(), Violation::MISSING_DYNAMIC_ON));
   New<MissingDynamicOnViolation>(GetStaticOn());
   DynamicStatement::L1_Erase();
+}
+Record DynamicOn::GetRecordForDisplay() const {
+  Record ret = DynamicStatement::GetRecordForDisplay();
+  forall(run, GetOnMultilink()->missing_)
+    ret["violations"] += run->second->ShortDescription() + "<br>\n";
+  forall(run, GetOnMultilink()->extra_)
+    ret["violations"] += run->second->ShortDescription() + "<br>\n";
+  return ret;
 }
 
 OTime DynamicOn::ComputeChildTime(const Link * link, 
@@ -411,14 +435,6 @@ string Expression::ToString(bool html) const {
   return ret;
 }
 
-Expression * Expression::MakeExpression(Keyword type) {
-  if (type.Data() == "substitute") return New<StaticSubstitute>();
-  if (type.Data() == "constant") return New<StaticConstant>();
-  if (type.Data() == "flake_choice") return New<StaticFlakeChoice>();
-  CHECK(false);
-  return NULL;
-}
-
 void StaticConstant::N1_ObjectChanged(int which) {
   CHECK(which == OBJECT);
   forall(run, dynamic_children_->children_) {
@@ -460,6 +476,23 @@ Object DynamicSubstitute::ComputeValue() const {
   return DeepSubstitute
     (GetBinding().Data(),  
      GetSingleExpressionChild(StaticSubstitute::CHILD)->GetValue());
+}
+Object DynamicEqual::ComputeValue() const { 
+  return Boolean::Make( (GetChildValue(StaticEqual::LHS)
+			 == GetChildValue(StaticEqual::RHS) ) );
+}
+Object DynamicSum::ComputeValue() const {
+  Object lhs = GetChildValue(StaticEqual::LHS);
+  Object rhs = GetChildValue(StaticEqual::RHS);
+  if (lhs.GetType() == Object::INTEGER
+      && rhs.GetType() == Object::INTEGER) {
+    return Integer::Make(Integer(lhs).Data() + Integer(rhs).Data());
+  }
+  if (lhs.GetType() == Object::REAL
+      && rhs.GetType() == Object::REAL) {
+    return Real::Make(Real(lhs).Data() + Real(rhs).Data());
+  }
+  return Object();
 }
 Object DynamicFlakeChoice::ComputeValue() const { 
   return choice_;
@@ -569,12 +602,54 @@ void DynamicElement::N1_ChildDisconnected(Link *child_link,
     N1_ChildExpressionChanged(child_link->WhichChild());  
 }
 
+DynamicElement * MakeDynamicElement(StaticElement *static_parent, 
+				    OMap binding) {
+  switch(static_parent->GetFunction()) {
+  case Element::PASS: 
+    return MakeDynamicElement<DynamicPass>(static_parent, binding);
+  case Element::ON: 
+    return MakeDynamicElement<DynamicOn>(static_parent, binding);
+  case Element::REPEAT: 
+    return MakeDynamicElement<DynamicRepeat>(static_parent, binding);
+  case Element::DELAY:
+    return MakeDynamicElement<DynamicDelay>(static_parent, binding);
+  case Element::LET:
+    return MakeDynamicElement<DynamicLet>(static_parent, binding);
+  case Element::OUTPUT: 
+    return MakeDynamicElement<DynamicOutput>(static_parent, binding);
+  case Element::IF: 
+    return MakeDynamicElement<DynamicIf>(static_parent, binding);
+  case Element::PARALLEL: 
+    return MakeDynamicElement<DynamicParallel>(static_parent, binding);
+  case Element::SUBSTITUTE: 
+    return MakeDynamicElement<DynamicSubstitute>(static_parent, binding);
+  case Element::FLAKE_CHOICE: 
+    return MakeDynamicElement<DynamicFlakeChoice>(static_parent, binding);
+  case Element::CONSTANT: 
+    return MakeDynamicElement<DynamicConstant>(static_parent, binding);
+  case Element::EQUAL: 
+    return MakeDynamicElement<DynamicEqual>(static_parent, binding);
+  case Element::SUM: 
+    return MakeDynamicElement<DynamicSum>(static_parent, binding);
+
+  default:
+    CHECK(false);
+  }
+  return NULL;
+}
+
+
 
 Record Element::GetRecordForDisplay() const {
   Record ret = Named::GetRecordForDisplay();
   Element * parent = GetParent();
-  if (parent) ret["parent"] = parent->ToString(true);
-  return ret;
+  if (parent) ret["parent"] = parent->ShortDescription();
+  if (Violation::owned_violations_ % (void *)this) {
+    forall(run, Violation::owned_violations_[(void *)this]) 
+      ret["violations"] += (*run)->ShortDescription() + "<br>\n";
+  }
+  ret["function"] = FunctionToString(GetFunction());
+  return ret;  
 }
 
 Record StaticElement::GetRecordForDisplay() const {
@@ -589,5 +664,10 @@ Record StaticElement::GetRecordForDisplay() const {
     };
     ret["dynamic"] += HTMLEscape((*run)->GetBinding().ToString()) + "<br>";
   }
+  return ret;
+}
+Record DynamicElement::GetRecordForDisplay() const { 
+  Record ret = Element::GetRecordForDisplay();
+  ret["static_parent"] = GetStatic()->ShortDescription();
   return ret;
 }

@@ -39,6 +39,8 @@ struct Element : public Named {
 	ITEM(SUBSTITUTE),				\
 	ITEM(FLAKE_CHOICE),				\
 	ITEM(CONSTANT),					\
+	ITEM(EQUAL),					\
+	ITEM(SUM),					\
 	};
   CLASS_ENUM_DECLARE(Element, Function);
 
@@ -54,7 +56,7 @@ struct Element : public Named {
   OTime GetTime() const { return time_;}
   // computes the proper time of a child element. 
   virtual OTime ComputeChildTime(const Link * link, const Element *child) const{
-    return time_;    
+    return time_;
   }
   Record GetRecordForDisplay() const;
   virtual Element * GetParent() const = 0;
@@ -166,6 +168,7 @@ struct StaticElement : public Element {
 };
 
 struct DynamicElement : public Element{
+  void EraseTree();  
 
   // ---------- L2 functions ----------  
   bool SetBinding(OMap new_binding); // returns false on failure
@@ -181,6 +184,7 @@ struct DynamicElement : public Element{
     if (!parent_) return NULL;
     return dynamic_cast<DynamicElement *>(parent_->GetParent());
   }
+  Record GetRecordForDisplay() const;
   StaticElement * GetStatic() const {
     return dynamic_cast<StaticElement *>(static_parent_->parent_); 
   }
@@ -193,6 +197,7 @@ struct DynamicElement : public Element{
   Object GetObject(int which) const { return GetStatic()->GetObject(which);}
   DynamicElement * GetSingleChild(int which) const;
   DynamicExpression * GetSingleExpressionChild(int which) const;
+  Object GetChildValue(int which) const;
   DynamicStatement * GetSingleStatementChild(int which) const;
   OMap GetBinding() const { return binding_;}
   DynamicElement * FindParent() const; // finds parent based on bindings.
@@ -272,7 +277,7 @@ struct Statement : public StaticElement{
 struct Expression : public StaticElement {  
   // ---------- L2 functions ----------  
   // TODO: actually make this thing L2
-  static Expression * MakeExpression(Keyword type);
+  //static Expression * MakeExpression(Keyword type);
   // ---------- const functions ----------  
   string ToString(bool html) const;
   Named::Type GetNamedType() const { return Named::EXPRESSION;}
@@ -308,7 +313,7 @@ struct DynamicExpression : public DynamicElement {
   Object GetValue() const { return value_;}
   Named::Type GetNamedType() const { return Named::DYNAMIC_EXPRESSION;}
   // ---------- L1 functions ----------  
-  void L1_Init(Expression * static_parent, OMap binding);
+  void L1_Init(StaticElement * static_parent, OMap binding);
   void L1_Erase();
   void N1_ChildExpressionChanged(int which_child) { 
     L1_CheckSetValueViolation();}
@@ -374,10 +379,14 @@ struct DynamicOn : public DynamicStatement {
   StaticOn *GetStaticOn() const { 
     return dynamic_cast<StaticOn*>(GetStatic());
   }
+  OnMultiLink * GetOnMultilink() const { 
+    return dynamic_cast<OnMultiLink *>(children_[StaticOn::CHILD]);
+  }
   OPattern GetPattern() const { return GetStaticOn()->GetPattern();}
   OTime ComputeChildTime(const Link * link, const Element *child) const;
+  Record GetRecordForDisplay() const;
   // ---------- L1 functions ----------  
-  void L1_Init(StaticOn* parent);
+  void L1_Init(StaticElement* parent, OMap dummy);
   void L1_Erase();
   // --------- N1 notifiers ----------
   void N1_ChildExpressionChanged(int which_child) { CHECK(false); }
@@ -503,7 +512,7 @@ struct DynamicLet : public DynamicStatement {
   bool HasLetViolation() const; // a let violation should exist.
   // ---------- L1 functions ----------  
   void L1_CheckSetLetViolation(); // (programming with Dr. Seuss)
-  void L1_Init(StaticLet * static_parent, OMap binding) {
+  void L1_Init(StaticElement * static_parent, OMap binding) {
     DynamicStatement::L1_Init(static_parent, binding);
     L1_CheckSetLetViolation();
   }
@@ -543,7 +552,7 @@ struct DynamicOutput : public DynamicStatement {
   }  
   OwnedPosting * GetOwnedPosting() const { return posting_;}
   // ---------- L1 functions ----------  
-  void L1_Init(StaticLet * static_parent, OMap binding) {
+  void L1_Init(StaticElement * static_parent, OMap binding) {
     DynamicStatement::L1_Init(static_parent, binding);
     L1_CheckSetPostingViolation();
   }
@@ -585,7 +594,7 @@ struct DynamicIf : public DynamicStatement {
   bool IsPerfect() const;
   // ---------- L1 functions ----------  
   void L1_CheckSetIfViolation();
-  void L1_Init(StaticIf * static_parent, OMap binding) {
+  void L1_Init(StaticElement * static_parent, OMap binding) {
     DynamicStatement::L1_Init(static_parent, binding);
     dynamic_cast<SingleLink *>(children_[StaticIf::ON_TRUE])
       ->L1_SetOptional(true);
@@ -631,23 +640,38 @@ struct StaticSubstitute : public Expression {
     CHILD,
     NUM_CHILDREN,
   };
-  // ---------- L2 functions ----------  
-  // ---------- const functions ----------  
   int NumChildren() const { return NUM_CHILDREN;}
   virtual Function GetFunction() const { return SUBSTITUTE;}
-
-  // ---------- L1 functions ----------  
-  void L1_Init() {Expression::L1_Init();}
-  // ---------- data ----------  
-
 };
 struct DynamicSubstitute : public DynamicExpression {
-  // ---------- L2 functions ----------  
-  // ---------- const functions ----------  
   Object ComputeValue() const;
-  // ---------- L1 functions ----------  
-  // ---------- data ----------  
 };
+
+struct StaticEqual : public Expression {
+  enum {
+    LHS,
+    RHS,
+    NUM_CHILDREN,
+  };
+  int NumChildren() const { return NUM_CHILDREN;}
+  virtual Function GetFunction() const { return EQUAL;}
+};
+struct DynamicEqual : public DynamicExpression {
+  Object ComputeValue() const;
+};
+struct StaticSum : public Expression {
+  enum {
+    LHS,
+    RHS,
+    NUM_CHILDREN,
+  };
+  int NumChildren() const { return NUM_CHILDREN;}
+  virtual Function GetFunction() const { return SUM;}
+};
+struct DynamicSum : public DynamicExpression {
+  Object ComputeValue() const;
+};
+
 
 struct StaticFlakeChoice : public Expression { 
   enum {
@@ -660,7 +684,7 @@ struct StaticFlakeChoice : public Expression {
   virtual Function GetFunction() const { return FLAKE_CHOICE;}
 
   // ---------- L1 functions ----------  
-  void L1_Init() {Expression::L1_Init();}
+  // void L1_Init() {Expression::L1_Init();}
   // ---------- data ----------  
 };
 struct DynamicFlakeChoice : public DynamicExpression {
@@ -701,7 +725,7 @@ struct StaticConstant : public Expression {
   virtual Function GetFunction() const { return CONSTANT;}
 
   // ---------- L1 functions ----------  
-  void L1_Init() {Expression::L1_Init();}
+  //void L1_Init() {Expression::L1_Init();}
 
   // ---------- N1 notifiers ----------  
   void N1_ObjectChanged(int which);
@@ -725,16 +749,14 @@ template <class T> T * MakeExpression() {
   CHECK(static_cast<Expression *>((T *)NULL) == NULL);
   return New<T>();
 }
-template <class T> T * MakeDynamicStatement(OMap binding, 
-					    Statement *static_parent) {
-  CHECK(static_cast<DynamicStatement *>((T *)NULL) == NULL);
-  return New<T>(binding, static_parent);
+template <class T> T * MakeDynamicElement(StaticElement *static_parent, 
+					  OMap binding) {
+  CHECK(static_cast<DynamicElement *>((T *)NULL) == NULL);
+  return New<T>(static_parent, binding);
 }
-template <class T> T * MakeDynamicExpression(OMap binding, 
-					     Statement *static_parent) {
-  CHECK(static_cast<DynamicExpression *>((T *)NULL) == NULL);
-  return New<T>(binding, static_parent);
-}
+
+DynamicElement * MakeDynamicElement(StaticElement *static_parent, 
+				    OMap binding);
 
 
 

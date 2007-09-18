@@ -38,8 +38,6 @@ class Model : public RequestHandler{
   // if html is set, produces html
   string ToString(bool html) const;
 
-  static void TestLoadAndStore();
-
   // handle a web request
   string Handle(Record params);
 
@@ -48,7 +46,8 @@ class Model : public RequestHandler{
   // various html output routines
   string TopNavHTML() const;
   string TypeListHTML(Named::Type type) const;
-
+  Violation * GetViolationOfType(Violation::Type type) const;
+  Violation * GetFirstViolation() const;
 
   // ---------- L1 functions ----------
 
