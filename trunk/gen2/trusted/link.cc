@@ -19,11 +19,12 @@
 #include "link.h"
 #include "element.h"
 #include "changelist.h"
+#include "webserver.h"
 
 
 void Link::L1_Init(Element *parent) {
   // Creating called at the beginning of the base class
-  CL.Creating(this);
+  Named::L1_Init();
   parent_ = parent;
 }
 
@@ -32,7 +33,7 @@ void Link::L1_Init(Element *parent) {
 void Link::L1_Erase() {
   CHECK(GetChildren().size() == 0);
   L1_EraseOwnedViolations(this);
-  CL.Destroying(this);
+  Named::L1_Erase();
 }
 
 // needed by various violations.
@@ -59,8 +60,30 @@ int Link::WhichChild() const {
   }
   return -1;
 }
-string Link::ShortDescription() const {
-  return "Link from " + GetParent()->ShortDescription();
+string Link::TextIdentifier() const {
+  return "from " + GetParent()->ShortDescription();
+}
+Record Link::GetRecordForDisplay() const { 
+  Record ret = Named::GetRecordForDisplay();
+  ret["parent"] = GetParent()->ShortDescription();
+  ret["children"] = ChildListings();
+  return ret;
+}
+string Link::ChildListings(int max_children) const{
+  string ret;
+  set<Element *> children = GetChildren();
+  int count = 0;
+  forall(run, children) {
+    if (count++ == max_children) {
+      ret += "... " + 
+	HTMLLink(GetURL(), "(" + itoa(children.size()) + " total)")
+	+ "<br>\n";
+      
+      break;
+    }
+    ret += (*run)->ShortDescription() + "<br>\n";
+  }
+  return ret;
 }
 
 void MultiLink::L1_AddChild(Element *child){

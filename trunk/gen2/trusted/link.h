@@ -27,13 +27,29 @@ class DynamicElement;
 class StaticElement;
 
 // we use the convention that parents own all links.
-struct Link {
+struct Link : public Named {
   enum Type{
     SINGLE,
     MULTI,
     ON,
   };
 
+  // ---------- L2 functions ----------
+
+  // ---------- const functions ----------
+  Named::Type GetNamedType() const { return Named::LINK; }
+  Element * GetParent() const { return parent_;}
+  // needed by various violations
+  OTime GetTime() const;
+  virtual set<Element *> GetChildren() const = 0;
+  // assumes this is the parent_ link of the child.
+  OTime ComputeChildTime(const Element *child) const;
+  int WhichChild() const;
+  string TextIdentifier() const;
+  string ChildListings(int max_children = -1) const;
+  Record GetRecordForDisplay() const;
+
+  // ---------- L1 functions ----------  
   // Init & Erase
   virtual void L1_Init(Element * parent);
   virtual void L1_Erase();
@@ -41,21 +57,10 @@ struct Link {
   // Modifiers
   virtual void L1_AddChild(Element *child) = 0;
   virtual void L1_RemoveChild(Element *child) = 0;
-
-  // Accessors
-  Element * GetParent() const { return parent_;}
-  // needed by various violations
-  OTime GetTime() const;
-  virtual set<Element *> GetChildren() const = 0;
-  // assumes this is the parent_ link of the child. 
-  OTime ComputeChildTime(const Element *child) const;
-  int WhichChild() const;
-  string ShortDescription() const;
-
   // Just to make the compiler happy
   virtual ~Link() {}
 
-  // Data
+  // ---------- data ----------  
   Element * parent_;
 };
 struct MultiLink : public Link {

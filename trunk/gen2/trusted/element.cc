@@ -221,9 +221,9 @@ OTime DynamicElement::ComputeTime() const {
   if (!parent_) return CREATION;
   return parent_->ComputeChildTime(this);
 }
-string DynamicElement::ToString(bool html) const{
-  return GetStatic()->ToString(html) + GetNewLine(html)
-    + MaybeHTMLEscape(GetBinding().ToString(), html);
+string DynamicElement::ToString() const{
+  return HTMLEscape(GetBinding().ToString()) 
+    + GetStatic()->ToString();
 }
 
 
@@ -399,40 +399,32 @@ void Expression::L1_Init() {
   StaticElement::L1_Init();
 }
 
-string Statement::ToString(int indent, bool html) const {
+string Statement::ToStringRecursive(int indent) const {
   string indentstring;
-  for (int i=0; i<indent; i++) indentstring += GetSpace(html);
+  for (int i=0; i<indent; i++) indentstring += GetSpace(true);
   string ret = indentstring;
-  if (this == NULL) return ret + "null" + GetNewLine(html);
-  ret += ToStringSingle(html);
+  if (this == NULL) return ret + "null" + GetNewLine(true);
+  ret += ToString();
   vector<Statement *> children = GetStatementChildren();
   if (children.size() > 1 || GetFunction() == PARALLEL) {
-    ret += " {" + GetNewLine(html);
+    ret += " {" + GetNewLine(true);
     for (uint i=0; i<children.size(); i++) 
-      ret += children[i]->ToString(indent+2, html);
-    ret += indentstring + "}" + GetNewLine(html);
+      ret += children[i]->ToStringRecursive(indent+2);
+    ret += indentstring + "}" + GetNewLine(true);
     return ret;
   }
   if (children.size() == 0) {
-    return ret + " ;" + GetNewLine(html);
+    return ret + " ;" + GetNewLine(true);
   }
   CHECK(children.size() == 1);
-  return ret + GetNewLine(html) + children[0]->ToString(indent+2, html);
+  return ret + GetNewLine(true) + children[0]->ToStringRecursive(indent+2);
 }
-string Statement::ToStringSingle(bool html) const {
-  string ret;
-  string tkw = FunctionKeyword().ToString();
-  ret += html?GetLink(tkw):tkw;
-  ret += ParameterListToString(html);
-  return ret;
+string Statement::ToString() const {
+  return GetLink(FunctionKeyword().ToString()) + ParameterListToString();
 }
-string Expression::ToString(bool html) const {
-  string ret = "(";
-  string tkw = FunctionKeyword().ToString();
-  ret += html?GetLink(tkw):tkw;
-  ret += ParameterListToString(html);
-  ret += ")";
-  return ret;
+string Expression::ToString() const {
+  return "(" + GetLink(FunctionKeyword().ToString())
+    + ParameterListToString() + ")";
 }
 
 void StaticConstant::N1_ObjectChanged(int which) {
@@ -442,32 +434,30 @@ void StaticConstant::N1_ObjectChanged(int which) {
   }
 }
 
-string StaticConstant::ToString(bool html) const {
+string StaticConstant::ToString() const {
   Object o = GetObject(OBJECT);
   if (o==NULL) return "null";
-  string ret = o.ToString();
-  if (html) ret = HTMLEscape(ret);
+  string ret = HTMLEscape(o.ToString());
   if (o.GetType() == Object::OTUPLE) {
     Tuple t = OTuple(o).Data();
     if (t.size() > 0 && t[0].GetType() == Object::KEYWORD) {
       ret =  "(constant " + ret + ")";
     }
   }
-  if (html) return GetLink(ret);
-  return ret;
+  return GetLink(ret);
 }
 Object DynamicConstant::ComputeValue() const {
   return GetObject(StaticConstant::OBJECT);
 }
-string StaticElement::ParameterListToString(bool html) const {
+string StaticElement::ParameterListToString() const {
   string ret;
   for (int i=0; i<NumObjects(); i++) {
     ret += " " + GetObject(i).ToString();
   }
-  if (html) ret = HTMLEscape(ret);
+  ret = HTMLEscape(ret);
   for (int i=0; i<NumExpressionChildren(); i++) {
     Expression * expr = GetExpressionChild(i);
-    if (expr) ret += " " + expr->ToString(html);
+    if (expr) ret += " " + expr->ToString();
     else ret += " null";
   }
   return ret;
@@ -649,25 +639,37 @@ Record Element::GetRecordForDisplay() const {
       ret["violations"] += (*run)->ShortDescription() + "<br>\n";
   }
   ret["function"] = FunctionToString(GetFunction());
+  ret["description"] = ShortDescription();
+  ret["time"] = time_.ToString();
   return ret;  
 }
 
 Record StaticElement::GetRecordForDisplay() const {
   Record ret = Element::GetRecordForDisplay();
-  ret["program"] = "<tt>" + ToString(true) + "</tt>";
+  ret["program"] = "<tt>" + ToStringRecursive() + "</tt>";
   set<Element *> dynamic_children = dynamic_children_->GetChildren();
   int count =0;
   forall(run, dynamic_children) {
     if (count==10) {
-      ret["dynamic"] += "... " + itoa(dynamic_children.size()) + " total";
+      ret["dynamic"] += "... " + itoa(dynamic_children.size()) + " total";      
       break;
     };
     ret["dynamic"] += HTMLEscape((*run)->GetBinding().ToString()) + "<br>";
   }
+  for (uint i=0; i<static_children_.size(); i++) {
+    if (i>0) ret["children"] += "<br>\n";
+    ret["children"] += static_children_[i]->ChildListings();
+  }
+  ret["dynamic_children"] = dynamic_children_->ChildListings(5);
   return ret;
 }
 Record DynamicElement::GetRecordForDisplay() const { 
   Record ret = Element::GetRecordForDisplay();
   ret["static_parent"] = GetStatic()->ShortDescription();
+  ret["binding"] = GetBinding().ToString();
+  for (uint i=0; i<children_.size(); i++) {
+    if (i>0) ret["children"] += "<br>\n";
+    ret["children"] += children_[i]->ChildListings(5);
+  }
   return ret;
 }
