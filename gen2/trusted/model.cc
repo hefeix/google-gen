@@ -67,7 +67,7 @@ string Model::ToString(bool html) const {
   forall(run, N.Index(Named::STATEMENT)) {
     Statement *s = dynamic_cast<Statement *>(run->second);
     if (s->parent_ == NULL) {
-      ret += s->ToString(2, html);
+      ret += s->ToStringRecursive(2);
     }
   }
   ret += "}" + GetNewLine(html);
@@ -97,11 +97,11 @@ string Model::TopNavHTML() const {
   string ret;
   ret += "<font size=-1>";
   ret += HTMLLink("program", "Program") + " "; 
-  for (uint i=0; i<Named::NUM_NAMED_TYPES; i++) {
+  for (int i=0; i<Named::NumTypes(); i++) {
     Named::Type t = Named::Type(i);
     ret += HTMLLink("typelist?type=" 
 		    + URLEscape(Named::TypeToString(t)),
-		    Named::TypeToString(t)) 
+		    Named::TypeToString(t))
       + "(" + itoa(N.Index(t).size()) + ") ";
   }
   ret += HTMLLink(BB.GetURL(), "Blackboard");
@@ -111,7 +111,7 @@ string Model::TopNavHTML() const {
 
 string Model::TypeListHTML(Named::Type type) const {
   string ret;
-  if (type < 0 || type >= Named::NUM_NAMED_TYPES) {
+  if (type < 0 || type >= Named::NumTypes()) {
     return "unkown type " + itoa(type);
   }
   vector<Record> v;
@@ -144,6 +144,7 @@ string Model::Handle(Record params) {
 	RecordToHTMLTable(named->GetOwnedPosting()->GetRecordForDisplay());
       return ret;
     }
+    ret += "<font size=+1>" + named->ShortDescription() + "</font><p>";
     ret += RecordToHTMLTable(named->GetRecordForDisplay());
     return ret;
   }

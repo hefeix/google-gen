@@ -26,7 +26,7 @@
 CLASS_ENUM_DEFINE(Named, Type);
 
 Namer::Namer() {
-  index_.resize(Named::NUM_NAMED_TYPES);
+  index_.resize(Named::NumTypes());
 }
 Named * Namer::Lookup(Named::Type type, Object name) const {
   Named *const * look = Index(type) % name;

@@ -61,7 +61,10 @@ struct Element : public Named {
   Record GetRecordForDisplay() const;
   virtual Element * GetParent() const = 0;
   // a human and machine readable version of the static subtree
-  virtual string ToString(bool html) const = 0;  
+  virtual string ToString() const = 0;
+  virtual string ToStringRecursive(int indent = 0) const {
+    return ToString();
+  }
   virtual Function GetFunction() const = 0;
   virtual Keyword FunctionKeyword() const { 
     return Keyword::Make(Downcase(FunctionToString(GetFunction())));
@@ -130,7 +133,7 @@ struct StaticElement : public Element {
   int NumDynamicChildren() const { return dynamic_children_->children_.size();}
   virtual int NumObjects() const { return 0;}
   // the objects and expression children
-  string ParameterListToString(bool html) const; 
+  string ParameterListToString() const; 
   // What new variables are introduced by this node
   virtual set<Variable> GetIntroducedVariables() const;
   // What variables exist at this node. 
@@ -188,6 +191,8 @@ struct DynamicElement : public Element{
   StaticElement * GetStatic() const {
     return dynamic_cast<StaticElement *>(static_parent_->parent_); 
   }
+  string TextIdentifier() const { return binding_.ToString() + " " 
+      + GetStatic()->ToString();}
   int NumExpressionChildren() const { 
     return GetStatic()->NumExpressionChildren();}
   int NumChildren() const { return GetStatic()->NumChildren();}
@@ -203,7 +208,7 @@ struct DynamicElement : public Element{
   DynamicElement * FindParent() const; // finds parent based on bindings.
   virtual Link::Type LinkType(int which_child) const { return Link::SINGLE;}
   OTime ComputeTime() const;
-  string ToString(bool html) const;
+  string ToString() const;
   virtual Function GetFunction() const { return GetStatic()->GetFunction();}
   virtual OMap ComputeNewBinding() { return OMap::Default(); }
   // static parent and binding need to exist. binding needs to be correct
@@ -260,10 +265,9 @@ struct Statement : public StaticElement{
   
   // ---------- const functions ----------  
   Named::Type GetNamedType() const { return Named::STATEMENT; }
-  string ToString(bool html) const { return ToString(0, html);}
-  string ToString(int indent, bool html) const; // includes the subtree
-  string ToStringSingle(bool html) const;
-  string TextIdentifier() const { return ToStringSingle(true);}
+  string ToStringRecursive(int indent) const; // includes the subtree
+  string ToString() const;
+  string TextIdentifier() const { return ToString();}
 
   // ---------- L1 functions ----------  
   virtual ~Statement(){}
@@ -279,12 +283,12 @@ struct Expression : public StaticElement {
   // TODO: actually make this thing L2
   //static Expression * MakeExpression(Keyword type);
   // ---------- const functions ----------  
-  string ToString(bool html) const;
+  string ToString() const;
   Named::Type GetNamedType() const { return Named::EXPRESSION;}
   virtual int NumExpressionChildren() const { return NumChildren();}
   virtual int NumChildren() const = 0;
   virtual int NumObjects() const { return 0;}
-  string TextIdentifier() const { return ToString(true);}
+  string TextIdentifier() const { return ToString();}
   // ---------- L1 functions ----------  
   void L1_Init();
   // ---------- data ----------  
@@ -721,7 +725,7 @@ struct StaticConstant : public Expression {
   // ---------- const functions ----------  
   int NumChildren() const { return NUM_CHILDREN;}
   int NumObjects() const { return NUM_OBJECTS;}
-  string ToString(bool html) const;
+  string ToString() const;
   virtual Function GetFunction() const { return CONSTANT;}
 
   // ---------- L1 functions ----------  
