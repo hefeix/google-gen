@@ -37,7 +37,7 @@ struct Violation : public Named {
       ITEM(MISSING_ON_MATCH),			\
       ITEM(EXTRA_ON_MATCH),			\
       ITEM(VALUE),				\
-      ITEM(POSTING),				\
+      ITEM(POST),				\
       ITEM(IF),				\
       ITEM(TIME),				\
       ITEM(STATIC_NO_PARENT),				\
@@ -71,7 +71,7 @@ struct Violation : public Named {
   void L1_RemoveFromGlobalMap();
 
   // ---------- N1 notifiers ----------  
-  void N1_TimeMayHaveChanged();
+  void N1_ComputedTimeChanged();
 
   // ---------- data ----------  
   static map<void *, set<Violation *> > owned_violations_;
@@ -183,7 +183,7 @@ class OnMultiLink;
 class Element;
 class StaticOn;
 class DynamicExpression;
-class OutputStatement;
+class DynamicLet;
 
 // The static program has changed somewhere involving this node (inlcuding its
 // parent link and outlinks) or one of its ancestors.  The dynamic network may
@@ -209,7 +209,7 @@ typedef OwnedViolation<DynamicElement, Violation::BINDING_VARIABLES>
 typedef OwnedViolation<DynamicElement, Violation::BINDING_OLD_VALUES>
   BindingOldValuesViolation;
 // A let statement's value doesn't match it's child's binding.
-typedef OwnedViolation<DynamicElement, Violation::LET>
+typedef OwnedViolation<DynamicLet, Violation::LET>
   LetViolation;
 // A required tuple is not present on the blackboard
 typedef OwnedViolation<Requirement, Violation::REQUIREMENT>
@@ -240,9 +240,9 @@ typedef OwnedViolation<DynamicExpression, Violation::VALUE>
 // computed time. The expression link could also be missing. 
 // typedef OwnedViolation<OutputStatement::Dynamic, Violation::POSTING>
 //  PostingViolation;
-class DynamicOutput;
-typedef OwnedViolation<DynamicOutput, Violation::POSTING>
-  PostingViolation;
+class DynamicPost;
+typedef OwnedViolation<DynamicPost, Violation::POST>
+  PostViolation;
 class DynamicIf;
 typedef OwnedViolation<DynamicIf, Violation::IF>
   IfViolation;

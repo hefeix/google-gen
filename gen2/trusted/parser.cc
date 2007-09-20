@@ -29,7 +29,7 @@ Statement * MakeStatementByKeyword(Keyword type){
   case Element::REPEAT: return MakeStatement<StaticRepeat>();
   case Element::DELAY: return MakeStatement<StaticDelay>();
   case Element::LET: return MakeStatement<StaticLet>();
-  case Element::OUTPUT: return MakeStatement<StaticOutput>();
+  case Element::POST: return MakeStatement<StaticPost>();
   case Element::IF: return MakeStatement<StaticIf>();
   case Element::PARALLEL: return MakeStatement<StaticParallel>();
   default: CHECK(false);
@@ -101,6 +101,7 @@ vector<Statement *> ParseStatements(const Tuple & t) {
 	  parent->static_children_.push_back(New<SingleLink>(parent));
 	}
       }
+      //cerr << "o=" << o.ToString() << endl;
       CHECK(parent->NumStatementChildren() == (int)subs.size());      
       for (uint i=0; i<subs.size(); i++) {
 	if (subs[i])
@@ -109,18 +110,27 @@ vector<Statement *> ParseStatements(const Tuple & t) {
       parent = NULL;
       position++;
     } else {
+      //int old_position = position;
       Statement * s = ParseSingleStatement(t, &position);
+      //cerr << "Parsed single statement " 
+      //	   << Element::FunctionToString(s->GetFunction())
+      //   << " from positions " << old_position << " to " << position 
+      //   << endl;
+      CHECK(s);
       if (parent) {
 	  CHECK(parent->NumStatementChildren() == 1);
-	if (s) {
 	  s->LinkToParent(parent, parent->NumExpressionChildren());
-	}
+	  cerr << "linking it onto the parent " << endl;
       } else {
 	ret.push_back(s);
+	//cerr << "adding it to ret, size=" << ret.size() << endl;
       }
       parent = s;
     }
   }
+  //cerr << "Parsed " << ret.size() << " statements from " 
+  //     << OTuple::Make(t).ToString()
+  //     << endl;
   return ret;
 }
 

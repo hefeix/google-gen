@@ -4,7 +4,7 @@
       if (equal (substitute x) 10) {
         pass;
 	let y (sum (substitute x) 1)
-	  output (substitute (COUT y) );
+	  post (substitute (COUT y) );
       }
 }
 

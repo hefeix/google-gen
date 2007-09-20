@@ -198,11 +198,11 @@ void OnMultiLink::Update(const QueryUpdate &update, SubType *sub) {
       if (children_ % m) {
 	// Note - We could use max(parent_->time_, s.new_time_)
 	// instead of computing it again. That would be an optimization
-	children_[m]->N1_TimeMayHaveChanged();
+	children_[m]->N1_StoredOrComputedTimeChanged();
       } else {
 	CHECK(missing_ % m);	
 	// if we want to optimize ... use the time from the update.
-	missing_[m]->N1_TimeMayHaveChanged();
+	missing_[m]->N1_ComputedTimeChanged();
       }
     }
   }

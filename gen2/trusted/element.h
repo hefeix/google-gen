@@ -33,7 +33,7 @@ struct Element : public Named {
 	ITEM(REPEAT),					\
 	ITEM(DELAY),					\
 	ITEM(LET),					\
-	ITEM(OUTPUT),					\
+	ITEM(POST),					\
 	ITEM(IF),					\
 	ITEM(PARALLEL),					\
 	ITEM(SUBSTITUTE),				\
@@ -46,6 +46,8 @@ struct Element : public Named {
 
   // ---------- L2 functions ----------  
   void SetTime(OTime new_time);
+  void ComputeSetTime() { SetTime(ComputeTime()); }
+  
 
   // ---------- const functions ----------  
 
@@ -75,12 +77,12 @@ struct Element : public Named {
     if (parent_) return parent_->WhichChildAmI(); 
     return -1; 
   }
+  virtual set<Element *> GetAllChildren() const = 0;
   
   // ---------- L1 functions ----------  
   Element() :parent_(NULL){};
   virtual void L1_Init() { 
     Named::L1_Init(); 
-    N1_TimeMayHaveChanged();
   }
   void L1_Erase();
 
@@ -89,9 +91,10 @@ struct Element : public Named {
   virtual void L1_ConnectToParentLink (Link * link) = 0;
   virtual void L1_DisconnectFromParentLink(Link * link) = 0;
 
-  // call this if the computed time may have changed. 
+  // ---------- N1 notifiers ----------  
+  // call this if the stored time or computed time may have changed. 
   // creates a time violation (or destroys one) as necessary. 
-  virtual void N1_TimeMayHaveChanged(); 
+  virtual void N1_StoredOrComputedTimeChanged();
 
   // ---------- data ----------  
 
@@ -149,6 +152,16 @@ struct StaticElement : public Element {
   // not including this node. 
   virtual set<Variable> GetVariables() const;
   Record GetRecordForDisplay() const;
+  set<Element *> GetAllChildren() const;
+  set<StaticElement *> GetAllStaticChildren() const;
+  
+  // these convert between the child and object name enums and strings. 
+  // they are defined by macros.
+  virtual int StringToChild(string s) const = 0;
+  virtual string ChildToString(int c) const = 0;
+  virtual int StringToObject(string s) const = 0;
+  virtual string ObjectToString(int o) const = 0;
+
 
   // ---------- L1 functions ----------  
   void L1_Init();
@@ -185,6 +198,9 @@ struct DynamicElement : public Element{
   bool SetBinding(OMap new_binding); // returns false on failure
   // it can figure out the parent from the static node and the bindings.
   // returns false on failure.
+  bool ComputeSetBinding() {
+    return SetBinding(ComputeBinding());
+  }
   bool LinkToParent(); 
   void UnlinkFromParent();
 
@@ -219,22 +235,31 @@ struct DynamicElement : public Element{
   string ToString() const;
   virtual Function GetFunction() const { return GetStatic()->GetFunction();}
   // this only works for single links.
-  virtual OMap GetIntroducedBinding(int which_child) { return OMap::Default(); }
+  virtual OMap GetIntroducedBinding(int which_child) const { 
+    return OMap::Default();}
   // this only works for single links now. 
-  virtual OMap ComputeChildBinding(int which_child) {
+  virtual OMap ComputeChildBinding(int which_child) const {
     return OMap::Make(Union(GetBinding().Data(), 
 			    GetIntroducedBinding(which_child).Data()));
   }
+  // only works for dynamic on statements and children of single links.
+  OMap ComputeBinding() {
+    if (!GetParent()) return OMap::Default();
+    return GetParent()->ComputeChildBinding(WhichChildAmI());
+  }
   // static parent and binding need to exist. binding needs to be correct
   // when restricted to the variables of the parent of the static parent. 
-  Link * FindDynamicParentLink();
+  Link * FindDynamicParentLink() const;
+  set<Element *> GetAllChildren() const;
 
   // ---------- L1 functions ----------  
   // we probably only need two of these parameters, since we can figure out 
   // the third, but we'd rather pass all three here than worry about the corner
   // cases at this point. 
   void L1_Init(StaticElement * static_parent, OMap binding);
-  void L1_Erase() { Element::L1_Erase();}
+  void L1_Erase() { 
+    Element::L1_Erase();
+  }
   // should only be called by Link::L1_AddChild();
   void L1_ConnectToParentLink(Link *link) {
     if (link->parent_->IsDynamic())
@@ -256,13 +281,15 @@ struct DynamicElement : public Element{
 
   // this gets called when the value of a child expression changes, 
   // or when a child expresison is created(Init) or destroyed(L1_Erase).   
-  virtual void N1_ChildExpressionChanged(int which_child) = 0;
+  virtual void N1_ChildExpressionValueChanged(int which_child) = 0;
 
   // The following are called externally when a child is connected to
   // or disconnected from this parent node. 
   virtual void N1_ChildConnected(Link *child_link, DynamicElement *child);
   virtual void N1_ChildDisconnected(Link *child_link, DynamicElement *child);
 
+  // called when the binding changes
+  virtual void N1_BindingChanged();
 
   // ---------- data ----------  
   MultiLink * static_parent_;
@@ -300,7 +327,7 @@ struct Expression : public StaticElement {
   Named::Type GetNamedType() const { return Named::EXPRESSION;}
   virtual int NumExpressionChildren() const { return NumChildren();}
   virtual int NumChildren() const = 0;
-  virtual int NumObjects() const { return 0;}
+  virtual int NumObjects() const = 0;
   string TextIdentifier() const { return ToString();}
   // ---------- L1 functions ----------  
   void L1_Init();
@@ -325,15 +352,19 @@ struct DynamicStatement : public DynamicElement {
 struct DynamicExpression : public DynamicElement {
   // ---------- L2 functions ----------  
   void SetValue(Object new_value);
+  void ComputeSetValue(){SetValue(ComputeValue());}
   // ---------- const functions ----------  
   Record GetRecordForDisplay() const;
   virtual Object ComputeValue() const = 0;
   Object GetValue() const { return value_;}
   Named::Type GetNamedType() const { return Named::DYNAMIC_EXPRESSION;}
+  string TextIdentifier() const { 
+    return DynamicElement::TextIdentifier() + " value=" + value_.ToString();
+  }
   // ---------- L1 functions ----------  
   void L1_Init(StaticElement * static_parent, OMap binding);
   void L1_Erase();
-  void N1_ChildExpressionChanged(int which_child) { 
+  void N1_ChildExpressionValueChanged(int which_child) { 
     L1_CheckSetValueViolation();}
   // checks whether the value is correct, and creates/removes a violation.
   void L1_CheckSetValueViolation();
@@ -341,13 +372,26 @@ struct DynamicExpression : public DynamicElement {
   Object value_;
 };
 
+#define DECLARE_FUNCTION_ENUMS \
+  int StringToChild(string s) const{ return StringToChildName(s);} \
+  string ChildToString(int c) const{ return ChildNameToString((ChildName)c);} \
+  int StringToObject(string s) const{ return StringToObjectName(s);} \
+  string ObjectToString(int o) const{return ObjectNameToString((ObjectName)o);}\
+  int NumObjects() const { return NumObjectNames();} \
+  int NumChildren() const { return NumChildNames();}
 
 struct StaticPass : public Statement {
+  #define StaticPassChildNameList {				\
+	};
+  CLASS_ENUM_DECLARE(StaticPass, ChildName);
+  #define StaticPassObjectNameList {				\
+	};
+  CLASS_ENUM_DECLARE(StaticPass, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return 0;}
-  int NumChildren() const { return 0;}
-  int NumObjects() const { return 0;}
   virtual Function GetFunction() const { return PASS;}
   // ---------- L1 functions ----------  
   // ---------- data ----------  
@@ -356,27 +400,24 @@ struct DynamicPass : public DynamicStatement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   // ---------- L1 functions ----------  
-  void N1_ChildExpressionChanged(int which_child) { CHECK(false);}
+  void N1_ChildExpressionValueChanged(int which_child) { CHECK(false);}
   // ---------- data ----------  
 };
 
 struct StaticOn : public Statement {
-  enum {
-    // expressions
-    // statements
-    CHILD,
-    NUM_CHILDREN,
-  };
-  enum {
-    PATTERN, // OPattern
-    NUM_OBJECTS,
-  };
+  #define StaticOnChildNameList {				\
+      ITEM(CHILD),					\
+	};
+  CLASS_ENUM_DECLARE(StaticOn, ChildName);
+  #define StaticOnObjectNameList {				\
+      ITEM(PATTERN),					\
+	};
+  CLASS_ENUM_DECLARE(StaticOn, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
 
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return CHILD;}
-  int NumChildren() const { return NUM_CHILDREN;}
-  int NumObjects() const { return NUM_OBJECTS;}
   OPattern GetPattern() const { return GetObject(PATTERN);}
   virtual Function GetFunction() const { return ON;}
   set<Variable> GetIntroducedVariables(int which_child) const;
@@ -407,28 +448,26 @@ struct DynamicOn : public DynamicStatement {
   void L1_Init(StaticElement* parent, OMap dummy);
   void L1_Erase();
   // --------- N1 notifiers ----------
-  void N1_ChildExpressionChanged(int which_child) { CHECK(false); }
+  void N1_ChildExpressionValueChanged(int which_child) { CHECK(false); }
   // ---------- data ----------  
 };
 
 
 struct StaticRepeat : public Statement {
-  enum {
-    // expressions
-    REPETITIONS,
-    // statements
-    CHILD,
-    NUM_CHILDREN,
-  };
-  enum {
-    REPETITION_VARIABLE,
-    NUM_OBJECTS,
-  };
+  #define StaticRepeatChildNameList {				\
+      ITEM(REPETITIONS),					\
+      ITEM(CHILD),					\
+	};
+  CLASS_ENUM_DECLARE(StaticRepeat, ChildName);
+  #define StaticRepeatObjectNameList {				\
+      ITEM(REPETITION_VARIABLE),					\
+	};
+  CLASS_ENUM_DECLARE(StaticRepeat, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return CHILD;}
-  int NumChildren() const { return NUM_CHILDREN;}
-  int NumObjects() const { return NUM_OBJECTS;}
   Variable GetRepetitionVariable() const { 
     return GetObject(REPETITION_VARIABLE);}
   virtual Function GetFunction() const { return REPEAT;}
@@ -452,7 +491,7 @@ struct DynamicRepeat : public DynamicStatement {
   }
   // ---------- L1 functions ----------  
   // ---------- N1 notifiers ----------
-  void N1_ChildExpressionChanged(int which_child) { 
+  void N1_ChildExpressionValueChanged(int which_child) { 
     // todo: check whether the number of repetitions is correct
     CHECK(false);
   }
@@ -461,17 +500,19 @@ struct DynamicRepeat : public DynamicStatement {
 
 
 struct StaticDelay : public Statement { 
-  enum {
-    // expressions
-    DIMENSION,
-    // statements
-    CHILD,
-    NUM_CHILDREN,
-  };
+  #define StaticDelayChildNameList {				\
+      ITEM(DIMENSION),					\
+      ITEM(CHILD),					\
+	};
+  CLASS_ENUM_DECLARE(StaticDelay, ChildName);
+  #define StaticDelayObjectNameList {				\
+    };
+  CLASS_ENUM_DECLARE(StaticDelay, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return CHILD;}
-  int NumChildren() const { return NUM_CHILDREN;}
   Function GetFunction() const { return DELAY;}
 
   // ---------- L1 functions ----------  
@@ -484,8 +525,10 @@ struct DynamicDelay : public DynamicStatement {
   OTime ComputeChildTime(const Link * link, const Element *child) const {
     if (link == children_[StaticDelay::CHILD]) {
       if (time_ == NULL) return OTime();
-      Object dimension 
-	= GetSingleExpressionChild(StaticDelay::DIMENSION)->value_;
+      DynamicExpression *delay_expression 
+	= GetSingleExpressionChild(StaticDelay::DIMENSION);
+      if (!delay_expression) return OTime();
+      Object dimension = delay_expression->value_;
       if (dimension.GetType() != Object::OBITSEQ) return OTime();
       return OTime::Make
 	(time_.Data() 
@@ -495,31 +538,29 @@ struct DynamicDelay : public DynamicStatement {
   }
   // ---------- L1 functions ----------  
   // ---------- N1 notifiers ----------
-  void N1_ChildExpressionChanged(int which_child) { 
+  void N1_ChildExpressionValueChanged(int which_child) { 
     // todo: check whether the times are right on the children
     DynamicStatement * child = GetSingleStatementChild(StaticDelay::CHILD);
-    if (child) child->N1_TimeMayHaveChanged();
+    if (child) child->N1_StoredOrComputedTimeChanged();
   }
   // ---------- data ----------  
 };
   
 struct StaticLet : public Statement {
-  enum {
-    // expressions
-    VALUE,
-    // statements
-    CHILD,
-    NUM_CHILDREN,
-  };
-  enum {
-    VARIABLE,
-    NUM_OBJECTS,
-  };
+  #define StaticLetChildNameList {				\
+      ITEM(VALUE),					\
+      ITEM(CHILD),					\
+	};
+  CLASS_ENUM_DECLARE(StaticLet, ChildName);
+  #define StaticLetObjectNameList {				\
+      ITEM(VARIABLE),					\
+	};
+  CLASS_ENUM_DECLARE(StaticLet, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return CHILD;}
-  int NumChildren() const { return NUM_CHILDREN;}
-  int NumObjects() const { return NUM_OBJECTS;}
   Variable GetVariable() const { return GetObject(VARIABLE);}
   virtual Function GetFunction() const { return LET;}
 
@@ -539,8 +580,8 @@ struct DynamicLet : public DynamicStatement {
   StaticLet *GetStaticLet() const { 
     return dynamic_cast<StaticLet*>(GetStatic());
   }
-  bool HasLetViolation() const; // a let violation should exist.
-  OMap GetIntroducedBinding(int which_child) { 
+  bool NeedsLetViolation() const; // a let violation should exist.
+  OMap GetIntroducedBinding(int which_child) const { 
     if (which_child != StaticLet::CHILD) return OMap::Default();
     Map ret;
     ret[GetStaticLet()->GetVariable()] = GetChildValue(StaticLet::VALUE);
@@ -553,68 +594,81 @@ struct DynamicLet : public DynamicStatement {
     L1_CheckSetLetViolation();
   }
   // ---------- N1 notifiers ----------
-  void N1_ChildExpressionChanged(int which_child) { 
+  void N1_ChildExpressionValueChanged(int which_child) { 
     L1_CheckSetLetViolation();
   }
   // ---------- data ----------  
 };
 
-struct StaticOutput : public Statement {
-  enum {
-    // expressions
-    TUPLE,
-    // statements
-    NUM_CHILDREN,
-  };
+struct StaticPost : public Statement {
+  #define StaticPostChildNameList {				\
+      ITEM(TUPLE),					\
+	};
+  CLASS_ENUM_DECLARE(StaticPost, ChildName);
+  #define StaticPostObjectNameList {				\
+	};
+  CLASS_ENUM_DECLARE(StaticPost, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
-  int NumExpressionChildren() const { return NUM_CHILDREN;}
-  int NumChildren() const { return NUM_CHILDREN;}
-  virtual Function GetFunction() const { return OUTPUT;}
+  int NumExpressionChildren() const { return NumChildren();}
+  virtual Function GetFunction() const { return POST;}
   // ---------- L1 functions ----------  
   void L1_Init();
   // ---------- data ----------  
 };
-struct DynamicOutput : public DynamicStatement {
+struct DynamicPost : public DynamicStatement {
   // ---------- L2 functions ----------  
   void AddCorrectPosting();
-  void AddPosting(OTuple t);
+  void AddPosting(OTuple t, OTime time);
   void RemovePosting();
+  void SetPostingTime(OTime new_time);
+  void SetCorrectPostingTime() { SetPostingTime(time_);}
   // ---------- const functions ----------  
-  bool IsPerfect() const;
+  bool NeedsPostViolation() const;
   DynamicExpression * GetTupleExpression() const {
     return dynamic_cast<DynamicExpression *>
-      (GetSingleChild(StaticOutput::TUPLE));
+      (GetSingleChild(StaticPost::TUPLE));
   }  
+  Object ComputeTuple() const{
+    DynamicExpression * expr = GetTupleExpression();
+    if (!expr) return Object();
+    return expr->GetValue();
+  }
   OwnedPosting * GetOwnedPosting() const { return posting_;}
+  Record GetRecordForDisplay() const;
   // ---------- L1 functions ----------  
   void L1_Init(StaticElement * static_parent, OMap binding) {
+    posting_ = NULL;
     DynamicStatement::L1_Init(static_parent, binding);
-    L1_CheckSetPostingViolation();
+    L1_CheckSetPostViolation();
   }
   // see if it's perfect, then create or remove violation if necessary.
-  void L1_CheckSetPostingViolation();
+  void L1_CheckSetPostViolation();
   // ---------- N1 notifiers ----------
-  void N1_ChildExpressionChanged(int which_child) { 
-    L1_CheckSetPostingViolation();
+  void N1_ChildExpressionValueChanged(int which_child) { 
+    L1_CheckSetPostViolation();
   }  
   // ---------- data ----------  
   OwnedPosting * posting_;
 };
 
 struct StaticIf : public Statement {
-  enum {
-    //expressions
-    CONDITION,
-    // statements
-    ON_TRUE,
-    ON_FALSE,
-    NUM_CHILDREN,
-  };
+  #define StaticIfChildNameList {					\
+      ITEM(CONDITION),							\
+	ITEM(ON_TRUE),					\
+	ITEM(ON_FALSE),					\
+	};
+  CLASS_ENUM_DECLARE(StaticIf, ChildName);
+  #define StaticIfObjectNameList {				\
+	};
+  CLASS_ENUM_DECLARE(StaticIf, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return ON_TRUE;}
-  int NumChildren() const { return NUM_CHILDREN;}
   Function GetFunction() const { return IF;}
   // ---------- L1 functions ----------  
   void L1_Init();
@@ -627,7 +681,7 @@ struct DynamicIf : public DynamicStatement {
     return dynamic_cast<DynamicExpression *>
       (GetSingleChild(StaticIf::CONDITION));
   }  
-  bool IsPerfect() const;
+  bool NeedsIfViolation() const;
   StaticIf *GetStaticIf() const { 
     return dynamic_cast<StaticIf*>(GetStatic());
   }
@@ -642,7 +696,7 @@ struct DynamicIf : public DynamicStatement {
     L1_CheckSetIfViolation();
   }
   // ---------- N1 notifiers ----------
-  void N1_ChildExpressionChanged(int which_child) {
+  void N1_ChildExpressionValueChanged(int which_child) {
     L1_CheckSetIfViolation();
   }
   void N1_ChildConnected(Link * child_link, 
@@ -660,14 +714,24 @@ struct DynamicIf : public DynamicStatement {
 
 
 struct StaticParallel : public Statement {
+  #define StaticParallelChildNameList {					\
+	};
+  CLASS_ENUM_DECLARE(StaticParallel, ChildName);
+  #define StaticParallelObjectNameList {				\
+	};
+  CLASS_ENUM_DECLARE(StaticParallel, ObjectName);
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return 0;}
   int NumChildren() const { return static_children_.size(); }
+  int StringToChild(string s) const { CHECK(false); return 0;}
+  string ChildToString(int i) const { return "CHILD(" + itoa(i) + ")";}
+  int StringToObject(string s) const { CHECK(false); return 0;}
+  string ObjectToString(int i) const { CHECK(false); return "";}
+
   virtual Function GetFunction() const { return PARALLEL;}
 
   // ---------- L1 functions ----------  
-  void L1_Init() { Statement::L1_Init();}
   // ---------- data ----------  
 };
 
@@ -676,42 +740,56 @@ struct DynamicParallel : public DynamicStatement {
   // ---------- const functions ----------  
   // ---------- L1 functions ----------  
   // ---------- N1 notifiers ----------
-  void N1_ChildExpressionChanged(int which_child) { CHECK(false); }
+  void N1_ChildExpressionValueChanged(int which_child) { CHECK(false); }
   // ---------- data ----------  
 };
 
 
 struct StaticSubstitute : public Expression {
-  enum {
-    CHILD,
-    NUM_CHILDREN,
-  };
-  int NumChildren() const { return NUM_CHILDREN;}
+   #define StaticSubstituteChildNameList {	 		\
+    ITEM(CHILD),						\
+      };
+  CLASS_ENUM_DECLARE(StaticSubstitute, ChildName);
+  #define StaticSubstituteObjectNameList {				\
+    };
+  CLASS_ENUM_DECLARE(StaticSubstitute, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+
   virtual Function GetFunction() const { return SUBSTITUTE;}
 };
 struct DynamicSubstitute : public DynamicExpression {
   Object ComputeValue() const;
+  void N1_BindingChanged() {
+    DynamicElement::N1_BindingChanged();
+    L1_CheckSetValueViolation();
+  }
 };
 
 struct StaticEqual : public Expression {
-  enum {
-    LHS,
-    RHS,
-    NUM_CHILDREN,
-  };
-  int NumChildren() const { return NUM_CHILDREN;}
+   #define StaticEqualChildNameList {	 		\
+    ITEM(LHS),						\
+    ITEM(RHS),						\
+      };
+  CLASS_ENUM_DECLARE(StaticEqual, ChildName);
+  #define StaticEqualObjectNameList {				\
+    };
+  CLASS_ENUM_DECLARE(StaticEqual, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
   virtual Function GetFunction() const { return EQUAL;}
 };
 struct DynamicEqual : public DynamicExpression {
   Object ComputeValue() const;
 };
 struct StaticSum : public Expression {
-  enum {
-    LHS,
-    RHS,
-    NUM_CHILDREN,
-  };
-  int NumChildren() const { return NUM_CHILDREN;}
+   #define StaticSumChildNameList {	 		\
+    ITEM(LHS),						\
+    ITEM(RHS),						\
+      };
+  CLASS_ENUM_DECLARE(StaticSum, ChildName);
+  #define StaticSumObjectNameList {				\
+    };
+  CLASS_ENUM_DECLARE(StaticSum, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
   virtual Function GetFunction() const { return SUM;}
 };
 struct DynamicSum : public DynamicExpression {
@@ -720,18 +798,15 @@ struct DynamicSum : public DynamicExpression {
 
 
 struct StaticFlakeChoice : public Expression { 
-  enum {
-    CHOOSER, 
-    NUM_CHILDREN,
-  };
-  // ---------- L2 functions ----------  
-  // ---------- const functions ----------  
-  int NumChildren() const { return NUM_CHILDREN;}
+   #define StaticFlakeChoiceChildNameList {	 		\
+    ITEM(CHOOSER),						\
+      };
+  CLASS_ENUM_DECLARE(StaticFlakeChoice, ChildName);
+  #define StaticFlakeChoiceObjectNameList {		\
+    };
+  CLASS_ENUM_DECLARE(StaticFlakeChoice, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
   virtual Function GetFunction() const { return FLAKE_CHOICE;}
-
-  // ---------- L1 functions ----------  
-  // void L1_Init() {Expression::L1_Init();}
-  // ---------- data ----------  
 };
 struct DynamicFlakeChoice : public DynamicExpression {
   // ---------- L2 functions ----------  
@@ -756,23 +831,20 @@ struct DynamicFlakeChoice : public DynamicExpression {
 };
 
 struct StaticConstant : public Expression {
-  enum {
-    NUM_CHILDREN,
-  };
-  enum {
-    OBJECT, 
-    NUM_OBJECTS,
-  };
+   #define StaticConstantChildNameList {	 		\
+      };
+  CLASS_ENUM_DECLARE(StaticConstant, ChildName);
+  #define StaticConstantObjectNameList {		\
+    ITEM(OBJECT),						\
+    };
+  CLASS_ENUM_DECLARE(StaticConstant, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
-  int NumChildren() const { return NUM_CHILDREN;}
-  int NumObjects() const { return NUM_OBJECTS;}
   string ToString() const;
   virtual Function GetFunction() const { return CONSTANT;}
 
   // ---------- L1 functions ----------  
-  //void L1_Init() {Expression::L1_Init();}
-
   // ---------- N1 notifiers ----------  
   void N1_ObjectChanged(int which);
 
@@ -866,6 +938,22 @@ struct RandomBoolExpression : public Expression {
 };
 */
 
+#define ALL_FUNCTIONS \
+  FUNCTION(Pass, PASS)				\
+       FUNCTION(On, ON)				\
+       FUNCTION(Repeat, REPEAT)			\
+       FUNCTION(Delay, DELAY)			\
+       FUNCTION(Let, LET)			\
+       FUNCTION(Post, POST)			\
+       FUNCTION(If, IF)				\
+       FUNCTION(Parallel, PARALLEL)				\
+       FUNCTION(Substitute, SUBSTITUTE)				\
+       FUNCTION(FlakeChoice, FLAKE_CHOICE)				\
+       FUNCTION(Constant, CONSTANT)				\
+       FUNCTION(Equal, EQUAL)				\
+       FUNCTION(Sum, SUM)				\
+ 
 
+    
 
 #endif

@@ -101,7 +101,7 @@ void Prohibition::Update(const QueryUpdate &update, SubType * sub){
       OTuple t = Substitute(run->data_.Data(), tuple_);
       Violation ** v = violations_ % t;
       CHECK(v);
-      (*v)->N1_TimeMayHaveChanged();
+      (*v)->N1_ComputedTimeChanged();
     }
   }
 }

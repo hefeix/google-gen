@@ -50,6 +50,19 @@ bool StaticExecute() {
     case Violation::IF :
       success = FixIf(dynamic_cast<IfViolation*>(v));
       break;
+    case Violation::TIME :
+      success = FixTime(dynamic_cast<TimeViolation*>(v));
+      break;
+    case Violation::POST :
+      success = FixPost(dynamic_cast<PostViolation*>(v));
+      break;
+    case Violation::LET :
+      success = FixLet(dynamic_cast<LetViolation*>(v));
+      break;
+    case Violation::BINDING_OLD_VALUES :
+      success = FixBindingOldValues
+	(dynamic_cast<BindingOldValuesViolation*>(v));
+      break;
     default:
       cerr << "Can't fix violation of type " << tp << endl;
       break;
@@ -111,13 +124,15 @@ bool FixExtraOnMatch(ExtraOnMatchViolation *violation) {
     return false;
   }
   OMap binding = violation->data_;
-  MakeDynamicElement(s_child, binding);
+  DynamicElement * d_child = s_child->GetDynamic(binding);
+  CHECK(d_child);
+  d_child->EraseTree();
   return true;
 }
 
 bool FixValue(ValueViolation *violation){
-  violation->GetOwner()->SetValue(violation->GetOwner()->ComputeValue());
   cerr << "Fixing value violation " << endl;
+  violation->GetOwner()->ComputeSetValue();
   return true;
 }
 bool FixIf(IfViolation *violation){
@@ -142,5 +157,64 @@ bool FixIf(IfViolation *violation){
   if (val && !on_true) MakeDynamicElement(s_on_true ,d_if->GetBinding());
   if (!val && !on_false) MakeDynamicElement(s_on_false ,d_if->GetBinding());
   cerr << "Fixed if violation" << endl;
+  return true;
+}
+bool FixTime(TimeViolation *violation) {
+  cerr << "Fixing time violation " << endl;
+  violation->GetOwner()->ComputeSetTime();
+  return true;
+
+}
+bool FixPost(PostViolation *violation) {
+  cerr << "Fixing post violation " << endl;
+  DynamicPost * dp = violation->GetOwner();
+  CHECK(dp->NeedsPostViolation());
+  Object computed = dp->ComputeTuple();
+  if (computed.GetType() != Object::OTUPLE) {
+    if (!dp->posting_) { 
+      cerr << "Error - why is there a post violation" << endl;
+      return true;
+    }
+    cerr << "Removing posting" << endl;
+    dp->RemovePosting();
+  } else {
+    if (!dp->posting_) {
+      cerr << "Adding Posting" << endl;
+      dp->AddCorrectPosting();
+    } else if (dp->posting_->tuple_ != computed){
+      dp->RemovePosting();
+      dp->AddCorrectPosting();
+    } else {
+      CHECK(dp->posting_->time_ != dp->time_.Data());
+      cerr << "Correcting posting time from" 
+	   << OTime::Make(dp->posting_->time_).ToString()
+	   << " to " << dp->time_.ToString() << endl;
+      dp->SetCorrectPostingTime();
+      cerr << "Now posting time is " 
+	   << OTime::Make(dp->posting_->time_).ToString() << endl;
+    }
+  }
+  return true;
+}
+
+bool FixLet(LetViolation *violation) {
+  cerr << "Fixing let violation" << endl;
+  //sleep(1000);
+  DynamicLet *dl = violation->GetOwner();
+  CHECK(dl->NeedsLetViolation());
+  cerr << "dl= " << dl->ShortDescription() << endl;
+  //DynamicExpression *value_child 
+  //  = dl->GetSingleExpressionChild(StaticLet::VALUE);
+  // CHECK(value_child);
+  DynamicStatement *child = dl->GetSingleStatementChild(StaticLet::CHILD);  
+  CHECK(child);
+  cerr << "child= " << child->ShortDescription() << endl;
+  return child->ComputeSetBinding();
+}
+bool FixBindingOldValues(BindingOldValuesViolation *violation){
+  cerr << "fixing BINDING_OLD_VALUES violation " << endl;
+  DynamicElement *d = violation->GetOwner();
+  // TODO: what if the binding isn't determined???
+  d->ComputeSetBinding();
   return true;
 }
