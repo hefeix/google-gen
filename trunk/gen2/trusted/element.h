@@ -45,10 +45,12 @@ struct Element : public Named {
   CLASS_ENUM_DECLARE(Element, Function);
 
   // ---------- L2 functions ----------  
+  void SetTime(OTime new_time);
 
   // ---------- const functions ----------  
 
   virtual bool IsDynamic() const = 0;
+  bool IsStatic() const { return !IsDynamic();}
   virtual OMap GetBinding() const { CHECK(false); return OMap();}
   // computes the proper time of this element. 
   virtual OTime ComputeTime() const = 0;
@@ -69,11 +71,17 @@ struct Element : public Named {
   virtual Keyword FunctionKeyword() const { 
     return Keyword::Make(Downcase(FunctionToString(GetFunction())));
   }
-  int WhichChild() { if (parent_) return parent_->WhichChild(); return -1; }
+  int WhichChildAmI() const { 
+    if (parent_) return parent_->WhichChildAmI(); 
+    return -1; 
+  }
   
   // ---------- L1 functions ----------  
   Element() :parent_(NULL){};
-  virtual void L1_Init() { Named::L1_Init(); }
+  virtual void L1_Init() { 
+    Named::L1_Init(); 
+    N1_TimeMayHaveChanged();
+  }
   void L1_Erase();
 
   // these functions are only called by the link. 
@@ -83,7 +91,7 @@ struct Element : public Named {
 
   // call this if the computed time may have changed. 
   // creates a time violation (or destroys one) as necessary. 
-  void N1_TimeMayHaveChanged(); 
+  virtual void N1_TimeMayHaveChanged(); 
 
   // ---------- data ----------  
 
@@ -135,7 +143,7 @@ struct StaticElement : public Element {
   // the objects and expression children
   string ParameterListToString() const; 
   // What new variables are introduced by this node
-  virtual set<Variable> GetIntroducedVariables() const;
+  virtual set<Variable> GetIntroducedVariables(int which_child) const;
   // What variables exist at this node. 
   // This is the union of GetIntroducedVariables() up the static tree, 
   // not including this node. 
@@ -210,7 +218,13 @@ struct DynamicElement : public Element{
   OTime ComputeTime() const;
   string ToString() const;
   virtual Function GetFunction() const { return GetStatic()->GetFunction();}
-  virtual OMap ComputeNewBinding() { return OMap::Default(); }
+  // this only works for single links.
+  virtual OMap GetIntroducedBinding(int which_child) { return OMap::Default(); }
+  // this only works for single links now. 
+  virtual OMap ComputeChildBinding(int which_child) {
+    return OMap::Make(Union(GetBinding().Data(), 
+			    GetIntroducedBinding(which_child).Data()));
+  }
   // static parent and binding need to exist. binding needs to be correct
   // when restricted to the variables of the parent of the static parent. 
   Link * FindDynamicParentLink();
@@ -234,7 +248,6 @@ struct DynamicElement : public Element{
     else 
       CL.ChangeValue(&static_parent_, (MultiLink *)NULL);
   }
-
 
   // checks for violations
   void L1_CheckSetParentAndBindingViolations();
@@ -313,6 +326,7 @@ struct DynamicExpression : public DynamicElement {
   // ---------- L2 functions ----------  
   void SetValue(Object new_value);
   // ---------- const functions ----------  
+  Record GetRecordForDisplay() const;
   virtual Object ComputeValue() const = 0;
   Object GetValue() const { return value_;}
   Named::Type GetNamedType() const { return Named::DYNAMIC_EXPRESSION;}
@@ -365,7 +379,7 @@ struct StaticOn : public Statement {
   int NumObjects() const { return NUM_OBJECTS;}
   OPattern GetPattern() const { return GetObject(PATTERN);}
   virtual Function GetFunction() const { return ON;}
-  set<Variable> GetIntroducedVariables() const;
+  set<Variable> GetIntroducedVariables(int which_child) const;
   // ---------- L1 functions ----------  
   void L1_Init();
   void L1_Erase();
@@ -373,7 +387,6 @@ struct StaticOn : public Statement {
   void N1_ObjectChanged(int which){CHECK(NumDynamicChildren() == 0);}
 
   // ---------- data ----------  
-  
 };
 
 struct DynamicOn : public DynamicStatement {
@@ -389,6 +402,7 @@ struct DynamicOn : public DynamicStatement {
   OPattern GetPattern() const { return GetStaticOn()->GetPattern();}
   OTime ComputeChildTime(const Link * link, const Element *child) const;
   Record GetRecordForDisplay() const;
+  OTime ComputeTime() const;
   // ---------- L1 functions ----------  
   void L1_Init(StaticElement* parent, OMap dummy);
   void L1_Erase();
@@ -418,8 +432,11 @@ struct StaticRepeat : public Statement {
   Variable GetRepetitionVariable() const { 
     return GetObject(REPETITION_VARIABLE);}
   virtual Function GetFunction() const { return REPEAT;}
-  set<Variable> GetIntroducedVariables() const {
-    return SingletonSet(GetRepetitionVariable()); }
+  set<Variable> GetIntroducedVariables(int which_child) const {
+    if (which_child == CHILD) 
+      return SingletonSet(GetRepetitionVariable());
+    return set<Variable>();
+  }
   // ---------- L1 functions ----------  
   void L1_Init();
 
@@ -466,18 +483,22 @@ struct DynamicDelay : public DynamicStatement {
   // ---------- const functions ----------  
   OTime ComputeChildTime(const Link * link, const Element *child) const {
     if (link == children_[StaticDelay::CHILD]) {
+      if (time_ == NULL) return OTime();
+      Object dimension 
+	= GetSingleExpressionChild(StaticDelay::DIMENSION)->value_;
+      if (dimension.GetType() != Object::OBITSEQ) return OTime();
       return OTime::Make
 	(time_.Data() 
-	 + OBitSeq
-	 (GetSingleExpressionChild(StaticDelay::DIMENSION)->value_).Data());
-      }
+	 + OBitSeq(dimension).Data());
+    }
     return time_;
   }
   // ---------- L1 functions ----------  
   // ---------- N1 notifiers ----------
   void N1_ChildExpressionChanged(int which_child) { 
     // todo: check whether the times are right on the children
-    CHECK(false);
+    DynamicStatement * child = GetSingleStatementChild(StaticDelay::CHILD);
+    if (child) child->N1_TimeMayHaveChanged();
   }
   // ---------- data ----------  
 };
@@ -502,8 +523,10 @@ struct StaticLet : public Statement {
   Variable GetVariable() const { return GetObject(VARIABLE);}
   virtual Function GetFunction() const { return LET;}
 
-  set<Variable> GetIntroducedVariables() const {
-    return SingletonSet(GetVariable());}
+  set<Variable> GetIntroducedVariables(int which_child) const {
+    if (which_child == CHILD) return SingletonSet(GetVariable());
+    return set<Variable>();
+  }
   // ---------- L1 functions ----------  
   void L1_Init();
   // ---------- N1 notifiers ----------  
@@ -513,7 +536,16 @@ struct StaticLet : public Statement {
 struct DynamicLet : public DynamicStatement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
+  StaticLet *GetStaticLet() const { 
+    return dynamic_cast<StaticLet*>(GetStatic());
+  }
   bool HasLetViolation() const; // a let violation should exist.
+  OMap GetIntroducedBinding(int which_child) { 
+    if (which_child != StaticLet::CHILD) return OMap::Default();
+    Map ret;
+    ret[GetStaticLet()->GetVariable()] = GetChildValue(StaticLet::VALUE);
+    return OMap::Make(ret);
+  }
   // ---------- L1 functions ----------  
   void L1_CheckSetLetViolation(); // (programming with Dr. Seuss)
   void L1_Init(StaticElement * static_parent, OMap binding) {
@@ -596,6 +628,9 @@ struct DynamicIf : public DynamicStatement {
       (GetSingleChild(StaticIf::CONDITION));
   }  
   bool IsPerfect() const;
+  StaticIf *GetStaticIf() const { 
+    return dynamic_cast<StaticIf*>(GetStatic());
+  }
   // ---------- L1 functions ----------  
   void L1_CheckSetIfViolation();
   void L1_Init(StaticElement * static_parent, OMap binding) {
@@ -608,14 +643,21 @@ struct DynamicIf : public DynamicStatement {
   }
   // ---------- N1 notifiers ----------
   void N1_ChildExpressionChanged(int which_child) {
-    // todo: check that the correct child is instantiated
-    // todo: what state of the world means that a child is not instantiated?
-    //       does the link just point to null. If so, then MISSING_LINK
-    //       violations are not violations
-    CHECK(false);
+    L1_CheckSetIfViolation();
+  }
+  void N1_ChildConnected(Link * child_link, 
+			 DynamicElement *child) {
+    DynamicElement::N1_ChildConnected(child_link, child);
+    L1_CheckSetIfViolation();
+  }
+  void N1_ChildDisconnected(Link * child_link, 
+			    DynamicElement *child) {
+    DynamicElement::N1_ChildDisconnected(child_link, child);
+    L1_CheckSetIfViolation();
   }
   // ---------- data ----------  
 };
+
 
 struct StaticParallel : public Statement {
   // ---------- L2 functions ----------  

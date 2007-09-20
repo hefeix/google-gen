@@ -29,10 +29,11 @@ void Shell() {
   ifstream input("test_prog");
   input >> M;
   cout << M;
+  StaticExecute();
   string command;
   while ((cout << "\n?") && (cin >> command)) {
     if (command == "q") break;
-    if (command == "execute") {
+    if (command == "run") {
       StaticExecute();
     }
   }

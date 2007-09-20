@@ -30,5 +30,7 @@ bool FixMissingDynamicOn(MissingDynamicOnViolation *violation);
 bool FixMissingOnMatch(MissingOnMatchViolation *violation);
 bool FixExtraOnMatch(ExtraOnMatchViolation *violation);
 bool FixMissingLink(MissingLinkViolation *violation);
+bool FixValue(ValueViolation *violation);
+bool FixIf(IfViolation *violation);
 
 #endif
