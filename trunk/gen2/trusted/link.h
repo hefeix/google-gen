@@ -42,6 +42,11 @@ struct Link : public Named {
   // needed by various violations
   OTime GetTime() const;
   virtual set<Element *> GetChildren() const = 0;
+  // adds children to a set.
+  template<class T> void AddChildrenInto(set<T*> *ret) const{
+    set<Element *> c = GetChildren();
+    forall(run, c) ret->insert(dynamic_cast<T*>(*run)); 
+  }
   // assumes this is the parent_ link of the child.
   OTime ComputeChildTime(const Element *child) const;
   int WhichChildAmI() const;

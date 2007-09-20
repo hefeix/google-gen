@@ -32,5 +32,8 @@ bool FixExtraOnMatch(ExtraOnMatchViolation *violation);
 bool FixMissingLink(MissingLinkViolation *violation);
 bool FixValue(ValueViolation *violation);
 bool FixIf(IfViolation *violation);
-
+bool FixTime(TimeViolation *violation);
+bool FixPost(PostViolation *violation);
+bool FixLet(LetViolation *violation);
+bool FixBindingOldValues(BindingOldValuesViolation *violation);
 #endif

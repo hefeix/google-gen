@@ -77,7 +77,7 @@ void Violation::L1_RemoveFromGlobalMap(){
   CL.RemoveFromMapOfSets(&M.violations_by_type_, GetViolationType(), this);
   CL.RemoveFromMapOfSets(&M.violations_by_time_, GetTime(), this);
 }
-void Violation::N1_TimeMayHaveChanged() {
+void Violation::N1_ComputedTimeChanged() {
   OTime new_time = ComputeTime();
   if (new_time != time_) L1_ChangeTime(new_time);
 }
@@ -117,7 +117,7 @@ OTime TimeViolation::ComputeTime() const {
   return DataMin(owner_->ComputeTime(), owner_->GetTime());
 }
 template<>
-OTime PostingViolation::ComputeTime() const {
+OTime PostViolation::ComputeTime() const {
   if (owner_->posting_ == NULL) return owner_->GetTime();
   return DataMin(owner_->GetTime(), OTime::Make(owner_->posting_->time_));
 }
