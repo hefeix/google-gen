@@ -26,6 +26,10 @@
 
 CLASS_ENUM_DEFINE(Element, Function);
 
+void Element::SetTime(OTime new_time) {
+  CL.ChangeValue(&time_, new_time);
+  N1_TimeMayHaveChanged(); WORKING
+}
 
 void Element::L1_Erase() {
   if (parent_) parent_->L1_RemoveChild(this);
@@ -56,13 +60,16 @@ void StaticElement::UnlinkFromParent() {
   parent_->L1_RemoveChild(this);
   if (GetFunction() != ON) 
     StaticNoParentViolation::L1_CreateIfAbsent(this);
+  N1_TimeMayHaveChanged();
 }
 void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
   CHECK(!parent_);
   CHECK(new_parent->ChildType(which_child) == GetNamedType());
   new_parent->static_children_[which_child]->L1_AddChild(this);
   StaticNoParentViolation::L1_RemoveIfPresent(this);
+  N1_TimeMayHaveChanged();
 }
+
 void StaticElement::EraseTree() {
   for (uint i=0; i<static_children_.size(); i++) {
     StaticElement *child = GetChild(i);
@@ -109,10 +116,11 @@ StaticElement * StaticElement::GetParent() const {
 set<Variable> StaticElement::GetVariables() const { 
   if (!parent_) return set<Variable>();
   StaticElement * parent = GetParent();
-  return Union(parent->GetVariables(), parent->GetIntroducedVariables());
+  return Union(parent->GetVariables(), 
+	       parent->GetIntroducedVariables(WhichChildAmI()));
 }
 
-set<Variable> StaticElement::GetIntroducedVariables() const {
+set<Variable> StaticElement::GetIntroducedVariables(int which_child) const {
   return set<Variable>();
 }
 
@@ -249,16 +257,16 @@ void DynamicExpression::L1_Init(StaticElement * static_parent,
 void DynamicExpression::SetValue(Object new_value) {
   CL.ChangeValue(&value_, new_value);
   L1_CheckSetValueViolation();
-  if (GetParent()) GetParent()->N1_ChildExpressionChanged(WhichChild());
+  if (GetParent()) GetParent()->N1_ChildExpressionChanged(WhichChildAmI());
 }
 
 void DynamicExpression::L1_Erase() {
   DynamicElement * parent = GetParent();
   DynamicElement::L1_Erase();
-  parent->N1_ChildExpressionChanged(WhichChild());
+  parent->N1_ChildExpressionChanged(WhichChildAmI());
 }
 void DynamicExpression::L1_CheckSetValueViolation() {
-  bool perfect = (value_ != NULL) && (value_ == ComputeValue());
+  bool perfect = (value_ == ComputeValue());
   Violation * value_violation = FindViolation(this, Violation::VALUE);
   if (perfect && value_violation) {
     value_violation->L1_Erase(); 
@@ -276,7 +284,7 @@ void StaticOn::L1_Init(){
   Statement::L1_Init();
   New<MissingDynamicOnViolation>(this);
 }
-set<Variable> StaticOn::GetIntroducedVariables() const {
+set<Variable> StaticOn::GetIntroducedVariables(int which_child) const {
   return ::GetVariables(GetPattern().Data());
 }
 void StaticOn::L1_Erase() {
@@ -303,6 +311,10 @@ Record DynamicOn::GetRecordForDisplay() const {
   forall(run, GetOnMultilink()->extra_)
     ret["violations"] += run->second->ShortDescription() + "<br>\n";
   return ret;
+}
+
+OTime DynamicOn::ComputeTime() const {
+  return GetStatic()->GetTime();
 }
 
 OTime DynamicOn::ComputeChildTime(const Link * link, 
@@ -381,9 +393,8 @@ void StaticIf::L1_Init() {
 
 bool DynamicIf::IsPerfect() const { 
   DynamicExpression * expr = GetConditionExpression();
-  if (!expr) return false;
-  if (expr->value_.GetType() != Object::BOOLEAN) return false;
-  bool val = Boolean(expr->value_).Data();
+  if (!expr) return true;
+  bool val = expr->value_ != Boolean::Make(false);
   if (val ^ bool(GetSingleChild(StaticIf::ON_TRUE)) ) return false;
   if ((!val) ^ bool(GetSingleChild(StaticIf::ON_FALSE)) ) return false;
   return true;
@@ -462,10 +473,11 @@ string StaticElement::ParameterListToString() const {
   }
   return ret;
 }
-Object DynamicSubstitute::ComputeValue() const { 
-  return DeepSubstitute
-    (GetBinding().Data(),  
-     GetSingleExpressionChild(StaticSubstitute::CHILD)->GetValue());
+Object DynamicSubstitute::ComputeValue() const {
+  DynamicExpression * child 
+    = GetSingleExpressionChild(StaticSubstitute::CHILD);
+  if (!child) return Object();
+  return DeepSubstitute(GetBinding().Data(), child->GetValue());
 }
 Object DynamicEqual::ComputeValue() const { 
   return Boolean::Make( (GetChildValue(StaticEqual::LHS)
@@ -528,6 +540,7 @@ bool DynamicElement::LinkToParent() {
   CHECK(parent_ == parent);
   L1_CheckSetParentAndBindingViolations();
   GetParent()->N1_ChildConnected(parent_, this);
+  N1_TimeMayHaveChanged();
   return true;
 }
 void DynamicElement::UnlinkFromParent() {
@@ -537,6 +550,7 @@ void DynamicElement::UnlinkFromParent() {
   parent_->L1_RemoveChild(this);
   dynamic_parent->N1_ChildDisconnected(parent_link, this);
   L1_CheckSetParentAndBindingViolations();
+  N1_TimeMayHaveChanged();
 }
 
 
@@ -584,12 +598,12 @@ DynamicElement * DynamicElement::FindParent() const {
 void DynamicElement::N1_ChildConnected(Link *child_link, 
 				       DynamicElement *child) {
   if (child->GetNamedType() == DYNAMIC_EXPRESSION) 
-    N1_ChildExpressionChanged(child_link->WhichChild());  
+    N1_ChildExpressionChanged(child_link->WhichChildAmI());  
 }
 void DynamicElement::N1_ChildDisconnected(Link *child_link, 
 					  DynamicElement *child) {
   if (child->GetNamedType() == DYNAMIC_EXPRESSION) 
-    N1_ChildExpressionChanged(child_link->WhichChild());  
+    N1_ChildExpressionChanged(child_link->WhichChildAmI());  
 }
 
 DynamicElement * MakeDynamicElement(StaticElement *static_parent, 
@@ -670,6 +684,14 @@ Record DynamicElement::GetRecordForDisplay() const {
   for (uint i=0; i<children_.size(); i++) {
     if (i>0) ret["children"] += "<br>\n";
     ret["children"] += children_[i]->ChildListings(5);
+  }
+  return ret;
+}
+Record DynamicExpression::GetRecordForDisplay() const { 
+  Record ret = DynamicElement::GetRecordForDisplay();
+  ret["value"] = value_.ToString();
+  if (value_ != ComputeValue()) {
+    ret["value"] += " (computed=" + ComputeValue().ToString() + ")";
   }
   return ret;
 }

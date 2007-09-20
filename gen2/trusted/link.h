@@ -44,7 +44,7 @@ struct Link : public Named {
   virtual set<Element *> GetChildren() const = 0;
   // assumes this is the parent_ link of the child.
   OTime ComputeChildTime(const Element *child) const;
-  int WhichChild() const;
+  int WhichChildAmI() const;
   string TextIdentifier() const;
   string ChildListings(int max_children = -1) const;
   Record GetRecordForDisplay() const;

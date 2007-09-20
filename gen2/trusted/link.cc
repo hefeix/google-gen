@@ -44,7 +44,7 @@ OTime Link::GetTime() const {
 OTime Link::ComputeChildTime(const Element *child) const {
   return parent_->ComputeChildTime(this, child);
 }
-int Link::WhichChild() const { 
+int Link::WhichChildAmI() const { 
   Named::Type pt = GetParent()->GetNamedType();
   if (pt == Named::STATEMENT
       || pt == Named::EXPRESSION) {
@@ -149,8 +149,8 @@ void SingleLink::L1_AddChild(Element *child) {
 }
 void SingleLink::L1_RemoveChild(Element *child){
   CHECK(child_ == child);
-  CL.ChangeValue(&child_, (Element *)NULL);
   child_->L1_DisconnectFromParentLink(this);
+  CL.ChangeValue(&child_, (Element *)NULL);
   L1_CheckSetMissingLinkViolation();
 }
 set<Element *> SingleLink::GetChildren() const {
