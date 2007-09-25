@@ -57,6 +57,7 @@ struct Violation : public Named {
   OTime GetTime() const { return time_; }
   Record GetRecordForDisplay() const;
   bool Exists() const;
+  virtual bool OwnerIsErased() const { return false;}
 
   // ---------- L1 functions ----------  
   virtual ~Violation(){}
@@ -112,6 +113,8 @@ struct OwnedViolation : public Violation {
     ret["owner"] = owner_->ShortDescription();    
     return ret;
   }
+  bool OwnerIsErased() const { if (!owner_) return false;
+    return owner_->IsErased();}
 
   // ---------- L1 functions ----------
   void L1_Init(Owner *owner) {
@@ -152,6 +155,8 @@ struct OwnedViolationWithData : public Violation {
   Owner *GetOwner() const { return owner_;}
   Violation::Type GetViolationType() const {return VType;}
   OTime ComputeTime() const { return owner_->GetTime();}
+  bool OwnerIsErased() const { if (!owner_) return false;
+    return owner_->IsErased();}
 
   // ---------- L1 functions ----------
   void L1_Init(Owner *owner, DataType data) {
