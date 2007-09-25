@@ -25,15 +25,38 @@
 #include "model.h"
 #include "element.h"
 
-bool StaticExecute();
-bool FixMissingDynamicOn(MissingDynamicOnViolation *violation);
-bool FixMissingOnMatch(MissingOnMatchViolation *violation);
-bool FixExtraOnMatch(ExtraOnMatchViolation *violation);
-bool FixMissingLink(MissingLinkViolation *violation);
-bool FixValue(ValueViolation *violation);
-bool FixIf(IfViolation *violation);
-bool FixTime(TimeViolation *violation);
-bool FixPost(PostViolation *violation);
-bool FixLet(LetViolation *violation);
-bool FixBindingOldValues(BindingOldValuesViolation *violation);
+
+
+struct StaticExecutor {
+  // running a program
+  static bool Execute();
+  
+
+  // fixing particular types of violations
+
+  static bool FixMissingDynamicOn(MissingDynamicOnViolation *violation);
+  static bool FixMissingOnMatch(MissingOnMatchViolation *violation);
+  static bool FixExtraOnMatch(ExtraOnMatchViolation *violation);
+  static bool FixMissingLink(MissingLinkViolation *violation);
+  static bool FixValue(ValueViolation *violation);
+  static bool FixIf(IfViolation *violation);
+  static bool FixTime(TimeViolation *violation);
+  static bool FixPost(PostViolation *violation);
+  static bool FixLet(LetViolation *violation);
+  static bool FixBindingOldValues(BindingOldValuesViolation *violation);
+
+  // utilities
+
+  static DynamicElement * 
+  MakeInstantiateChild(DynamicElement *parent, int which_child);
+  
+  static bool Instantiate(DynamicElement *e);
+
+  static bool InstantiateExpression(DynamicExpression *e);
+
+  static bool InstantiateStatement(DynamicStatement *s);
+
+  
+};
+
 #endif

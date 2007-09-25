@@ -1,10 +1,12 @@
 {
-  on pattern((COUT x))
+  on pattern() post (F 0 0);
+  on pattern((F x y))
     delay #0
-      if (equal (substitute x) 10) {
+      if (equal (substitute x) 1001) {
         pass;
-	let y (sum (substitute x) 1)
-	  post (substitute (COUT y) );
+	let a (sum (substitute x) 1)
+	  let b (sum (substitute x) (substitute y) )
+	  post (substitute (F a b) );
       }
 }
 

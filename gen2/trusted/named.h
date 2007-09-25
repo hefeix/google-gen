@@ -48,6 +48,7 @@ class Named {
   void L1_AutomaticallyName();
   virtual Record GetRecordForDisplay() const;
   string GetURL() const; // link to object view
+  bool IsErased() const { return erased_;}
   string GetLink(string anchortext) const;
   string ShortDescription() const;
   virtual string TextIdentifier() const;
@@ -60,6 +61,7 @@ class Named {
   virtual ~Named() {};
  private:
   Object name_;
+  bool erased_;
 };
 
 class Namer {

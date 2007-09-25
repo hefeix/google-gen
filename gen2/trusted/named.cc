@@ -55,11 +55,13 @@ void Named::L1_AutomaticallyName() {
 
 void Named::L1_Erase() {
   CL.RemoveFromMap(&N.index_[GetNamedType()], name_);
+  CL.ChangeValue(&erased_, true);
   CL.Destroying(this);
 }
 
 void Named::L1_Init() {
   CL.Creating(this);
+  erased_ = false;
   L1_AutomaticallyName();
 }
 
@@ -67,6 +69,7 @@ Record Named::GetRecordForDisplay() const {
   Record ret;
   ret["name"] = name_.ToString();
   ret["type"] = TypeToString(GetNamedType());
+  if (IsErased()) ret["ERASED"] = "ERASED";
   return ret;
 }
 string Named::GetURL() const { 

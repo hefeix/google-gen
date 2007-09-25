@@ -25,6 +25,7 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <string>
 #include <iostream>
 #include <ext/hash_map>
 #include <ext/hash_set>
@@ -32,7 +33,9 @@
 using namespace std;
 using namespace __gnu_cxx;
 
-#define CHECK(cond) if(!(cond)) {cerr << "Check Failed" << endl; int *x=0; *x=0; }
+// #define CHECK(cond) if(!(cond)) {cerr << "Check Failed" << endl; int *x=0; *x=0; }
+#define CHECK(cond) if(!(cond)) {cerr << "Check Failed at " << __FUNCTION__ << " " << __FILE__ << ":" << __LINE__ << endl << endl;	\
+    string __s; do { cin >> __s; } while (__s != "c");}
 
 #define OPERATORLESS operator <
 #define OPERATORLE operator <=

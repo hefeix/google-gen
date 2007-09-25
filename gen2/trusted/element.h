@@ -41,6 +41,7 @@ struct Element : public Named {
 	ITEM(CONSTANT),					\
 	ITEM(EQUAL),					\
 	ITEM(SUM),					\
+	ITEM(FUNCTION_ERROR)				\
 	};
   CLASS_ENUM_DECLARE(Element, Function);
 
@@ -213,10 +214,11 @@ struct DynamicElement : public Element{
   }
   Record GetRecordForDisplay() const;
   StaticElement * GetStatic() const {
+    if (!static_parent_) return NULL;
     return dynamic_cast<StaticElement *>(static_parent_->parent_); 
   }
   string TextIdentifier() const { return binding_.ToString() + " " 
-      + GetStatic()->ToString();}
+      + (GetStatic()?GetStatic()->ToString():"NO STATIC");}
   int NumExpressionChildren() const { 
     return GetStatic()->NumExpressionChildren();}
   int NumChildren() const { return GetStatic()->NumChildren();}
@@ -233,7 +235,9 @@ struct DynamicElement : public Element{
   virtual Link::Type LinkType(int which_child) const { return Link::SINGLE;}
   OTime ComputeTime() const;
   string ToString() const;
-  virtual Function GetFunction() const { return GetStatic()->GetFunction();}
+  virtual Function GetFunction() const { 
+    if (!GetStatic()) return FUNCTION_ERROR;
+    return GetStatic()->GetFunction();}
   // this only works for single links.
   virtual OMap GetIntroducedBinding(int which_child) const { 
     return OMap::Default();}
@@ -257,9 +261,7 @@ struct DynamicElement : public Element{
   // the third, but we'd rather pass all three here than worry about the corner
   // cases at this point. 
   void L1_Init(StaticElement * static_parent, OMap binding);
-  void L1_Erase() { 
-    Element::L1_Erase();
-  }
+  void L1_Erase();
   // should only be called by Link::L1_AddChild();
   void L1_ConnectToParentLink(Link *link) {
     if (link->parent_->IsDynamic())

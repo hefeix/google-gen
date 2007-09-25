@@ -43,8 +43,7 @@ void Element::SetTime(OTime new_time) {
 }
 
 void Element::L1_Erase() {
-  CHECK(!parent_);
-  //  if (parent_) parent_->L1_RemoveChild(this);
+  CHECK(!parent_); // We always unlink elements before we erase.
   L1_EraseOwnedViolations(this);
   Named::L1_Erase();
 }
@@ -125,6 +124,12 @@ void StaticElement::L1_Erase() {
 StaticElement * StaticElement::GetParent() const { 
   if (!parent_) return NULL;
   return dynamic_cast<StaticElement *>(parent_->GetParent());
+}
+void DynamicElement::L1_Erase() {
+  for (uint i=0; i<children_.size(); i++) {
+    children_[i]->L1_Erase();
+  }  
+  Element::L1_Erase();
 }
 
 set<Variable> StaticElement::GetVariables() const { 
@@ -411,6 +416,8 @@ void DynamicPost::SetPostingTime(OTime new_time) {
 bool DynamicPost::NeedsPostViolation() const {
   Object computed = ComputeTuple();
   if (computed.GetType() != Object::OTUPLE) {
+    // If the computed value is not a tuple, there should be no posting. 
+    // It is a posting violation if one exists.
     return posting_;
   }
   if (!posting_) return true;
@@ -429,6 +436,10 @@ void DynamicPost::AddCorrectPosting() {
   if (!expr) return;
   Object t = expr->value_;
   if (t.GetType() != Object::OTUPLE) return;
+  if (time_ == NULL) {
+    cerr << "Cannot add posting because time is null";
+    return;
+  }
   AddPosting(OTuple(t), time_);
 }
 void DynamicPost::AddPosting(OTuple t, OTime time) {
@@ -721,8 +732,10 @@ Record StaticElement::GetRecordForDisplay() const {
 }
 Record DynamicElement::GetRecordForDisplay() const { 
   Record ret = Element::GetRecordForDisplay();
-  ret["static_parent"] = GetStatic()->ShortDescription();
+  ret["static_parent"] = GetStatic()?GetStatic()->ShortDescription():
+    "NONE FOUND";
   ret["binding"] = GetBinding().ToString();
+  if (!GetStatic()) return ret;
   for (uint i=0; i<children_.size(); i++) {
     if (i>0) ret["children"] += "<br>\n";
     ret["children"] += GetStatic()->ChildToString(i) 

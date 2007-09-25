@@ -29,12 +29,23 @@ void Shell() {
   ifstream input("test_prog");
   input >> M;
   cout << M;
-  StaticExecute();
+  StaticExecutor::Execute();
   string command;
   while ((cout << "\n?") && (cin >> command)) {
     if (command == "q") break;
     if (command == "run") {
-      StaticExecute();
+      StaticExecutor::Execute();
+    }
+    if (command == "v") {
+      int level;
+      cin >> level;
+      SetVerbosity(level);
+    }
+    if (command == "fv") {
+      int level;
+      string func_name;
+      cin >> func_name >> level;
+      SetVerbosity(func_name, level);
     }
   }
 }
