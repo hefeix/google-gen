@@ -36,7 +36,8 @@ class Named {
 	ITEM(PROHIBITION),				\
 	ITEM(GIVEN),					\
 	ITEM(VIOLATION),					\
-	ITEM(LINK)					\
+	ITEM(LINK),						\
+	ITEM(MODEL)					\
 	};
   CLASS_ENUM_DECLARE(Named, Type);
 
