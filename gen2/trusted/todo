@@ -1,9 +1,7 @@
-Write a deterministic and random executor.
+Write a random executor.
 
-viewer needs:
-blackboard indexrow
-blackboard tupleinfo
-blackboard posting
+Give the executor/fixer options (maybe a strategy) so that it can have variations in strategy.
 
-test the spec stuff (like givens adding to the blackboard)
+Track coplexity costs.
+
 

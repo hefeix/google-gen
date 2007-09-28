@@ -31,7 +31,7 @@ Model::Model(){
   ln_likelihood_ = 0;
   next_name_ = 0;
   next_unique_variable_ = -1;
-  webserver_ = new WebServer(this);
+  webserver_ = new WebServer(&request_handler_);
   webserver_->StartInThread();
 }
 Model::~Model(){}
@@ -92,90 +92,6 @@ void Model::L1_AddChoiceToFlakeChooser(Object chooser_name,
     CL.RemoveFromMap(&flake_choosers_, chooser_name);
   }
 }
-
-string Model::TopNavHTML() const {
-  string ret;
-  ret += "<font size=-1>";
-  ret += HTMLLink("program", "Program") + " "; 
-  for (int i=0; i<Named::NumTypes(); i++) {
-    Named::Type t = Named::Type(i);
-    ret += HTMLLink("typelist?type=" 
-		    + URLEscape(Named::TypeToString(t)),
-		    Named::TypeToString(t))
-      + "(" + itoa(N.Index(t).size()) + ") ";
-  }
-  ret += HTMLLink(BB.GetURL(), "Blackboard");
-  ret += "</font><br><p>";
-  return ret;
-}
-
-string Model::TypeListHTML(Named::Type type) const {
-  string ret;
-  if (type < 0 || type >= Named::NumTypes()) {
-    return "unkown type " + itoa(type);
-  }
-  vector<Record> v;
-  forall(run, N.Index(type)) {
-    v.push_back(run->second->GetRecordForDisplay());
-  }
-  ret += RecordVectorToHTMLTable(v);
-  return ret;
-}
-
-string Model::Handle(Record params) {
-  string ret = SimpleHTMLHeader() + TopNavHTML();
-  string command = params["_command"];
-  // display information about a named object. 
-  if (command == "getobject") {
-    string sname = params["name"];
-    Object name = StringToObject(sname);
-    Named::Type type = Named::StringToType(params["type"]);
-    Named * named = N.Lookup(type, name);
-    if (!named) {
-      ret += "Object not found";
-      return ret;
-    }
-    // We are overloading the getobject command to also get owned postings.
-    // It would be more elegant to have a separate command, but instead
-    // we are just tacking on a parameter ownedposting= to signify that 
-    // we want the posting owned by the given named object.
-    if (params % string("ownedposting")) {
-      ret += 
-	RecordToHTMLTable(named->GetOwnedPosting()->GetRecordForDisplay());
-      return ret;
-    }
-    ret += "<font size=+1>" + named->ShortDescription() + "</font><p>";
-    ret += RecordToHTMLTable(named->GetRecordForDisplay());
-    return ret;
-  }
-  if (command == "typelist") {
-    ret += TypeListHTML(Named::StringToType(params["type"]));
-    return ret;
-  }
-  if (command == "tupleinfo") {
-    const TupleInfo * ti 
-      = BB.GetConstTupleInfo(OTuple(StringToObject(params["tuple"])));
-    if (!ti) return ret + "Tuple not found on blackboard";
-    ret += RecordToHTMLTable(ti->GetRecordForDisplay());
-    return ret;
-  }
-  if (command == "indexrow") {
-    const IndexRow * ir 
-      = BB.GetConstIndexRow(OTuple(StringToObject(params["tuple"])));
-    if (!ir) return ret + "Index row not found";
-    ret += RecordToHTMLTable(ir->GetRecordForDisplay());
-    return ret;
-  }
-  if (command == "blackboard") {
-    ret += RecordToHTMLTable(BB.GetRecordForDisplay());
-    return ret;
-  }
-  //if (command == "program") {
-    ret += ToString(true);
-    // }
-  return ret;
-}
-
 Violation * Model::GetViolationOfType(Violation::Type type) const {
   const set<Violation *> * s = violations_by_type_ % type;
   if (!s) return NULL;

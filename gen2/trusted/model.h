@@ -25,8 +25,9 @@
 #include "violation.h"
 #include "record.h"
 #include "webserver.h"
+#include "genrequesthandler.h"
 
-class Model : public RequestHandler{
+class Model : public Named{
  public:
 
   // ---------- L2 functions ----------
@@ -38,14 +39,10 @@ class Model : public RequestHandler{
   // if html is set, produces html
   string ToString(bool html) const;
 
-  // handle a web request
-  string Handle(Record params);
-
   // ---------- const functions ----------
 
+  Named::Type GetNamedType() const { return Named::MODEL;}
   // various html output routines
-  string TopNavHTML() const;
-  string TypeListHTML(Named::Type type) const;
   Violation * GetViolationOfType(Violation::Type type) const;
   Violation * GetFirstViolation() const;
 
@@ -103,6 +100,7 @@ class Model : public RequestHandler{
   LL work_penalty_;
 
   // webserver
+  GenRequestHandler request_handler_;
   WebServer * webserver_;
 };
 
