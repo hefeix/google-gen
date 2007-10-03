@@ -60,6 +60,8 @@ class Named {
   virtual void L1_Erase();
   virtual OMap GetMap() { CHECK(false); return OMap();} // overriden for dynamic
   virtual ~Named() {};
+
+  static int counts_[100]; // for debugging purposes
  private:
   Object name_;
   bool erased_;

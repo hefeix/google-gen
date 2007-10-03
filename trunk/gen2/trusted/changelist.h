@@ -387,6 +387,7 @@ template <class C, class P> class MemberCall1Change : public Change {
 
 class Changelist {
  public:
+  Changelist(); 
   void Make(Change * c); // Make a change (use 'new' to create c inline)
   Checkpoint GetCheckpoint();  // Create a checkpoint.
   void Rollback(Checkpoint cp); // Roll back to a checkpoint.
@@ -394,50 +395,99 @@ class Changelist {
   string ToString() const;
  private:
   vector<Change *> history_;
+  bool disabled_; // 
 
  public:
   // convenience functions:
   template <class C> void ChangeValue(C * location, const C & new_val){
+    if (disabled_) {
+      *location = new_val;
+      return;
+    }
     Make(new ValueChange<C>(location, new_val));
   }
   // delete on rollback
   template <class C> void Creating(C * object){
+    if (disabled_) return;
     Make(new DeleteOnRollbackChange<C>(object));
   }
   // delete on make permanent
   template <class C> void Destroying(C * object){
+    if (disabled_) return;
     Make(new DeleteOnMakePermanentChange<C>(object));
   }
 
   // Adding to set convenience function
   template <class C, class SC> void InsertIntoSet(SC * sc, const C& c) {
+    if (disabled_) {
+      sc->insert(c);
+      return;
+    }
     Make(new SetInsertChange<C, SC>(sc, c));
   }
   template <class C, class SC> void RemoveFromSet(SC * sc, const C& c) {
+    if (disabled_) {
+      sc->erase(c);
+      return;
+    }
     Make(new SetRemoveChange<C, SC>(sc, c));
   }
   template <class K, class V> void InsertIntoMap(map<K,V> * location,
 						 const K& key,
 						 const V& val) {
+    if (disabled_) {
+      (*location)[key] = val;
+      return;
+    }
     Make (new MapInsertChange<K, V>(location, key, val));
   }
   template <class K, class V> void RemoveFromMap(map<K,V> * location,
 						 const K& key) {
+    if (disabled_) {
+      location->erase(key);
+      return;
+    }
     Make (new MapRemoveChange<K, V>(location, key));
   }
   template<class K, class V> void ChangeMapValue(map<K,V> *location,
 						 const K&key, 
 						 const V&new_val) {
+    if (disabled_) {
+      (*location)[key] = new_val;
+      return;
+    }
     Make(new MapValueChange<K,V>(location, key, new_val));
   }
+  template <class K, class V> 
+    void AddToMapOfCounts(map<K, V> *location, const K & key, 
+			       const V & delta) {
+    if (disabled_) {
+      (*location)[key] += delta;
+      if ((*location)[key] == 0) location->erase(key);
+      return;
+    }
+    Make(new MapOfCountsAddChange<K,V>(location, key, delta));
+  }
+
   template <class MK, class SV, class MapComp> 
-    void InsertIntoMapOfSets(map<MK, set<SV>, MapComp> * location, const MK & key, 
+    void InsertIntoMapOfSets(map<MK, set<SV>, MapComp> * location, 
+			     const MK & key, 
 			     const SV & value) {
+    if (disabled_) {
+      (*location)[key].insert(value);
+      return;
+    }
     Make(new MapOfSetsInsertChange<MK, SV, MapComp>(location, key, value));
   }
   template <class MK, class SV, class MapComp> 
-    void RemoveFromMapOfSets(map<MK, set<SV>, MapComp> * location, const MK & key, 
+    void RemoveFromMapOfSets(map<MK, set<SV>, MapComp> * location, 
+			     const MK & key, 
 			     const SV & value) {
+    if (disabled_) {
+      (*location)[key].erase(value);
+      if ((*location)[key].size()==0) location->erase(key);
+      return;
+    }
     Make(new MapOfSetsRemoveChange<MK, SV, MapComp>(location, key, value));
   }
 

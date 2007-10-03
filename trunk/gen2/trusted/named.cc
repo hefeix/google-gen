@@ -25,6 +25,8 @@
 
 CLASS_ENUM_DEFINE(Named, Type);
 
+int Named::counts_[100];
+
 Namer::Namer() {
   index_.resize(Named::NumTypes());
 }
@@ -63,6 +65,7 @@ void Named::L1_Init() {
   CL.Creating(this);
   erased_ = false;
   L1_AutomaticallyName();
+  counts_[GetNamedType()]++;
 }
 
 Record Named::GetRecordForDisplay() const { 

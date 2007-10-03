@@ -78,6 +78,7 @@ void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
   CHECK(new_parent->ChildType(which_child) == GetNamedType());
   new_parent->static_children_[which_child]->L1_AddChild(this);
   StaticNoParentViolation::L1_RemoveIfPresent(this);
+  L1_RecursivelyComputeSetVariables();
   N1_StoredOrComputedTimeChanged();
 }
 
@@ -132,11 +133,21 @@ void DynamicElement::L1_Erase() {
   Element::L1_Erase();
 }
 
-set<Variable> StaticElement::GetVariables() const { 
+set<Variable> StaticElement::ComputeVariables() const { 
   if (!parent_) return set<Variable>();
   StaticElement * parent = GetParent();
   return Union(parent->GetVariables(), 
 	       parent->GetIntroducedVariables(WhichChildAmI()));
+}
+
+void StaticElement::L1_RecursivelyComputeSetVariables() {
+  set<Variable> new_variables = ComputeVariables();
+  if (new_variables == variables_) return;
+  CL.ChangeValue(&variables_, new_variables);
+  for (int i=0; i<NumChildren(); i++) {
+    StaticElement *child = GetChild(i);
+    if (child) child->L1_RecursivelyComputeSetVariables();
+  }
 }
 
 set<Variable> StaticElement::GetIntroducedVariables(int which_child) const {

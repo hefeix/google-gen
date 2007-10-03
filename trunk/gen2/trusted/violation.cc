@@ -27,6 +27,7 @@ CLASS_ENUM_DEFINE(Violation, Type);
 
 
 map<void *, set<Violation *> > Violation::owned_violations_;
+int Violation::counts_[100];
 
 // Find all OwnedViolations of this type with this owner. 
 set<Violation *> FindViolations(void *owner, Violation::Type type) {
@@ -68,6 +69,7 @@ void Violation::L1_Init() {
   time_ = ComputeTime();
   // add to the model's set of violations
   L1_InsertIntoGlobalMap();
+  counts_[GetViolationType()]++;
 }
 void Violation::L1_InsertIntoGlobalMap(){
   CL.InsertIntoMapOfSets(&M.violations_by_type_, GetViolationType(), this);

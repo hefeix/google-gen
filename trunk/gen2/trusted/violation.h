@@ -77,6 +77,7 @@ struct Violation : public Named {
   // ---------- data ----------  
   static map<void *, set<Violation *> > owned_violations_;
   OTime time_;
+  static int counts_[100];
 };
 
 
