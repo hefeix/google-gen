@@ -151,7 +151,9 @@ struct StaticElement : public Element {
   // What variables exist at this node. 
   // This is the union of GetIntroducedVariables() up the static tree, 
   // not including this node. 
-  virtual set<Variable> GetVariables() const;
+  set<Variable> ComputeVariables() const;
+  inline const set<Variable> & GetVariables() const { return variables_;}
+
   Record GetRecordForDisplay() const;
   set<Element *> GetAllChildren() const;
   set<StaticElement *> GetAllStaticChildren() const;
@@ -172,6 +174,9 @@ struct StaticElement : public Element {
   void L1_UnlinkChild(int where);
   void L1_SetObject(int which, Object new_value);
 
+  // caches the set of variables_ for this and all descendents.
+  void L1_RecursivelyComputeSetVariables();
+
   //This should only be called from Link::L1_AddChild()
   void L1_ConnectToParentLink(Link *link) { CL.ChangeValue(&parent_, link);}
   //This should only be called from Link::L1_RemoveChild()
@@ -188,7 +193,7 @@ struct StaticElement : public Element {
   MultiLink * dynamic_children_;
   vector<SingleLink *> static_children_; // statements and expressions
   vector<Object> objects_;
-
+  set<Variable> variables_;
 
 };
 
@@ -656,6 +661,8 @@ struct DynamicPost : public DynamicStatement {
   OwnedPosting * posting_;
 };
 
+// if the condition does not evaluate to Boolean::Make(false), 
+// then the ON_TRUE should be executed.
 struct StaticIf : public Statement {
   #define StaticIfChildNameList {					\
       ITEM(CONDITION),							\

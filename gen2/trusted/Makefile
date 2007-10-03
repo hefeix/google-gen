@@ -1,6 +1,6 @@
 # This defines the compiler and standard ways to use it
 CXX = g++
-CXXFLAGS = -Wall -Wno-deprecated -g
+CXXFLAGS = -Wall -Wno-deprecated -O2
 CXXMOSTFLAGS = -Wall -Wno-deprecated
 
 # These are the Gen sources, and computed object and header files

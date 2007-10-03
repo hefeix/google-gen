@@ -185,13 +185,13 @@ struct Subscription {
     CL.Creating(this);
     needs_ = needs;
     subscribee_ = subscribee;
-    CL.Make(new MapOfSetsInsertChange<UpdateNeeds, Subscription *>
-	    (&(subscribee_->subscriptions_), needs_, this));
+    CL.InsertIntoMapOfSets
+      (&(subscribee_->subscriptions_), needs_, this);
     subscribee_->L1_AddedSubscription();
   }
   void L1_Erase(){
-    CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, Subscription*>
-	    (&(subscribee_->subscriptions_), needs_, this));
+    CL.RemoveFromMapOfSets
+      (&(subscribee_->subscriptions_), needs_, this);
     subscribee_->L1_RemovedSubscription();
     CL.Destroying(this);
   }
@@ -208,11 +208,11 @@ struct Subscription {
     subscribee_->L1_SendCurrentAsUpdates(this);
   }
   void L1_ChangeNeeds(UpdateNeeds new_needs){
-    CL.Make(new MapOfSetsRemoveChange<UpdateNeeds, Subscription*>
-	    (&(subscribee_->subscriptions_), needs_, this));
+    CL.RemoveFromMapOfSets
+      (&(subscribee_->subscriptions_), needs_, this);
     CL.ChangeValue(&needs_, new_needs);
-    CL.Make(new MapOfSetsInsertChange<UpdateNeeds, Subscription*>
-	    (&(subscribee_->subscriptions_), needs_, this));
+    CL.InsertIntoMapOfSets
+      (&(subscribee_->subscriptions_), needs_, this);
     subscribee_->L1_ChangedSubscriptionNeeds();
   }
   SubscribeeType * subscribee_;

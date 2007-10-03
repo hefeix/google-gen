@@ -20,7 +20,7 @@
 #include "element.h"
 #include "changelist.h"
 #include "webserver.h"
-
+#include "options.h"
 
 void Link::L1_Init(Element *parent) {
   // Creating called at the beginning of the base class
@@ -123,6 +123,7 @@ void SingleLink::L1_Init(Element *parent) {
 }
 
 void SingleLink::L1_CheckSetMissingLinkViolation() {
+  if (NO_SINGLELINK_VIOLATIONS) return;
   bool needs_violation = (!optional_) && (child_==NULL);
   if (needs_violation) 
     MissingLinkViolation::L1_CreateIfAbsent(this);

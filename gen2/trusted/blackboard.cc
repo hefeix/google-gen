@@ -90,12 +90,9 @@ void Posting::L1_ChangeTime(Time new_time) {
 TupleInfo::TupleInfo(Posting *first_posting, Blackboard *blackboard)
   :blackboard_(blackboard), tuple_(first_posting->tuple_) {
   CL.Creating(this);
-  CL.Make
-    (new MapInsertChange<OTuple, TupleInfo *>
-     (&blackboard_->tuple_info_, tuple_, this));
-  CL.Make
-    (new SetInsertChange<pair<Time, Posting *> >
-     (&postings_, make_pair(first_posting->time_, first_posting)));
+  CL.InsertIntoMap(&blackboard_->tuple_info_, tuple_, this);
+  CL.InsertIntoSet
+    (&postings_, make_pair(first_posting->time_, first_posting));
   SingleWTUpdate update = SingleWTUpdate::Create(tuple_, first_posting->time_);
   // First we add the tuple to all of the index rows, then we send updates.
   for (int pass=0; pass<2; pass++) {
@@ -130,9 +127,8 @@ void TupleInfo::L1_Erase() {
       else ir->L1_RemoveTuple(this);
     }
   }
-  CL.Make
-    (new MapRemoveChange<OTuple, TupleInfo *>
-     (&blackboard_->tuple_info_, tuple_));
+  CL.RemoveFromMap
+     (&blackboard_->tuple_info_, tuple_);
   CL.Destroying(this);
 }
 
@@ -166,13 +162,11 @@ void TupleInfo::L1_ChangeTimesInIndexRows(Time old_first_time,
 
 void TupleInfo::L1_ChangePostingTime(Posting *p, Time new_time) {
   Time old_first_time = FirstTime();
-  CL.Make
-    (new SetRemoveChange<pair<Time, Posting*> >
-     (&postings_, make_pair(p->time_, p)));
+  CL.RemoveFromSet
+     (&postings_, make_pair(p->time_, p));
   CL.ChangeValue(&p->time_, new_time);
-  CL.Make
-    (new SetInsertChange<pair<Time, Posting*> >
-     (&postings_, make_pair(p->time_, p)));
+  CL.InsertIntoSet
+     (&postings_, make_pair(p->time_, p));
   Time new_first_time = FirstTime();
   if (old_first_time != new_first_time) {
     L1_ChangeTimesInIndexRows(old_first_time, new_first_time);
@@ -181,9 +175,8 @@ void TupleInfo::L1_ChangePostingTime(Posting *p, Time new_time) {
 
 void TupleInfo::L1_AddPosting(Posting *p) {
   Time old_first_time = FirstTime();
-  CL.Make
-    (new SetInsertChange<pair<Time, Posting *> >
-     (&postings_, make_pair(p->time_, p) ) );
+  CL.InsertIntoSet
+     (&postings_, make_pair(p->time_, p) );
   Time new_first_time = FirstTime();
   L1_ChangeTimesInIndexRows(old_first_time, new_first_time);
 }
@@ -194,9 +187,8 @@ void TupleInfo::L1_RemovePosting(Posting *p){
     return;
   }
   Time old_first_time = FirstTime();
-  CL.Make
-    (new SetRemoveChange<pair<Time, Posting *> >
-     (&postings_, make_pair(p->time_, p) ) );
+  CL.RemoveFromSet
+     (&postings_, make_pair(p->time_, p) );
   Time new_first_time = FirstTime();
   L1_ChangeTimesInIndexRows(old_first_time, new_first_time);
 }
@@ -204,14 +196,12 @@ void TupleInfo::L1_RemovePosting(Posting *p){
 IndexRow::IndexRow(OTuple wildcard_tuple, Blackboard *blackboard)
   :wildcard_tuple_(wildcard_tuple), blackboard_(blackboard){  
   CL.Creating(this);
-  CL.Make
-    (new MapInsertChange<OTuple, IndexRow *>
-     (&blackboard_->index_, wildcard_tuple_, this) );
+  CL.InsertIntoMap
+     (&blackboard_->index_, wildcard_tuple_, this);
 }
 void IndexRow::L1_Erase() {
-  CL.Make
-    (new MapRemoveChange<OTuple, IndexRow *>
-     (&blackboard_->index_, wildcard_tuple_) );
+  CL.RemoveFromMap
+     (&blackboard_->index_, wildcard_tuple_);
   CL.Destroying(this);
 }
 

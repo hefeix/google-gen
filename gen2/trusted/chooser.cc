@@ -108,7 +108,7 @@ void Chooser::L1_ChangeObjectCount(Object object, int delta) {
   int old_num_objects = counts_.size();
   int64 old_total = total_;
   
-  CL.Make(new MapOfCountsAddChange<Object, int>(&counts_, object, delta));
+  CL.AddToMapOfCounts(&counts_, object, delta);
   CL.ChangeValue(&total_, delta + old_total);
   
   int new_num_objects = counts_.size();

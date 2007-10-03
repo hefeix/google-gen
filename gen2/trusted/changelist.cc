@@ -17,6 +17,12 @@
 // Author: Noam Shazeer and Georges Harik
 
 #include "changelist.h"
+#include "options.h"
+
+Changelist::Changelist() {
+  // WORKING TODO remove this if we want a changelist.
+  disabled_ = NO_CHANGELIST;
+}
 
 DestructibleCheckpoint::DestructibleCheckpoint(Changelist *cl){
   cl_ = cl;

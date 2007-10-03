@@ -1,0 +1,1 @@
+export DYLD_INSERT_LIBRARIES=/usr/lib/libMallocDebug.A.dylib

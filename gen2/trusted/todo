@@ -1,7 +1,19 @@
-Write a random executor.
+Profiling/Optimizing ideas:
+
+Track the number of each named type that have ever been created. 
+Mode where the number of single link violations are tracked, instead of creating them.  
+Look at allocations in the changelist.  
+
+
+Now:
+
+Profile
+Track complexity costs.
+Port previous learning algorithms.
+
+L8r:
 
 Give the executor/fixer options (maybe a strategy) so that it can have variations in strategy.
-
-Track coplexity costs.
+Write a random executor.
 
 
