@@ -127,8 +127,6 @@ struct SingleLink : public Link {
   // Modifiers
   void L1_AddChild(Element *child);
   void L1_RemoveChild(Element *child);
-  void L1_SetOptional(bool optional);
-  void L1_CheckSetMissingLinkViolation();
 
   // Accessors
   Element * GetChild() const { return child_;  }
@@ -139,7 +137,6 @@ struct SingleLink : public Link {
 
   // Data
   Element * child_;
-  bool optional_;
 };
 
 #endif

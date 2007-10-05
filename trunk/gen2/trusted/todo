@@ -3,7 +3,7 @@ Profiling/Optimizing ideas:
 Track the number of each named type that have ever been created. 
 Mode where the number of single link violations are tracked, instead of creating them.  
 Look at allocations in the changelist.  
-
+on MakePermanent, remove forwarded notifications that deal with deleted objects.
 
 Now:
 
