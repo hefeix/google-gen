@@ -39,6 +39,12 @@ class Model : public Named{
   // if html is set, produces html
   string ToString(bool html) const;
 
+  void SetBatchMode(bool value) {
+    CL.ChangeValue(&batch_mode_, value);
+    if (value == false) {
+      L1_ProcessDelayedChecks();
+    }
+  }
   // ---------- const functions ----------
 
   Named::Type GetNamedType() const { return Named::MODEL;}
@@ -59,8 +65,30 @@ class Model : public Named{
 
   // throw-away variables (we use negative integers)
   Variable L1_GetNextUniqueVariable();
+
+  struct DelayedCheck {
+    Element *element_;
+    typedef void (Element::*FuncType)();
+    FuncType function_;
+    DelayedCheck(Element *e, FuncType f) 
+      :element_(e), function_(f) {}
+  };
+  void L1_AddDelayedCheck(Element *e, DelayedCheck::FuncType f) {
+    CL.PushBack(&delayed_checks_, DelayedCheck(e,f));
+  }
+  void L1_ProcessDelayedChecks() {
+    for (uint i=0; i<delayed_checks_.size(); i++) {
+      const DelayedCheck & dn = delayed_checks_[i];
+      (dn.element_->*(dn.function_))();
+    }
+    CL.ChangeValue(&delayed_checks_, vector<DelayedCheck>());
+  }
   
   // ---------- data ----------
+
+  // delayed checks
+  vector<DelayedCheck> delayed_checks_;
+  bool batch_mode_;
 
   // The problem specification
   set<Requirement *> requirements_;

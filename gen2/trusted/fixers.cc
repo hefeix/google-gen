@@ -22,6 +22,7 @@
 
 bool StaticExecutor::Execute() {
   while (1) {
+    M.SetBatchMode(true);
     Violation * v = M.GetFirstViolation();
     if (!v) {
       VLOG(0) << "No more violations in Khazakhstan" << endl;
@@ -43,8 +44,8 @@ bool StaticExecutor::Execute() {
     case Violation::EXTRA_ON_MATCH :
       success = FixExtraOnMatch(dynamic_cast<ExtraOnMatchViolation*>(v));
       break;
-    case Violation::MISSING_LINK :
-      success = FixMissingLink(dynamic_cast<MissingLinkViolation*>(v));
+    case Violation::CHILD :
+      success = FixChildViolation(dynamic_cast<ChildViolation*>(v));
       break;
     case Violation::VALUE :
       success = FixValue(dynamic_cast<ValueViolation*>(v));
@@ -75,6 +76,7 @@ bool StaticExecutor::Execute() {
       VLOG(1) << "Devastating Failure" << endl;
       break;
     }
+    M.SetBatchMode(false);
   }
   return true;
 }
@@ -136,23 +138,32 @@ InstantiateExpression(DynamicExpression *e){
   return true;
 }
 
-bool StaticExecutor::FixMissingLink(MissingLinkViolation *violation) {
-  SingleLink * owner = violation->GetOwner();
-  if (owner->GetParent()->IsStatic()) {
+bool StaticExecutor::FixChildViolation(ChildViolation *violation) {
+  Element * e = violation->GetOwner();
+  if (e->IsStatic()) {
     VLOG(1) << "Couldn't fix missing static link" << endl;
     return false;
-  } else {
-    DynamicElement *parent = dynamic_cast<DynamicElement *>(owner->GetParent());
-    int which_child = owner->WhichChildAmI();
-    StaticElement *s_child = parent->GetStatic()->GetChild(which_child);
-    if (!s_child) {
-      VLOG(1) << "Static child doesn't exist" << endl;
-      return false;
-    }
-    MakeDynamicElement(s_child, parent->ComputeChildBinding(which_child));
-    VLOG(2) << "Fixing missing link" << endl;
-    return true;
   }
+  DynamicElement *de  = dynamic_cast<DynamicElement *>(e);
+  for (int which_child=0; which_child<de->NumChildren(); which_child++) {
+    if (de->LinkType(which_child) != Link::SINGLE) continue;    
+    bool should_exist = de->ChildShouldExist(which_child);
+    DynamicElement * does_exist = de->GetChild(which_child);
+    if (should_exist && !does_exist) {
+      StaticElement *s_child = de->GetStatic()->GetChild(which_child);
+      if (!s_child) {
+	VLOG(1) << "Static child doesn't exist" << endl;
+	return false;
+      }
+      MakeDynamicElement(s_child, de->ComputeChildBinding(which_child));
+      VLOG(2) << "Fixing missing link" << endl;
+    }
+    if (does_exist && !should_exist) {
+      VLOG(2) << "Erasing extra child" << endl;
+      does_exist->EraseTree();
+    }
+  }
+  return true;
 }
 bool StaticExecutor::FixMissingDynamicOn(MissingDynamicOnViolation *violation){
   VLOG(2) << "Fixing missing dynamic on " << endl;

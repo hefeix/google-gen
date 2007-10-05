@@ -61,6 +61,21 @@ template <class C> class ValueChange : public Change{
   C old_val_;
 };
 
+template<class C> 
+class PushChange : public Change {
+ public: 
+  PushChange(vector<C> * v, const C & val) {
+    v_ = v;
+    v_->push_back(val);
+  }
+  void Undo() {
+    v_->pop_back();
+  }
+  string ToString() const { 
+    return "PushChange";
+  }
+  vector<C> * v_;
+};
 
 // Inserts a value into a set.
 template <class C, class SC = set<C> >
@@ -405,6 +420,13 @@ class Changelist {
       return;
     }
     Make(new ValueChange<C>(location, new_val));
+  }
+  template <class C> void PushBack(vector<C> *location, const C & val) {
+    if (disabled_) {
+      location->push_back(val);
+      return;
+    }
+    Make(new PushChange<C>(location, val));
   }
   // delete on rollback
   template <class C> void Creating(C * object){

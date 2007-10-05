@@ -39,13 +39,19 @@ void Element::SetTime(OTime new_time) {
   set<Element *> dep = GetAllChildren();
   forall(run, dep) {
     (*run)->N1_StoredOrComputedTimeChanged();
-  }
+  }  
 }
 
 void Element::L1_Erase() {
   CHECK(!parent_); // We always unlink elements before we erase.
   L1_EraseOwnedViolations(this);
   Named::L1_Erase();
+}
+
+// The following are called externally when a child is connected to
+// or disconnected from this parent node. 
+void Element::N1_ChildChanged(int which_child) {
+  L1_CheckSetChildViolation();
 }
 
 void Element::N1_StoredOrComputedTimeChanged() {
@@ -62,17 +68,29 @@ void Element::N1_StoredOrComputedTimeChanged() {
   }
 }
 
+void Element::L1_CheckSetChildViolation() {
+  if (M.batch_mode_) {
+    M.L1_AddDelayedCheck(this, &Element::L1_CheckSetChildViolation);
+    return;
+  }
+  if (NeedsChildViolation()) ChildViolation::L1_CreateIfAbsent(this);
+  else ChildViolation::L1_RemoveIfPresent(this);
+}
+
 void StaticElement::UnlinkFromParent() {
   CHECK(parent_);
   // First unlink the dynamic nodes.
   forall(run, dynamic_children_->children_) {
     run->second->UnlinkFromParent();
   }
+  int which_child_was_i = WhichChildAmI();
+  StaticElement *parent = GetParent();
   parent_->L1_RemoveChild(this);
-  if (GetFunction() != ON) 
-    StaticNoParentViolation::L1_CreateIfAbsent(this);
+  if (GetFunction() != ON) StaticNoParentViolation::L1_CreateIfAbsent(this);
   N1_StoredOrComputedTimeChanged();
+  parent->N1_ChildChanged(which_child_was_i);
 }
+
 void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
   CHECK(!parent_);
   CHECK(new_parent->ChildType(which_child) == GetNamedType());
@@ -80,6 +98,7 @@ void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
   StaticNoParentViolation::L1_RemoveIfPresent(this);
   L1_RecursivelyComputeSetVariables();
   N1_StoredOrComputedTimeChanged();
+  GetParent()->N1_ChildChanged(which_child);
 }
 
 void StaticElement::EraseTree() {
@@ -212,6 +231,13 @@ set<Element *> DynamicElement::GetAllChildren() const {
   for (uint i=0; i<children_.size(); i++) children_[i]->AddChildrenInto(&ret);
   return ret;  
 }
+bool Element::NeedsChildViolation() const { 
+  for (int i=0; i<NumChildren(); i++) {
+    if (LinkType(i) != Link::SINGLE) continue;
+    if (ChildShouldExist(i) != bool(GetChild(i))) return true;
+  }
+  return false;
+}
 
 Object DynamicElement::GetChildValue(int which) const { 
   DynamicExpression * child = GetSingleExpressionChild(which);
@@ -235,6 +261,7 @@ bool DynamicElement::SetBinding(OMap new_binding) {
   N1_BindingChanged();
   return true;
 }
+
 void DynamicElement::N1_BindingChanged() {
   L1_CheckSetParentAndBindingViolations();
   set<Element *> all_children = GetAllChildren();
@@ -245,6 +272,10 @@ void DynamicElement::N1_BindingChanged() {
 }
 
 void DynamicElement::L1_CheckSetParentAndBindingViolations() {
+  if (M.batch_mode_) {
+    M.L1_AddDelayedCheck(this, &Element::L1_CheckSetParentAndBindingViolations);
+    return;
+  }
   // first check that there's a parent if there needs to be.
   if (GetParent() == NULL && GetFunction() != ON) {
     DynamicNoParentViolation::L1_CreateIfAbsent(this);
@@ -310,14 +341,15 @@ void DynamicExpression::L1_Init(StaticElement * static_parent,
 				OMap binding){
   DynamicElement::L1_Init(static_parent, binding);
   value_ = NULL;
-  L1_CheckSetValueViolation();
+  N1_ValueChanged();
   // there should already be a violation at the parent
   // if (GetParent()) GetParent()->L1_ChildExpressionValueChanged();
 }
 void DynamicExpression::SetValue(Object new_value) {
   CL.ChangeValue(&value_, new_value);
-  L1_CheckSetValueViolation();
-  if (GetParent()) GetParent()->N1_ChildExpressionValueChanged(WhichChildAmI());
+  N1_ValueChanged(); 
+  if (GetParent()) 
+    GetParent()->N1_ChildExpressionValueChanged(WhichChildAmI());  
 }
 
 void DynamicExpression::L1_Erase() {
@@ -325,6 +357,10 @@ void DynamicExpression::L1_Erase() {
   DynamicElement::L1_Erase();
 }
 void DynamicExpression::L1_CheckSetValueViolation() {
+  if (M.batch_mode_) {
+    M.L1_AddDelayedCheck(this, &Element::L1_CheckSetValueViolation);
+    return;
+  }
   bool perfect = (value_ == ComputeValue());
   Violation * value_violation = FindViolation(this, Violation::VALUE);
   if (perfect && value_violation) {
@@ -406,6 +442,10 @@ bool DynamicLet::NeedsLetViolation() const {
   return (value_child->GetValue() != *binding_value);
 }
 void DynamicLet::L1_CheckSetLetViolation() {
+  if (M.batch_mode_) {
+    M.L1_AddDelayedCheck(this, &Element::L1_CheckSetLetViolation);
+    return;
+  }
   if (NeedsLetViolation()) LetViolation::L1_CreateIfAbsent(this);
   else LetViolation::L1_RemoveIfPresent(this);
 }
@@ -437,6 +477,10 @@ bool DynamicPost::NeedsPostViolation() const {
   return false;
 }
 void DynamicPost::L1_CheckSetPostViolation() {
+  if (M.batch_mode_) {
+    M.L1_AddDelayedCheck(this, &Element::L1_CheckSetPostViolation);
+    return;
+  }
   if (NeedsPostViolation())
     PostViolation::L1_CreateIfAbsent(this);
   else 
@@ -472,19 +516,16 @@ void StaticIf::L1_Init() {
   Statement::L1_Init();
 }
 
-bool DynamicIf::NeedsIfViolation() const { 
-  DynamicExpression * expr = GetConditionExpression();
-  if (!expr) return false;
-  bool val = expr->value_ != Boolean::Make(false);
-  if (val ^ bool(GetSingleChild(StaticIf::ON_TRUE)) ) return true;
-  if ((!val) ^ bool(GetSingleChild(StaticIf::ON_FALSE)) ) return true;
-  return false;
-}
-void DynamicIf::L1_CheckSetIfViolation() {
-  if (NeedsIfViolation()) 
-    IfViolation::L1_CreateIfAbsent(this);
-  else 
-    IfViolation::L1_RemoveIfPresent(this);
+bool DynamicIf::ChildShouldExist(int which_child) const { 
+  if (which_child == StaticIf::ON_TRUE
+      || which_child == StaticIf::ON_FALSE) {
+    DynamicExpression * expr = GetConditionExpression();
+    if (!expr) return false;
+    bool val = expr->value_ != Boolean::Make(false);
+    if (which_child == StaticIf::ON_TRUE) return val;
+    return !val;
+  }
+  return true;
 }
 
 void Expression::L1_Init() {
@@ -620,16 +661,17 @@ bool DynamicElement::LinkToParent() {
   parent->L1_AddChild(this);
   CHECK(parent_ == parent);
   L1_CheckSetParentAndBindingViolations();
-  GetParent()->N1_ChildConnected(parent_, this);
+  GetParent()->N1_ChildChanged(WhichChildAmI());
   N1_StoredOrComputedTimeChanged();
   return true;
 }
+
 void DynamicElement::UnlinkFromParent() {
   DynamicElement * dynamic_parent = GetParent();
-  Link * parent_link = parent_;
+  int which_child = WhichChildAmI();
   CHECK(parent_);
   parent_->L1_RemoveChild(this);
-  dynamic_parent->N1_ChildDisconnected(parent_link, this);
+  dynamic_parent->N1_ChildChanged(which_child);
   L1_CheckSetParentAndBindingViolations();
   N1_StoredOrComputedTimeChanged();
 }
@@ -675,17 +717,12 @@ DynamicElement * DynamicElement::FindParent() const {
     (Restrict(GetBinding(), GetStatic()->GetVariables()));
 }
 
-// The following are called externally when a child is connected to
+// The following is called externally when a child is connected to
 // or disconnected from this parent node. 
-void DynamicElement::N1_ChildConnected(Link *child_link, 
-				       DynamicElement *child) {
-  if (child->GetNamedType() == DYNAMIC_EXPRESSION) 
-    N1_ChildExpressionValueChanged(child_link->WhichChildAmI());  
-}
-void DynamicElement::N1_ChildDisconnected(Link *child_link, 
-					  DynamicElement *child) {
-  if (child->GetNamedType() == DYNAMIC_EXPRESSION) 
-    N1_ChildExpressionValueChanged(child_link->WhichChildAmI());  
+void DynamicElement::N1_ChildChanged(int which_child) {
+  Element::N1_ChildChanged(which_child);
+  if (GetStatic()->IsExpressionChild(which_child))
+    N1_ChildExpressionValueChanged(which_child);
 }
 
 DynamicElement * MakeDynamicElement(StaticElement *static_parent, 

@@ -48,7 +48,6 @@ struct Element : public Named {
   // ---------- L2 functions ----------  
   void SetTime(OTime new_time);
   void ComputeSetTime() { SetTime(ComputeTime()); }
-  
 
   // ---------- const functions ----------  
 
@@ -65,6 +64,9 @@ struct Element : public Named {
   }
   Record GetRecordForDisplay() const;
   virtual Element * GetParent() const = 0;
+  virtual Element * GetChild(int which) const = 0;
+  virtual int NumChildren() const = 0;
+  virtual Link::Type LinkType(int which_child) const { return Link::SINGLE;}
   // a human and machine readable version of the static subtree
   virtual string ToString() const = 0;
   virtual string ToStringRecursive(int indent = 0) const {
@@ -79,6 +81,8 @@ struct Element : public Named {
     return -1; 
   }
   virtual set<Element *> GetAllChildren() const = 0;
+  virtual bool ChildShouldExist(int which_child) const { return true;}
+  virtual bool NeedsChildViolation() const;
   
   // ---------- L1 functions ----------  
   Element() :parent_(NULL){};
@@ -92,10 +96,25 @@ struct Element : public Named {
   virtual void L1_ConnectToParentLink (Link * link) = 0;
   virtual void L1_DisconnectFromParentLink(Link * link) = 0;
 
+  void L1_CheckSetChildViolation();
+  
+  // virtual functions that are here because we need to point to them from the
+  // delayed checks.
+  virtual void L1_CheckSetParentAndBindingViolations() { CHECK(false);}
+  virtual void L1_CheckSetValueViolation() { CHECK(false);}
+  virtual void L1_CheckSetLetViolation() { CHECK(false);}
+  virtual void L1_CheckSetPostViolation() { CHECK(false);}
+
+
   // ---------- N1 notifiers ----------  
   // call this if the stored time or computed time may have changed. 
   // creates a time violation (or destroys one) as necessary. 
   virtual void N1_StoredOrComputedTimeChanged();
+
+  // a child was connected or disconnected.
+  virtual void N1_ChildChanged(int which_child);
+
+  virtual void N1_ValueChanged() { CHECK(false);}
 
   // ---------- data ----------  
 
@@ -134,6 +153,8 @@ struct StaticElement : public Element {
   vector<Statement *> GetStatementChildren() const;
   Object GetObject(int which) const;
   virtual int NumExpressionChildren() const = 0;
+  bool IsExpressionChild(int which_child) {return 
+      (which_child < NumExpressionChildren());}
   virtual int NumChildren() const = 0;
   int NumStatementChildren()  const{ 
     return NumChildren() - NumExpressionChildren(); }
@@ -210,7 +231,6 @@ struct DynamicElement : public Element{
   bool LinkToParent(); 
   void UnlinkFromParent();
 
-
   // ---------- const functions ----------  
   bool IsDynamic() const { return true; }
   DynamicElement * GetParent() const { 
@@ -231,6 +251,7 @@ struct DynamicElement : public Element{
     return GetStatic()->NumStatementChildren();}
   int NumObjects() const { return GetStatic()->NumObjects();}  
   Object GetObject(int which) const { return GetStatic()->GetObject(which);}
+  DynamicElement * GetChild(int which) const {return GetSingleChild(which);}
   DynamicElement * GetSingleChild(int which) const;
   DynamicExpression * GetSingleExpressionChild(int which) const;
   Object GetChildValue(int which) const;
@@ -248,6 +269,7 @@ struct DynamicElement : public Element{
     return OMap::Default();}
   // this only works for single links now. 
   virtual OMap ComputeChildBinding(int which_child) const {
+    CHECK(LinkType(which_child) == Link::SINGLE);
     return OMap::Make(Union(GetBinding().Data(), 
 			    GetIntroducedBinding(which_child).Data()));
   }
@@ -290,10 +312,9 @@ struct DynamicElement : public Element{
   // or when a child expresison is created(Init) or destroyed(L1_Erase).   
   virtual void N1_ChildExpressionValueChanged(int which_child) = 0;
 
-  // The following are called externally when a child is connected to
+  // The following is called externally when a child is connected to
   // or disconnected from this parent node. 
-  virtual void N1_ChildConnected(Link *child_link, DynamicElement *child);
-  virtual void N1_ChildDisconnected(Link *child_link, DynamicElement *child);
+  void N1_ChildChanged(int which_child);
 
   // called when the binding changes
   virtual void N1_BindingChanged();
@@ -371,10 +392,14 @@ struct DynamicExpression : public DynamicElement {
   // ---------- L1 functions ----------  
   void L1_Init(StaticElement * static_parent, OMap binding);
   void L1_Erase();
+  void L1_CheckSetValueViolation();
+
+  // ---------- N1 Notifiers ----------
+  // TODO: forward this
   void N1_ChildExpressionValueChanged(int which_child) { 
     L1_CheckSetValueViolation();}
-  // checks whether the value is correct, and creates/removes a violation.
-  void L1_CheckSetValueViolation();
+  void N1_ValueChanged() { L1_CheckSetValueViolation();}  // checks whether the value is correct, and creates/removes a violation.
+
   // ---------- data ----------  
   Object value_;
 };
@@ -694,29 +719,16 @@ struct DynamicIf : public DynamicStatement {
   StaticIf *GetStaticIf() const { 
     return dynamic_cast<StaticIf*>(GetStatic());
   }
+  bool ChildShouldExist(int which_child) const;
+
+
   // ---------- L1 functions ----------  
-  void L1_CheckSetIfViolation();
   void L1_Init(StaticElement * static_parent, OMap binding) {
     DynamicStatement::L1_Init(static_parent, binding);
-    dynamic_cast<SingleLink *>(children_[StaticIf::ON_TRUE])
-      ->L1_SetOptional(true);
-    dynamic_cast<SingleLink *>(children_[StaticIf::ON_FALSE])
-      ->L1_SetOptional(true);
-    L1_CheckSetIfViolation();
   }
   // ---------- N1 notifiers ----------
   void N1_ChildExpressionValueChanged(int which_child) {
-    L1_CheckSetIfViolation();
-  }
-  void N1_ChildConnected(Link * child_link, 
-			 DynamicElement *child) {
-    DynamicElement::N1_ChildConnected(child_link, child);
-    L1_CheckSetIfViolation();
-  }
-  void N1_ChildDisconnected(Link * child_link, 
-			    DynamicElement *child) {
-    DynamicElement::N1_ChildDisconnected(child_link, child);
-    L1_CheckSetIfViolation();
+    L1_CheckSetChildViolation();
   }
   // ---------- data ----------  
 };

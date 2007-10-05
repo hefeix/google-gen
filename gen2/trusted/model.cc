@@ -26,6 +26,7 @@ Model::Model(){
   // This cuts down on the pointer chasing.
   CHECK(this==&M); 
 
+  batch_mode_ = false;
   global_flake_chooser_ = New<Chooser>();
   global_uint_chooser_ = New<UintChooser>();
   ln_likelihood_ = 0;

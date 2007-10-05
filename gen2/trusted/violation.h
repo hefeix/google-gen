@@ -32,7 +32,7 @@ struct Violation : public Named {
 #define ViolationTypeList {   \
     ITEM(REQUIREMENT),	      \
       ITEM(PROHIBITION),      \
-      ITEM(MISSING_LINK),			\
+      ITEM(CHILD),			\
       ITEM(MISSING_DYNAMIC_ON),			\
       ITEM(MISSING_ON_MATCH),			\
       ITEM(EXTRA_ON_MATCH),			\
@@ -223,9 +223,9 @@ typedef OwnedViolation<Requirement, Violation::REQUIREMENT>
 // a tuple on the blackboard matches a prohibited pattern
 typedef OwnedViolationWithData<Prohibition, OTuple, Violation::PROHIBITION>
   ProhibitionViolation;
-// a SingleLink has no child.
-typedef OwnedViolation<SingleLink, Violation::MISSING_LINK>
-  MissingLinkViolation;
+// an element is missing a child or has an extra child
+typedef OwnedViolation<Element, Violation::CHILD>
+  ChildViolation;
 // An on statement lacks a child for a binding which matches the blackboard.
 typedef OwnedViolationWithData<OnMultiLink, OMap, Violation::MISSING_ON_MATCH>
   MissingOnMatchViolation;
