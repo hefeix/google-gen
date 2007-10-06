@@ -97,6 +97,7 @@ struct Element : public Named {
   virtual void L1_DisconnectFromParentLink(Link * link) = 0;
 
   void L1_CheckSetChildViolation();
+  void L1_CheckSetTimeViolation();
   
   // virtual functions that are here because we need to point to them from the
   // delayed checks.
@@ -109,7 +110,9 @@ struct Element : public Named {
   // ---------- N1 notifiers ----------  
   // call this if the stored time or computed time may have changed. 
   // creates a time violation (or destroys one) as necessary. 
-  virtual void N1_StoredOrComputedTimeChanged();
+  void N1_StoredOrComputedTimeChanged() {
+    L1_CheckSetTimeViolation();
+  }
 
   // a child was connected or disconnected.
   virtual void N1_ChildChanged(int which_child);
