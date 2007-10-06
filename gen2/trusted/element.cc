@@ -54,7 +54,11 @@ void Element::N1_ChildChanged(int which_child) {
   L1_CheckSetChildViolation();
 }
 
-void Element::N1_StoredOrComputedTimeChanged() {
+void Element::L1_CheckSetTimeViolation() {
+  if (M.batch_mode_) {
+    M.L1_AddDelayedCheck(this, &Element::L1_CheckSetTimeViolation);
+    return;
+  }
   OTime proper_time = ComputeTime();
   Violation * violation = FindViolation(this, Violation::TIME);
   if (proper_time != time_) {

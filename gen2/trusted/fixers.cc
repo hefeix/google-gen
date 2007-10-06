@@ -114,17 +114,14 @@ bool StaticExecutor::Instantiate(DynamicElement *e) {
 
 bool StaticExecutor::InstantiateStatement(DynamicStatement *s) {
   CHECK(s);
-  if (s->GetFunction() == Element::IF) {
-    if (!MakeInstantiateChild(s, StaticIf::CONDITION)) return false;      
-    bool cond_val = (s->GetChildValue(StaticIf::CONDITION) 
-		     != Boolean::Make(false));
-    if (!MakeInstantiateChild(s, cond_val?StaticIf::ON_TRUE:StaticIf::ON_FALSE))
-      return false;      
-    return true;
-  }
   for(int i=0; i<s->GetStatic()->NumChildren(); i++) {
-    if (!MakeInstantiateChild(s, i)) return false;
+    if (s->ChildShouldExist(i))
+      if (!MakeInstantiateChild(s, i)) return false;
   }
+  if (s->GetFunction() == Element::POST) {
+    dynamic_cast<DynamicPost *>(s)->AddCorrectPosting();
+  }
+
   return true;
 }
 
