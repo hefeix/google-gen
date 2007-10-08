@@ -57,7 +57,7 @@ void L1_EraseOwnedViolations(void *owner) {
 }
 
 Record Violation::GetRecordForDisplay() const { 
-  Record ret = Named::GetRecordForDisplay();
+  Record ret = Base::GetRecordForDisplay();
   ret["Violation Type"] = TypeToString(GetViolationType());
   return ret;
 }
@@ -65,7 +65,7 @@ Record Violation::GetRecordForDisplay() const {
 
 
 void Violation::L1_Init() {  
-  Named::L1_Init();
+  Base::L1_Init();
   time_ = ComputeTime();
   // add to the model's set of violations
   L1_InsertIntoGlobalMap();

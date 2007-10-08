@@ -27,7 +27,7 @@ class DynamicElement;
 class StaticElement;
 
 // we use the convention that parents own all links.
-struct Link : public Named {
+struct Link : public Base {
   enum Type{
     SINGLE,
     MULTI,
@@ -37,7 +37,7 @@ struct Link : public Named {
   // ---------- L2 functions ----------
 
   // ---------- const functions ----------
-  Named::Type GetNamedType() const { return Named::LINK; }
+  Base::Type GetBaseType() const { return Base::LINK; }
   Element * GetParent() const { return parent_;}
   // needed by various violations
   OTime GetTime() const;

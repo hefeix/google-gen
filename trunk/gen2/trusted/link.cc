@@ -24,7 +24,7 @@
 
 void Link::L1_Init(Element *parent) {
   // Creating called at the beginning of the base class
-  Named::L1_Init();
+  Base::L1_Init();
   parent_ = parent;
 }
 
@@ -32,7 +32,7 @@ void Link::L1_Init(Element *parent) {
 // Then is called back on the way up, destroying at the end
 void Link::L1_Erase() {
   CHECK(GetChildren().size() == 0);
-  Named::L1_Erase();
+  Base::L1_Erase();
 }
 
 // needed by various violations.
@@ -44,15 +44,15 @@ OTime Link::ComputeChildTime(const Element *child) const {
   return parent_->ComputeChildTime(this, child);
 }
 int Link::WhichChildAmI() const { 
-  Named::Type pt = GetParent()->GetNamedType();
-  if (pt == Named::STATEMENT
-      || pt == Named::EXPRESSION) {
+  Base::Type pt = GetParent()->GetBaseType();
+  if (pt == Base::STATEMENT
+      || pt == Base::EXPRESSION) {
     StaticElement *parent = dynamic_cast<StaticElement *>(GetParent());
     for (uint i=0; i<parent->static_children_.size(); i++) 
       if (this == parent->static_children_[i]) return i;
   }
-  if (pt == Named::DYNAMIC_STATEMENT
-      || pt == Named::DYNAMIC_EXPRESSION) {
+  if (pt == Base::DYNAMIC_STATEMENT
+      || pt == Base::DYNAMIC_EXPRESSION) {
     DynamicElement *parent = dynamic_cast<DynamicElement *>(GetParent());
     for (uint i=0; i<parent->children_.size(); i++) 
       if (this == parent->children_[i]) return i;
@@ -63,7 +63,7 @@ string Link::TextIdentifier() const {
   return "from " + GetParent()->ShortDescription();
 }
 Record Link::GetRecordForDisplay() const { 
-  Record ret = Named::GetRecordForDisplay();
+  Record ret = Base::GetRecordForDisplay();
   ret["parent"] = GetParent()->ShortDescription();
   ret["children"] = ChildListings();
   return ret;

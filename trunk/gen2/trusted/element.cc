@@ -45,7 +45,7 @@ void Element::SetTime(OTime new_time) {
 void Element::L1_Erase() {
   CHECK(!parent_); // We always unlink elements before we erase.
   L1_EraseOwnedViolations(this);
-  Named::L1_Erase();
+  Base::L1_Erase();
 }
 
 // The following are called externally when a child is connected to
@@ -97,7 +97,7 @@ void StaticElement::UnlinkFromParent() {
 
 void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
   CHECK(!parent_);
-  CHECK(new_parent->ChildType(which_child) == GetNamedType());
+  CHECK(new_parent->ChildType(which_child) == GetBaseType());
   new_parent->static_children_[which_child]->L1_AddChild(this);
   StaticNoParentViolation::L1_RemoveIfPresent(this);
   L1_RecursivelyComputeSetVariables();
@@ -129,7 +129,8 @@ void DynamicElement::EraseTree() {
 }
 
 void StaticElement::L1_Init() {
-  Named::L1_Init();
+  Base::L1_Init();
+  L1_AutomaticallyName();
   dynamic_children_ = New<MultiLink>(this);
   for (int i=0; i<NumChildren(); i++) 
     static_children_.push_back(New<SingleLink>(this));  
@@ -338,7 +339,7 @@ void Statement::L1_Init() {
 // Can't erase statements that are linked
 void Statement::L1_Erase() {
   CHECK(parent_ == NULL);
-  Named::L1_Erase();
+  Base::L1_Erase();
 }
 
 void DynamicExpression::L1_Init(StaticElement * static_parent, 
@@ -745,7 +746,7 @@ DynamicElement * MakeDynamicElement(StaticElement *static_parent,
 
 
 Record Element::GetRecordForDisplay() const {
-  Record ret = Named::GetRecordForDisplay();
+  Record ret = Base::GetRecordForDisplay();
   Element * parent = GetParent();
   if (parent) ret["parent"] = parent->ShortDescription();
   if (Violation::owned_violations_ % (void *)this) {

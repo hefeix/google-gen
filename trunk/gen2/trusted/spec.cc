@@ -20,17 +20,17 @@
 #include "model.h"
 
 void Given::L1_Init(OTuple tuple) {
-  Named::L1_Init();
+  Base::L1_Init();
   posting_ = new OwnedPosting(tuple, CREATION, this);
 }
 
 void Given::L1_Erase() {
   posting_->L1_Erase();
-  Named::L1_Erase();
+  Base::L1_Erase();
 }
 
 void Requirement::L1_Init(OTuple tuple) {
-  Named::L1_Init();
+  Base::L1_Init();
   CL.InsertIntoSet(&M.requirements_, this);
   tuple_ = tuple;
   Query * q = BB.L1_GetExecuteQuery(OPattern::Make(Pattern(1, tuple)), 
@@ -42,7 +42,7 @@ void Requirement::L1_Erase() {
   subscription_->L1_Erase();
   L1_EraseOwnedViolations(this);
   CL.RemoveFromSet(&M.requirements_, this);  
-  Named::L1_Erase();
+  Base::L1_Erase();
 }
 void Requirement::Update(const QueryUpdate &update, SubType * sub){
   int count = subscription_->subscribee_->GetCount();
@@ -63,7 +63,7 @@ void Requirement::L1_RemoveViolation() {
 }
 
 void Prohibition::L1_Init(OTuple tuple) {
-  Named::L1_Init();
+  Base::L1_Init();
   CL.InsertIntoSet(&M.prohibitions_, this);
   tuple_ = tuple;
   Query * q = BB.L1_GetExecuteQuery(OPattern::Make(Pattern(1, tuple)), 
@@ -77,7 +77,7 @@ void Prohibition::L1_Erase() {
     violations_.begin()->second->L1_Erase();    
   }
   CL.RemoveFromSet(&M.prohibitions_, this);
-  Named::L1_Erase();
+  Base::L1_Erase();
 }
 void Prohibition::Update(const QueryUpdate &update, SubType * sub){
   forall(run, update.changes_) {
@@ -113,18 +113,18 @@ void Prohibition::AddException(OTuple t) {
 }
 
 Record Requirement::GetRecordForDisplay() const { 
-  Record ret = Named::GetRecordForDisplay();
+  Record ret = Base::GetRecordForDisplay();
   ret["tuple"] = tuple_.ToString();
   return ret;
 }
 Record Prohibition::GetRecordForDisplay() const { 
-  Record ret = Named::GetRecordForDisplay();
+  Record ret = Base::GetRecordForDisplay();
   ret["tuple"] = tuple_.ToString();
   forall(run, exceptions_) ret["exceptions"] += run->ToString();
   return ret;
 }
 Record Given::GetRecordForDisplay() const { 
-  Record ret = Named::GetRecordForDisplay();
+  Record ret = Base::GetRecordForDisplay();
   ret["posting"] = posting_->ShortDescription();
   return ret;
 }

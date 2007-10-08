@@ -22,11 +22,13 @@
 #include "objects.h"
 #include "record.h"
 
+//#define TRACK_ERASED
+
 class OwnedPosting;
 
-class Named {
+class Base {
  public:
-  #define NamedTypeList {				\
+  #define BaseTypeList {				\
       ITEM(STATEMENT),					\
 	ITEM(EXPRESSION),				\
 	ITEM(DYNAMIC_STATEMENT),			\
@@ -39,51 +41,58 @@ class Named {
 	ITEM(LINK),						\
 	ITEM(MODEL)					\
 	};
-  CLASS_ENUM_DECLARE(Named, Type);
+  CLASS_ENUM_DECLARE(Base, Type);
 
   
-  //Named();
+  //Base();
   void L1_Init(); // shadow constructor
   Object GetName() const { return name_;}
   void L1_SetName(Object new_name_);
   void L1_AutomaticallyName();
   virtual Record GetRecordForDisplay() const;
   string GetURL() const; // link to object view
-  bool IsErased() const { return erased_;}
   string GetLink(string anchortext) const;
   string ShortDescription() const;
   virtual string TextIdentifier() const;
   virtual OwnedPosting * GetOwnedPosting() const { return NULL;}
+  
 
-
-  virtual Type GetNamedType() const = 0;
+  virtual Type GetBaseType() const = 0;
   virtual void L1_Erase();
   virtual OMap GetMap() { CHECK(false); return OMap();} // overriden for dynamic
-  virtual ~Named() {};
+  virtual ~Base() {};
 
-  static int counts_[100]; // for debugging purposes
+  #ifdef TRACK_ERASED
+  bool IsErased() const { return erased_;}
+  bool erased_;
+  #endif
+
  private:
   Object name_;
-  bool erased_;
 };
 
 class Namer {
  public:
   Namer();
-  friend class Named;
+  friend class Base;
   // returns null if not found
-  Named * Lookup(Named::Type type, Object name) const; 
+  Base * Lookup(Base::Type type, Object name) const; 
   // a version of the previous function that returns the subtype.
-  template <class NamedClass> 
-    NamedClass * Find(Object name) const {
-    return dynamic_cast<NamedClass *>(Lookup(NamedClass::Type(), name));
+  template <class BaseClass> 
+    BaseClass * Find(Object name) const {
+    return dynamic_cast<BaseClass *>(Lookup(BaseClass::Type(), name));
   }
-  // Get a constant index of one named type by name. 
-  const map<Object, Named *> & Index(Named::Type type) const 
+  // Get a constant index of one base type by name. 
+  const map<Object, Base *> & Index(Base::Type type) const 
     { return index_[type];}
 
+  int GetCurrentCount(Base::Type t) const { return current_count_[t];}
+  int GetAllTimeCount(Base::Type t) const { return all_time_count_[t];}
+
  private:
-  vector<map<Object, Named *> > index_;
+  vector<map<Object, Base *> > index_;
+  vector<int> current_count_;
+  vector<int> all_time_count_;
   int next_name_; // for automatic naming
 };
 

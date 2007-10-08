@@ -19,12 +19,12 @@
 #ifndef _ELEMENT_H_
 #define _ELEMENT_H_
 
-#include "named.h"
+#include "base.h"
 #include "link.h"
 #include "extensions.h"
 
 
-struct Element : public Named {  
+struct Element : public Base {  
   public:
 
   #define ElementFunctionList {			\
@@ -87,7 +87,7 @@ struct Element : public Named {
   // ---------- L1 functions ----------  
   Element() :parent_(NULL){};
   virtual void L1_Init() { 
-    Named::L1_Init(); 
+    Base::L1_Init(); 
   }
   void L1_Erase();
 
@@ -161,10 +161,10 @@ struct StaticElement : public Element {
   virtual int NumChildren() const = 0;
   int NumStatementChildren()  const{ 
     return NumChildren() - NumExpressionChildren(); }
-  Named::Type ChildType(int which) {
+  Base::Type ChildType(int which) {
     CHECK(which>=0 && which < NumChildren());
     return (which < NumExpressionChildren())
-      ?Named::EXPRESSION:Named::STATEMENT;
+      ?Base::EXPRESSION:Base::STATEMENT;
   }
   int NumDynamicChildren() const { return dynamic_children_->children_.size();}
   virtual int NumObjects() const { return 0;}
@@ -335,7 +335,7 @@ struct Statement : public StaticElement{
   static Statement * MakeStatement(Keyword type);
   
   // ---------- const functions ----------  
-  Named::Type GetNamedType() const { return Named::STATEMENT; }
+  Base::Type GetBaseType() const { return Base::STATEMENT; }
   string ToStringRecursive(int indent) const; // includes the subtree
   string ToString() const;
   string TextIdentifier() const { return ToString();}
@@ -355,7 +355,7 @@ struct Expression : public StaticElement {
   //static Expression * MakeExpression(Keyword type);
   // ---------- const functions ----------  
   string ToString() const;
-  Named::Type GetNamedType() const { return Named::EXPRESSION;}
+  Base::Type GetBaseType() const { return Base::EXPRESSION;}
   virtual int NumExpressionChildren() const { return NumChildren();}
   virtual int NumChildren() const = 0;
   virtual int NumObjects() const = 0;
@@ -371,7 +371,7 @@ struct Expression : public StaticElement {
 struct DynamicStatement : public DynamicElement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
-  Named::Type GetNamedType() const { return Named::DYNAMIC_STATEMENT;}
+  Base::Type GetBaseType() const { return Base::DYNAMIC_STATEMENT;}
   // ---------- L1 functions ----------  
   void L1_Erase() { DynamicElement::L1_Erase();}
   void L1_Init(StaticElement * static_parent, OMap binding){
@@ -388,7 +388,7 @@ struct DynamicExpression : public DynamicElement {
   Record GetRecordForDisplay() const;
   virtual Object ComputeValue() const = 0;
   Object GetValue() const { return value_;}
-  Named::Type GetNamedType() const { return Named::DYNAMIC_EXPRESSION;}
+  Base::Type GetBaseType() const { return Base::DYNAMIC_EXPRESSION;}
   string TextIdentifier() const { 
     return DynamicElement::TextIdentifier() + " value=" + value_.ToString();
   }

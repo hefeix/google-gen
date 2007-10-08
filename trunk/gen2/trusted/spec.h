@@ -31,9 +31,9 @@
 #include "blackboard.h"
 #include "query.h"
 #include "violation.h"
-#include "named.h"
+#include "base.h"
 
-class Requirement : public Named {
+class Requirement : public Base {
  public:
   // ---------- L2 functions ----------
   static Requirement * Make(OTuple tuple) {
@@ -41,7 +41,7 @@ class Requirement : public Named {
   }
 
   // ---------- const functions ----------
-  Named::Type GetNamedType() const { return Named::REQUIREMENT;}
+  Base::Type GetBaseType() const { return Base::REQUIREMENT;}
   OTime GetTime() const { return CREATION;} // needed for violation
   Record GetRecordForDisplay() const;
   string TextIdentifier() const { return tuple_.ToString(); }
@@ -62,7 +62,7 @@ class Requirement : public Named {
   OTuple tuple_;
 };
 
-class Prohibition : public Named {
+class Prohibition : public Base {
  public:
 
   // ---------- L2 functions ----------
@@ -74,7 +74,7 @@ class Prohibition : public Named {
   // ---------- const functions ----------
   // needed for ProhibitionViolation, but shouldn't actually be called, 
   // since ProhibitionViolation has its own ComputeTime().
-  Named::Type GetNamedType() const { return Named::PROHIBITION;}
+  Base::Type GetBaseType() const { return Base::PROHIBITION;}
   OTime GetTime() const { CHECK(false); return CREATION;} 
   // also needed by ProhibitionViolation
   map<OTuple, Violation *> * GetViolationMap(Violation::Type vtype) {
@@ -99,7 +99,7 @@ class Prohibition : public Named {
   map<OTuple, Violation *> violations_;
 };
 
-class Given : public Named {
+class Given : public Base {
  public:
   // ---------- L2 functions ----------
   
@@ -109,7 +109,7 @@ class Given : public Named {
   Record GetRecordForDisplay() const;
   OTuple GetTuple() const { return posting_->tuple_;}
   string TextIdentifier() const { return GetTuple().ToString(); }
-  Named::Type GetNamedType() const { return Named::GIVEN;}
+  Base::Type GetBaseType() const { return Base::GIVEN;}
   OwnedPosting * GetOwnedPosting() const { return posting_;}
 
   // ---------- L1 functions ----------

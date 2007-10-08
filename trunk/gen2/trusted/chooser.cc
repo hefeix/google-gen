@@ -128,7 +128,7 @@ void Chooser::L1_ChangeObjectCount(Object object, int delta) {
 }
 
 void Chooser::L1_Init() {
-  Named::L1_Init();
+  Base::L1_Init();
   parent_ = NULL;
   ln_likelihood_ = 0;
   total_ = 0;
@@ -141,7 +141,7 @@ void Chooser::L1_Erase(){
   CHECK(counts_.size()==0);
   CHECK(ln_likelihood_ == 0);
   CHECK(total_ ==0);
-  Named::L1_Erase();
+  Base::L1_Erase();
 }
 
 Record Chooser::ChooserInfo(bool include_objects) {
