@@ -21,13 +21,13 @@
 
 #include "webserver.h"
 #include "record.h"
-#include "named.h"
+#include "base.h"
 
 class GenRequestHandler : public RequestHandler {
   // handle a web request
   string Handle(Record params);
   string TopNavHTML() const;
-  string TypeListHTML(Named::Type type) const;
+  string TypeListHTML(Base::Type type) const;
 
 
 };

@@ -26,25 +26,27 @@ string GenRequestHandler::TopNavHTML() const {
   string ret;
   ret += "<font size=-1>";
   ret += HTMLLink("program", "Program") + " "; 
-  for (int i=0; i<Named::NumTypes(); i++) {
-    Named::Type t = Named::Type(i);
+  for (int i=0; i<Base::NumTypes(); i++) {
+    Base::Type t = Base::Type(i);
     ret += HTMLLink("typelist?type=" 
-		    + URLEscape(Named::TypeToString(t)),
-		    Named::TypeToString(t))
-      + "(" + itoa(N.Index(t).size()) + "/" +
-      itoa(Named::counts_[t]) + ") ";
+		    + URLEscape(Base::TypeToString(t)),
+		    Base::TypeToString(t))
+      + "(" + itoa(N.Index(t).size()) 
+      + "/" + itoa(N.GetCurrentCount(t)) 
+      + "/" + itoa(N.GetAllTimeCount(t)) 
+      + ") ";
   }
   ret += HTMLLink(BB.GetURL(), "Blackboard");
   ret += "</font><br><p>";
   return ret;
 }
 
-string GenRequestHandler::TypeListHTML(Named::Type type) const {
+string GenRequestHandler::TypeListHTML(Base::Type type) const {
   string ret;
-  if (type < 0 || type >= Named::NumTypes()) {
+  if (type < 0 || type >= Base::NumTypes()) {
     return "unkown type " + itoa(type);
   }
-  if (type == Named::VIOLATION) {
+  if (type == Base::VIOLATION) {
     for (int i=0; i<Violation::NumTypes(); i++) {
       ret += Violation::TypeToString(Violation::Type(i)) 
 	+ " : " +  itoa(Violation::counts_[i])
@@ -63,31 +65,40 @@ string GenRequestHandler::TypeListHTML(Named::Type type) const {
 string GenRequestHandler::Handle(Record params) {
   string ret = SimpleHTMLHeader() + TopNavHTML();
   string command = params["_command"];
-  // display information about a named object. 
+  // display information about a base object. 
   if (command == "getobject") {
-    string sname = params["name"];
-    Object name = StringToObject(sname);
-    Named::Type type = Named::StringToType(params["type"]);
-    Named * named = N.Lookup(type, name);
-    if (!named) {
+    Base *base;
+    if (params % string("name")) {
+      string sname = params["name"];
+      Object name = StringToObject(sname);
+      Base::Type type = Base::StringToType(params["type"]);
+      base = N.Lookup(type, name);
+    } else {
+      if (! (params % string("address")) ) {
+	ret += "Error - no name or address specified";
+	return ret;
+      }
+      base = (Base*)atop(params["address"]);      
+    }
+    if (!base) {
       ret += "Object not found";
       return ret;
     }
     // We are overloading the getobject command to also get owned postings.
     // It would be more elegant to have a separate command, but instead
     // we are just tacking on a parameter ownedposting= to signify that 
-    // we want the posting owned by the given named object.
+    // we want the posting owned by the given base object.
     if (params % string("ownedposting")) {
       ret += 
-	RecordToHTMLTable(named->GetOwnedPosting()->GetRecordForDisplay());
+	RecordToHTMLTable(base->GetOwnedPosting()->GetRecordForDisplay());
       return ret;
     }
-    ret += "<font size=+1>" + named->ShortDescription() + "</font><p>";
-    ret += RecordToHTMLTable(named->GetRecordForDisplay());
+    ret += "<font size=+1>" + base->ShortDescription() + "</font><p>";
+    ret += RecordToHTMLTable(base->GetRecordForDisplay());
     return ret;
   }
   if (command == "typelist") {
-    ret += TypeListHTML(Named::StringToType(params["type"]));
+    ret += TypeListHTML(Base::StringToType(params["type"]));
     return ret;
   }
   if (command == "tupleinfo") {

@@ -65,7 +65,7 @@ void Model::Load(istream &input) {
 
 string Model::ToString(bool html) const {
   string ret = "{" + GetNewLine(html); 
-  forall(run, N.Index(Named::STATEMENT)) {
+  forall(run, N.Index(Base::STATEMENT)) {
     Statement *s = dynamic_cast<Statement *>(run->second);
     if (s->parent_ == NULL) {
       ret += s->ToStringRecursive(2);

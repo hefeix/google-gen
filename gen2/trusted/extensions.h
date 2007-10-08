@@ -22,17 +22,17 @@
 #define _EXTENSIONS_H_
 
 #include "blackboard.h"
-#include "named.h"
+#include "base.h"
 
-Named * GetPostingOwner(const Posting *posting);
+Base * GetPostingOwner(const Posting *posting);
 
 struct OwnedPosting : public Posting {
-  OwnedPosting(OTuple tuple, OTime time, Named *owner);
+  OwnedPosting(OTuple tuple, OTime time, Base *owner);
   bool IsOwned() const { return true;}
   string GetURL() const;
   string ShortDescription() const;
   Record GetRecordForDisplay() const;
-  Named *owner_;
+  Base *owner_;
 };
 
 #endif

@@ -27,7 +27,7 @@
 #include "webserver.h"
 #include "genrequesthandler.h"
 
-class Model : public Named{
+class Model : public Base{
  public:
 
   // ---------- L2 functions ----------
@@ -47,7 +47,7 @@ class Model : public Named{
   }
   // ---------- const functions ----------
 
-  Named::Type GetNamedType() const { return Named::MODEL;}
+  Base::Type GetBaseType() const { return Base::MODEL;}
   // various html output routines
   Violation * GetViolationOfType(Violation::Type type) const;
   Violation * GetFirstViolation() const;
@@ -98,7 +98,7 @@ class Model : public Named{
   map<Violation::Type, set<Violation *> > violations_by_type_;
   map<OTime, set<Violation *>, DataCompare<OTime> > violations_by_time_;
 
-  // Statements, Expressions, Dynamic counterparts, and choosers are named.
+  // Statements, Expressions, Dynamic counterparts, and choosers are base.
   // The namer can give you maps of these indexed by name.
 
   // Global Choosers
@@ -107,8 +107,8 @@ class Model : public Named{
 
   map<Object, Chooser *> flake_choosers_;
 
-  // all named objects by name
-  map<Object, Named *> name_index_;
+  // all base objects by name
+  map<Object, Base *> name_index_;
   int next_name_;  
 
   // throw-away variables (we use negative integers)

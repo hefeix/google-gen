@@ -19,12 +19,12 @@
 #include "extensions.h"
 #include "webserver.h"
 
-Named * GetPostingOwner(const Posting *posting){
+Base * GetPostingOwner(const Posting *posting){
   if (!posting->IsOwned()) return NULL;
   return dynamic_cast<const OwnedPosting *>(posting)->owner_;
 }
 
-OwnedPosting::OwnedPosting(OTuple tuple, OTime time, Named *owner) 
+OwnedPosting::OwnedPosting(OTuple tuple, OTime time, Base *owner) 
   :Posting(tuple, time.Data(), &BB) {
   owner_ = owner;
 }

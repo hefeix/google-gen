@@ -21,14 +21,14 @@
 
 #include "changelist.h"
 #include "objects.h"
-#include "named.h"
+#include "base.h"
 
 class Requirement;
 class Prohibition;
 
 
 // base class for all violations.
-struct Violation : public Named {
+struct Violation : public Base {
 #define ViolationTypeList {   \
     ITEM(REQUIREMENT),	      \
       ITEM(PROHIBITION),      \
@@ -51,13 +51,15 @@ struct Violation : public Named {
   // ---------- L2 functions ----------  
 
   // ---------- const functions ----------  
-  virtual Named::Type GetNamedType() const { return Named::VIOLATION; }
+  virtual Base::Type GetBaseType() const { return Base::VIOLATION; }
   virtual Type GetViolationType() const = 0;
   virtual OTime ComputeTime() const = 0;
   OTime GetTime() const { return time_; }
   Record GetRecordForDisplay() const;
   bool Exists() const;
+  #ifdef TRACK_ERASED
   virtual bool OwnerIsErased() const { return false;}
+  #endif
 
   // ---------- L1 functions ----------  
   virtual ~Violation(){}
@@ -65,7 +67,7 @@ struct Violation : public Named {
   virtual void L1_Erase() {
     // remove from the model's set of violations
     L1_RemoveFromGlobalMap();
-    Named::L1_Erase();
+    Base::L1_Erase();
   }
   void L1_ChangeTime(OTime new_time);
   void L1_InsertIntoGlobalMap();
@@ -114,8 +116,10 @@ struct OwnedViolation : public Violation {
     ret["owner"] = owner_->ShortDescription();    
     return ret;
   }
+  #ifdef TRACK_ERASED
   bool OwnerIsErased() const { if (!owner_) return false;
     return owner_->IsErased();}
+  #endif
 
   // ---------- L1 functions ----------
   void L1_Init(Owner *owner) {
@@ -156,8 +160,10 @@ struct OwnedViolationWithData : public Violation {
   Owner *GetOwner() const { return owner_;}
   Violation::Type GetViolationType() const {return VType;}
   OTime ComputeTime() const { return owner_->GetTime();}
+  #ifdef TRACK_ERASED
   bool OwnerIsErased() const { if (!owner_) return false;
     return owner_->IsErased();}
+  #endif
 
   // ---------- L1 functions ----------
   void L1_Init(Owner *owner, DataType data) {

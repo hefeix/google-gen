@@ -166,6 +166,17 @@ inline string dtoa(double d) {
   sprintf(p, "%g", d);
   return p;
 }
+inline string ptoa(const void *ptr) {
+  ostringstream output;
+  output << ptr;
+  return output.str();
+}
+inline void * atop(const string & s) {
+  istringstream input(s);
+  void *ret;
+  input >> ret;
+  return ret;
+}
 
 // read a line from a stream
 bool GetLine(istream & input, string * ret);

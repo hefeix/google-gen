@@ -28,8 +28,10 @@ bool StaticExecutor::Execute() {
       VLOG(0) << "No more violations in Khazakhstan" << endl;
       break;
     }
+    #ifdef TRACK_ERASED
     CHECK(!v->IsErased());
     CHECK(!v->OwnerIsErased());
+    #endif
     string tp = Violation::TypeToString(v->GetViolationType());
     VLOG(2) << "About to fix " << tp << " " << v->GetName().ToString() << endl;
     bool success = false;
@@ -105,7 +107,7 @@ DynamicElement * StaticExecutor::MakeInstantiateChild(DynamicElement *parent,
 bool StaticExecutor::Instantiate(DynamicElement *e) {
   CHECK(e);
   e->ComputeSetTime();
-  if (e->GetNamedType() == Named::DYNAMIC_STATEMENT) {
+  if (e->GetBaseType() == Base::DYNAMIC_STATEMENT) {
     return InstantiateStatement(dynamic_cast<DynamicStatement *>(e));
   } else {
     return InstantiateExpression(dynamic_cast<DynamicExpression *>(e));
