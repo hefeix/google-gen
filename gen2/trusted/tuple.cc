@@ -128,8 +128,8 @@ int GeneralizationIterator::GeneralizeMask() const{
   return generalize_mask_;
 }
 
-set<Variable> GetDomainVariables(OMap m) {
-  set<Variable> ret;
+small_set<Variable> GetDomainVariables(OMap m) {
+  small_set<Variable> ret;
   forall(run, m.Data()) {
     ret.insert(Variable(run->first));
   }
@@ -187,13 +187,13 @@ void Add(Map * m, Object key, Object value) {
 void Add(Map *m, const Map & m2) {
   m->insert(m2.begin(), m2.end());
 }
-Map Restrict(const Map & m, const set<Object> & keys){
+/*Map Restrict(const Map & m, const small_set<Object> & keys){
   Map ret;
   forall(run, m) {
     if (keys % run->first) ret[run->first] = run->second;
   }
   return ret;
-}
+  }*/
 Map Reverse(const Map & m) {
   Map ret;
   forall(run, m) {
@@ -215,21 +215,21 @@ bool IsSubsetOf(const Map & m1, const Map & m2) {
   return true;
 }
 
-set<Variable> GetVariables(const Tuple & t) {
-  set<Variable> ret;
+small_set<Variable> GetVariables(const Tuple & t) {
+  small_set<Variable> ret;
   for (uint i=0; i<t.size(); i++)
     if (IsVariable(t[i])) ret.insert(t[i]);
   return ret;
 }
-set<Variable> GetVariables(const MPattern & v) {
-  set<Variable> ret;
+small_set<Variable> GetVariables(const MPattern & v) {
+  small_set<Variable> ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
       if (IsVariable(v[i][j])) ret.insert(v[i][j]);
   return ret;
 }
-set<Variable> GetVariables(const Pattern & v) {
-  set<Variable> ret;
+small_set<Variable> GetVariables(const Pattern & v) {
+  small_set<Variable> ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
       if (IsVariable(v[i].Data()[j])) ret.insert(v[i].Data()[j]);

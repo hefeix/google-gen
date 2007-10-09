@@ -29,12 +29,12 @@ void DestroyKeywords() {
 
 // There must be some black magic going on here, but the compiler is happy.
 template<Object::Type OT, class D>
-map<D, class SpecificObject<OT, D>::Definition *> 
+hash_map<D, class SpecificObject<OT, D>::Definition *> 
 SpecificObject<OT, D>::unique_;
 
 // there must be blacker magic going on that this line is necessary.
 template<>
-map<BitSeq, OBitSeq::Definition *> OBitSeq::unique_ = map<BitSeq, OBitSeq::Definition *>();
+hash_map<BitSeq, OBitSeq::Definition *> OBitSeq::unique_ = hash_map<BitSeq, OBitSeq::Definition *>();
 
 
 template<>
@@ -191,7 +191,7 @@ istream & operator >>(istream & input, Object & o){
   if (IsOpenEnclosure(firstchar)) {
     bool ismap = false;
     bool isfirst = true;
-    map<Object, Object> m;
+    Map m;
     vector<Object> v;
     Object key;
     Object value;

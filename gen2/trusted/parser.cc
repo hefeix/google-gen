@@ -120,7 +120,7 @@ vector<Statement *> ParseStatements(const Tuple & t) {
       if (parent) {
 	  CHECK(parent->NumStatementChildren() == 1);
 	  s->LinkToParent(parent, parent->NumExpressionChildren());
-	  cerr << "linking it onto the parent " << endl;
+	  //cerr << "linking it onto the parent " << endl;
       } else {
 	ret.push_back(s);
 	//cerr << "adding it to ret, size=" << ret.size() << endl;

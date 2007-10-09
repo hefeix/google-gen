@@ -34,6 +34,9 @@ You can use this free for any purpose.  It has no warranty.
 #include <set>
 #include <map>
 #include <string>
+#include <ext/hash_map>
+#include <ext/hash_set>
+
 
 using namespace std;
 
@@ -82,5 +85,31 @@ template <class A, class B> uint64 Fingerprint(const map<A,B> & s,
 template <class T> uint64 Fingerprint(const vector<T> & s, uint64 level = 0){
   return FingerprintIterator(s.begin(), s.end(), level);
 }
+
+#define DEFINE_HASH_AS_FINGERPRINT(Classname)	\
+  class hash<Classname> {			\
+  public:					\
+    size_t operator()(const Classname & c) const{	\
+      return size_t(Fingerprint(c));			\
+    } \
+  };
+#define __COMMA ,
+
+#define DEFINE_HASH_AS_FINGERPRINT_0(Classname)				\
+  namespace __gnu_cxx{ template <> DEFINE_HASH_AS_FINGERPRINT(Classname); };
+#define DEFINE_HASH_AS_FINGERPRINT_1(Classname) \
+  namespace __gnu_cxx{ template <class A>		\
+      DEFINE_HASH_AS_FINGERPRINT(Classname<A>); };
+#define DEFINE_HASH_AS_FINGERPRINT_2(Classname)		   \
+  namespace __gnu_cxx{ template <class A __COMMA class B>	\
+      DEFINE_HASH_AS_FINGERPRINT(Classname<A __COMMA B>); };
+
+DEFINE_HASH_AS_FINGERPRINT_0(bool);
+DEFINE_HASH_AS_FINGERPRINT_0(double);
+DEFINE_HASH_AS_FINGERPRINT_1(vector);
+DEFINE_HASH_AS_FINGERPRINT_1(set);
+DEFINE_HASH_AS_FINGERPRINT_2(map);
+
+
 
 #endif 

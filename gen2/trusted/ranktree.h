@@ -68,12 +68,13 @@ NPtr NextNode(NPtr current) {
 }
 
 // Projcetions of data onto keys
-template<class K> 
+template<class K>
 struct IdentityProjection {
   typedef K KeyType;
   typedef K DataType;
   static const KeyType & ToKey(const DataType &k) { return k;}
   static const DataType & ToData(const KeyType &k) { return k;}
+  static bool KeyIsData() { return true; }
 };
 template<class K, class V> 
   struct FirstProjection {
@@ -83,6 +84,7 @@ template<class K, class V>
   
   static const KeyType & ToKey(const DataType &p) { return p.first;}  
   static DataType ToData(const KeyType & k) { return make_pair(k, V());}
+  static bool KeyIsData() { return false; }
 };
 
 
@@ -99,7 +101,9 @@ class RankTree {
   uint size() const { return root_?root_->subtree_size_:0;}
 
   void insert(const Data & d) {
-    GetAddNode(d);
+    Node *n = GetAddNode(Projection::ToKey(d));
+    if (!Projection::KeyIsData())
+      n->data_ = d;
   }
   void erase(const Key & k) {
     Node *parent;
@@ -107,6 +111,10 @@ class RankTree {
     if (*look) Delete(*look);
   }
   RankTree() {root_ = NULL;}
+  RankTree(const RankTree<Projection> & other) {
+    root_ = NULL;
+    *this = other;
+  }
   string ToString(){
     return "tree\n" + ToString(root_, "", "");
   }
@@ -124,6 +132,22 @@ class RankTree {
     Node * right_;
     Color color_;
     uint subtree_size_;
+    static Node * DeepCopy(Node * n) {
+      if (n==NULL) return NULL;
+      Node *ret = new Node(*n);
+      if (n->left_) {
+	ret->left_ = DeepCopy(n->left_);
+	ret->left_->parent_ = ret;
+      }
+      if (n->right_) {
+	ret->right_ = DeepCopy(n->right_);
+	ret->right_->parent_ = ret;
+      }
+      return ret;
+    }
+    Node(const Node &o) 
+      :data_(o.data_), parent_(o.parent_), left_(o.left_), right_(o.right_), 
+       color_(o.color_), subtree_size_(o.subtree_size_) {}
     int WhichChild() const{ 
       if (!parent_) return 0;
       if (this == parent_->left_) return -1;
@@ -154,7 +178,7 @@ class RankTree {
       for (Node *current = this; current; current = current->parent_) {
 	current->subtree_size_++;
       }
-    }
+    }   
     void Check() {
       if (parent_) CHECK(parent_->left_==this || parent_->right_==this);
       if (left_) CHECK(left_->parent_==this);
@@ -312,7 +336,8 @@ class RankTree {
   }
   void operator=(const RankTree & o) {
     clear();
-    insert(o.begin(), o.end());
+    root_ = Node::DeepCopy(o.root_);
+     //insert(o.begin(), o.end());
   }
 
  protected:
@@ -604,6 +629,30 @@ template<class A, class B> const B * operator %(const rankmap<A, B> & m,
   if (look != m.end()) return &(look->second);
   return 0;
 }
+
+template<class Projection> 
+bool operator <(const RankTree<Projection> & x, 
+		const RankTree<Projection> & y) {
+  return lexicographical_compare(x.begin(), x.end(), y.begin(), y.end());
+}
+template<class Projection> 
+bool operator ==(const RankTree<Projection> & x, 
+		 const RankTree<Projection> & y) {
+  return ((x.size() == y.size()) && 
+	  equal(x.begin(), x.end(), y.begin()) );
+}
+
+
+template<class SK, class MK, class V> 
+  rankmap<MK, V> Restrict(const rankmap<MK,V> & m, 
+			   const set<SK> & s) {
+  rankmap<MK, V> ret;
+  forall(run, m) {
+    if (s % SK(run->first)) ret[run->first] = run->second;
+  }
+  return ret;
+}
+
 
 inline void TestRankSet() {
   set<int> foo;

@@ -52,6 +52,8 @@ a-z(otherwise)   It's a keyword, except for the following exceptions:
 #include "util.h"
 #include "hash.h"
 #include "numbers.h"
+#include "ranktree.h"
+#include "small_tree.h"
 
 class Object {
  public:
@@ -181,18 +183,16 @@ inline bool operator !=(const Object & o, void *p) {
 // TODO: we could make some types of objects that own their definitions.  
 // We would have to change object comparison to first be by type.  
 
-template <Object::Type OT, class D>
-class SpecificObject : public Object {
+template <Object::Type OT, class D>  class SpecificObject : public Object {
  public:
-  class Definition : public Object::Definition 
-  {
-  public:
-    D data_;
-    Definition(D data) {
+  class Definition : public Object::Definition {
+   public:
+     D data_;
+     Definition(D data) {
       data_ = data;
       CHECK(!(unique_ % data));
       unique_[data_] = this;
-    }
+     }
     
     ~Definition() {
       unique_.erase(data_);
@@ -205,10 +205,9 @@ class SpecificObject : public Object {
     uint64 DeepFingerprint(uint64 level = 0) const{
       return ::Fingerprint(::Fingerprint(data_, OT), level); 
     }
-
   };
-  static map<D, Definition *> unique_;
-
+  static hash_map<D, Definition *> unique_;
+  
 
   // Make a SpecificObject from data.
   // We can't just make this a constructor, because it conflicts with the copy
@@ -252,7 +251,18 @@ class SpecificObject : public Object {
 	CHECK(def == NULL || def->GetType() == OT);
       }
 	
-	SpecificObject(void *null) : Object(null) {}
+   SpecificObject(void *null) : Object(null) {}
+};
+
+
+namespace __gnu_cxx{
+  template <Object::Type OT, class D> 
+    class hash<SpecificObject<OT, D> > {
+  public:
+    size_t operator()(const SpecificObject<OT, D> & o) const{
+      return size_t(o.GetDefinition());
+    }
+  };
 };
 
 istream & operator >>(istream & input, Object & o);
@@ -268,8 +278,18 @@ inline ostream & operator <<(ostream & output, const Object & o) {
   return output;
 }
 
+namespace __gnu_cxx{
+  template <> class hash<Object> {
+  public:
+    size_t operator()(const Object & o) const{
+      return size_t(o.GetDefinition());
+    }
+  };
+};
+
+
 typedef vector<Object> Tuple;
-typedef map<Object, Object> Map;
+typedef small_map<Object, Object> Map;
 typedef vector<Tuple> MPattern; // mutable 2 levels down
 
 typedef SpecificObject<Object::FLAKE, string> Flake;

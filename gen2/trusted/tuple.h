@@ -92,7 +92,7 @@ OPattern Substitute(const Map &m, OPattern p);
 // recursively substitutes Patterns and tuples.  
 Object DeepSubstitute(const Map & m, Object o);
 
-set<Variable> GetDomainVariables(OMap m);
+small_set<Variable> GetDomainVariables(OMap m);
 
 // Adds a key-value pair to a Map.
 void Add(Map *m, Object key, Object value);
@@ -101,7 +101,7 @@ void Add(Map *m, const Map & m2);
 
 // Provide a restricted substitution to a set of keys.  The keys are objects
 template<class OType>
-OMap Restrict(const OMap & m, const set<OType> & keys){
+OMap Restrict(const OMap & m, const small_set<OType> & keys){
   return OMap::Make(Restrict(m.Data(), keys));  
 }
 
@@ -115,9 +115,9 @@ Variable FirstUnusedVariable(Map m);
 // onto the domain of m1.
 bool IsSubsetOf(const Map  & m1, const Map & m2);
 
-set<Variable> GetVariables(const Tuple & t);
-set<Variable> GetVariables(const MPattern & v);
-set<Variable> GetVariables(const Pattern & v);
+small_set<Variable> GetVariables(const Tuple & t);
+small_set<Variable> GetVariables(const MPattern & v);
+small_set<Variable> GetVariables(const Pattern & v);
 
 // find ths connected components of the pattern.  
 // Two tuples are connected if they share variables
