@@ -8,7 +8,7 @@ SRC = main.cc objects.cc hash.cc util.cc changelist.cc tuple.cc \
     numbers.cc blackboard.cc query.cc probutil.cc ranktree.cc \
     violation.cc link.cc spec.cc record.cc chooser.cc globals.cc model.cc \
     base.cc element.cc webserver.cc parser.cc extensions.cc fixers.cc \
-    genrequesthandler.cc
+    genrequesthandler.cc small_tree.cc
 INC = $(addsuffix .h, $(basename $(SRC)))
 OBJ = $(addsuffix .o, $(basename $(SRC)))
 

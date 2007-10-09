@@ -93,6 +93,14 @@ inline istream & operator>>(istream & input, BitSeq & s) {
 inline uint64 Fingerprint(BitSeq s, uint64 level = 0){
   return Fingerprint(Fingerprint(s.data_, 0x23948289343ll), level);
 }
+namespace __gnu_cxx{
+  template <> class hash<BitSeq> {
+  public:
+    size_t operator()(const BitSeq & bs) const{
+      return Fingerprint(bs.data_);
+    }
+  };
+};
 
 
 /*
@@ -167,6 +175,16 @@ struct Time{
   void Increment(const BitSeq & coordinate, int count);
   bool IsNever() { return never_;}
   static Time Never() { Time t; t.never_ = true; return t;}
+};
+
+namespace __gnu_cxx{
+  template <> class hash<Time> {
+  public:
+    size_t operator()(const Time & t) const{
+      if (t.never_) return 0;
+      return Fingerprint(t.coordinates_);
+    }
+  };
 };
 
 inline Time operator +(const Time & t, BitSeq coordninate){

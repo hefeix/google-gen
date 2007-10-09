@@ -396,11 +396,11 @@ template<class T, class P1, class P2, class P3> T * New(const P1 & p1,
   return t;
 }
 
-template<class T> set<T> SingletonSet(const T & t) {
+/*template<class T> set<T> SingletonSet(const T & t) {
   set<T> ret;
   ret.insert(t);
   return ret;
-}
+  }*/
 
 // In general SK and MK are identical, but we should at least be able to
 // cast an MK to an SK
