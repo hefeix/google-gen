@@ -104,7 +104,7 @@ template <class A, class B> uint32 Hash32(const pair<A,B> & p,
 template <class T> uint32 Hash32(const set<T> & s, uint32 level = 0){
   return Hash32Iterator(s.begin(), s.end(), level);
 }
-template <class A, class B> uint32 Hash32(const map<A,B> & s, 
+template <class A, class B, class C, class D> uint32 Hash32(const map<A,B,C,D> & s, 
 					  uint32 level = 0){
   return Hash32Iterator(s.begin(), s.end(), level);
 }
@@ -133,12 +133,18 @@ template <class A, class B> uint32 Hash32(const hash_map<A,B> & s,
 #define DEFINE_HASH_CLASS_2(Classname)		   \
   namespace __gnu_cxx{ template <class A __COMMA class B>	\
       DEFINE_HASH_CLASS(Classname<A __COMMA B>); };
+#define DEFINE_HASH_CLASS_3(Classname)		   \
+  namespace __gnu_cxx{ template <class A __COMMA class B __COMMA class C> \
+      DEFINE_HASH_CLASS(Classname<A __COMMA B __COMMA C>); };
+#define DEFINE_HASH_CLASS_4(Classname)		   \
+  namespace __gnu_cxx{ template <class A __COMMA class B __COMMA class C __COMMA class D>	\
+      DEFINE_HASH_CLASS(Classname<A __COMMA B __COMMA C __COMMA D>); };
 
 DEFINE_HASH_CLASS_0(bool);
 DEFINE_HASH_CLASS_0(double);
 DEFINE_HASH_CLASS_1(vector);
 DEFINE_HASH_CLASS_1(set);
-DEFINE_HASH_CLASS_2(map);
+DEFINE_HASH_CLASS_4(map);
 DEFINE_HASH_CLASS_2(hash_map);
 
 #endif 

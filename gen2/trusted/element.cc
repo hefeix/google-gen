@@ -157,15 +157,15 @@ void DynamicElement::L1_Erase() {
   Element::L1_Erase();
 }
 
-set<Variable> StaticElement::ComputeVariables() const { 
-  if (!parent_) return set<Variable>();
+VariableSet StaticElement::ComputeVariables() const { 
+  if (!parent_) return VariableSet();
   StaticElement * parent = GetParent();
   return Union(parent->GetVariables(), 
 	       parent->GetIntroducedVariables(WhichChildAmI()));
 }
 
 void StaticElement::L1_RecursivelyComputeSetVariables() {
-  set<Variable> new_variables = ComputeVariables();
+  VariableSet new_variables = ComputeVariables();
   if (new_variables == variables_) return;
   CL.ChangeValue(&variables_, new_variables);
   for (int i=0; i<NumChildren(); i++) {
@@ -174,8 +174,8 @@ void StaticElement::L1_RecursivelyComputeSetVariables() {
   }
 }
 
-set<Variable> StaticElement::GetIntroducedVariables(int which_child) const {
-  return set<Variable>();
+VariableSet StaticElement::GetIntroducedVariables(int which_child) const {
+  return VariableSet();
 }
 
 StaticElement * StaticElement::GetChild(int which) const { 
@@ -384,7 +384,7 @@ void StaticOn::L1_Init(){
   Statement::L1_Init();
   New<MissingDynamicOnViolation>(this);
 }
-set<Variable> StaticOn::GetIntroducedVariables(int which_child) const {
+VariableSet StaticOn::GetIntroducedVariables(int which_child) const {
   return ::GetVariables(GetPattern().Data());
 }
 void StaticOn::L1_Erase() {
@@ -659,7 +659,7 @@ Link * DynamicElement::FindDynamicParentLink() const {
   if (!dp) {
     cerr << "binding=" << binding_ << endl
 	 << "restricted=" << Restrict(binding_, sp->GetVariables()) << endl;
-    set<Variable> vars = sp->GetVariables();
+    VariableSet vars = sp->GetVariables();
     forall(run, vars) cerr << (*run) << " ";
     cerr << endl;
   }

@@ -386,7 +386,6 @@ template <class C, class P> class MemberCall1Change : public Change {
   P parameter_;
 };
 
-extern LinearAllocator CL_ALLOC;
 
 // A changelist is a stack of changes which allows you to set checkpoints and
 // rollback to desired checkpoints.  To use a changelist object, you will need
@@ -405,6 +404,9 @@ extern LinearAllocator CL_ALLOC;
 // }
 
 //#define new(CL_ALLOC) new
+
+// extern LinearAllocator CL_ALLOC;
+
 class Changelist {
  public:
   Changelist(); 

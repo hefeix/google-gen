@@ -420,10 +420,12 @@ template<class S, class M> M Restrict(const M & m,
 string Downcase(string s);
 string Upcase(string s);
 
-template<class T> set<T> SingletonSet(const T & t) {
-  set<T> ret;
-  ret.insert(t);
-  return ret;
+template <class S> S Singleton(typename S::key_type t) {
+  S ret; ret.insert(t); return ret;
 }
+/*template<class T> set<T> SingletonSet(const T & t) {
+  set<T> ret; ret.insert(t);
+  return ret;
+  }*/
 
 #endif

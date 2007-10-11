@@ -171,12 +171,12 @@ struct StaticElement : public Element {
   // the objects and expression children
   string ParameterListToString() const; 
   // What new variables are introduced by this node
-  virtual set<Variable> GetIntroducedVariables(int which_child) const;
+  virtual VariableSet GetIntroducedVariables(int which_child) const;
   // What variables exist at this node. 
   // This is the union of GetIntroducedVariables() up the static tree, 
   // not including this node. 
-  set<Variable> ComputeVariables() const;
-  inline const set<Variable> & GetVariables() const { return variables_;}
+  VariableSet ComputeVariables() const;
+  inline const VariableSet & GetVariables() const { return variables_;}
 
   Record GetRecordForDisplay() const;
   set<Element *> GetAllChildren() const;
@@ -217,7 +217,7 @@ struct StaticElement : public Element {
   MultiLink * dynamic_children_;
   vector<SingleLink *> static_children_; // statements and expressions
   vector<Object> objects_;
-  set<Variable> variables_;
+  VariableSet variables_;
 
 };
 
@@ -455,7 +455,7 @@ struct StaticOn : public Statement {
   int NumExpressionChildren() const { return CHILD;}
   OPattern GetPattern() const { return GetObject(PATTERN);}
   virtual Function GetFunction() const { return ON;}
-  set<Variable> GetIntroducedVariables(int which_child) const;
+  VariableSet GetIntroducedVariables(int which_child) const;
   // ---------- L1 functions ----------  
   void L1_Init();
   void L1_Erase();
@@ -506,10 +506,10 @@ struct StaticRepeat : public Statement {
   Variable GetRepetitionVariable() const { 
     return GetObject(REPETITION_VARIABLE);}
   virtual Function GetFunction() const { return REPEAT;}
-  set<Variable> GetIntroducedVariables(int which_child) const {
+  VariableSet GetIntroducedVariables(int which_child) const {
     if (which_child == CHILD) 
-      return SingletonSet(GetRepetitionVariable());
-    return set<Variable>();
+      return Singleton<VariableSet>(GetRepetitionVariable());
+    return VariableSet();
   }
   // ---------- L1 functions ----------  
   void L1_Init();
@@ -599,9 +599,9 @@ struct StaticLet : public Statement {
   Variable GetVariable() const { return GetObject(VARIABLE);}
   virtual Function GetFunction() const { return LET;}
 
-  set<Variable> GetIntroducedVariables(int which_child) const {
-    if (which_child == CHILD) return SingletonSet(GetVariable());
-    return set<Variable>();
+  VariableSet GetIntroducedVariables(int which_child) const {
+    if (which_child == CHILD) return Singleton<VariableSet>(GetVariable());
+    return VariableSet();
   }
   // ---------- L1 functions ----------  
   void L1_Init();

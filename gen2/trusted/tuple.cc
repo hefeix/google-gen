@@ -128,8 +128,8 @@ int GeneralizationIterator::GeneralizeMask() const{
   return generalize_mask_;
 }
 
-set<Variable> GetDomainVariables(OMap m) {
-  set<Variable> ret;
+VariableSet GetDomainVariables(OMap m) {
+  VariableSet ret;
   forall(run, m.Data()) {
     ret.insert(Variable(run->first));
   }
@@ -215,21 +215,21 @@ bool IsSubsetOf(const Map & m1, const Map & m2) {
   return true;
 }
 
-set<Variable> GetVariables(const Tuple & t) {
-  set<Variable> ret;
+VariableSet GetVariables(const Tuple & t) {
+  VariableSet ret;
   for (uint i=0; i<t.size(); i++)
     if (IsVariable(t[i])) ret.insert(t[i]);
   return ret;
 }
-set<Variable> GetVariables(const MPattern & v) {
-  set<Variable> ret;
+VariableSet GetVariables(const MPattern & v) {
+  VariableSet ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
       if (IsVariable(v[i][j])) ret.insert(v[i][j]);
   return ret;
 }
-set<Variable> GetVariables(const Pattern & v) {
-  set<Variable> ret;
+VariableSet GetVariables(const Pattern & v) {
+  VariableSet ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
       if (IsVariable(v[i].Data()[j])) ret.insert(v[i].Data()[j]);
