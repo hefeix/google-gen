@@ -90,18 +90,10 @@ inline istream & operator>>(istream & input, BitSeq & s) {
   return input;
 }
 
-inline uint64 Fingerprint(BitSeq s, uint64 level = 0){
-  return Fingerprint(Fingerprint(s.data_, 0x23948289343ll), level);
+inline uint32 Hash32(BitSeq s, uint32 level = 0){
+  return Hash32(s.data_, level);
 }
-namespace __gnu_cxx{
-  template <> class hash<BitSeq> {
-  public:
-    size_t operator()(const BitSeq & bs) const{
-      return Fingerprint(bs.data_);
-    }
-  };
-};
-
+DEFINE_HASH_CLASS_0(BitSeq);
 
 /*
 // represents a real number between zero and 1 by a vector of bits, most 
@@ -176,16 +168,10 @@ struct Time{
   bool IsNever() { return never_;}
   static Time Never() { Time t; t.never_ = true; return t;}
 };
-
-namespace __gnu_cxx{
-  template <> class hash<Time> {
-  public:
-    size_t operator()(const Time & t) const{
-      if (t.never_) return 0;
-      return Fingerprint(t.coordinates_);
-    }
-  };
-};
+inline uint32 Hash32(const Time & t, uint32 seed = 0) {
+  return Hash32(t.coordinates_, seed);
+}
+DEFINE_HASH_CLASS_0(Time);
 
 inline Time operator +(const Time & t, BitSeq coordninate){
   Time ret = t;
@@ -198,15 +184,6 @@ istream & operator >> (istream & input, Time & t);
 inline ostream & operator << (ostream & output, const Time &n){
   output << n.ToString();
   return output;
-}
-
-inline uint64 Fingerprint(Time t, uint64 level = 0){
-  uint64 ret = Fingerprint(0x23948237ll, level);
-  for (uint i=0; i<t.coordinates_.size(); i++) {
-    ret = Fingerprint(t.coordinates_[i].first, ret);
-    ret = Fingerprint(t.coordinates_[i].second, ret);
-  }
-  return ret;
 }
 
 inline string TimeToStringOrNothing(const Time *t) {

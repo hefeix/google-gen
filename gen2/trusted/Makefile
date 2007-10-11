@@ -8,7 +8,7 @@ SRC = main.cc objects.cc hash.cc util.cc changelist.cc tuple.cc \
     numbers.cc blackboard.cc query.cc probutil.cc ranktree.cc \
     violation.cc link.cc spec.cc record.cc chooser.cc globals.cc model.cc \
     base.cc element.cc webserver.cc parser.cc extensions.cc fixers.cc \
-    genrequesthandler.cc small_tree.cc
+    genrequesthandler.cc allocators.cc
 INC = $(addsuffix .h, $(basename $(SRC)))
 OBJ = $(addsuffix .o, $(basename $(SRC)))
 
@@ -16,6 +16,7 @@ OBJ = $(addsuffix .o, $(basename $(SRC)))
 # Where to find python includes
 # How to link the python library
 # How to make a loadable object
+
 
 # Pattern rule making .o files from .cc
 %.o : %.cc

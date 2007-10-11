@@ -20,6 +20,9 @@
 #include "changelist.h"
 #include "webserver.h"
 
+const bool NAME_ALL = false;
+const bool TRACK_CURRENT_COUNT = false;
+
 #undef ITEM
 #define ITEM(x) #x
 
@@ -60,6 +63,10 @@ void Base::L1_Erase() {
   #ifdef TRACK_ERASED
   CL.ChangeValue(&erased_, true);
   #endif
+  if (TRACK_CURRENT_COUNT) {
+    CL.ChangeValue(&N.current_count_[GetBaseType()],
+		   N.current_count_[GetBaseType()]-1);
+  }
   CL.Destroying(this);
 }
 
@@ -68,10 +75,13 @@ void Base::L1_Init() {
   #ifdef TRACK_ERASED
   erased_ = false;
   #endif
-  // L1_AutomaticallyName();
+  if (NAME_ALL) L1_AutomaticallyName();
+
   N.all_time_count_[GetBaseType()]++;
-  CL.ChangeValue(&N.current_count_[GetBaseType()],
-		 N.current_count_[GetBaseType()]+1);
+  if (TRACK_CURRENT_COUNT) {
+    CL.ChangeValue(&N.current_count_[GetBaseType()],
+		   N.current_count_[GetBaseType()]+1);
+  }
 }
 
 Record Base::GetRecordForDisplay() const { 

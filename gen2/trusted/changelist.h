@@ -1,3 +1,4 @@
+
 // Copyright (C) 2006 Google Inc. and Georges Harik
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +23,7 @@
 #include <vector>
 #include <map>
 #include "util.h"
+#include "allocators.h"
 
 typedef uint Checkpoint;
   
@@ -149,9 +151,9 @@ template<class K, class V> class MapValueChange : public Change {
 
 // Inserts a key/value pair into a map.
 // Precondition: the map must lack that key.
-template <class K, class V> class MapInsertChange : public Change {
+template <class K, class V, class MC> class MapInsertChange : public Change {
  public:
-  MapInsertChange(map<K,V> * location, const K & key, const V & val) {
+  MapInsertChange(MC * location, const K & key, const V & val) {
     location_ = location;
     key_ = key;
     CHECK(! (*location % key));
@@ -166,14 +168,14 @@ template <class K, class V> class MapInsertChange : public Change {
     return out.str();
   }
  private:
-  map<K,V> * location_;
+  MC * location_;
   K key_;
 };
 
 // Removes a key/value pair from a map.
-template <class K, class V> class MapRemoveChange : public Change {
+template <class K, class V, class MC> class MapRemoveChange : public Change {
  public:
-  MapRemoveChange(map<K,V> * location, const K & key) {
+  MapRemoveChange(MC * location, const K & key) {
     location_ = location;
     CHECK(*location % key);
     key_ = key;
@@ -188,7 +190,7 @@ template <class K, class V> class MapRemoveChange : public Change {
     out << "MapRemoveChange " << location_;
     return out.str();
   }
-  map<K,V> * location_;
+  MC * location_;
  private:
   K key_;
   V val_;
@@ -384,6 +386,8 @@ template <class C, class P> class MemberCall1Change : public Change {
   P parameter_;
 };
 
+extern LinearAllocator CL_ALLOC;
+
 // A changelist is a stack of changes which allows you to set checkpoints and
 // rollback to desired checkpoints.  To use a changelist object, you will need
 // to use either the already defined change types, or to write your own 
@@ -400,6 +404,7 @@ template <class C, class P> class MemberCall1Change : public Change {
 //    my_changelist.Rollback(cp);
 // }
 
+//#define new(CL_ALLOC) new
 class Changelist {
  public:
   Changelist(); 
@@ -419,24 +424,24 @@ class Changelist {
       *location = new_val;
       return;
     }
-    Make(new ValueChange<C>(location, new_val));
+    Make(new(CL_ALLOC) ValueChange<C>(location, new_val));
   }
   template <class C> void PushBack(vector<C> *location, const C & val) {
     if (disabled_) {
       location->push_back(val);
       return;
     }
-    Make(new PushChange<C>(location, val));
+    Make(new(CL_ALLOC) PushChange<C>(location, val));
   }
   // delete on rollback
   template <class C> void Creating(C * object){
     if (disabled_) return;
-    Make(new DeleteOnRollbackChange<C>(object));
+    Make(new(CL_ALLOC) DeleteOnRollbackChange<C>(object));
   }
   // delete on make permanent
   template <class C> void Destroying(C * object){
     if (disabled_) return;
-    Make(new DeleteOnMakePermanentChange<C>(object));
+    Make(new(CL_ALLOC) DeleteOnMakePermanentChange<C>(object));
   }
 
   // Adding to set convenience function
@@ -445,23 +450,23 @@ class Changelist {
       sc->insert(c);
       return;
     }
-    Make(new SetInsertChange<C, SC>(sc, c));
+    Make(new(CL_ALLOC) SetInsertChange<C, SC>(sc, c));
   }
   template <class C, class SC> void RemoveFromSet(SC * sc, const C& c) {
     if (disabled_) {
       sc->erase(c);
       return;
     }
-    Make(new SetRemoveChange<C, SC>(sc, c));
+    Make(new(CL_ALLOC) SetRemoveChange<C, SC>(sc, c));
   }
-  template <class K, class V> void InsertIntoMap(map<K,V> * location,
-						 const K& key,
-						 const V& val) {
+  template <class K, class V, class MC> void InsertIntoMap(MC * location,
+							   const K& key,
+							   const V& val) {
     if (disabled_) {
       (*location)[key] = val;
       return;
     }
-    Make (new MapInsertChange<K, V>(location, key, val));
+    Make (new(CL_ALLOC) MapInsertChange<K, V, MC>(location, key, val));
   }
   template <class K, class V> void RemoveFromMap(map<K,V> * location,
 						 const K& key) {
@@ -469,7 +474,15 @@ class Changelist {
       location->erase(key);
       return;
     }
-    Make (new MapRemoveChange<K, V>(location, key));
+    Make (new(CL_ALLOC) MapRemoveChange<K, V, map<K,V> >(location, key));
+  }
+  template <class K, class V> void RemoveFromMap(hash_map<K,V> * location,
+						 const K& key) {
+    if (disabled_) {
+      location->erase(key);
+      return;
+    }
+    Make (new(CL_ALLOC) MapRemoveChange<K, V, hash_map<K,V> >(location, key));
   }
   template<class K, class V> void ChangeMapValue(map<K,V> *location,
 						 const K&key, 
@@ -478,7 +491,7 @@ class Changelist {
       (*location)[key] = new_val;
       return;
     }
-    Make(new MapValueChange<K,V>(location, key, new_val));
+    Make(new(CL_ALLOC) MapValueChange<K,V>(location, key, new_val));
   }
   template <class K, class V> 
     void AddToMapOfCounts(map<K, V> *location, const K & key, 
@@ -488,7 +501,7 @@ class Changelist {
       if ((*location)[key] == 0) location->erase(key);
       return;
     }
-    Make(new MapOfCountsAddChange<K,V>(location, key, delta));
+    Make(new(CL_ALLOC) MapOfCountsAddChange<K,V>(location, key, delta));
   }
 
   template <class MK, class SV, class MapComp> 
@@ -499,7 +512,7 @@ class Changelist {
       (*location)[key].insert(value);
       return;
     }
-    Make(new MapOfSetsInsertChange<MK, SV, MapComp>(location, key, value));
+    Make(new(CL_ALLOC) MapOfSetsInsertChange<MK, SV, MapComp>(location, key, value));
   }
   template <class MK, class SV, class MapComp> 
     void RemoveFromMapOfSets(map<MK, set<SV>, MapComp> * location, 
@@ -510,7 +523,7 @@ class Changelist {
       if ((*location)[key].size()==0) location->erase(key);
       return;
     }
-    Make(new MapOfSetsRemoveChange<MK, SV, MapComp>(location, key, value));
+    Make(new(CL_ALLOC) MapOfSetsRemoveChange<MK, SV, MapComp>(location, key, value));
   }
 
 };
