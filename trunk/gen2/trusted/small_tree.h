@@ -179,17 +179,6 @@ bool operator !=(const SmallTree<Projection> & x,
   return (!(x==y));
 }
 
-
-template<class SK, class MK, class V> 
-  small_map<MK, V> Restrict(const small_map<MK,V> & m, 
-			    const small_set<SK> & s) {
-  small_map<MK, V> ret;
-  forall(run, m) {
-    if (s % SK(run->first)) ret[run->first] = run->second;
-  }
-  return ret;
-}
-
 template <class A, class B> uint32 Hash32(const small_set<A> & s, 
 					       uint32 level = 0){
   return Hash32Iterator(s.begin(), s.end(), level);
@@ -204,12 +193,6 @@ DEFINE_HASH_CLASS_2(small_map);
 
 void TestSmallSet();
 void TestSmallMap();
-
-template<class T> small_set<T> SingletonSmallSet(const T & t) {
-  small_set<T> ret;
-  ret.insert(t);
-  return ret;
-}
 
 //template <class T>
 //typedef SmallTree<IdentityProjection<T> > smallset;
