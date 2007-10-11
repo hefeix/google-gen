@@ -190,22 +190,22 @@ template<class SK, class MK, class V>
   return ret;
 }
 
-template <class A, class B> uint64 Fingerprint(const small_set<A> & s, 
-					       uint64 level = 0){
-  return FingerprintIterator(s.begin(), s.end(), level);
+template <class A, class B> uint32 Hash32(const small_set<A> & s, 
+					       uint32 level = 0){
+  return Hash32Iterator(s.begin(), s.end(), level);
 }
-DEFINE_HASH_AS_FINGERPRINT_1(small_set);
+DEFINE_HASH_CLASS_1(small_set);
 
-template <class A, class B> uint64 Fingerprint(const small_map<A,B> & s, 
-					       uint64 level = 0){
-  return FingerprintIterator(s.begin(), s.end(), level);
+template <class A, class B> uint32 Hash32(const small_map<A,B> & s, 
+					       uint32 level = 0){
+  return Hash32Iterator(s.begin(), s.end(), level);
 }
-DEFINE_HASH_AS_FINGERPRINT_2(small_map);
+DEFINE_HASH_CLASS_2(small_map);
 
 void TestSmallSet();
 void TestSmallMap();
 
-template<class T> small_set<T> SingletonSet(const T & t) {
+template<class T> small_set<T> SingletonSmallSet(const T & t) {
   small_set<T> ret;
   ret.insert(t);
   return ret;

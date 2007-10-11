@@ -21,6 +21,7 @@
 #include "model.h"
 
 Changelist CL;
+LinearAllocator CL_ALLOC;
 Blackboard BB;
 Namer N;
 Model M;

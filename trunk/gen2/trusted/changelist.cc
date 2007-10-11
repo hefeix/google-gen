@@ -48,11 +48,14 @@ Checkpoint Changelist::GetCheckpoint(){
 }
 void Changelist::Rollback(Checkpoint cp){
   CHECK(history_.size() >= (uint)cp);
+  if (history_.size() == (uint)cp) return;
+  Change * last_to_go = history_[cp];
   while (history_.size() > (uint)cp){
     history_.back()->Undo();
     delete history_.back();
     history_.pop_back();
   }
+  CL_ALLOC.deallocate(last_to_go);
 }
 void Changelist::MakeChangesPermanent(){
   for (uint i=0; i<history_.size(); i++) {
@@ -60,4 +63,5 @@ void Changelist::MakeChangesPermanent(){
     delete history_[i];
   }
   history_.clear();
+  CL_ALLOC.Clear();
 }

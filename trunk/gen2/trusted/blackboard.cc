@@ -68,6 +68,7 @@ string SamplingInfo::ToString() const {
 
 Posting::Posting(OTuple tuple, Time time, Blackboard *blackboard)
   :tuple_(tuple), time_(time), blackboard_(blackboard){
+  CHECK(tuple != NULL);
   CL.Creating(this);
   blackboard_->L1_AddPosting(this);
   blackboard_->L1_FlushUpdates();
@@ -413,6 +414,9 @@ UpdateNeeds RandomUpdateNeeds() {
 }
 OTime Blackboard::FindTupleTime(OTuple t) const{
   const TupleInfo * ti = GetConstTupleInfo(t);
+  if (!ti) {
+    cerr << "Couldn't find tuple " << t << endl;
+  }
   CHECK(ti);
   return OTime::Make(ti->FirstTime());
 }
@@ -675,7 +679,8 @@ Record Blackboard::GetRecordForDisplay() const {
   ret["type"] = "BLACKBOARD";
   ret["num tuples"] = itoa(tuple_info_.size());
   forall(run, tuple_info_) {
-    ret["tuples"] += run->second->ShortDescription() + "<br>\n";
+    ret["tuples"] += run->first.ToString() + " " 
+      + run->second->ShortDescription() + "<br>\n";
   }
   return ret;
 }

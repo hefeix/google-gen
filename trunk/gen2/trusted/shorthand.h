@@ -33,9 +33,14 @@
 using namespace std;
 using namespace __gnu_cxx;
 
-// #define CHECK(cond) if(!(cond)) {cerr << "Check Failed" << endl; int *x=0; *x=0; }
+//#define NO_CHECK
+
+#ifdef NO_CHECK
+#define CHECK(cond) if (false) {if (!(cond)) {cerr << "huh????";} }
+#else
 #define CHECK(cond) if(!(cond)) {cerr << "Check Failed at " << __FUNCTION__ << " " << __FILE__ << ":" << __LINE__ << endl << endl;	\
     string __s; do { cin >> __s; } while (__s != "c");}
+#endif
 
 #define OPERATORLESS operator <
 #define OPERATORLE operator <=
@@ -50,6 +55,8 @@ typedef unsigned long uint32;
 typedef long long int64;
 typedef long int32;
 typedef unsigned int uint;
+typedef unsigned char uint8;
+typedef signed char int8;
 
 /*
 The interface to sets and maps sucks rocks. Let's fix it.

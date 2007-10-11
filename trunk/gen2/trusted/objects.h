@@ -93,7 +93,7 @@ class Object {
     Definition() {
       reference_count_ = 0;
     }
-    virtual uint64 DeepFingerprint(uint64 level = 0) const = 0;
+    virtual uint32 DeepHash32(uint32 level = 0) const = 0;
   };
   
   Object() {
@@ -138,11 +138,11 @@ class Object {
   }
   string ToString(bool verbose=false) const 
   { if (def_) return def_->ToString(verbose); return "null"; }
-  uint64 ShallowFingerprint(uint64 level = 0) const {
-    return ::Fingerprint((uint64)def_, level);
+  uint32 ShallowHash32(uint32 level = 0) const {
+    return ::Hash32((uint32)def_, level);
   }
-  uint64 DeepFingerprint(uint64 level = 0) const {
-    return def_->DeepFingerprint(level);
+  uint32 DeepHash32(uint32 level = 0) const {
+    return def_->DeepHash32(level);
   }
 
  protected:
@@ -202,8 +202,8 @@ template <Object::Type OT, class D>  class SpecificObject : public Object {
     }
     string ToStringSpecific(bool verbose) const;
     const D & Data() const { return data_; }
-    uint64 DeepFingerprint(uint64 level = 0) const{
-      return ::Fingerprint(::Fingerprint(data_, OT), level); 
+    uint32 DeepHash32(uint32 seed = 0) const{
+      return ::Hash32(::Hash32(data_, uint32(OT)), seed); 
     }
   };
   static hash_map<D, Definition *> unique_;
@@ -289,7 +289,7 @@ namespace __gnu_cxx{
 
 
 typedef vector<Object> Tuple;
-typedef small_map<Object, Object> Map;
+typedef map<Object, Object> Map;
 typedef vector<Tuple> MPattern; // mutable 2 levels down
 
 typedef SpecificObject<Object::FLAKE, string> Flake;
@@ -312,26 +312,26 @@ inline const Object * operator %(const OMap & m, Object key) {
 }
 
 template <> 
-inline uint64 OTuple::Definition::DeepFingerprint(uint64 level) const {
-  uint64 ret = ::Fingerprint(OTUPLE, level);
-  forall(run, data_) ret = run->DeepFingerprint(ret);
+inline uint32 OTuple::Definition::DeepHash32(uint32 level) const {
+  uint32 ret = ::Hash32((uint32)OTUPLE, level);
+  forall(run, data_) ret = run->DeepHash32(ret);
   return ret;
 }
 template <> 
-inline uint64 OMap::Definition::DeepFingerprint(uint64 level) const {
-  uint64 ret = ::Fingerprint(OMAP, level);
+inline uint32 OMap::Definition::DeepHash32(uint32 level) const {
+  uint32 ret = ::Hash32((uint32)OMAP, level);
   forall(run, data_) {
-    ret = run->first.DeepFingerprint(ret);
-    ret = run->second.DeepFingerprint(ret);
+    ret = run->first.DeepHash32(ret);
+    ret = run->second.DeepHash32(ret);
   }
   return ret;
 }
 template <> 
-inline uint64 Escape::Definition::DeepFingerprint(uint64 level) const {
-  return ::Fingerprint(data_.DeepFingerprint(level), ESCAPE);
+inline uint32 Escape::Definition::DeepHash32(uint32 level) const {
+  return ::Hash32(data_.DeepHash32(level), ESCAPE);
 }
-inline uint64 Fingerprint(const Object & o, uint64 level = 0) {
-  return o.DeepFingerprint(level);
+inline uint32 Hash32(const Object & o, uint32 level = 0) {
+  return o.DeepHash32(level);
 }
 
 inline Pattern TupleToPattern(const Tuple & t) {

@@ -128,8 +128,8 @@ int GeneralizationIterator::GeneralizeMask() const{
   return generalize_mask_;
 }
 
-small_set<Variable> GetDomainVariables(OMap m) {
-  small_set<Variable> ret;
+set<Variable> GetDomainVariables(OMap m) {
+  set<Variable> ret;
   forall(run, m.Data()) {
     ret.insert(Variable(run->first));
   }
@@ -187,7 +187,7 @@ void Add(Map * m, Object key, Object value) {
 void Add(Map *m, const Map & m2) {
   m->insert(m2.begin(), m2.end());
 }
-/*Map Restrict(const Map & m, const small_set<Object> & keys){
+/*Map Restrict(const Map & m, const set<Object> & keys){
   Map ret;
   forall(run, m) {
     if (keys % run->first) ret[run->first] = run->second;
@@ -215,21 +215,21 @@ bool IsSubsetOf(const Map & m1, const Map & m2) {
   return true;
 }
 
-small_set<Variable> GetVariables(const Tuple & t) {
-  small_set<Variable> ret;
+set<Variable> GetVariables(const Tuple & t) {
+  set<Variable> ret;
   for (uint i=0; i<t.size(); i++)
     if (IsVariable(t[i])) ret.insert(t[i]);
   return ret;
 }
-small_set<Variable> GetVariables(const MPattern & v) {
-  small_set<Variable> ret;
+set<Variable> GetVariables(const MPattern & v) {
+  set<Variable> ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
       if (IsVariable(v[i][j])) ret.insert(v[i][j]);
   return ret;
 }
-small_set<Variable> GetVariables(const Pattern & v) {
-  small_set<Variable> ret;
+set<Variable> GetVariables(const Pattern & v) {
+  set<Variable> ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
       if (IsVariable(v[i].Data()[j])) ret.insert(v[i].Data()[j]);
@@ -402,7 +402,7 @@ MPattern Canonicalize(const MPattern & v, Map*sub){
   // Map between fingerprints and position in the pattern
   map<uint64, int> sorted;
   for (uint i=0; i<v.size(); i++) {
-    fprints.push_back(Fingerprint(VariablesToWildcards(v[i])));
+    fprints.push_back(Hash32(VariablesToWildcards(v[i])));
     sorted[fprints[i]] = i;
   }
   if (sorted.size() == v.size()) {
@@ -410,11 +410,11 @@ MPattern Canonicalize(const MPattern & v, Map*sub){
   } else {
     // OK, we have some identical ones. 
     for (int rep=0; rep<3; rep++) {
-      map<Variable, uint64> var_hashes;
+      map<Variable, uint32> var_hashes;
       for (uint i=0; i<v.size(); i++) {
 	for (uint j=0; j<v[i].size(); j++) {
 	  if (IsVariable(v[i][j])) {
-	    var_hashes[Variable(v[i][j])] += Fingerprint(fprints[i], j);
+	    var_hashes[Variable(v[i][j])] += Hash32(fprints[i], j);
 	  }
 	}
       }
@@ -422,12 +422,12 @@ MPattern Canonicalize(const MPattern & v, Map*sub){
 	for (uint j=0; j<v[i].size(); j++) {
 	  if (IsVariable(v[i][j])) {
 	    fprints[i] = 
-	      Fingerprint(fprints[i], Fingerprint(var_hashes[v[i][j]], j));
+	      Hash32(fprints[i], Hash32(var_hashes[v[i][j]], j));
 	  }
 	}
       }
     }
-    multimap<uint64, int> order;
+    multimap<uint32, int> order;
     for (uint i=0; i<v.size(); i++) {
       order.insert(make_pair(fprints[i], i));
     }

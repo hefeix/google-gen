@@ -389,8 +389,8 @@ class Blackboard {
   IndexRow * GetAddIndexRow(OTuple wildcard_tuple);
   TupleInfo * GetTupleInfo(OTuple tuple);
 
-  map<OTuple, IndexRow *> index_;
-  map<OTuple, TupleInfo *> tuple_info_;
+  hash_map<OTuple, IndexRow *> index_;
+  hash_map<OTuple, TupleInfo *> tuple_info_;
   set<pair<int, Search*> > searches_to_flush_;
 
   SingleWTUpdate * current_wt_update_;

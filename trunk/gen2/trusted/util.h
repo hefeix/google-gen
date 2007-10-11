@@ -404,11 +404,11 @@ template<class T, class P1, class P2, class P3> T * New(const P1 & p1,
 
 // In general SK and MK are identical, but we should at least be able to
 // cast an MK to an SK
-template<class SK, class MK, class V> map<MK, V> Restrict(const map<MK,V> & m, 
-							  const set<SK> & s) {
-  map<MK, V> ret;
+template<class S, class M> M Restrict(const M & m, 
+				      const S & s) {
+  M ret;
   forall(run, m) {
-    if (s % SK(run->first)) ret[run->first] = run->second;
+    if (s % (typeof(*s.begin()))run->first) ret[run->first] = run->second;
   }
   return ret;
 }
@@ -419,5 +419,11 @@ template<class SK, class MK, class V> map<MK, V> Restrict(const map<MK,V> & m,
 
 string Downcase(string s);
 string Upcase(string s);
+
+template<class T> set<T> SingletonSet(const T & t) {
+  set<T> ret;
+  ret.insert(t);
+  return ret;
+}
 
 #endif
