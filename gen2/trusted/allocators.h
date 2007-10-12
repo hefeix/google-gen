@@ -26,6 +26,7 @@
 #include "hash.h"
 
 #define LINEAR_ALLOCATOR_BLOCK_SIZE (16 << 20)
+// maximum size (in *s)
 #define GENERAL_ALLOCATOR_MAX_ITEM_SIZE 65
 #define GENERAL_ALLOCATOR_BLOCK_BYTES (1 << 20)
 
@@ -49,7 +50,7 @@ class GeneralAllocator {
       delete [] data_;
     }
     // If the density falls below this, scavenge the block for more allocations.
-    int UsabilityThreshold() { return num_items_ / 2;}
+    int UsabilityThreshold() { return num_items_ * 3 / 4;}
     Block ** DataEnd() { return data_ + num_items_ * (item_size_+ 1);}
     Block ** GetItem(int item_num) { return data_ + item_num * (item_size_+1); }
     Block *& IsOccupied(int item_num) { 
@@ -63,7 +64,7 @@ class GeneralAllocator {
   int max_item_size_; // items of this size (in ints) or greater just get new'd
 
   struct SizeInfo {
-    int item_size_;
+    int item_size_; // in *s
     Block *current_;
     set<Block *> usable_; // usable blocks (other than current_)
     int current_position_in_block_;
@@ -127,8 +128,11 @@ class GeneralAllocator {
     }
   }
   void *allocate(size_t s) {
-    int item_size = (s + sizeof(Block*) - 1) / sizeof(Block*);
-    CHECK(item_size > 0);
+    int item_size = max(1UL, (s + sizeof(Block*) - 1) / sizeof(Block*));
+    /*if (item_size == 0) {
+      cerr << "Allocating an object of size o??? s=" << s << endl;
+      }
+      CHECK(item_size > 0);*/
     if (item_size >= max_item_size_) {
       Block ** m = new Block*[item_size+1];
       m[0] = NULL;
@@ -297,13 +301,32 @@ bool operator!= (const GenAlloc<T1>&, const GenAlloc<T2>&) throw() {
   return false;
 }
 
-template<class A> 
-class alloc_set : public set<A,less<A>, GenAlloc<A> >{};
+template<class A, class Comp = less<A> > 
+class alloc_set : public set<A, Comp, GenAlloc<A> >{};
+//class alloc_set : public set<A>{};
 
-template<class A, class B> 
-  class alloc_map : public map<A, B, less<A>, GenAlloc<pair<A const, B> > >{};
+template<class A, class B, class Comp = less<A> > 
+  class alloc_map : public map<A, B, Comp, GenAlloc<pair<A const, B> > >{};
+  //  class alloc_map : public map<A, B>{};
 
+template<class A>
+class alloc_vector : public vector<A, GenAlloc<A> >{
+ public:
+  alloc_vector(int i, const A & a) 
+    :vector<A, GenAlloc<A> >(i, a){}
+  alloc_vector(int i) 
+    :vector<A, GenAlloc<A> >(i){}
+  alloc_vector() : vector<A, GenAlloc<A> >(){}
+  alloc_vector(const alloc_vector<A>&o) 
+    :vector<A, GenAlloc<A> >(o){}
+};
+
+DEFINE_HASH_CLASS_1(alloc_vector);
 DEFINE_HASH_CLASS_1(alloc_set);
 DEFINE_HASH_CLASS_2(alloc_map);
+
+#define set alloc_set
+#define map alloc_map
+#define vector alloc_vector
 
 #endif;

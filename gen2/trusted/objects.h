@@ -291,7 +291,7 @@ namespace __gnu_cxx{
 // map<int, int, less<int>, MyAlloc<std::pair<int const, int > > > test_vector;
 
 typedef vector<Object> Tuple;
-typedef alloc_map<Object, Object> Map;
+typedef map<Object, Object> Map;
 //typedef map<Object, Object, less<Object>, MyAlloc<pair<Object const, Object> > > Map;
 typedef vector<Tuple> MPattern; // mutable 2 levels down
 
@@ -310,7 +310,7 @@ typedef SpecificObject<Object::OBITSEQ, BitSeq> OBitSeq;
 typedef SpecificObject<Object::STRING, string> String;
 typedef SpecificObject<Object::ESCAPE, Object> Escape;
 
-typedef alloc_set<Variable> VariableSet;
+typedef set<Variable> VariableSet;
 
 
 inline const Object * operator %(const OMap & m, Object key) {

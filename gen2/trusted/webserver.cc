@@ -202,7 +202,8 @@ string URLQuote(string s) {
   return ret;
 }
 vector<string> SplitString(string s, string delimiters){
-  set<char> delim(delimiters.begin(), delimiters.end());
+  set<char> delim;
+  delim.insert(delimiters.begin(), delimiters.end());
   string current;
   vector<string> ret;
   for (unsigned int i=0; i<s.size(); i++) {
