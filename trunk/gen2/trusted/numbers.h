@@ -21,6 +21,7 @@
 #define _NUMBERS_H_
 
 #include "util.h"
+#include "allocators.h"
 
 inline int NumOnes(uint32 x){
   x = ( (x & 0xAAAAAAAA) >> 1) + (x & 0x55555555);

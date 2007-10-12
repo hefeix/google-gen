@@ -45,10 +45,12 @@ Running ws_main() in webserver.cc is also useful to see the webserver working.
 #ifndef _WEBSERVER_H_
 #define _WEBSERVER_H_
 
-#include "shorthand.h"
 #include <map>
 #include <netinet/in.h>
+
 #include <pthread.h>
+#include "shorthand.h"
+#include "allocators.h"
 
 struct RequestHandler{
   virtual string Handle(map<string, string> params) = 0;

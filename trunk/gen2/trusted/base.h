@@ -43,7 +43,13 @@ class Base {
 	};
   CLASS_ENUM_DECLARE(Base, Type);
 
-  
+  /*void *operator new(size_t s) {
+    return GEN_ALLOC.allocate(s);
+  }
+  void operator delete(void *ptr) {
+    return GEN_ALLOC.deallocate(ptr);
+    }*/
+
   //Base();
   void L1_Init(); // shadow constructor
   Object GetName() const { return name_;}

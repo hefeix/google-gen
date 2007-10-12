@@ -368,7 +368,7 @@ void Blackboard::L1_AddSearchToFlush(Search * s) {
 }
 
 Time RandomTime() {
-  vector<pair<BitSeq, int> > coordinates;
+  alloc_vector<pair<BitSeq, int> > coordinates;
   coordinates.push_back(make_pair(BitSeq(), rand()%3 + 1));
   return Time(coordinates);
 }

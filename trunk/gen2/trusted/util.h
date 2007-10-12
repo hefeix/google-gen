@@ -30,6 +30,7 @@
 #include <cstdio>
 #include <cwctype>
 #include <sstream>
+#include "allocators.h"
 
 /*
   This stuff helps you more simply declare enums which convert to and 
@@ -182,14 +183,14 @@ inline void * atop(const string & s) {
 bool GetLine(istream & input, string * ret);
 
 // remove an item from a vector
-template<class A> vector<A> RemoveFromVector(const vector<A> & v, uint index){
-  vector<A> ret;
+template<class V> V RemoveFromVector(const V & v, uint index){
+  V ret;
   for (uint i=0; i<v.size(); i++) if (i!=index) ret.push_back(v[i]);
   return ret;
 }
 // concatenate two vectors
-template<class A> vector<A> Concat(const vector<A> & v, const vector<A> & w){
-  vector<A> ret = v;
+template<class V> V Concat(const V & v, const V & w){
+  V ret = v;
   ret.insert(ret.end(), w.begin(), w.end());
   return ret;
 }

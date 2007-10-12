@@ -108,7 +108,8 @@ template <class A, class B, class C, class D> uint32 Hash32(const map<A,B,C,D> &
 					  uint32 level = 0){
   return Hash32Iterator(s.begin(), s.end(), level);
 }
-template <class T> uint32 Hash32(const vector<T> & s, uint32 level = 0){
+template <class T, class A> uint32 Hash32(const vector<T, A> & s, 
+					  uint32 level = 0){
   return Hash32Iterator(s.begin(), s.end(), level);
 }
 template <class A, class B> uint32 Hash32(const hash_map<A,B> & s, 
@@ -142,7 +143,7 @@ template <class A, class B> uint32 Hash32(const hash_map<A,B> & s,
 
 DEFINE_HASH_CLASS_0(bool);
 DEFINE_HASH_CLASS_0(double);
-DEFINE_HASH_CLASS_1(vector);
+DEFINE_HASH_CLASS_2(vector);
 DEFINE_HASH_CLASS_1(set);
 DEFINE_HASH_CLASS_4(map);
 DEFINE_HASH_CLASS_2(hash_map);
