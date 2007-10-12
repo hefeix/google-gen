@@ -16,13 +16,23 @@
 //
 // Author: Georges Harik and Noam Shazeer
 
-#include "changelist.h"
-#include "blackboard.h"
-#include "model.h"
+#include "allocators.h"
 
-Changelist CL;
-LinearAllocator CL_ALLOC;
-GeneralAllocator GEN_ALLOC;
-Blackboard BB;
-Namer N;
-Model M;
+LinearAllocator::LinearAllocator() {
+  AddBlock();
+}
+
+void LinearAllocator::AddBlock() {
+  blocks_.push_back(last_block_end_ = new int[LINEAR_ALLOCATOR_BLOCK_SIZE]);
+}
+
+void LinearAllocator::RemoveLastBlock() {
+  CHECK(blocks_.size() > 1);
+  delete [] blocks_[blocks_.size()-1];
+  blocks_.pop_back();
+}
+
+void LinearAllocator::Clear() {
+  while (blocks_.size() > 1) RemoveLastBlock();
+  last_block_end_ = 0;
+}

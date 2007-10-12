@@ -31,7 +31,7 @@
 #include "shorthand.h"
 
 inline uint32 Hash32(uint32 a, uint32 seed = 0) {
-  return a * 30534821 + seed * 54359087 + 42342389;
+  return a * 30534821 + seed * 54359087 + 42342389; //+ ( (a * 29294833) >> 16);
 }
 inline uint32 Hash32(const uint8 * s, uint length, uint32 seed = 0) {
   uint32 ret = 98439481;
