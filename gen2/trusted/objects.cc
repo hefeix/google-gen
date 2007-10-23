@@ -12,19 +12,19 @@ Keyword WILDCARD;
 OTime CREATION;
 OTime NEVER;
 
-void InitKeywords(){
-  cout << "Calling InitKeywords" << endl;
+void InitConstants(){
+  cout << "Calling InitConstants" << endl;
   WILDCARD = Keyword::Make("*");
   SEMICOLON = Keyword::Make(";");
   NEVER = OTime::Make(Time::Never());
   CREATION = OTime::Make(Time());
 };
 
-void DestroyKeywords() {
-  cout << "Calling DestroyKeywords" << endl;
-  WILDCARD = (void*)NULL;
-  SEMICOLON = (void*)NULL;
-  NEVER = (void*)NULL;
+void DestroyConstants() {
+  cout << "Calling DestroyConstants" << endl;
+  WILDCARD = NULL;
+  SEMICOLON = NULL;
+  NEVER = NULL;
 }
 
 // There must be some black magic going on here, but the compiler is happy.

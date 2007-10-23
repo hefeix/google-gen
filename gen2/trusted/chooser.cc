@@ -40,42 +40,147 @@
 #include "changelist.h"
 #include "model.h"
 
-LL Chooser::ComputeLnLikelihood() const {
+#undef ITEM
+#define ITEM(x) #x
+
+CLASS_ENUM_DEFINE(GlobalChooser, Strategy);
+
+bool GlobalChooser::ChoiceIsPossible(Strategy strategy, Object parameter,
+				     Object value) const {
+  switch(strategy) {
+  case INDEPENDENT_BOOL:
+  case LOCAL_BOOL:
+    return (value.GetType() == Object::BOOLEAN);
+  case LOCAL_UINT:
+  case QUADRATIC_UINT:
+    return (value.GetType() == Object::INTEGER && Integer(value).Data() >= 0);
+  case GLOBAL_FLAKE:
+  case LOCAL_FLAKE: 
+    return (value.GetType() == Object::FLAKE);
+  default:
+    return false;
+  }
+}
+void GlobalChooser::L1_ChangeCount(Strategy strategy, Object parameter,
+				   Object value, int delta) {
+  CHECK(ChoiceIsPossible(strategy, parameter, value));
+  if (IsIndependent(strategy)) {
+    LL ll_delta 
+      = GetIndependentChoiceLnLikelihood(strategy, parameter, value) * delta;
+    L1_AddToLnLikelihood(ll_delta);
+    return;
+  }
+  Chooser * c = GetCreateChooser(strategy, parameter);
+  c->L1_ChangeCount(value, delta);
+  if (c->IsEmpty()) {
+    switch(strategy) {
+    case LOCAL_FLAKE: 
+      c->L1_Erase();
+      CL.RemoveFromMap(&local_flake_choosers_, parameter);
+      break;
+    case LOCAL_BOOL:
+      c->L1_Erase();
+      CL.RemoveFromMap(&local_bool_choosers_, parameter);
+      break;
+    case LOCAL_UINT:
+      c->L1_Erase();
+      CL.RemoveFromMap(&local_uint_choosers_, parameter);
+      break;
+    default:
+      CHECK(false);
+    }
+  }
+}
+
+bool GlobalChooser::IsIndependent(GlobalChooser::Strategy strategy) const { 
+  return (strategy < NUM_INDEPENDENT_STRATEGIES);
+}
+LL GlobalChooser::GetIndependentChoiceLnLikelihood(Strategy strategy, 
+						   Object parameter,
+						   Object value) const {
+  switch(strategy) {
+  case INDEPENDENT_BOOL : {
+    bool b = Boolean(value).Data();
+    double param = Real(parameter).Data();
+    return Log(b?param:(1.0-param));
+  }
+  case QUADRATIC_UINT : {
+    int i = Integer(value).Data();
+    CHECK(i >= 0);
+    return uintQuadraticLnProb(i);
+  }
+  default:
+    CHECK(false);
+    break;
+  };
+  return LL(0);
+}
+
+GlobalChooser::GlobalChooser() {
+  ln_likelihood_ = LL(0);
+  global_flake_chooser_ = New<GenericChooser>(NO_STRATEGY, NULL);
+}
+Chooser * GlobalChooser::GetCreateChooser(Strategy strategy, Object parameter){
+  switch(strategy) {
+  case GLOBAL_FLAKE:
+    return global_flake_chooser_;
+  case LOCAL_FLAKE: {
+    GenericChooser ** look = local_flake_choosers_ % parameter;
+    if (look) return *look;
+    GenericChooser * nu = New<GenericChooser>(GLOBAL_FLAKE, NULL);
+    CL.InsertIntoMap(&local_flake_choosers_, parameter, nu);
+    return nu;
+  }
+  case LOCAL_UINT: {
+    GenericChooser ** look = local_uint_choosers_ % parameter;
+    if (look) return *look;
+    GenericChooser * nu = New<GenericChooser>(QUADRATIC_UINT, NULL);
+    CL.InsertIntoMap(&local_uint_choosers_, parameter, nu);
+    return nu;    
+  }
+  case LOCAL_BOOL: {
+    BooleanChooser ** look = local_bool_choosers_ % parameter;
+    if (look) return *look;
+    BooleanChooser *nu = New<BooleanChooser>();
+    CL.InsertIntoMap(&local_bool_choosers_, parameter, nu);
+    return nu;
+  }
+  default:
+    CHECK(false);
+    return NULL;
+  }
+}
+
+void GlobalChooser::L1_AddToLnLikelihood(LL delta) {
+  CL.ChangeValue(&ln_likelihood_, ln_likelihood_ +  delta);
+  M.A1_AddToLnLikelihood(delta);
+}
+
+LL GenericChooser::ComputeLnLikelihood() const {
   LL ret(0);
   if (counts_.size()==0) return ret;
   int total = 0;
   forall(run, counts_) {
-    int count = run->second;
+    int count = run->second.first;
     total += count;
     ret += LnFactorial(count);
   }
   CHECK(total>0);
-  CHECK(total == total_);
+  CHECK(total == total_choices_);
   ret += LnFactorial(counts_.size());
   ret += LnFactorial(counts_.size()-1);
-  ret += LnFactorial(total_-counts_.size());
-  ret -= LnFactorial(total_);
-  ret -= LnFactorial(total_-1);
+  ret += LnFactorial(total-counts_.size());
+  ret -= LnFactorial(total);
+  ret -= LnFactorial(total-1);
   return ret;
 }
 
-LL UintChooser::ComputeLnLikelihood() const{
-  LL total = 0;
-  forall(run, counts_) {
-    Integer object = run->first;
-    int count = run->second;
-    total += count * uintQuadraticLnProb(object.Data());
-  }
-  return total;  
-}
-
 void Chooser::L1_AddToLnLikelihood(LL delta) {
-  CL.ChangeValue(&ln_likelihood_, 
-		 ln_likelihood_ +  delta);
+  CL.ChangeValue(&ln_likelihood_, ln_likelihood_ +  delta);
   M.A1_AddToLnLikelihood(delta);
 }
 
-LL Chooser::ComputeLLDelta(Object object,
+LL GenericChooser::ComputeLLDelta(Object object,
 			   int old_count, int new_count, 
 			   int old_num_objects, int new_num_objects, 
 			   int old_total, int new_total) {
@@ -90,72 +195,65 @@ LL Chooser::ComputeLLDelta(Object object,
   return ll_delta;
 }
 
-LL UintChooser::ComputeLLDelta(Object object, 
-			       int old_count, int new_count,
-			       int old_num_objects, int new_num_objects,
-			       int old_total, int new_total){
-  return (new_count-old_count) * uintQuadraticLnProb(Integer(object).Data());
-}
-
-void Chooser::L1_ChangeObjectCount(Object object, int delta) {
+void GenericChooser::L1_ChangeCount(Object value, int delta) {
 
   CHECK (delta != 0);
-  int * look = counts_ % object;
-  int old_count = look ? *look : 0;
+  
+  pair<int, Choice *> * look = counts_ % value;
+  int old_count = look ? look->first : 0;
   int new_count = old_count + delta;
   CHECK (new_count >= 0);
   
-  int old_num_objects = counts_.size();
-  int64 old_total = total_;
+  int old_num_values = counts_.size();
+  int64 old_total = total_choices_;
   
-  CL.AddToMapOfCounts(&counts_, object, delta);
-  CL.ChangeValue(&total_, delta + old_total);
+  if (!look) {
+    Choice * choice = NULL;
+    if (parent_strategy_ != GlobalChooser::NO_STRATEGY) 
+      choice = New<Choice>(parent_strategy_, parent_parameter_, value); 
+    CL.InsertIntoMap(&counts_, value, make_pair(new_count, choice));
+  } else if (new_count == 0) {
+    look->second->L1_Erase();
+    CL.RemoveFromMap(&counts_, value);
+  } else {
+    CL.ChangeMapValue(&counts_, value, make_pair(new_count, look->second));
+  }
   
-  int new_num_objects = counts_.size();
-  int64 new_total = total_;
+  int new_num_values = counts_.size();
+  int64 new_total = total_choices_;
 
-  LL ll_delta = ComputeLLDelta(object, 
-			       old_count, new_count, old_num_objects, 
-			       new_num_objects, old_total, new_total);
+  LL ll_delta = ComputeLLDelta(value, 
+			       old_count, new_count, old_num_values, 
+			       new_num_values, old_total, new_total);
   L1_AddToLnLikelihood(ll_delta);
-
-  // Propagate to parent
-  if (!parent_) return;
-  if (new_count == 0)
-    parent_->L1_ChangeObjectCount(object, -1);
-  if (old_count == 0)
-    parent_->L1_ChangeObjectCount(object, 1);
 }
 
 void Chooser::L1_Init() {
   Base::L1_Init();
-  parent_ = NULL;
   ln_likelihood_ = 0;
-  total_ = 0;
-}
-void Chooser::L1_SetParent(Chooser *parent) {
-  CL.ChangeValue(&parent_, parent);
+  total_choices_ = 0;
 }
 
 void Chooser::L1_Erase(){
-  CHECK(counts_.size()==0);
   CHECK(ln_likelihood_ == 0);
-  CHECK(total_ ==0);
+  CHECK(total_choices_ ==0);
   Base::L1_Erase();
 }
 
-Record Chooser::ChooserInfo(bool include_objects) {
-  Record r;
+Record Chooser::GetRecordForDisplay() const{
+  Record r = Base::GetRecordForDisplay();
   r["Ln Likelihood"] = ln_likelihood_.ToString();
-  r["Total"] = itoa(total_);
+  r["Total"] = itoa(total_choices_);
+  return r;
+}
+Record GenericChooser::GetRecordForDisplay() const{
+  Record r = Chooser::GetRecordForDisplay();
   r["Num Objects"] = itoa(counts_.size());
   if (!include_objects) return r;
 
   forall (run, counts_) {
-    //int object = run->first;
-    //int count = run->second;
-    // TODO fix all of this file because a chooser should be choosing objects, not ints!!!!
-    // r["objects"] += LEXICON.GetString(object) + ":" + itoa(count) + "<br>";
+    r["objects"] += run->first.ToString() + ":" + itoa(run->second.first) 
+      + "<br>\n";
   }
   return r;
 }
@@ -165,3 +263,45 @@ int Chooser::GetCount(Object object) const {
   if (!find) return 0;
   return *find;
 }
+
+void Choice::L1_Init(GlobalChooser::Strategy strategy, 
+		Object parameter, Object value) {
+  CL.Creating(this);
+  L1_Change(strategy, parameter, value);
+}
+void Choice::L1_Erase() {
+  L1_AddToChooser(-1);
+  CL.Destroying(this);
+}
+
+void Choice::L1_AddToChooser(int count_delta) {
+  if (value_ == NULL) return;
+  GC.L1_ChangeCount(strategy_, parameter_, value_, count_delta);
+}
+void Choice::L1_Change(GlobalChooser::Strategy new_strategy, 
+		       Object new_parameter, Object new_value){
+  if (!GlobalChooser.ChoiceIsPossible(new_strategy, new_parameter, new_value)) {
+    new_value = NULL;
+  }
+  L1_AddToChooser(-1);
+  CL.ChangeValue(&strategy_, new_strategy);
+  CL.ChangeValue(&parameter_, new_parameter);
+  CL.ChangeValue(&value_, new_value);
+  L1_AddToChooser(1);
+}
+
+LL BooleanChooser::ComputeLnLikelihood() const {
+  LL ret = -Log(total_choices_+1);
+  ret += LnFactorial(total_choices_) 
+    - LnFactorial(counts_[0]) - LnFactorial(counts_[1]);
+  return ret;
+}
+
+void BooleanChooser::L1_ChangeCount(Object value, int delta) {
+  int val = (Boolean(value).GetValue())?1:0;
+  CL.ChangeValue(&counts_[val], counts_[val] + delta);
+  CL.ChangeValue(&total_choices_, counts_[0] + counts_[1]);
+  L1_AddToLnLikelihood(ComputeLnLikelihood() - ln_likelihood_);
+  CHECK(total_choices_ == counts_[0] + counts_[1]);
+}
+ 

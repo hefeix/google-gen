@@ -51,10 +51,10 @@ void Shell() {
 }
 
 int main() {
-  InitKeywords();
+  InitConstants();
   //ObjectsShell();
   // Blackboard::Shell();
   Shell();
 
-  DestroyKeywords();
+  DestroyConstants();
 }

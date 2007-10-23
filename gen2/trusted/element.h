@@ -22,6 +22,7 @@
 #include "base.h"
 #include "link.h"
 #include "extensions.h"
+#include "chooser.h"
 
 
 struct Element : public Base {  
@@ -37,7 +38,7 @@ struct Element : public Base {
 	ITEM(IF),					\
 	ITEM(PARALLEL),					\
 	ITEM(SUBSTITUTE),				\
-	ITEM(FLAKE_CHOICE),				\
+	ITEM(CHOOSE),					\
 	ITEM(CONSTANT),					\
 	ITEM(EQUAL),					\
 	ITEM(SUM),					\
@@ -117,7 +118,8 @@ struct Element : public Base {
   // a child was connected or disconnected.
   virtual void N1_ChildChanged(int which_child);
 
-  virtual void N1_ValueChanged() { CHECK(false);}
+  virtual void N1_StoredValueChanged() { CHECK(false);}
+  virtual void N1_ComputedValueChanged() { CHECK(false);}
 
   // ---------- data ----------  
 
@@ -188,7 +190,10 @@ struct StaticElement : public Element {
   virtual string ChildToString(int c) const = 0;
   virtual int StringToObject(string s) const = 0;
   virtual string ObjectToString(int o) const = 0;
-
+  
+  // returns (chooser name, choice) pairs for choices needed to specify
+  // this element. 
+  virtual vector<pair<Object, Object> > ComputeChoices() const;
 
   // ---------- L1 functions ----------  
   void L1_Init();
@@ -208,6 +213,9 @@ struct StaticElement : public Element {
     CHECK(parent_ == link);
     CL.ChangeValue(&parent_, (Link *) NULL);
   }
+  void L1_SetChoices(const vector<pair<Object, Object> > &choices);
+  void L1_ComputeSetChoices() { L1_SetChoices(ComputeChoices()); }
+
   // ---------- N1 notifiers ----------  
   virtual void N1_ObjectChanged(int which) {}
 
@@ -217,6 +225,7 @@ struct StaticElement : public Element {
   MultiLink * dynamic_children_;
   vector<SingleLink *> static_children_; // statements and expressions
   vector<Object> objects_;
+  vector<Choice *> choices_;
   VariableSet variables_;
 
 };
@@ -401,7 +410,9 @@ struct DynamicExpression : public DynamicElement {
   // TODO: forward this
   void N1_ChildExpressionValueChanged(int which_child) { 
     L1_CheckSetValueViolation();}
-  void N1_ValueChanged() { L1_CheckSetValueViolation();}  // checks whether the value is correct, and creates/removes a violation.
+  // Called if the stored or computed value might have changed.
+  void N1_ComputedValueChanged() { L1_CheckSetValueViolation();} 
+  void N1_StoredValueChanged() { L1_CheckSetValueViolation();}
 
   // ---------- data ----------  
   Object value_;
@@ -821,37 +832,54 @@ struct DynamicSum : public DynamicExpression {
 };
 
 
-struct StaticFlakeChoice : public Expression { 
-   #define StaticFlakeChoiceChildNameList {	 		\
-    ITEM(CHOOSER),						\
+struct StaticChoose : public Expression { 
+   #define StaticChooseChildNameList {	 		\
+    ITEM(PARAMETER),					\
       };
-  CLASS_ENUM_DECLARE(StaticFlakeChoice, ChildName);
-  #define StaticFlakeChoiceObjectNameList {		\
+  CLASS_ENUM_DECLARE(StaticChoose, ChildName);
+  #define StaticChooseObjectNameList {		\
+      ITEM(STRATEGY),				\
     };
-  CLASS_ENUM_DECLARE(StaticFlakeChoice, ObjectName);
+  CLASS_ENUM_DECLARE(StaticChoose, ObjectName);
   DECLARE_FUNCTION_ENUMS;
-  virtual Function GetFunction() const { return FLAKE_CHOICE;}
+  virtual Function GetFunction() const { return CHOOSE;}
+  GlobalChooser::Strategy strategy_; // just a cache.
+  GlobalChooser::Strategy ComputeStrategy() {
+    return GlobalChooser::StringToStrategy
+      (Upcase(Keyword(GetObject(STRATEGY)).Data()));
+  }
+  void N1_ObjectChanged(int which){
+    strategy_ = ComputeStrategy();
+    CHECK(NumDynamicChildren() == 0);
+  }
+
 };
-struct DynamicFlakeChoice : public DynamicExpression {
+// For now, we'll make choice_->value_ always match value_, and 
+// choice_->parameter_ always match GetChildValue(PARAMETER). 
+// This cuts down on violations, but we may need a new violation if the 
+// choice is impossible for that parameter.  
+struct DynamicChoose : public DynamicExpression {
   // ---------- L2 functions ----------  
 
   // ---------- const functions ----------  
   Object ComputeValue() const;
-
+  
   // ---------- L1 functions ----------  
-  void L1_ChangeChooser(Object new_chooser_name);
-  void L1_ChangeChoice(Flake new_choice);
-  private:
-  // this function is called only from L1_ChangeChooser and L1_ChangeChoice
-  // and add/remove the current choice to the current chooser
-  void L1_AddToChooser(int count_delta);
-  public:
+  bool L1_TryMakeChoice(Object parameter, Object value);
+  bool L1_TryMakeCorrectChoice();
+
+  // ---------- N1 Notifiers ----------  
+  void N1_ChildExpressionValueChanged(int which_child) {
+    DynamicExpression::N1_ChildExpressionValueChanged(which_child);
+    L1_TryMakeCorrectChoice();
+  }
+  void N1_StoredValueChanged() {
+    L1_TryMakeCorrectChoice();
+    DynamicExpression::N1_StoredValueChanged();
+  }
 
   // ---------- data ----------  
-  // Both of the following can be set to NULL, which is a violation,
-  //  but can be used to avoid creating unnecessary transient c_objects. 
-  Object chooser_name_; // which of the model's flake_choosers_ do we use. 
-  Flake choice_; // The current choice.    
+  Choice * choice_; // The current choice.
 };
 
 struct StaticConstant : public Expression {
@@ -972,7 +1000,7 @@ struct RandomBoolExpression : public Expression {
        FUNCTION(If, IF)				\
        FUNCTION(Parallel, PARALLEL)				\
        FUNCTION(Substitute, SUBSTITUTE)				\
-       FUNCTION(FlakeChoice, FLAKE_CHOICE)				\
+       FUNCTION(Choose, CHOOSE)				\
        FUNCTION(Constant, CONSTANT)				\
        FUNCTION(Equal, EQUAL)				\
        FUNCTION(Sum, SUM)				\

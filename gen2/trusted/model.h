@@ -101,12 +101,6 @@ class Model : public Base{
   // Statements, Expressions, Dynamic counterparts, and choosers are base.
   // The namer can give you maps of these indexed by name.
 
-  // Global Choosers
-  Chooser * global_flake_chooser_;
-  UintChooser * global_uint_chooser_;
-
-  map<Object, Chooser *> flake_choosers_;
-
   // all base objects by name
   map<Object, Base *> name_index_;
   int next_name_;  

@@ -346,13 +346,15 @@ void DynamicExpression::L1_Init(StaticElement * static_parent,
 				OMap binding){
   DynamicElement::L1_Init(static_parent, binding);
   value_ = NULL;
-  N1_ValueChanged();
+  N1_StoredValueChanged();
+  N1_ComputedValueChanged(); 
+
   // there should already be a violation at the parent
   // if (GetParent()) GetParent()->L1_ChildExpressionValueChanged();
 }
 void DynamicExpression::SetValue(Object new_value) {
   CL.ChangeValue(&value_, new_value);
-  N1_ValueChanged(); 
+  N1_StoredValueChanged(); 
   if (GetParent()) 
     GetParent()->N1_ChildExpressionValueChanged(WhichChildAmI());  
 }
@@ -366,7 +368,7 @@ void DynamicExpression::L1_CheckSetValueViolation() {
     M.L1_AddDelayedCheck(this, &Element::L1_CheckSetValueViolation);
     return;
   }
-  bool perfect = (value_ == ComputeValue());
+  bool perfect = (value_ != NULL && value_ == ComputeValue());
   Violation * value_violation = FindViolation(this, Violation::VALUE);
   if (perfect && value_violation) {
     value_violation->L1_Erase(); 
@@ -623,24 +625,21 @@ Object DynamicSum::ComputeValue() const {
   }
   return Object();
 }
-Object DynamicFlakeChoice::ComputeValue() const { 
-  return choice_;
+
+bool DynamicChoose::L1_TryMakeChoice(Object parameter, Object value) {
+  choice_->L1_Change(dynamic_cast<StaticChoose *>(GetStatic())->strategy_, 
+		     parameter, value);
+  N1_ComputedValueChanged();
+  return (value == choice_->value_);
 }
-void DynamicFlakeChoice::L1_AddToChooser(int count_delta) {
-  if (chooser_name_ != NULL && choice_ != NULL) {
-    M.L1_AddChoiceToFlakeChooser(chooser_name_, choice_, count_delta);
-  }
+bool DynamicChoose::L1_TryMakeCorrectChoice() {
+  return L1_TryMakeChoice(GetChildValue(StaticChoose::PARAMETER), value_);
 }
-void DynamicFlakeChoice::L1_ChangeChooser(Object new_chooser_name){
-  L1_AddToChooser(-1);
-  CL.ChangeValue(&chooser_name_, new_chooser_name);
-  L1_AddToChooser(1);
-}
-void DynamicFlakeChoice::L1_ChangeChoice(Flake new_choice){
-  L1_AddToChooser(-1);
-  CL.ChangeValue(&choice_, new_choice);
-  L1_AddToChooser(1);
-  L1_CheckSetValueViolation();
+
+Object DynamicChoose::ComputeValue() const { 
+  if(choice_)
+    return choice_->value_;
+  return NULL;
 }
 
 Link * DynamicElement::FindDynamicParentLink() const {
