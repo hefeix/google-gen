@@ -125,9 +125,9 @@ class SetRemoveChange : public Change {
   C val_;
 };
 
-template<class K, class V> class MapValueChange : public Change {
+template<class M, class K, class V> class MapValueChange : public Change {
  public:
-  MapValueChange(map<K,V> * location, const K & key, const V & new_val) {
+  MapValueChange(M * location, const K & key, const V & new_val) {
     location_ = location;
     key_ = key;
     V * look = (*location_) % key_;
@@ -144,7 +144,7 @@ template<class K, class V> class MapValueChange : public Change {
     return out.str();
   }
  private:
-  map<K,V> * location_;
+  M * location_;
   K key_;
   V old_val_;
 };
@@ -256,9 +256,10 @@ template <class MK, class SV, class MapComp = less<MK> > class MapOfSetsRemoveCh
 
 // Adds to the value associated with a particular key.  Keys are removed
 // when the associated values are 0.
-template <class K, class V> class MapOfCountsAddChange : public Change {
+template <class M, class K, class V> class MapOfCountsAddChange 
+  : public Change {
  public:
-  MapOfCountsAddChange(map<K, V> * location, const K & key, const V & delta) {
+  MapOfCountsAddChange(M * location, const K & key, const V & delta) {
     location_ = location;
     key_ = key;
     old_value_ = (*location_)[key];
@@ -277,7 +278,7 @@ template <class K, class V> class MapOfCountsAddChange : public Change {
   }
 
  private:
-  map<K,V> * location_;
+  M * location_;
   K key_;
   V old_value_;
 };
@@ -426,6 +427,9 @@ class Changelist {
       *location = new_val;
       return;
     }
+    // this might be an optimization if we aren't changing values of 
+    // non-comparable items.
+    // if (*location == new_val) return;
     Make(new(CL_ALLOC) ValueChange<C>(location, new_val));
   }
   template <class C> void PushBack(vector<C> *location, const C & val) {
@@ -486,24 +490,24 @@ class Changelist {
     }
     Make (new(CL_ALLOC) MapRemoveChange<K, V, hash_map<K,V> >(location, key));
   }
-  template<class K, class V> void ChangeMapValue(map<K,V> *location,
-						 const K&key, 
-						 const V&new_val) {
+  template<class M, class K, class V> void ChangeMapValue(M *location,
+							  const K&key, 
+							  const V&new_val) {
     if (disabled_) {
       (*location)[key] = new_val;
       return;
     }
-    Make(new(CL_ALLOC) MapValueChange<K,V>(location, key, new_val));
+    Make(new(CL_ALLOC) MapValueChange<M,K,V>(location, key, new_val));
   }
-  template <class K, class V> 
-    void AddToMapOfCounts(map<K, V> *location, const K & key, 
+  template <class M, class K, class V> 
+    void AddToMapOfCounts(M *location, const K & key, 
 			       const V & delta) {
     if (disabled_) {
       (*location)[key] += delta;
       if ((*location)[key] == 0) location->erase(key);
       return;
     }
-    Make(new(CL_ALLOC) MapOfCountsAddChange<K,V>(location, key, delta));
+    Make(new(CL_ALLOC) MapOfCountsAddChange<M, K, V>(location, key, delta));
   }
 
   template <class MK, class SV, class MapComp> 

@@ -1,13 +1,7 @@
-Profiling/Optimizing ideas:
 
-Track the number of each named type that have ever been created. 
-Mode where the number of single link violations are tracked, instead of creating them.  
-Look at allocations in the changelist.  
-on MakePermanent, remove forwarded notifications that deal with deleted objects.
 
 Now:
 
-Profile
 Track complexity costs.
 Port previous learning algorithms.
 
@@ -17,3 +11,5 @@ Give the executor/fixer options (maybe a strategy) so that it can have variation
 Write a random executor.
 
 
+
+Disallow MakeChangesPermanent in batch mode, since the delayed notifications may point to deleted objects.

@@ -104,10 +104,6 @@ class Object {
     def_ = NULL;
     PointTo(def);
   };
-  Object(void *null) {
-    CHECK(null==NULL);
-    def_ = NULL;
-  }
   Object & operator =(const Object &o) {
     PointTo(o.def_);
     return *this;
@@ -252,7 +248,7 @@ template <Object::Type OT, class D>  class SpecificObject : public Object {
 	CHECK(def == NULL || def->GetType() == OT);
       }
 	
-   SpecificObject(void *null) : Object(null) {}
+	//SpecificObject(void *null) : Object(null) {}
 };
 
 
@@ -379,8 +375,8 @@ template <class T> const T & DataMin(const T & t1, const T & t2) {
 }
 
 
-void InitKeywords();
-void DestroyKeywords();
+void InitConstants();
+void DestroyConstants();
 // keywords that need to be created in InitKeywords
 extern Keyword WILDCARD;
 extern Keyword SEMICOLON;

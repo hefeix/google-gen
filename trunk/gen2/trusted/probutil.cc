@@ -29,10 +29,6 @@ LL operator -(const LL & a){ return Micronats(-a.mcn_);}
 ostream & operator << (ostream & output, LL ll){
   return (output << ll.ToString());
 }
-LL Log(int i){
-  CHECK(i>0);
-  return Micronats((int)(log(i)*1000000));
-}
 bool OPERATORLESS(const LL & a, const LL & b){ return (a.mcn_<b.mcn_);}
 bool OPERATORLE(const LL & a, const LL & b){ return (a.mcn_<=b.mcn_);}
 bool OPERATOREQ(const LL & a, const LL & b){ return (a.mcn_==b.mcn_);}

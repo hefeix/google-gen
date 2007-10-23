@@ -26,3 +26,4 @@ GeneralAllocator GEN_ALLOC;
 Blackboard BB;
 Namer N;
 Model M;
+GlobalChooser GC;
