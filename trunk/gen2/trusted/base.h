@@ -34,6 +34,7 @@ class Base {
 	ITEM(DYNAMIC_STATEMENT),			\
 	ITEM(DYNAMIC_EXPRESSION),			\
 	ITEM(CHOOSER),					\
+	ITEM(CHOOSER_SET),					\
 	ITEM(REQUIREMENT),				\
 	ITEM(PROHIBITION),				\
 	ITEM(GIVEN),					\
@@ -84,10 +85,10 @@ class Namer {
   // returns null if not found
   Base * Lookup(Base::Type type, Object name) const; 
   // a version of the previous function that returns the subtype.
-  template <class BaseClass> 
+  /*template <class BaseClass> 
     BaseClass * Find(Object name) const {
-    return dynamic_cast<BaseClass *>(Lookup(BaseClass::Type(), name));
-  }
+    return dynamic_cast<BaseClass *>(Lookup(BaseClass::GetBaseType(), name));
+    }*/
   // Get a constant index of one base type by name. 
   const map<Object, Base *> & Index(Base::Type type) const 
     { return index_[type];}

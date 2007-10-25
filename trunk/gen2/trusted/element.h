@@ -191,9 +191,6 @@ struct StaticElement : public Element {
   virtual int StringToObject(string s) const = 0;
   virtual string ObjectToString(int o) const = 0;
   
-  // returns (chooser name, choice) pairs for choices needed to specify
-  // this element. 
-  virtual vector<pair<Object, Object> > ComputeChoices() const;
 
   // ---------- L1 functions ----------  
   void L1_Init();
@@ -202,6 +199,10 @@ struct StaticElement : public Element {
   void L1_LinkChild(int where, StaticElement *child);
   void L1_UnlinkChild(int where);
   void L1_SetObject(int which, Object new_value);
+
+  void L1_ClearChoices();
+  // Create the choices  
+  virtual void L1_CreateChoices();
 
   // caches the set of variables_ for this and all descendents.
   void L1_RecursivelyComputeSetVariables();
@@ -213,8 +214,6 @@ struct StaticElement : public Element {
     CHECK(parent_ == link);
     CL.ChangeValue(&parent_, (Link *) NULL);
   }
-  void L1_SetChoices(const vector<pair<Object, Object> > &choices);
-  void L1_ComputeSetChoices() { L1_SetChoices(ComputeChoices()); }
 
   // ---------- N1 notifiers ----------  
   virtual void N1_ObjectChanged(int which) {}
@@ -834,26 +833,16 @@ struct DynamicSum : public DynamicExpression {
 
 struct StaticChoose : public Expression { 
    #define StaticChooseChildNameList {	 		\
-    ITEM(PARAMETER),					\
+    ITEM(STRATEGY),					\
       };
   CLASS_ENUM_DECLARE(StaticChoose, ChildName);
   #define StaticChooseObjectNameList {		\
-      ITEM(STRATEGY),				\
     };
   CLASS_ENUM_DECLARE(StaticChoose, ObjectName);
   DECLARE_FUNCTION_ENUMS;
   virtual Function GetFunction() const { return CHOOSE;}
-  GlobalChooser::Strategy strategy_; // just a cache.
-  GlobalChooser::Strategy ComputeStrategy() {
-    return GlobalChooser::StringToStrategy
-      (Upcase(Keyword(GetObject(STRATEGY)).Data()));
-  }
-  void N1_ObjectChanged(int which){
-    strategy_ = ComputeStrategy();
-    CHECK(NumDynamicChildren() == 0);
-  }
-
 };
+
 // For now, we'll make choice_->value_ always match value_, and 
 // choice_->parameter_ always match GetChildValue(PARAMETER). 
 // This cuts down on violations, but we may need a new violation if the 
@@ -865,7 +854,7 @@ struct DynamicChoose : public DynamicExpression {
   Object ComputeValue() const;
   
   // ---------- L1 functions ----------  
-  bool L1_TryMakeChoice(Object parameter, Object value);
+  bool L1_TryMakeChoice(OTuple strategy, Object value);
   bool L1_TryMakeCorrectChoice();
 
   // ---------- N1 Notifiers ----------  
@@ -883,8 +872,8 @@ struct DynamicChoose : public DynamicExpression {
 };
 
 struct StaticConstant : public Expression {
-   #define StaticConstantChildNameList {	 		\
-      };
+  #define StaticConstantChildNameList {		\
+    };
   CLASS_ENUM_DECLARE(StaticConstant, ChildName);
   #define StaticConstantObjectNameList {		\
     ITEM(OBJECT),						\

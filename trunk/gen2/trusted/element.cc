@@ -143,8 +143,21 @@ void StaticElement::L1_Erase() {
   for (uint i=0; i<static_children_.size(); i++) {
     static_children_[i]->L1_Erase();
   }
+  L1_ClearChoices();
   dynamic_children_->L1_Erase();
   Element::L1_Erase();
+}
+void StaticElement::L1_ClearChoices() {
+  for (uint i=0; i<choices_.size(); i++) choices_[i]->L1_Erase();
+  CL.ChangeValue(&choices_, vector<Choice *>());
+}
+void StaticElement::L1_CreateChoices() {
+  L1_ClearChoices();
+  Tuple function_choice_strategy;
+  function_choice_strategy.push_back(Keyword::Make("set_chooser"));
+  function_choice_strategy.push_back(Keyword::Make("functions"));
+  CL.PushBack(&choices_, New<Choice>(OTuple::Make(function_choice_strategy),
+				     FunctionKeyword()));
 }
 StaticElement * StaticElement::GetParent() const { 
   if (!parent_) return NULL;
@@ -528,7 +541,7 @@ bool DynamicIf::ChildShouldExist(int which_child) const {
       || which_child == StaticIf::ON_FALSE) {
     DynamicExpression * expr = GetConditionExpression();
     if (!expr) return false;
-    bool val = expr->value_ != Boolean::Make(false);
+    bool val = expr->value_ != FALSE;
     if (which_child == StaticIf::ON_TRUE) return val;
     return !val;
   }
@@ -626,14 +639,13 @@ Object DynamicSum::ComputeValue() const {
   return Object();
 }
 
-bool DynamicChoose::L1_TryMakeChoice(Object parameter, Object value) {
-  choice_->L1_Change(dynamic_cast<StaticChoose *>(GetStatic())->strategy_, 
-		     parameter, value);
+bool DynamicChoose::L1_TryMakeChoice(OTuple strategy, Object value) {
+  choice_->L1_Change(strategy, value);
   N1_ComputedValueChanged();
   return (value == choice_->value_);
 }
 bool DynamicChoose::L1_TryMakeCorrectChoice() {
-  return L1_TryMakeChoice(GetChildValue(StaticChoose::PARAMETER), value_);
+  return L1_TryMakeChoice(GetChildValue(StaticChoose::STRATEGY), value_);
 }
 
 Object DynamicChoose::ComputeValue() const { 

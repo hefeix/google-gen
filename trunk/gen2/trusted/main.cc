@@ -21,6 +21,8 @@
 #include "model.h"
 #include "spec.h"
 #include "fixers.h"
+#include "chooser.h"
+
 #include <fstream>
 
 void Shell() {
@@ -52,6 +54,7 @@ void Shell() {
 
 int main() {
   InitConstants();
+  InitChooserSets();
   //ObjectsShell();
   // Blackboard::Shell();
   Shell();
