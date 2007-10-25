@@ -27,8 +27,6 @@ Model::Model(){
   CHECK(this==&M); 
 
   batch_mode_ = false;
-  global_flake_chooser_ = New<Chooser>();
-  global_uint_chooser_ = New<UintChooser>();
   ln_likelihood_ = 0;
   next_name_ = 0;
   next_unique_variable_ = -1;
@@ -76,23 +74,6 @@ string Model::ToString(bool html) const {
   return ret;
 }
 
-void Model::L1_AddChoiceToFlakeChooser(Object chooser_name, 
-				       Flake f, int count_delta){
-  Chooser * c;
-  if (flake_choosers_ % chooser_name) {
-    c = flake_choosers_[chooser_name];
-  } else {
-    c = New<Chooser>();
-    c->L1_SetParent(global_flake_chooser_);
-    CL.InsertIntoMap(&flake_choosers_, chooser_name, c);
-  }
-  c->L1_ChangeObjectCount(f, count_delta);
-  CHECK(c->GetCount(f) >= 0);
-  if (c->total_ == 0) {
-    c->L1_Erase();
-    CL.RemoveFromMap(&flake_choosers_, chooser_name);
-  }
-}
 Violation * Model::GetViolationOfType(Violation::Type type) const {
   const set<Violation *> * s = violations_by_type_ % type;
   if (!s) return NULL;

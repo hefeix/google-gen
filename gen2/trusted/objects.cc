@@ -11,6 +11,8 @@ Keyword SEMICOLON;
 Keyword WILDCARD;
 OTime CREATION;
 OTime NEVER;
+Boolean TRUE;
+Boolean FALSE;
 
 void InitConstants(){
   cout << "Calling InitConstants" << endl;
@@ -18,6 +20,8 @@ void InitConstants(){
   SEMICOLON = Keyword::Make(";");
   NEVER = OTime::Make(Time::Never());
   CREATION = OTime::Make(Time());
+  TRUE = Boolean::Make(true);
+  FALSE = Boolean::Make(false);
 };
 
 void DestroyConstants() {
@@ -25,6 +29,9 @@ void DestroyConstants() {
   WILDCARD = NULL;
   SEMICOLON = NULL;
   NEVER = NULL;
+  CREATION = NULL;
+  TRUE = NULL;
+  FALSE = NULL;
 }
 
 // There must be some black magic going on here, but the compiler is happy.
@@ -318,11 +325,11 @@ istream & operator >>(istream & input, Object & o){
     return input;
   }
   if (s=="true") {
-    o = Boolean::Make(true);
+    o = TRUE;
     return input;
   }
   if (s=="false") {
-    o = Boolean::Make(false);
+    o = FALSE;
     return input;
   }
   if (s=="never") {

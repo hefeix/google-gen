@@ -382,6 +382,8 @@ extern Keyword WILDCARD;
 extern Keyword SEMICOLON;
 extern OTime CREATION;
 extern OTime NEVER;
+extern Boolean TRUE;
+extern Boolean FALSE;
 
 inline bool IsVariable(const Object & o) { 
   return (o.GetType()==Object::VARIABLE); 

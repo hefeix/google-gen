@@ -24,155 +24,196 @@
 #include "probutil.h"
 #include "base.h"
 
-// Keeps track of the likelihood of a sequence of choices of objects.  
-// Doesn't actually keep track of the sequence.
-// A chooser can have a parent chooser.  This means that the different objects
-// in this chooser are chosen (once each) by the parent chooser.  Modifying 
-// this chooser automatically modifies the parent chooser.
-// 
-// We use choosers in the model in several places where we need to encode 
-// sequences of objects.  The current two places are naming objects in 
-// defining rules and preconditions, and dynamic naming choices.  
-// In defining rules and preconditions, we use a global chooser associated
-// with the model, and in dynamic naming choices, we use one child chooser per
-// creative variable per rule.  
+/*
 
+The global chooser is a structure that a GENTL program can call to randomly 
+return objects.  
+The GENTL syntax of calling the global chooser is "choose (strategy)" 
+The StaticChoose implements this.  It has one subexpresion corrsponding to 
+ the strategy.
 
-// The global choser is a structure that a GENTL program can call to randomly 
-// return objects.  
-// The GENTL syntax of calling the global chooser is "choose strategy 
-// (parameter)" The StaticChoose implements this.  It has one object 
-// corresponding to the strategy, and a subexpresion corrsponding to the 
-// parameter. 
+ A strategy is an OTuple whose first element is the strategy type (represented by a keyword) , and the remaining elements represent additional parameters.  An optional name can be included in the tuple to separate it from other strategies with the same type and parameters. 
+
+ Here we document the various strategy types:
+
+--- Independent strategies (ones for which each choice is independent) ---
+
+{ independent_bool, Real prior } 
+    Returns TRUE with probability prior and FALSE otherwise.
+
+{ quadratic_uint }
+    Returns unsigned integer x with probabilitiy 1/(x+1)(x+2)
+
+--- Choose based strategies ---
+
+{ new_flake }   
+   There can only be one such chooser. It cannot have a name.
+   This cannot return identified flakes, which have to be returned otherwise
+   Should return each invented flake at most once
+   Each flake return has probability 1.0. It seems like we aren't properly accounting for the likelihood, but we are, since we only care about getting the right output modulo renaming invented flakes.
+   Any flake it returns more than once, has a new flake violation.
+
+{ set_chooser, keyword parent_set_name }
+   This is a modeled chooser, which names the set that is it's "parent". Some sets are prepopulated in GEN like "booleans", function_keywords <the set of function keywords>, universal_strategies <the set of universal strategies>, identified_flakes <the set of identified flakes>...
+
+{ generic_chooser, otuple parent_strategy }
+   This is a modeled chooser, with its domain being chosen by a parent_strategy
+
+{ meta_chooser, otuple(otuples) strategies }
+   A modeled chooser, which makes 2 choices. The first is a choice of strategy, and the second is the object chosen, which is accounted for by the strategy chosen. 
+
+{ universal }
+   A particularly brilliant chooser that we will choose to be able to generate anything you could possibly want to generate. We expect this to be used a lot by people who are not flakes.
+
+*/
 
 struct Chooser;
 struct GenericChooser;
 struct BooleanChooser;
+struct Choice;
 
 struct GlobalChooser {
-  #define GlobalChooserStrategyList {			\
+  #define GlobalChooserStrategyTypeList {	       	\
       ITEM(NO_STRATEGY),				\
 	ITEM(INDEPENDENT_BOOL),				\
 	ITEM(QUADRATIC_UINT),				\
 	ITEM(NUM_INDEPENDENT_STRATEGIES),		\
-	ITEM(GLOBAL_FLAKE),				\
-	ITEM(LOCAL_FLAKE),				\
-	ITEM(LOCAL_BOOL),				\
-	ITEM(LOCAL_UINT),				\
+	ITEM(NEW_FLAKE),				\
+        ITEM(SET),                                      \
+	ITEM(GENERIC),					\
+	ITEM(META),				        \
 	};
-  CLASS_ENUM_DECLARE(GlobalChooser, Strategy);
+  CLASS_ENUM_DECLARE(GlobalChooser, StrategyType);
 
-  bool ChoiceIsPossible(Strategy s, Object p, Object v) const;
-
-  // This function is what needs to be called externally from the choice object
-  void L1_ChangeCount(Strategy strategy, Object parameter, 
-		      Object value, int delta);
-
-  // For some strategies, each choice is independent of each other choice.
-  // All other strategies are covered by chooser objects. 
-  bool IsIndependent(Strategy strategy) const;
+  // const functions
+  static bool ChoiceIsPossible(OTuple strategy, Object v);
+  static StrategyType GetStrategyType(OTuple strategy);
+  static bool IsIndependent(OTuple strategy);
   // For independent strategies, gives you the likelihood of a choice. 
-  LL GetIndependentChoiceLnLikelihood(Strategy strategy,
-				      Object parameter,
+  LL GetIndependentChoiceLnLikelihood(OTuple strategy,
 				      Object value) const;
+
+  void L1_Change(Choice *c, bool adding);
+  void L1_Add(Choice *c){ L1_Change(c, true); }
+  void L1_Remove(Choice *c){L1_Change(c, false); }
+
   // For non-independent strategies, gives you a pointer to a chooser that
   // that needs to be called to make your choice. 
-  Chooser * GetCreateChooser(Strategy strategy, Object parameter);
+  Chooser * L1_GetCreateChooser(OTuple strategy);
   //  update the ln likelihood of this object and of the model.
+
   void L1_AddToLnLikelihood(LL delta); 
   
   GlobalChooser();
-
-  // For flake choosing
-  GenericChooser * global_flake_chooser_;
-  hash_map<Object, GenericChooser *> local_flake_choosers_;
-  hash_map<Object, GenericChooser *> local_uint_choosers_;
-  hash_map<Object, BooleanChooser *> local_bool_choosers_;
 
   LL ln_likelihood_; // for choices not covered in choosers.
 };
 
 extern GlobalChooser GC;
 
-
-struct Choice {
-  GlobalChooser::Strategy strategy_;
-  Object parameter_;
+struct Choice : public Base {
+  OTuple strategy_;
   Object value_;
+  Base *owner_;
 
-  Choice() {value_ = NULL;}
-  // In fact, if you try to have an impossible value, these things will just 
-  //change value_ to NULL
-  void L1_Init(GlobalChooser::Strategy strategy, 
-	       Object parameter, Object value);
-  void L1_Change(GlobalChooser::Strategy new_strategy, 
-		 Object new_parameter, Object new_value);
-  /*void L1_ChangeParameter(Object new_parameter) 
-  { L1_Change(strategy_, new_parameter, value_);}
-  void L1_ChangeValue(Object new_value) 
-  { L1_Change(strategy_, parameter_, new_value);}*/
+  Choice() { value_ = NULL; }
+  // If you try to have an impossible value, we'll set it to NULL
+  void L1_Init(Base *owner, OTuple strategy, Object value);
+  void L1_Change(OTuple new_strategy, Object new_value);
   void L1_Erase();
-  private:
-  void L1_AddToChooser(int count_delta);
 };
 
 // Chooser is an abstract base class for a choosing strategy.
 struct Chooser : public Base {
-  void L1_Init();
+  void L1_Init(OTuple strategy);
   void L1_Erase();
+
+  bool IsEmpty() const { return (total_choices_ == 0);}
   Base::Type GetBaseType() const { return Base::CHOOSER;}
+  Record GetRecordForDisplay() const;
+
   //  update the ln likelihood of this object and of the model.
   void L1_AddToLnLikelihood(LL delta); 
+
   // This function gets overridden in order to compute the likelihood from 
   // scratch.  It is only for verification purposes.  
   virtual LL ComputeLnLikelihood() const { return ln_likelihood_;}
-  virtual void L1_ChangeCount(Object value, int delta);
-  bool IsEmpty() const { return (total_choices_ == 0);}
-  Record GetRecordForDisplay() const;
+
+  virtual void L1_Change(Choice *c, bool adding);
+  
   LL ln_likelihood_;
   int64 total_choices_;
+
+  // choices made from this chooser. 
+  hash_map<Object, set<Choice *> > choices_;
 };
 
 struct GenericChooser : public Chooser {
   // This is how we choose values to return from this chooser. 
   // if parent_strategy_ == NO_STRATEGY, this is the global flake chooser.
-  GlobalChooser::Strategy parent_strategy_;
-  Object parent_parameter_;
+  OTuple parent_strategy_;
 
-  // maps from value to count.
-  // The Choice * is the choice of the object from the parent strategy.
-  hash_map<Object, pair<int, Choice *> > counts_;
-  
-  void L1_Init(GlobalChooser::Strategy parent_strategy,Object parent_parameter){
-    Chooser::L1_Init(); 
-    parent_strategy_ = parent_strategy;
-    parent_parameter_ = parent_parameter;
+  void L1_Init(OTuple strategy){
+    Chooser::L1_Init(strategy); 
+    parent_strategy_ = OTuple(strategy).Data()[1];
   }
   void L1_Erase() {Chooser::L1_Erase();}
 
   virtual ~GenericChooser() {}
-  virtual LL ComputeLLDelta(Object object,
-			    int old_count, int new_count, 
+  virtual LL ComputeLLDelta(int old_count, int new_count, 
 			    int old_num_objects,  int new_num_objects, 
 			    int old_total, int new_total);
-  void L1_ChangeCount(Object value, int delta);
+
+  void L1_Change(Choice *c, bool adding);
   LL ComputeLnLikelihood() const; // from scratch for verification.
   int GetCount(Object object) const;
   Record GetRecordForDisplay() const;
+
+  // maps from value to count.
+  // The Choice * is the choice of the object from the parent strategy.
+  hash_map<Object, pair<int, Choice *> > counts_;
+
+
 };
 
-struct BooleanChooser : public Chooser {
-  int64 counts_[2];
-  void L1_Init() {
-    Chooser::L1_Init();
-    counts_[0] = counts_[1] = 0;
+class SetChooser;
+
+struct ChooserSet : public Base {
+  void L1_Init(Object name) {
+    Base::L1_Init();
+    L1_SetName(name);
   }
-  void L1_Erase() { Chooser::L1_Erase();}
-  LL ComputeLnLikelihood() const;
-  void L1_ChangeCount(Object value, int delta);
+  Base::Type GetBaseType() const { return Base::CHOOSER_SET;}
+
+  void L1_Insert(Object o);
+
+  set<Object> set_;
+  set<SetChooser *> choosers_;
 };
 
+void InitChooserSets();
 
+struct SetChooser : public Chooser {
+  void L1_Init(OTuple strategy);
+  void L1_Erase();
+
+  LL ComputeLnLikelihood() const;
+  virtual void L1_Change(Choice *c, bool adding);
+  LL ComputeLLDelta(int old_count, int new_count, 
+		    int old_total, int new_total);
+
+  hash_map<Object, int> counts_;
+  ChooserSet * my_set_;
+};
+
+struct NewFlakeChooser : public Chooser {
+  virtual void L1_Change(Choice *c, bool adding);
+  
+  map<Flake, Violation *> GetViolationMap(Violatoin::Type vtype) {
+    return violations_;
+  }
+  map<Flake, Violation *> violations_;
+};
 
 
 

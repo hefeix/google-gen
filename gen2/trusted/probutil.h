@@ -49,8 +49,7 @@ bool OPERATORGE(const LL & a, const LL & b);
 bool operator !=(const LL & a, const LL & b);
 
 ostream & operator << (ostream & output, LL ll);
-// LL Log(int i);
-LL Log(double d) {
+inline LL Log(double d) {
   CHECK(d>0);
   return Micronats((int)(log(d)*1000000));
 }
