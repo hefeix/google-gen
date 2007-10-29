@@ -2,7 +2,7 @@
   on pattern() post (F 0 0);
   on pattern((F x y))
     delay #0
-      if (equal (substitute x) 10001) {
+      if (equal (substitute x) 1001) {
         pass;
 	let a (sum (substitute x) 1)
 	  let b (sum (substitute x) (substitute y) )

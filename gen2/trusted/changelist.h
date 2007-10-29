@@ -199,10 +199,11 @@ template <class K, class V, class MC> class MapRemoveChange : public Change {
 // Inserts a key/value pair into a map of sets.
 // might need to create a map entry and remove it on rollback.
 // MK is map key, SV is the set value type
-template <class MK, class SV, class MapComp = less<MK> > 
+template <class M, class MK, class SV> 
   class MapOfSetsInsertChange : public Change {
  public:
-    MapOfSetsInsertChange(map<MK, set<SV>, MapComp> * location, const MK & key, 
+    MapOfSetsInsertChange(M * location, 
+			  const MK & key, 
 			  const SV & value) {
       location_ = location;
       key_ = key;
@@ -220,7 +221,7 @@ template <class MK, class SV, class MapComp = less<MK> >
     return out.str();
     }
  private:
-    map<MK,set<SV>, MapComp > * location_;
+    M * location_;
     MK key_;
     SV value_;
   };
@@ -228,9 +229,10 @@ template <class MK, class SV, class MapComp = less<MK> >
 // Removes a key/value pair into a map of sets.
 // Removes the map entry when the set is empty.
 // MK is map key, SV is the set value type
-template <class MK, class SV, class MapComp = less<MK> > class MapOfSetsRemoveChange : public Change {
+template <class M, class MK, class SV> class MapOfSetsRemoveChange 
+  : public Change {
  public:
-  MapOfSetsRemoveChange(map<MK, set<SV>, MapComp > * location, 
+  MapOfSetsRemoveChange(M * location, 
 			const MK & key, 
 			const SV & value) {
     location_ = location;
@@ -249,7 +251,7 @@ template <class MK, class SV, class MapComp = less<MK> > class MapOfSetsRemoveCh
     return out.str();
   }
  private:
-  map<MK,set<SV>, MapComp > * location_;
+  M * location_;
   MK key_;
   SV value_;
 };
@@ -510,18 +512,18 @@ class Changelist {
     Make(new(CL_ALLOC) MapOfCountsAddChange<M, K, V>(location, key, delta));
   }
 
-  template <class MK, class SV, class MapComp> 
-    void InsertIntoMapOfSets(map<MK, set<SV>, MapComp> * location, 
+  template <class M, class MK, class SV> 
+    void InsertIntoMapOfSets(M * location, 
 			     const MK & key, 
 			     const SV & value) {
     if (disabled_) {
       (*location)[key].insert(value);
       return;
     }
-    Make(new(CL_ALLOC) MapOfSetsInsertChange<MK, SV, MapComp>(location, key, value));
+    Make(new(CL_ALLOC) MapOfSetsInsertChange<M, MK, SV>(location, key, value));
   }
-  template <class MK, class SV, class MapComp> 
-    void RemoveFromMapOfSets(map<MK, set<SV>, MapComp> * location, 
+  template <class M, class MK, class SV> 
+    void RemoveFromMapOfSets(M * location, 
 			     const MK & key, 
 			     const SV & value) {
     if (disabled_) {
@@ -529,7 +531,7 @@ class Changelist {
       if ((*location)[key].size()==0) location->erase(key);
       return;
     }
-    Make(new(CL_ALLOC) MapOfSetsRemoveChange<MK, SV, MapComp>(location, key, value));
+    Make(new(CL_ALLOC) MapOfSetsRemoveChange<M, MK, SV>(location, key, value));
   }
 
 };

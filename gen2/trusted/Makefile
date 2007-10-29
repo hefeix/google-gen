@@ -4,9 +4,9 @@ CXXFLAGS = -Wall -Wno-deprecated -g
 CXXMOSTFLAGS = -Wall -Wno-deprecated
 
 # These are the Gen sources, and computed object and header files
-SRC = element.cc main.cc objects.cc hash.cc util.cc changelist.cc tuple.cc \
+SRC = chooser.cc element.cc main.cc objects.cc hash.cc util.cc changelist.cc tuple.cc \
     numbers.cc query.cc probutil.cc ranktree.cc \
-    violation.cc link.cc spec.cc record.cc chooser.cc globals.cc model.cc \
+    violation.cc link.cc spec.cc record.cc globals.cc model.cc \
     base.cc webserver.cc parser.cc extensions.cc fixers.cc \
     genrequesthandler.cc allocators.cc blackboard.cc
 INC = $(addsuffix .h, $(basename $(SRC)))
