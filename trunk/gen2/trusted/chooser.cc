@@ -50,6 +50,7 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
   }
     // Run through all the meta's strategies and check it
   case META: {
+    return (SuggestStrategy(strategy, value) != NULL);
     // TODO: make this not crash if the strategy is malformed
     OTuple strategies = OTuple(strategy.Data()[1]);
     for (uint cc=0; cc < strategies.Data().size(); cc++) {
@@ -58,9 +59,11 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
     }
     return false;
   }
-  case SET:
-    // TODO need to get the set
-    // CRASH
+  case SET: {
+    ChooserSet *cs = ChooserSet::FromStrategy(strategy);
+    if (!cs) return false;
+    return (cs->set_ % value);
+  }
   default:
     return false;
   }
@@ -89,7 +92,12 @@ void GlobalChooser::L1_Change(Choice *c, bool adding) {
     L1_AddToLnLikelihood(ll_delta);
     return;
   }
-  
+  if (GetStrategyType(c->strategy_) == META) {
+    if (adding) L1_AddMetaChoice(c, SuggestStrategy(c) );
+    else L1_RemoveMetaChoice(c);
+    return;
+  }
+
   // Otherwise make the chooser
   Chooser * chooser = L1_GetCreateChooser(c->strategy_);
   chooser->L1_Change(c, adding);
@@ -99,7 +107,7 @@ void GlobalChooser::L1_Change(Choice *c, bool adding) {
 }
 
 LL GlobalChooser::GetIndependentChoiceLnLikelihood(OTuple strategy, 
-						   Object value) const {
+						   Object value) {
   StrategyType st = GetStrategyType(strategy);
 
   switch(st) {
@@ -194,9 +202,10 @@ void Chooser::L1_AddToLnLikelihood(LL delta) {
   M.A1_AddToLnLikelihood(delta);
 }
 void Chooser::L1_Change(Choice *c, bool adding) {
+  int delta = adding?1:-1;
   CL.ChangeValue(&total_choices_, total_choices_ + delta);
-  if (adding) CL.InsertIntoMapOfSets(&choices_, value, c);
-  else CL.RemoveFromMapOfSets(&choices_, value, c);
+  if (adding) CL.InsertIntoMapOfSets(&choices_, c->value_, c);
+  else CL.RemoveFromMapOfSets(&choices_, c->value_, c);
 }
 /*
   TODO: This is wrong.   We need to specify how many distinct objects are 
@@ -266,10 +275,12 @@ void GenericChooser::L1_Change(Choice *c, bool adding) {
   int64 old_total = total_choices_;
   
   if (!look) {
+    // Make a choice of this value from the parent strategy
     Choice * choice = NULL;
-    choice = New<Choice>(parent_strategy_, value); 
+    choice = New<Choice>(this, parent_strategy_, value); 
     CL.InsertIntoMap(&counts_, value, make_pair(new_count, choice));
   } else if (new_count == 0) {
+    // Erase the choice of this object from the parent strategy. 
     look->second->L1_Erase();
     CL.RemoveFromMap(&counts_, value);
   } else {
@@ -311,17 +322,38 @@ void ChooserSet::L1_Insert(Object o) {
   }
 }
 
-void InitChooserSets() {
-  ChooserSet *booleans = New<ChooserSet>(Keyword::Make("booleans"));
-  booleans->L1_Insert(TRUE);
-  booleans->L1_Insert(FALSE);
+ChooserSet * ChooserSet::FromStrategy(OTuple strategy) {
+  Object chooser_set_name = strategy.Data()[1];
+  return
+    dynamic_cast<ChooserSet *>(N.Lookup(Base::CHOOSER_SET, chooser_set_name));
+}
 
-  ChooserSet *functions = New<ChooserSet>(Keyword::Make("functions"));
+ChooserSet * ChooserSet::booleans_;
+ChooserSet * ChooserSet::functions_;
+ChooserSet * ChooserSet::identified_flakes_;
+ChooserSet * ChooserSet::universal_;
+
+void InitChooserSets() {
+  ChooserSet::booleans_ = New<ChooserSet>(Keyword::Make("booleans"));
+  ChooserSet::booleans_->L1_Insert(TRUE);
+  ChooserSet::booleans_->L1_Insert(FALSE);
+
+  ChooserSet::functions_ = New<ChooserSet>(Keyword::Make("functions"));
   for (int i=0; i<Element::NumFunctions(); i++) {
-    functions->L1_Insert
+    ChooserSet::functions_->L1_Insert
       (Keyword::Make(Downcase
 		     (Element::FunctionToString(Element::Function(i)))));
   }
+  ChooserSet::identified_flakes_ 
+    = New<ChooserSet>(Keyword::Make("identified_flakes"));
+
+  ChooserSet * u = 
+    ChooserSet::universal_ = New<ChooserSet>(Keyword::Make("universal"));
+  u->L1_Insert(OTuple(StringToObject("{set, booleans, universal}")));
+  u->L1_Insert(OTuple(StringToObject("{set, functions, universal}")));
+  u->L1_Insert(OTuple(StringToObject("{set, identified_flakes, universal}")));
+  u->L1_Insert(OTuple(StringToObject("{generic, {new_flake} }")));
+  u->L1_Insert(OTuple(StringToObject("{generic, {quadratic_uint} }")));  
 }
 
 
@@ -410,4 +442,48 @@ void SetChooser::L1_Change(Choice *c, bool adding) {
 			       old_total, new_total);
 
   L1_AddToLnLikelihood(ll_delta);
+}
+
+void GlobalChooser::L1_AddMetaChoice(Choice *c, OTuple strategy) {
+  CL.InsertIntoMap
+    (&meta_choices_,
+     c, make_pair(New<Choice>(c, c->strategy_.Data()[1], strategy),
+		  New<Choice>(c, strategy, c->value_)));
+}
+void GlobalChooser::L1_RemoveMetaChoice(Choice *c) {
+  pair<Choice *, Choice *> * look = meta_choices_ % c;
+  CHECK(look);
+  look->first->L1_Erase();
+  look->second->L1_Erase();
+  CL.RemoveFromMap(&meta_choices_, c);
+}
+OTuple GlobalChooser::SuggestStrategy(Choice *c){
+  return SuggestStrategy(c->strategy_, c->value_);
+}
+
+OTuple GlobalChooser::SuggestStrategy(OTuple meta_strategy, Object value) {
+  CHECK(meta_strategy.Data().size() > 1);
+  CHECK(GetStrategyType(meta_strategy) == META);
+  OTuple strategy_strategy = meta_strategy.Data()[1];
+  if (GetStrategyType(strategy_strategy) == SET) {
+    ChooserSet *cs = ChooserSet::FromStrategy(strategy_strategy);
+    CHECK(cs);
+    forall(run, cs->set_) {
+      if (ChoiceIsPossible(*run, value)) return *run;
+    }
+    return NULL;
+  }
+  return NULL;
+}
+
+void NewFlakeChooser::L1_Change(Choice *c, bool adding) {
+  Chooser::L1_Change(c, adding);
+  set<Choice *> * choices = choices_ % c->value_;
+  bool violation_should_exist = (choices && (choices->size() > 1));
+  //TODO: foraward
+  if (violation_should_exist) {
+    NewFlakeViolation::L1_CreateIfAbsent(this, c->value_);
+  } else {
+    NewFlakeViolation::L1_RemoveIfPresent(this, c->value_);
+  }  
 }

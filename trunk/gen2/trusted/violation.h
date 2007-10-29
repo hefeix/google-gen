@@ -45,6 +45,7 @@ struct Violation : public Base {
       ITEM(BINDING_VARIABLES),			\
       ITEM(BINDING_OLD_VALUES),			\
       ITEM(LET),				\
+      ITEM(NEW_FLAKE),				\
       };
   CLASS_ENUM_DECLARE(Violation, Type);
   
@@ -182,6 +183,21 @@ struct OwnedViolationWithData : public Violation {
     ret["data"] = data_.ToString();
     return ret;
   }
+  
+  static OwnedViolationWithData * 
+  FindOwnedViolationWithData(Owner *owner, DataType data) {
+    return dynamic_cast<OwnedViolationWithData *> 
+      (*((*owner->GetViolationMap(VType)) % data));
+  }
+  static void L1_CreateIfAbsent(Owner *owner, DataType data) {
+    if (!FindOwnedViolationWithData(owner, data)) 
+      New<OwnedViolationWithData<Owner, DataType, VType> >(owner, data);
+  }
+  static void L1_RemoveIfPresent(Owner *owner, DataType data) {
+    OwnedViolationWithData *v = FindOwnedViolationWithData(owner, data);
+    if (v) v->L1_Erase();
+  }
+
 
   // ---------- data ----------
   Owner *owner_;
@@ -196,6 +212,7 @@ class Element;
 class StaticOn;
 class DynamicExpression;
 class DynamicLet;
+class NewFlakeChooser;
 
 // The static program has changed somewhere involving this node (inlcuding its
 // parent link and outlinks) or one of its ancestors.  The dynamic network may
@@ -238,6 +255,8 @@ typedef OwnedViolationWithData<OnMultiLink, OMap, Violation::MISSING_ON_MATCH>
 // An on statement has a child whose binding does not match the blackboard.
 typedef OwnedViolationWithData<OnMultiLink, OMap, Violation::EXTRA_ON_MATCH>
   ExtraOnMatchViolation;
+// A new flake chooser generates a flake more than once. 
+typedef OwnedViolationWithData<NewFlakeChooser, Flake, Violation::NEW_FLAKE> NewFlakeViolation;
 // the time on a dynamic element may not be equal to its computed time.
 typedef OwnedViolation<Element, Violation::TIME>
   TimeViolation;

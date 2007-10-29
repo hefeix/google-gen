@@ -23,6 +23,7 @@
 #include "record.h"
 #include "probutil.h"
 #include "base.h"
+#include "violation.h"
 
 /*
 
@@ -90,9 +91,9 @@ struct GlobalChooser {
   static StrategyType GetStrategyType(OTuple strategy);
   static bool IsIndependent(OTuple strategy);
   // For independent strategies, gives you the likelihood of a choice. 
-  LL GetIndependentChoiceLnLikelihood(OTuple strategy,
-				      Object value) const;
-
+  static LL GetIndependentChoiceLnLikelihood(OTuple strategy,
+					     Object value);
+  
   void L1_Change(Choice *c, bool adding);
   void L1_Add(Choice *c){ L1_Change(c, true); }
   void L1_Remove(Choice *c){L1_Change(c, false); }
@@ -107,7 +108,18 @@ struct GlobalChooser {
   GlobalChooser();
 
   LL ln_likelihood_; // for choices not covered in choosers.
+  
+  // ----- This stuff is for metachoices. 
+  // suggests a strategy for a metachoice.
+  static OTuple SuggestStrategy(Choice *c);
+  static OTuple SuggestStrategy(OTuple meta_strategy, Object value);
+  void L1_AddMetaChoice (Choice *c, OTuple strategy);
+  void L1_RemoveMetaChoice(Choice *c);
+  // maps from the metachoice to the choice of strategy and the 
+  // choice from that strategy.
+  hash_map<Choice *, pair<Choice *, Choice *> > meta_choices_;
 };
+
 
 extern GlobalChooser GC;
 
@@ -116,6 +128,7 @@ struct Choice : public Base {
   Object value_;
   Base *owner_;
 
+  Base::Type GetBaseType() const { return Base::CHOICE;}
   Choice() { value_ = NULL; }
   // If you try to have an impossible value, we'll set it to NULL
   void L1_Init(Base *owner, OTuple strategy, Object value);
@@ -159,11 +172,10 @@ struct GenericChooser : public Chooser {
   }
   void L1_Erase() {Chooser::L1_Erase();}
 
-  virtual ~GenericChooser() {}
-  virtual LL ComputeLLDelta(int old_count, int new_count, 
-			    int old_num_objects,  int new_num_objects, 
-			    int old_total, int new_total);
-
+  LL ComputeLLDelta(int old_count, int new_count, 
+		    int old_num_objects,  int new_num_objects, 
+		    int old_total, int new_total);
+  
   void L1_Change(Choice *c, bool adding);
   LL ComputeLnLikelihood() const; // from scratch for verification.
   int GetCount(Object object) const;
@@ -172,8 +184,6 @@ struct GenericChooser : public Chooser {
   // maps from value to count.
   // The Choice * is the choice of the object from the parent strategy.
   hash_map<Object, pair<int, Choice *> > counts_;
-
-
 };
 
 class SetChooser;
@@ -187,8 +197,15 @@ struct ChooserSet : public Base {
 
   void L1_Insert(Object o);
 
+  static ChooserSet * FromStrategy(OTuple strategy);
+
   set<Object> set_;
   set<SetChooser *> choosers_;
+
+  static ChooserSet *booleans_;
+  static ChooserSet *functions_;
+  static ChooserSet *identified_flakes_;
+  static ChooserSet *universal_;
 };
 
 void InitChooserSets();
@@ -198,7 +215,7 @@ struct SetChooser : public Chooser {
   void L1_Erase();
 
   LL ComputeLnLikelihood() const;
-  virtual void L1_Change(Choice *c, bool adding);
+  void L1_Change(Choice *c, bool adding);
   LL ComputeLLDelta(int old_count, int new_count, 
 		    int old_total, int new_total);
 
@@ -207,10 +224,17 @@ struct SetChooser : public Chooser {
 };
 
 struct NewFlakeChooser : public Chooser {
-  virtual void L1_Change(Choice *c, bool adding);
+  void L1_Init(OTuple strategy){
+    Chooser::L1_Init(strategy); 
+    CHECK(OTuple(strategy).Data().size() == 1); // no name.
+  }
+  void L1_Erase() {Chooser::L1_Erase();}
+  void L1_Change(Choice *c, bool adding);
+  // TODO: the time probably should be something different. 
+  OTime GetTime() { return CREATION;} // needed by the violaiton.
   
-  map<Flake, Violation *> GetViolationMap(Violatoin::Type vtype) {
-    return violations_;
+  map<Flake, Violation *> * GetViolationMap(Violation::Type vtype) {
+    return &violations_;
   }
   map<Flake, Violation *> violations_;
 };

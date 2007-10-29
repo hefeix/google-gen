@@ -156,7 +156,8 @@ void StaticElement::L1_CreateChoices() {
   Tuple function_choice_strategy;
   function_choice_strategy.push_back(Keyword::Make("set_chooser"));
   function_choice_strategy.push_back(Keyword::Make("functions"));
-  CL.PushBack(&choices_, New<Choice>(OTuple::Make(function_choice_strategy),
+  CL.PushBack(&choices_, New<Choice>(this,
+				     OTuple::Make(function_choice_strategy),
 				     FunctionKeyword()));
 }
 StaticElement * StaticElement::GetParent() const { 

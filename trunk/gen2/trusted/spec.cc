@@ -18,10 +18,18 @@
 
 #include "spec.h"
 #include "model.h"
+#include "chooser.h"
 
 void Given::L1_Init(OTuple tuple) {
   Base::L1_Init();
   posting_ = new OwnedPosting(tuple, CREATION, this);
+  forall(run, tuple.Data()) {
+    Object o = *run;
+    if (o.GetType() == Object::FLAKE) {
+      ChooserSet::identified_flakes_->L1_Insert(o);
+      // TODO, make sure the new flake chooser isn't choosing this thing.
+    }
+  }
 }
 
 void Given::L1_Erase() {

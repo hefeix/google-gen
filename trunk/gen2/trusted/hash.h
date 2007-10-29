@@ -75,6 +75,15 @@ inline uint32 Hash32(bool n, uint32 seed = 0){
 inline uint32 Hash32(int n, uint32 seed = 0){
   return Hash32(uint32(n), seed);
 }
+template <class C>
+inline uint32 Hash32(C* p, uint32 seed = 0){
+  return Hash32(uint32(p), seed);
+}
+template <class C>
+inline uint32 Hash32(const C* p, uint32 seed = 0){
+  return Hash32(uint32(p), seed);
+}
+
 
 template <class T> uint32 Hash32Iterator(const T & begin, 
 					 const T & end, 
@@ -120,7 +129,7 @@ template <class A, class B> uint32 Hash32(const hash_map<A,B> & s,
 #define DEFINE_HASH_CLASS(Classname)	\
   class hash<Classname> {			\
   public:					\
-    size_t operator()(const Classname & c) const{	\
+    size_t operator()(Classname const & c) const{	\
       return size_t(Hash32(c));			\
     } \
   };
@@ -147,5 +156,9 @@ DEFINE_HASH_CLASS_2(vector);
 DEFINE_HASH_CLASS_1(set);
 DEFINE_HASH_CLASS_4(map);
 DEFINE_HASH_CLASS_2(hash_map);
+namespace __gnu_cxx {
+  template <class C> DEFINE_HASH_CLASS(C*);
+  template <class C> DEFINE_HASH_CLASS(const C*);
+}
 
 #endif 
