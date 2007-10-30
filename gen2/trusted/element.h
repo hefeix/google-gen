@@ -216,7 +216,9 @@ struct StaticElement : public Element {
   }
 
   // ---------- N1 notifiers ----------  
-  virtual void N1_ObjectChanged(int which) {}
+  virtual void N1_ObjectChanged(int which) {
+    L1_CreateChoices();
+  }
 
   // ---------- data ----------  
 
