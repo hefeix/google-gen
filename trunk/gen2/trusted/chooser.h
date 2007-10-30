@@ -128,6 +128,11 @@ struct Choice : public Base {
   Object value_;
   Base *owner_;
 
+  Record GetRecordForDisplay() const;
+  string TextIdentifier() const {
+    return value_.ToString();
+  }
+
   Base::Type GetBaseType() const { return Base::CHOICE;}
   Choice() { value_ = NULL; }
   // If you try to have an impossible value, we'll set it to NULL
@@ -198,6 +203,7 @@ struct ChooserSet : public Base {
   void L1_Insert(Object o);
 
   static ChooserSet * FromStrategy(OTuple strategy);
+  Record GetRecordForDisplay() const;
 
   set<Object> set_;
   set<SetChooser *> choosers_;

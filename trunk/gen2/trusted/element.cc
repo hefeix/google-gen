@@ -138,6 +138,7 @@ void StaticElement::L1_Init() {
   N1_StoredOrComputedTimeChanged();
   if (GetFunction() != ON) 
     StaticNoParentViolation::L1_CreateIfAbsent(this);
+  L1_CreateChoices();
 }
 void StaticElement::L1_Erase() {
   for (uint i=0; i<static_children_.size(); i++) {
@@ -151,14 +152,20 @@ void StaticElement::L1_ClearChoices() {
   for (uint i=0; i<choices_.size(); i++) choices_[i]->L1_Erase();
   CL.ChangeValue(&choices_, vector<Choice *>());
 }
+
+// TODO: account for objects
 void StaticElement::L1_CreateChoices() {
   L1_ClearChoices();
-  Tuple function_choice_strategy;
-  function_choice_strategy.push_back(Keyword::Make("set_chooser"));
-  function_choice_strategy.push_back(Keyword::Make("functions"));
-  CL.PushBack(&choices_, New<Choice>(this,
-				     OTuple::Make(function_choice_strategy),
-				     FunctionKeyword()));
+  Object function_strategy;
+  function_strategy = ::StringToObject("{set functions}");
+  Object universal_strategy;
+  universal_strategy = ::StringToObject("(meta (set universal))");
+  CL.PushBack(&choices_, New<Choice>(this, function_strategy, FunctionKeyword()));
+  for (int c=0; c<NumObjects(); c++) {
+    Object obj = GetObject(c);
+    if (obj == NULL) continue;
+    CL.PushBack(&choices_, New<Choice>(this, universal_strategy, obj));
+  }
 }
 StaticElement * StaticElement::GetParent() const { 
   if (!parent_) return NULL;
@@ -583,6 +590,7 @@ string Expression::ToString() const {
 
 void StaticConstant::N1_ObjectChanged(int which) {
   CHECK(which == OBJECT);
+  StaticElement::N1_ObjectChanged(which);
   forall(run, dynamic_children_->children_) {
     dynamic_cast<DynamicExpression *>(run->second)->L1_CheckSetValueViolation();
   }

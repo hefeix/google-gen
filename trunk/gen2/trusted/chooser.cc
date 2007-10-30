@@ -32,47 +32,57 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
 
   StrategyType stype = GetStrategyType(strategy);
 
+  bool return_value = false;
   switch (stype) {
   case INDEPENDENT_BOOL:
-    return (value.GetType() == Object::BOOLEAN);
+    return_value = (value.GetType() == Object::BOOLEAN); break;
   case QUADRATIC_UINT:
-    return (value.GetType() == Object::INTEGER && Integer(value).Data() >= 0);
+    return_value = (value.GetType() == Object::INTEGER && Integer(value).Data() >= 0); break;
   case NEW_FLAKE:
-    return (value.GetType() == Object::FLAKE);
+    return_value = (value.GetType() == Object::FLAKE); break;
   case GENERIC: {
     // Check that its parent can generate its choice
     if (strategy.Data().size() <= 1) {
       cerr << "Error? generic with no parent " << strategy << endl;
-      return false;
+      return_value = false;
+    } else {
+      OTuple p_strategy = (strategy.Data())[1];
+      return_value = ChoiceIsPossible(p_strategy, value);
     }
-    OTuple p_strategy = (strategy.Data())[1];
-    return ChoiceIsPossible(p_strategy, value);
   }
+    break;
     // Run through all the meta's strategies and check it
   case META: {
-    return (SuggestStrategy(strategy, value) != NULL);
+    return_value = (SuggestStrategy(strategy, value) != NULL);
     // TODO: make this not crash if the strategy is malformed
+    // FIX THIS NO LONGER LISTING STRATEGIES
     OTuple strategies = OTuple(strategy.Data()[1]);
     for (uint cc=0; cc < strategies.Data().size(); cc++) {
       if (ChoiceIsPossible(strategies.Data()[cc], value))
-	return true;
+	return_value = true;
     }
-    return false;
   }
+    break;
   case SET: {
     ChooserSet *cs = ChooserSet::FromStrategy(strategy);
-    if (!cs) return false;
-    return (cs->set_ % value);
+    if (!cs) return_value = false;
+    return_value = (cs->set_ % value);
   }
+    break;
   default:
-    return false;
+    return_value = false;
   }
+  VLOG(3) << strategy.ToString() << " " << value.ToString() << " " << (return_value ? "true" : "false") << endl;
+  return return_value;
 }
 
 GlobalChooser::StrategyType GlobalChooser::GetStrategyType(OTuple strategy) {
   // TODO: make this not crash if the strategy is malformed
   if (strategy.Data().size() == 0) return NO_STRATEGY;
-  return StringToStrategyType(Upcase(Keyword(strategy.Data()[0]).Data()));
+  GlobalChooser::StrategyType return_value = 
+    StringToStrategyType(Upcase(Keyword(strategy.Data()[0]).Data()));
+  VLOG(3) << "strategy:" << strategy.ToString() << " type:" << return_value << endl;
+  return return_value;
 }
 
 bool GlobalChooser::IsIndependent(OTuple strategy) { 
@@ -160,7 +170,9 @@ GlobalChooser::GlobalChooser() {
 void Choice::L1_Init(Base *owner, OTuple strategy, Object value) {
   owner_ = owner;
   Base::L1_Init();
+  L1_AutomaticallyName();
   L1_Change(strategy, value);
+  VLOG(3) << "Initing choice " << strategy.ToString() << " " << value.ToString() << endl;
 }
 
 void Choice::L1_Change(OTuple new_strategy, Object new_value){
@@ -175,6 +187,14 @@ void Choice::L1_Change(OTuple new_strategy, Object new_value){
 void Choice::L1_Erase() {
   GC.L1_Remove(this);
   Base::L1_Erase();
+}
+
+Record Choice::GetRecordForDisplay() const {
+  Record r = Base::GetRecordForDisplay();
+  r["strategy"] = strategy_.ToString();
+  r["value"] = value_.ToString();
+  if (owner_) r["owner"] = owner_->ShortDescription();
+  return r;
 }
 
 void Chooser::L1_Init(OTuple strategy) {
@@ -193,6 +213,16 @@ void Chooser::L1_Erase(){
 Record Chooser::GetRecordForDisplay() const{
   Record r = Base::GetRecordForDisplay();
   r["Ln Likelihood"] = ln_likelihood_.ToString();
+  r["choices"] = "<table border=1>";
+  forall(run, choices_) {
+    r["choices"] += "<tr><td>" + run->first.ToString() + "</td>" 
+    + "<td>" + itoa(run->second.size()) + "</td><td>";
+    forall (run2, run->second) {
+      r["choices"] += (*run2)->ShortDescription() + "<br>";
+    }
+    r["choices"] += "</td></tr>";
+  }
+  r["choices"] += "</table>";
   r["Total"] = itoa(total_choices_);
   return r;
 }
@@ -312,6 +342,17 @@ int GenericChooser::GetCount(Object object) const {
   return find->first;
 }
 
+Record ChooserSet::GetRecordForDisplay() const {
+  Record r = Base::GetRecordForDisplay();
+  forall (run, set_) {
+    r["set"] += run->ToString() + "<br>";
+  }
+  forall (run, choosers_) {
+    r["choosers"] += (*run)->ShortDescription() + "<br>";
+  }
+  return r;
+}
+
 void ChooserSet::L1_Insert(Object o) {
   CL.InsertIntoSet(&set_, o);
   forall(run, choosers_) {
@@ -402,7 +443,7 @@ LL SetChooser::ComputeLnLikelihood() const {
   CHECK(total == total_choices_);
   int set_size = my_set_->set_.size();
   ret += LnFactorial(set_size-1);
-  ret += LnFactorial(total+set_size-1);
+  ret -= LnFactorial(total+set_size-1);
   return ret;
 }
 
@@ -411,7 +452,7 @@ LL SetChooser::ComputeLLDelta(int old_count, int new_count,
   int set_size = my_set_->set_.size();
   if (old_total==0 || new_total==0) return 0;
   LL ll_delta = LnFactorial(new_count) - LnFactorial(old_count); 
-  ll_delta += LnFactorial(new_total+set_size-1) 
+  ll_delta -= LnFactorial(new_total+set_size-1) 
     - LnFactorial(old_total+set_size-1);
   return ll_delta;
 }
