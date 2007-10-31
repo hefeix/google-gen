@@ -1,4 +1,9 @@
+immediately:
 
+   fix bug in set chooser ll computation
+   choose how to encode variable constants (x)
+   choose how to encode tuples
+   figure out a display for the model's total likelihood that makes sense
 
 Now:
 

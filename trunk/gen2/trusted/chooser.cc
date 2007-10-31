@@ -56,10 +56,18 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
     return_value = (SuggestStrategy(strategy, value) != NULL);
     // TODO: make this not crash if the strategy is malformed
     // FIX THIS NO LONGER LISTING STRATEGIES
-    OTuple strategies = OTuple(strategy.Data()[1]);
-    for (uint cc=0; cc < strategies.Data().size(); cc++) {
-      if (ChoiceIsPossible(strategies.Data()[cc], value))
+    OTuple strategy_strategy = OTuple(strategy.Data()[1]);
+    StrategyType stype = GetStrategyType(strategy_strategy);
+    if (stype != SET) {
+      return_value = false;
+      break;
+    }
+    ChooserSet * cs = ChooserSet::FromStrategy(strategy_strategy);
+    forall (run, cs->set_) {
+      if (ChoiceIsPossible(*run, value)) {
 	return_value = true;
+	break;
+      }
     }
   }
     break;
@@ -145,14 +153,15 @@ Chooser * GlobalChooser::L1_GetCreateChooser(OTuple strategy) {
 
   StrategyType st = GetStrategyType(strategy);
   switch(st) {
-    // case NEW_FLAKE:
-    // Make sure it doesn't have a name!
-    // CHECK(strategy.Data().size() == 1);
-    // return New<NewFlakeChooser>();
+  case NEW_FLAKE:
+    // Check it doesnt have a name
+    CHECK(strategy.Data().size() == 1);
+    return New<NewFlakeChooser>(strategy);
   case SET:     return New<SetChooser>(strategy);
   case GENERIC: return New<GenericChooser>(strategy);
     // case META:    return New<MetaChooser>(strategy); 
   default:
+    VLOG(0) << strategy << endl;
     CHECK(false);
     return NULL;
   }
@@ -189,6 +198,8 @@ void Choice::L1_Erase() {
   Base::L1_Erase();
 }
 
+
+
 Record Choice::GetRecordForDisplay() const {
   Record r = Base::GetRecordForDisplay();
   r["strategy"] = strategy_.ToString();
@@ -196,6 +207,29 @@ Record Choice::GetRecordForDisplay() const {
   if (owner_) r["owner"] = owner_->ShortDescription();
   return r;
 }
+
+
+void ArbitraryChoice::L1_Init(Base * owner, LL ln_likelihood, string comment) {
+  Base::L1_Init();
+  L1_AutomaticallyName();
+  owner_ = owner;
+  comment_ = comment;
+  ln_likelihood_ = ln_likelihood;
+  M.A1_AddToLnLikelihood(ln_likelihood_);
+}
+void ArbitraryChoice::L1_Erase() {
+  M.A1_AddToLnLikelihood(-ln_likelihood_);
+  Base::L1_Erase();
+}
+Record ArbitraryChoice::GetRecordForDisplay() const {
+  Record r = Base::GetRecordForDisplay();
+  if (owner_) r["owner"] = owner_->ShortDescription();
+  r["ln_likelihood"] = ln_likelihood_.ToString();
+  if (comment_.size()) r["comment"] = comment_;
+  return r;
+}
+
+
 
 void Chooser::L1_Init(OTuple strategy) {
   Base::L1_Init();
@@ -212,7 +246,7 @@ void Chooser::L1_Erase(){
 
 Record Chooser::GetRecordForDisplay() const{
   Record r = Base::GetRecordForDisplay();
-  r["Ln Likelihood"] = ln_likelihood_.ToString();
+  r["Ln Likelihood"] = ln_likelihood_.ToString() + " c:" + ComputeLnLikelihood().ToString();
   r["choices"] = "<table border=1>";
   forall(run, choices_) {
     r["choices"] += "<tr><td>" + run->first.ToString() + "</td>" 
@@ -252,10 +286,12 @@ void Chooser::L1_Change(Choice *c, bool adding) {
     (total - count.size()) objects and (count.size()-1) dividers
     So the number of possibilities is (total-1) choose (count.size()-1).
     a. likelihood = (count.size()-1)! * (total-count.size())! / (total-1)!
+  4. The choice of the number of distinct objects, we have some argument
+     that this should be uniform from 1 to the number of choices. 1/total
 
   Multiplying it all together, we get:
    Prod(count[i]!) * count.size()! * (count.size()-1)! * (total-count.size())!
-    / [ total! * (total-1)! ]
+    / [ total! ^ 2 ]
 
 */
 
@@ -273,8 +309,7 @@ LL GenericChooser::ComputeLnLikelihood() const {
   ret += LnFactorial(counts_.size());
   ret += LnFactorial(counts_.size()-1);
   ret += LnFactorial(total-counts_.size());
-  ret -= LnFactorial(total);
-  ret -= LnFactorial(total-1);
+  ret -= LnFactorial(total) * 2;
   return ret;
 }
 
@@ -287,8 +322,7 @@ LL GenericChooser::ComputeLLDelta(int old_count, int new_count,
   ll_delta += LnFactorial(new_num_objects-1) - LnFactorial(old_num_objects-1);
   ll_delta += LnFactorial(new_total-new_num_objects) 
     - LnFactorial(old_total - old_num_objects);
-  ll_delta -= LnFactorial(new_total) - LnFactorial(old_total);
-  ll_delta -= LnFactorial(new_total-1) - LnFactorial(old_total-1);
+  ll_delta -= 2 * (LnFactorial(new_total) - LnFactorial(old_total));
   return ll_delta;
 }
 
@@ -373,6 +407,7 @@ ChooserSet * ChooserSet::booleans_;
 ChooserSet * ChooserSet::functions_;
 ChooserSet * ChooserSet::identified_flakes_;
 ChooserSet * ChooserSet::universal_;
+ChooserSet * ChooserSet::misc_;
 
 void InitChooserSets() {
   ChooserSet::booleans_ = New<ChooserSet>(Keyword::Make("booleans"));
@@ -388,15 +423,21 @@ void InitChooserSets() {
   ChooserSet::identified_flakes_ 
     = New<ChooserSet>(Keyword::Make("identified_flakes"));
 
+  ChooserSet::misc_ =
+    New<ChooserSet>(Keyword::Make("misc"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("variable"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("tuple"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("pattern"));
+
   ChooserSet * u = 
     ChooserSet::universal_ = New<ChooserSet>(Keyword::Make("universal"));
   u->L1_Insert(OTuple(StringToObject("{set, booleans, universal}")));
   u->L1_Insert(OTuple(StringToObject("{set, functions, universal}")));
+  u->L1_Insert(OTuple(StringToObject("{set, misc, universal}")));
   u->L1_Insert(OTuple(StringToObject("{set, identified_flakes, universal}")));
   u->L1_Insert(OTuple(StringToObject("{generic, {new_flake} }")));
   u->L1_Insert(OTuple(StringToObject("{generic, {quadratic_uint} }")));  
 }
-
 
 void SetChooser::L1_Init(OTuple strategy) {
   Chooser::L1_Init(strategy);
@@ -450,7 +491,6 @@ LL SetChooser::ComputeLnLikelihood() const {
 LL SetChooser::ComputeLLDelta(int old_count, int new_count, 
 			      int old_total, int new_total) {
   int set_size = my_set_->set_.size();
-  if (old_total==0 || new_total==0) return 0;
   LL ll_delta = LnFactorial(new_count) - LnFactorial(old_count); 
   ll_delta -= LnFactorial(new_total+set_size-1) 
     - LnFactorial(old_total+set_size-1);

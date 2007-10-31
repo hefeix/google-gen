@@ -83,6 +83,13 @@ class Model : public Base{
     }
     CL.ChangeValue(&delayed_checks_, vector<DelayedCheck>());
   }
+
+  // ---------- constant functions ----------
+  Record GetRecordForDisplay() const {
+    Record ret = Base::GetRecordForDisplay();
+    ret["ln_likelihood_"] = ln_likelihood_.ToString();
+    return ret;
+  }
   
   // ---------- data ----------
 
@@ -110,9 +117,9 @@ class Model : public Base{
   int next_unique_variable_;
 
   // likelihood and utility tracking
+  LL ln_likelihood_;
 
   // Total of search_work_ for all preconditions.
-  LL ln_likelihood_;
   uint64 search_work_; 
   // We prefer models that cost us less work in searching for satisfactions of 
   // preconditions, since they are quicker to reason about.  The number of 

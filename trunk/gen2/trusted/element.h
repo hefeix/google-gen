@@ -190,7 +190,6 @@ struct StaticElement : public Element {
   virtual string ChildToString(int c) const = 0;
   virtual int StringToObject(string s) const = 0;
   virtual string ObjectToString(int o) const = 0;
-  
 
   // ---------- L1 functions ----------  
   void L1_Init();
@@ -200,8 +199,9 @@ struct StaticElement : public Element {
   void L1_UnlinkChild(int where);
   void L1_SetObject(int which, Object new_value);
 
-  void L1_ClearChoices();
   // Create the choices  
+  void L1_ClearChoices();
+  virtual void L1_CreateChoices(set<Variable> * variables_so_far, Object obj);
   virtual void L1_CreateChoices();
 
   // caches the set of variables_ for this and all descendents.
@@ -226,7 +226,7 @@ struct StaticElement : public Element {
   MultiLink * dynamic_children_;
   vector<SingleLink *> static_children_; // statements and expressions
   vector<Object> objects_;
-  vector<Choice *> choices_;
+  vector<Base *> choices_;
   VariableSet variables_;
 
 };

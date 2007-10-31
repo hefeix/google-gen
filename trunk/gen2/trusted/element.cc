@@ -150,22 +150,83 @@ void StaticElement::L1_Erase() {
 }
 void StaticElement::L1_ClearChoices() {
   for (uint i=0; i<choices_.size(); i++) choices_[i]->L1_Erase();
-  CL.ChangeValue(&choices_, vector<Choice *>());
+  CL.ChangeValue(&choices_, vector<Base *>());
 }
 
-// TODO: account for objects
+void StaticElement::L1_CreateChoices(set<Variable> * variables_so_far, Object obj) {
+
+  if (obj == NULL) return;
+
+  Object universal_strategy = ::StringToObject("(meta (set universal))");
+
+  if (obj.GetType() == Object::VARIABLE) {
+    // Choose the keyword variable from (meta (set misc))
+    CL.PushBack(&choices_,(Base *)
+		New<Choice>(this, universal_strategy, Keyword::Make("variable")));
+
+    // Choose the backreference or new variable
+    CL.PushBack(&choices_,(Base *)
+		New<ArbitraryChoice>(this, - Log(variables_so_far->size() + 1), "backref"));
+    variables_so_far->insert(Variable(obj));
+    return;
+  }
+
+  Object tuple_size_strategy = ::StringToObject("(generic (quadratic_uint) tuple_size)");
+  if (obj.GetType() == Object::OTUPLE) {
+    const Tuple & t = OTuple(obj).Data();
+    CL.PushBack(&choices_,(Base *)
+		New<Choice>(this, universal_strategy, Keyword::Make("tuple")));
+    CL.PushBack(&choices_,(Base *)
+		New<Choice>(this, tuple_size_strategy, Integer::Make(t.size())));
+    for (uint i=0; i<t.size(); i++)  {
+      L1_CreateChoices(variables_so_far, t[i]);
+    }
+    return;
+  }
+  
+  if (obj.GetType() == Object::OPATTERN) {
+    const Pattern & p = OPattern(obj).Data();
+    CL.PushBack(&choices_, (Base *)
+		New<Choice>(this, universal_strategy, Keyword::Make("pattern")));
+    // TODO: check for duplicate tuples - if so, don't save n!
+    CL.PushBack(&choices_, (Base *)
+		New<ArbitraryChoice>(this, LnFactorial(p.size()), 
+						"pattern symmetry"));
+
+    for (uint i=0; i<p.size(); i++) {
+      const Tuple &t = p[i].Data();
+      // we don't recurse here because we want to avoid reencoding the fact that each
+      // sub-part is a tuple. 
+      CL.PushBack(&choices_, (Base *) 
+		  New<Choice>(this, tuple_size_strategy, Integer::Make(t.size())));
+      for (uint i=0; i<t.size(); i++)  {
+	L1_CreateChoices(variables_so_far, t[i]);
+      }      
+    }
+    return;
+  }
+  CL.PushBack(&choices_, (Base *) New<Choice>(this, universal_strategy, obj));
+}
+
 void StaticElement::L1_CreateChoices() {
   L1_ClearChoices();
   Object function_strategy;
   function_strategy = ::StringToObject("{set functions}");
-  Object universal_strategy;
-  universal_strategy = ::StringToObject("(meta (set universal))");
-  CL.PushBack(&choices_, New<Choice>(this, function_strategy, FunctionKeyword()));
+  CL.PushBack(&choices_, (Base *)New<Choice>(this, function_strategy, FunctionKeyword()));
+  
+  set<Variable> variables_so_far = variables_;
+
   for (int c=0; c<NumObjects(); c++) {
     Object obj = GetObject(c);
-    if (obj == NULL) continue;
-    CL.PushBack(&choices_, New<Choice>(this, universal_strategy, obj));
+    L1_CreateChoices(&variables_so_far, obj);
   }
+  bool any_bad_choices = false;
+  for (uint i=0; i<choices_.size(); i++)  {
+    Choice * c = dynamic_cast<Choice *>(choices_[i]);
+    if (c && c->value_ == NULL) any_bad_choices = true;
+  }
+  if (any_bad_choices) StaticChoiceViolation::L1_CreateIfAbsent(this);
+  else StaticChoiceViolation::L1_RemoveIfPresent(this);
 }
 StaticElement * StaticElement::GetParent() const { 
   if (!parent_) return NULL;

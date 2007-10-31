@@ -32,7 +32,9 @@ Model::Model(){
   next_unique_variable_ = -1;
   webserver_ = new WebServer(&request_handler_);
   webserver_->StartInThread();
+  L1_AutomaticallyName();
 }
+
 Model::~Model(){}
 
 Variable Model::L1_GetNextUniqueVariable() {
