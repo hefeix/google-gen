@@ -46,6 +46,7 @@ struct Violation : public Base {
       ITEM(BINDING_OLD_VALUES),			\
       ITEM(LET),				\
       ITEM(NEW_FLAKE),				\
+      ITEM(STATIC_CHOICE),			\
       };
   CLASS_ENUM_DECLARE(Violation, Type);
   
@@ -224,6 +225,9 @@ class NewFlakeChooser;
 // A static node other than an ON statement has no parent.
 typedef OwnedViolation<StaticElement, Violation::STATIC_NO_PARENT>
   StaticNoParentViolation;
+// A static node makes an impossible choice
+typedef OwnedViolation<StaticElement, Violation::STATIC_CHOICE>
+  StaticChoiceViolation;
 // A dynamic node other than an ON statement has no parent.
 typedef OwnedViolation<DynamicElement, Violation::DYNAMIC_NO_PARENT>
   DynamicNoParentViolation;

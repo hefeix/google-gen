@@ -120,7 +120,6 @@ struct GlobalChooser {
   hash_map<Choice *, pair<Choice *, Choice *> > meta_choices_;
 };
 
-
 extern GlobalChooser GC;
 
 struct Choice : public Base {
@@ -139,6 +138,17 @@ struct Choice : public Base {
   void L1_Init(Base *owner, OTuple strategy, Object value);
   void L1_Change(OTuple new_strategy, Object new_value);
   void L1_Erase();
+};
+
+struct ArbitraryChoice : public Base {
+  void L1_Init(Base * owner, LL ln_likelihood, string comment);
+  void L1_Erase();
+  Base::Type GetBaseType() const { return Base::CHOICE;}
+  Record GetRecordForDisplay() const;
+
+  Base * owner_;
+  string comment_;
+  LL ln_likelihood_;
 };
 
 // Chooser is an abstract base class for a choosing strategy.
@@ -212,6 +222,7 @@ struct ChooserSet : public Base {
   static ChooserSet *functions_;
   static ChooserSet *identified_flakes_;
   static ChooserSet *universal_;
+  static ChooserSet *misc_;
 };
 
 void InitChooserSets();
