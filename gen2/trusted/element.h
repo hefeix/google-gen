@@ -472,7 +472,10 @@ struct StaticOn : public Statement {
   void L1_Init();
   void L1_Erase();
   // ---------- N1 notifiers ----------  
-  void N1_ObjectChanged(int which){CHECK(NumDynamicChildren() == 0);}
+  void N1_ObjectChanged(int which){
+    StaticElement::N1_ObjectChanged(which);
+    CHECK(NumDynamicChildren() == 0);
+  }
 
   // ---------- data ----------  
 };
@@ -527,7 +530,10 @@ struct StaticRepeat : public Statement {
   void L1_Init();
 
   // ---------- N1 notifiers ----------  
-  void N1_ObjectChanged(int which){CHECK(NumDynamicChildren() == 0);}
+  void N1_ObjectChanged(int which){
+    StaticElement::N1_ObjectChanged(which);
+    CHECK(NumDynamicChildren() == 0);
+  }
 };
 
 struct DynamicRepeat : public DynamicStatement {
@@ -618,7 +624,10 @@ struct StaticLet : public Statement {
   // ---------- L1 functions ----------  
   void L1_Init();
   // ---------- N1 notifiers ----------  
-  void N1_ObjectChanged(int which){CHECK(NumDynamicChildren() == 0);}
+  void N1_ObjectChanged(int which){
+    StaticElement::N1_ObjectChanged(which);
+    CHECK(NumDynamicChildren() == 0);
+  }
   // ---------- data ----------  
 };
 struct DynamicLet : public DynamicStatement {

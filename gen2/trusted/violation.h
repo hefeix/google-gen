@@ -187,8 +187,10 @@ struct OwnedViolationWithData : public Violation {
   
   static OwnedViolationWithData * 
   FindOwnedViolationWithData(Owner *owner, DataType data) {
-    return dynamic_cast<OwnedViolationWithData *> 
-      (*((*owner->GetViolationMap(VType)) % data));
+    map<DataType, Violation *> * m = owner->GetViolationMap(VType);
+    Violation ** look = (*m) % data;
+    if (!look) return NULL;
+    return dynamic_cast<OwnedViolationWithData *>(*look); 
   }
   static void L1_CreateIfAbsent(Owner *owner, DataType data) {
     if (!FindOwnedViolationWithData(owner, data)) 
