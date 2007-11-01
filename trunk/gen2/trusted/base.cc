@@ -21,7 +21,7 @@
 #include "webserver.h"
 
 const bool NAME_ALL = false;
-const bool TRACK_CURRENT_COUNT = false;
+const bool TRACK_CURRENT_COUNT = true;
 
 #undef ITEM
 #define ITEM(x) #x

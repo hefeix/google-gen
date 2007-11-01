@@ -38,6 +38,8 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
     return_value = (value.GetType() == Object::BOOLEAN); break;
   case QUADRATIC_UINT:
     return_value = (value.GetType() == Object::INTEGER && Integer(value).Data() >= 0); break;
+  case QUADRATIC_BITSEQ:
+    return_value = (value.GetType() == Object::OBITSEQ); break;
   case NEW_FLAKE:
     return_value = (value.GetType() == Object::FLAKE); break;
   case GENERIC: {
@@ -138,6 +140,10 @@ LL GlobalChooser::GetIndependentChoiceLnLikelihood(OTuple strategy,
     int i = Integer(value).Data();
     CHECK(i >= 0);
     return uintQuadraticLnProb(i);
+  }
+  case QUADRATIC_BITSEQ : {
+    int num_bits = OBitSeq(value).Data().NumBits();
+    return uintQuadraticLnProb(num_bits) - num_bits * Log(2);
   }
   default:
     CHECK(false);
@@ -437,6 +443,7 @@ void InitChooserSets() {
   u->L1_Insert(OTuple(StringToObject("{set, identified_flakes, universal}")));
   u->L1_Insert(OTuple(StringToObject("{generic, {new_flake} }")));
   u->L1_Insert(OTuple(StringToObject("{generic, {quadratic_uint} }")));  
+  u->L1_Insert(OTuple(StringToObject("{generic, {quadratic_bitseq} }")));  
 }
 
 void SetChooser::L1_Init(OTuple strategy) {

@@ -70,6 +70,7 @@ void Violation::L1_Init() {
   // add to the model's set of violations
   L1_InsertIntoGlobalMap();
   counts_[GetViolationType()]++;
+  L1_AutomaticallyName();
 }
 void Violation::L1_InsertIntoGlobalMap(){
   CL.InsertIntoMapOfSets(&M.violations_by_type_, GetViolationType(), this);

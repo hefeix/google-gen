@@ -212,7 +212,8 @@ void StaticElement::L1_CreateChoices() {
   L1_ClearChoices();
   Object function_strategy;
   function_strategy = ::StringToObject("{set functions}");
-  CL.PushBack(&choices_, (Base *)New<Choice>(this, function_strategy, FunctionKeyword()));
+  CL.PushBack(&choices_, 
+	      (Base *)New<Choice>(this, function_strategy, FunctionKeyword()));
   
   set<Variable> variables_so_far = variables_;
 
@@ -250,6 +251,7 @@ void StaticElement::L1_RecursivelyComputeSetVariables() {
   VariableSet new_variables = ComputeVariables();
   if (new_variables == variables_) return;
   CL.ChangeValue(&variables_, new_variables);
+  L1_CreateChoices();
   for (int i=0; i<NumChildren(); i++) {
     StaticElement *child = GetChild(i);
     if (child) child->L1_RecursivelyComputeSetVariables();
@@ -650,8 +652,8 @@ string Expression::ToString() const {
 }
 
 void StaticConstant::N1_ObjectChanged(int which) {
-  CHECK(which == OBJECT);
   StaticElement::N1_ObjectChanged(which);
+  CHECK(which == OBJECT);
   forall(run, dynamic_children_->children_) {
     dynamic_cast<DynamicExpression *>(run->second)->L1_CheckSetValueViolation();
   }

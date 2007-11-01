@@ -22,7 +22,7 @@
 #include "objects.h"
 #include "record.h"
 
-//#define TRACK_ERASED
+// #define TRACK_ERASED
 
 class OwnedPosting;
 
