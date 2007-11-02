@@ -32,9 +32,60 @@ inline int NumOnes(uint32 x){
   return x;
 }
 inline int NumTrailingZeros(uint32 x) {
-  CHECK(x!=0);
+  if (x==0) return 32;
   return NumOnes(x ^ (x-1)) - 1;
 }
+inline int NumOnes(uint64 x){
+  x = ( (x & 0xAAAAAAAAAAAAAAAAull) >> 1)  + (x & 0x5555555555555555ull);
+  x = ( (x & 0xCCCCCCCCCCCCCCCCull) >> 2)  + (x & 0x3333333333333333ull);
+  x = ( (x & 0xF0F0F0F0F0F0F0F0ull) >> 4)  + (x & 0x0F0F0F0F0F0F0F0Full);
+  x = ( (x & 0xFF00FF00FF00FF00ull) >> 8)  + (x & 0x00FF00FF00FF00FFull);
+  x = ( (x & 0xFFFF0000FFFF0000ull) >> 16) + (x & 0x0000FFFF0000FFFFull);  
+  x = ( (x & 0xFFFFFFFF00000000ull) >> 32) + (x & 0x00000000FFFFFFFFull);  
+  return x;
+}
+inline int NumTrailingZeros(uint64 x) {
+  if (x==0) return 64;
+  return NumOnes(x ^ (x-1)) - 1;
+}
+
+struct DoubleBits{
+  uint64 mantissa_:52;
+  uint32 exponent_:11;
+  uint32 sign_:1;
+
+  DoubleBits(double x) {
+    memcpy(this, &x, sizeof(double));
+  };
+  DoubleBits(uint64 m, int32 e, int s)
+    :mantissa_(m), exponent_(e+1023), sign_(s) {}
+  double ToDouble(){
+    double ret;
+    memcpy(&ret, this, sizeof(double));
+    return ret;
+  }
+
+  string ToString() const {
+    ostringstream ostr;
+    ostr << (IsNegative()?'-':'+') << "(1+(" << MantissaBits() 
+	 << "/2^" << NumMantissaBits() << ")) * 2^" << Exponent();
+    return ostr.str();
+  }
+
+  bool IsNegative() const {return sign_;}
+  int Exponent() const {return exponent_-1023;}
+  uint64 Mantissa() const { return mantissa_;}
+
+  int NumMantissaBits() const { 
+    return 52 - NumTrailingZeros(mantissa_ + (1ll << 52) );
+  }
+  uint64 MantissaBits() const {
+    return Mantissa() >> (52-NumMantissaBits());    
+  }
+};
+
+
+
 struct BitSeq{
   BitSeq() { data_ = 0x80000000; }
   BitSeq(int num_bits, uint32 bits) {

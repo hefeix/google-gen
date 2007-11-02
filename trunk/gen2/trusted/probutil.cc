@@ -76,3 +76,34 @@ LL BinaryChoiceLnLikelihood(uint num_total, uint num_positive){
 }
 
 
+LL DoubleLnLikelihood(double d) {
+  DoubleBits db(d);
+  int num_mantissa_bits = db.NumMantissaBits();
+  int exponent = db.Exponent();
+
+  LL ret = 0;
+  ret += -Log(2) * 2; // the sign bits
+  ret += -Log(2) * num_mantissa_bits;
+  ret += uintQuadraticLnProb(num_mantissa_bits);
+  ret += uintQuadraticLnProb((exponent >= 0)?exponent:(-1-exponent));
+  return ret;
+}
+double RandomDouble() {
+  int sign = rand() % 2;
+  int exponent = RandomUintQuadratic(1022);
+  if (rand() % 2) exponent = -1 - exponent;
+  int num_mantissa_bits = RandomUintQuadratic(52);
+  uint64 mantissa_bits = (RandomUInt64() << (52-num_mantissa_bits)) 
+    & 0x000FFFFFFFFFFFFFull ;  
+  DoubleBits db(mantissa_bits, exponent, sign);
+  return db.ToDouble();
+}
+
+uint32 RandomUintQuadratic(int max_return_value) {
+  while (1) {
+    uint ret_val = uint (1.0 / RandomFraction()) - 1;
+    if ((max_return_value != -1)
+	&& (ret_val > (uint) max_return_value)) continue;
+    return ret_val;
+  }
+}
