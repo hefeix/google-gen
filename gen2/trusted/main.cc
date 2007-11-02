@@ -58,6 +58,5 @@ int main() {
   //ObjectsShell();
   // Blackboard::Shell();
   Shell();
-
   DestroyConstants();
 }

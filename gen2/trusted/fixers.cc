@@ -210,6 +210,24 @@ bool StaticExecutor::FixExtraOnMatch(ExtraOnMatchViolation *violation) {
 
 bool StaticExecutor::FixValue(ValueViolation *violation){
   VLOG(2) << "Fixing value violation " << endl;
+  if (violation->GetOwner()->ComputeValue() == NULL) {
+    if (violation->GetOwner()->GetFunction()==Element::CHOOSE) {
+      DynamicChoose *dc = dynamic_cast<DynamicChoose*>(violation->GetOwner());
+      OTuple strategy = OTuple::ConvertOrNull
+	(dc->GetChildValue(StaticChoose::STRATEGY));
+      VLOG(0) << "Making random choice for strategy " << strategy << endl;
+      if (strategy != NULL) {
+	Object choice = GC.RandomChoice(strategy);
+	VLOG(0) << "Picked a choice " << choice << endl;
+	dc->L1_TryMakeChoice(strategy, choice);
+      }
+    }     
+  }
+  if (violation->GetOwner()->ComputeValue() == NULL) {
+    VLOG(0) 
+      << "Can't fix value violation because computed value is NULL" << endl;
+    return false;
+  }
   violation->GetOwner()->ComputeSetValue();
   return true;
 }
@@ -219,12 +237,12 @@ bool StaticExecutor::FixIf(IfViolation *violation){
   StaticElement * s_on_true = s_if->GetChild(StaticIf::ON_TRUE);
   StaticElement * s_on_false = s_if->GetChild(StaticIf::ON_FALSE);
   if (!s_on_true || !s_on_false) {
-    VLOG(1) << "static if is missing children";
+    VLOG(0) << "static if is missing children";
     return false;
   }
   DynamicExpression * expr = d_if->GetConditionExpression();
   if (!expr) {
-    VLOG(1) << "wtf, this violation shouldn't exist" << endl;
+    VLOG(0) << "wtf, this violation shouldn't exist" << endl;
     return false;
   }
   bool val = expr->value_ != Boolean::Make(false);

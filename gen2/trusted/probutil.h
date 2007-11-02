@@ -61,6 +61,9 @@ LL LnCombinations(uint n, uint k);
 // Pr(n) = 1/((n+1)(n+2))
 LL uintQuadraticLnProb(uint n);
 
+// Draws from the above distribution.
+uint32 RandomUintQuadratic(int max_return_value = -1);
+
 // Cost of encoding a number in our funky binary representation.  
 // Returns uintQuadraticLnProb(length)-length*log(2)
 LL BitSeqLnLikelihood(const BitSeq & n);
@@ -70,5 +73,8 @@ LL BinaryChoiceLnLikelihood(uint num_total, uint num_positive);
 inline LL BinaryChoiceLnLikelihood(pair<int, int> p){
   return BinaryChoiceLnLikelihood(p.first, p.second);
 }
+
+LL DoubleLnLikelihood(double d);
+double RandomDouble();
 
 #endif

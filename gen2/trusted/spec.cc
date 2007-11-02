@@ -48,7 +48,6 @@ void Requirement::L1_Init(OTuple tuple) {
 }
 void Requirement::L1_Erase() {
   subscription_->L1_Erase();
-  L1_EraseOwnedViolations(this);
   CL.RemoveFromSet(&M.requirements_, this);  
   Base::L1_Erase();
 }

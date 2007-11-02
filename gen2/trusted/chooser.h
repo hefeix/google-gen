@@ -92,15 +92,17 @@ struct GlobalChooser {
   CLASS_ENUM_DECLARE(GlobalChooser, StrategyType);
 
   // const functions
-  static bool ChoiceIsPossible(OTuple strategy, Object v);
-  static Object RandomChoice(OTuple strategy);
+  bool ChoiceIsPossible(OTuple strategy, Object v) const;
+  Object RandomChoice(OTuple strategy) const;
+  StrategyType GetStrategyType(OTuple strategy) const;
+  bool IsIndependent(OTuple strategy) const;
 
-  static StrategyType GetStrategyType(OTuple strategy);
-  static bool IsIndependent(OTuple strategy);
   // For independent strategies, gives you the likelihood of a choice. 
-  static LL GetIndependentChoiceLnLikelihood(OTuple strategy,
-					     Object value);
+  LL GetIndependentChoiceLnLikelihood(OTuple strategy,
+				      Object value) const;
   
+  Chooser * GetChooser(OTuple strategy) const;
+
   void L1_Change(Choice *c, bool adding);
   void L1_Add(Choice *c){ L1_Change(c, true); }
   void L1_Remove(Choice *c){L1_Change(c, false); }
@@ -108,23 +110,24 @@ struct GlobalChooser {
   // For non-independent strategies, gives you a pointer to a chooser that
   // that needs to be called to make your choice. 
   Chooser * L1_GetCreateChooser(OTuple strategy);
+
   //  update the ln likelihood of this object and of the model.
 
   void L1_AddToLnLikelihood(LL delta); 
   
   GlobalChooser();
 
-  LL ln_likelihood_; // for choices not covered in choosers.
-  
   // ----- This stuff is for metachoices. 
   // suggests a strategy for a metachoice.
   static OTuple SuggestStrategy(Choice *c);
   static OTuple SuggestStrategy(OTuple meta_strategy, Object value);
   void L1_AddMetaChoice (Choice *c, OTuple strategy);
   void L1_RemoveMetaChoice(Choice *c);
+
   // maps from the metachoice to the choice of strategy and the 
   // choice from that strategy.
   hash_map<Choice *, pair<Choice *, Choice *> > meta_choices_;
+  LL ln_likelihood_; // for choices not covered in choosers.
 };
 
 extern GlobalChooser GC;

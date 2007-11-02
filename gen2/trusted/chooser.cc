@@ -27,77 +27,62 @@
 
 CLASS_ENUM_DEFINE(GlobalChooser, StrategyType);
 
-Object GlobalChooser::RandomChoice(OTuple strategy) {
+Object GlobalChooser::RandomChoice(OTuple strategy) const {
 
   StrategyType stype = GetStrategyType(strategy);
   Object value; value = NULL;
 
   switch (stype) {
-  case INDEPENDENT_BOOL:
+  case INDEPENDENT_BOOL: {
     double param = Real(strategy.Data()[1]).Data();
-    if (RandomFraction() < param) return TRUE;
-    return FALSE;
-  case QUADRATIC_UINT:
-    int val = int (1.0 / RandomFraction()) - 1;
-    return Integer::Make(val);
-  case QUADRATIC_BITSEQ:
-    int length = min( int (1.0 / RandomFraction()) - 1, 31 );
+    if (RandomFraction() < param) return TRUE; else return FALSE;
+  }
+  case QUADRATIC_UINT: {
+    return Integer::Make(RandomUintQuadratic());
+  }
+  case QUADRATIC_BITSEQ: {
+    int length = RandomUintQuadratic(31);
     int bits = RandomUInt32() % (1 << length);
     return OBitSeq::Make(BitSeq(length, bits));
-  case NEW_FLAKE:
-    string s;
-    while (1) {
-      s += ('A' + (rand() % 26));
-      if (
-    }
-    return_value = (value.GetType() == Object::FLAKE); break;
-  case GENERIC: {
-    // Check that its parent can generate its choice
-    if (strategy.Data().size() <= 1) {
-      cerr << "Error? generic with no parent " << strategy << endl;
-      return_value = false;
-    } else {
-      OTuple p_strategy = (strategy.Data())[1];
-      return_value = ChoiceIsPossible(p_strategy, value);
-    }
   }
-    break;
-    // Run through all the meta's strategies and check it
-  case META: {
-    return_value = (SuggestStrategy(strategy, value) != NULL);
-    // TODO: make this not crash if the strategy is malformed
-    // FIX THIS NO LONGER LISTING STRATEGIES
-    OTuple strategy_strategy = OTuple(strategy.Data()[1]);
-    StrategyType stype = GetStrategyType(strategy_strategy);
-    if (stype != SET) {
-      return_value = false;
-      break;
-    }
-    ChooserSet * cs = ChooserSet::FromStrategy(strategy_strategy);
-    forall (run, cs->set_) {
-      if (ChoiceIsPossible(*run, value)) {
-	return_value = true;
-	break;
+  // THIS IS TERRIBLE, FIX THIS
+  case NEW_FLAKE: {
+    string s;
+    for (int i=0; i<6; i++) s += ('A' + (rand() % 26));
+    return Flake::Make(s); 
+  }
+  case GENERIC: {
+    Chooser * ch = GetChooser(strategy);
+    if (ch) {
+      int64 ch_num = RandomUInt64() % (ch->total_choices_ + 1);
+      int64 total = 0;
+      forall (run, ch->choices_) {
+	total += run->second.size();
+	if (total > ch_num) return run->first;
       }
     }
+
+    // You need to pick a new object from the parent instead
+    return RandomChoice(strategy.Data()[1]);
   }
-    break;
+  case META: {
+    OTuple strategy_strategy = OTuple(strategy.Data()[1]);
+    OTuple random_strategy = RandomChoice(strategy_strategy);
+    return RandomChoice(random_strategy);
+  }
   case SET: {
-    ChooserSet *cs = ChooserSet::FromStrategy(strategy);
-    if (!cs) return_value = false;
-    return_value = (cs->set_ % value);
+    ChooserSet * cs = ChooserSet::FromStrategy(strategy);
+    RandomElement(return_val, cs->set_);
+    return *return_val;
   }
-    break;
   default:
-    return_value = false;
+    return NULL;
   }
-  VLOG(3) << strategy.ToString() << " " << value.ToString() << " " << (return_value ? "true" : "false") << endl;
-  return return_value;
+  return NULL;
 }
 
-
 bool GlobalChooser::ChoiceIsPossible(OTuple strategy, 
-				     Object value) {
+				     Object value) const {
 
   StrategyType stype = GetStrategyType(strategy);
 
@@ -155,7 +140,8 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
   return return_value;
 }
 
-GlobalChooser::StrategyType GlobalChooser::GetStrategyType(OTuple strategy) {
+GlobalChooser::StrategyType 
+GlobalChooser::GetStrategyType(OTuple strategy) const {
   // TODO: make this not crash if the strategy is malformed
   if (strategy == NULL) return NO_STRATEGY;
   if (strategy.Data().size() == 0) return NO_STRATEGY;
@@ -165,7 +151,7 @@ GlobalChooser::StrategyType GlobalChooser::GetStrategyType(OTuple strategy) {
   return return_value;
 }
 
-bool GlobalChooser::IsIndependent(OTuple strategy) { 
+bool GlobalChooser::IsIndependent(OTuple strategy) const { 
   return (GetStrategyType(strategy) < NUM_INDEPENDENT_STRATEGIES);
 }
 
@@ -196,8 +182,8 @@ void GlobalChooser::L1_Change(Choice *c, bool adding) {
   if (chooser->IsEmpty()) chooser->L1_Erase();
 }
 
-LL GlobalChooser::GetIndependentChoiceLnLikelihood(OTuple strategy, 
-						   Object value) {
+LL GlobalChooser::GetIndependentChoiceLnLikelihood
+(OTuple strategy, Object value) const {
   StrategyType st = GetStrategyType(strategy);
 
   switch(st) {
@@ -219,6 +205,10 @@ LL GlobalChooser::GetIndependentChoiceLnLikelihood(OTuple strategy,
     CHECK(false);
   };
   return LL(0);
+}
+
+Chooser * GlobalChooser::GetChooser(OTuple strategy) const {
+  return dynamic_cast<Chooser *>(N.Lookup(Base::CHOOSER, strategy));
 }
 
 Chooser * GlobalChooser::L1_GetCreateChooser(OTuple strategy) {
@@ -261,7 +251,7 @@ void Choice::L1_Init(Base *owner, OTuple strategy, Object value) {
 }
 
 void Choice::L1_Change(OTuple new_strategy, Object new_value){
-  if (!GlobalChooser::ChoiceIsPossible(new_strategy, new_value))
+  if (!GC.ChoiceIsPossible(new_strategy, new_value))
     new_value = NULL;
   GC.L1_Remove(this);
   CL.ChangeValue(&strategy_, new_strategy);
@@ -631,13 +621,13 @@ OTuple GlobalChooser::SuggestStrategy(Choice *c){
 
 OTuple GlobalChooser::SuggestStrategy(OTuple meta_strategy, Object value) {
   CHECK(meta_strategy.Data().size() > 1);
-  CHECK(GetStrategyType(meta_strategy) == META);
+  CHECK(GC.GetStrategyType(meta_strategy) == META);
   OTuple strategy_strategy = meta_strategy.Data()[1];
-  if (GetStrategyType(strategy_strategy) == SET) {
+  if (GC.GetStrategyType(strategy_strategy) == SET) {
     ChooserSet *cs = ChooserSet::FromStrategy(strategy_strategy);
     CHECK(cs);
     forall(run, cs->set_) {
-      if (ChoiceIsPossible(*run, value)) return *run;
+      if (GC.ChoiceIsPossible(*run, value)) return *run;
     }
     return NULL;
   }

@@ -278,6 +278,8 @@ vector<int> StringToIntVector(const string & s);
 
 // random 32-bit integer
 uint32 RandomUInt32();
+// random 64-bit integer
+uint64 RandomUInt64();
 // between 0 and 1, non-inclusive
 double RandomFraction();
 

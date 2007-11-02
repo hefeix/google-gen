@@ -19,8 +19,9 @@
 #include "base.h"
 #include "changelist.h"
 #include "webserver.h"
+#include "violation.h"
 
-const bool NAME_ALL = false;
+const bool NAME_ALL = true;
 const bool TRACK_CURRENT_COUNT = true;
 
 #undef ITEM
@@ -59,6 +60,7 @@ void Base::L1_AutomaticallyName() {
 }
 
 void Base::L1_Erase() {
+  L1_EraseOwnedViolations(this);  
   if (name_ != NULL) CL.RemoveFromMap(&N.index_[GetBaseType()], name_);
   #ifdef TRACK_ERASED
   CL.ChangeValue(&erased_, true);

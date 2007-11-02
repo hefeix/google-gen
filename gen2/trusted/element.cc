@@ -44,7 +44,6 @@ void Element::SetTime(OTime new_time) {
 
 void Element::L1_Erase() {
   CHECK(!parent_); // We always unlink elements before we erase.
-  L1_EraseOwnedViolations(this);
   Base::L1_Erase();
 }
 
