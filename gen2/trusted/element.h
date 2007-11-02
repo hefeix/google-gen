@@ -865,6 +865,8 @@ struct DynamicChoose : public DynamicExpression {
   Object ComputeValue() const;
   
   // ---------- L1 functions ----------  
+  void L1_Init(StaticElement * static_parent, OMap binding);
+  void L1_Erase();
   bool L1_TryMakeChoice(OTuple strategy, Object value);
   bool L1_TryMakeCorrectChoice();
 

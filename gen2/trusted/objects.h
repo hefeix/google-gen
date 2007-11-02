@@ -237,6 +237,12 @@ template <Object::Type OT, class D>  class SpecificObject : public Object {
   uint size() const { return Data().size(); }
 
   // constructors at bottom to prevent emacs from @#($*@ing up the indentation
+  static SpecificObject ConvertOrNull(const Object & o) {
+    if (o.GetType() == OT)
+      return SpecificObject(o);
+    return NULL;
+  }
+
   SpecificObject() : Object() {}
     
     SpecificObject(const Object & o) : Object(o) {      

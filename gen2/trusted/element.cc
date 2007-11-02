@@ -711,13 +711,27 @@ Object DynamicSum::ComputeValue() const {
   return Object();
 }
 
+void DynamicChoose::L1_Init(StaticElement * static_parent, OMap binding) {
+  choice_ = NULL;
+  DynamicExpression::L1_Init(static_parent, binding);
+}
+
+void DynamicChoose::L1_Erase() {
+  if (choice_) choice_->L1_Erase();
+  DynamicExpression::L1_Erase();
+}
+
 bool DynamicChoose::L1_TryMakeChoice(OTuple strategy, Object value) {
-  choice_->L1_Change(strategy, value);
+  if (!choice_)
+    choice_ = New<Choice>(this, strategy, value);
+  else choice_->L1_Change(strategy, value);
+
   N1_ComputedValueChanged();
   return (value == choice_->value_);
 }
 bool DynamicChoose::L1_TryMakeCorrectChoice() {
-  return L1_TryMakeChoice(GetChildValue(StaticChoose::STRATEGY), value_);
+  return L1_TryMakeChoice
+    (OTuple::ConvertOrNull(GetChildValue(StaticChoose::STRATEGY)), value_);
 }
 
 Object DynamicChoose::ComputeValue() const { 
@@ -871,6 +885,9 @@ Record StaticElement::GetRecordForDisplay() const {
     ret["objects"] += ObjectToString(i) + ": " + GetObject(i).ToString();
   }
   ret["dynamic_children"] = dynamic_children_->ChildListings(5);
+  forall(run, choices_) {
+    ret["choices"] += (*run)->ShortDescription() + "<br>\n";
+  }
   return ret;
 }
 Record DynamicElement::GetRecordForDisplay() const { 

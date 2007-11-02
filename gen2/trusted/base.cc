@@ -103,8 +103,9 @@ string Base::GetLink(string anchortext) const {
   return HTMLLink(GetURL(), anchortext);
 }
 string Base::ShortDescription() const { 
-  string ret = GetLink(TypeToString(GetBaseType()));
-  if (GetName() != NULL) ret += " " + GetName().ToString() ;
+  string link_text = TypeToString(GetBaseType());
+  if (GetName() != NULL) link_text += " " + GetName().ToString() ;
+  string ret = GetLink(link_text);
   ret += " " + TextIdentifier();
   return ret;
 }
