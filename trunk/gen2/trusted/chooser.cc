@@ -27,6 +27,75 @@
 
 CLASS_ENUM_DEFINE(GlobalChooser, StrategyType);
 
+Object GlobalChooser::RandomChoice(OTuple strategy) {
+
+  StrategyType stype = GetStrategyType(strategy);
+  Object value; value = NULL;
+
+  switch (stype) {
+  case INDEPENDENT_BOOL:
+    double param = Real(strategy.Data()[1]).Data();
+    if (RandomFraction() < param) return TRUE;
+    return FALSE;
+  case QUADRATIC_UINT:
+    int val = int (1.0 / RandomFraction()) - 1;
+    return Integer::Make(val);
+  case QUADRATIC_BITSEQ:
+    int length = min( int (1.0 / RandomFraction()) - 1, 31 );
+    int bits = RandomUInt32() % (1 << length);
+    return OBitSeq::Make(BitSeq(length, bits));
+  case NEW_FLAKE:
+    string s;
+    while (1) {
+      s += ('A' + (rand() % 26));
+      if (
+    }
+    return_value = (value.GetType() == Object::FLAKE); break;
+  case GENERIC: {
+    // Check that its parent can generate its choice
+    if (strategy.Data().size() <= 1) {
+      cerr << "Error? generic with no parent " << strategy << endl;
+      return_value = false;
+    } else {
+      OTuple p_strategy = (strategy.Data())[1];
+      return_value = ChoiceIsPossible(p_strategy, value);
+    }
+  }
+    break;
+    // Run through all the meta's strategies and check it
+  case META: {
+    return_value = (SuggestStrategy(strategy, value) != NULL);
+    // TODO: make this not crash if the strategy is malformed
+    // FIX THIS NO LONGER LISTING STRATEGIES
+    OTuple strategy_strategy = OTuple(strategy.Data()[1]);
+    StrategyType stype = GetStrategyType(strategy_strategy);
+    if (stype != SET) {
+      return_value = false;
+      break;
+    }
+    ChooserSet * cs = ChooserSet::FromStrategy(strategy_strategy);
+    forall (run, cs->set_) {
+      if (ChoiceIsPossible(*run, value)) {
+	return_value = true;
+	break;
+      }
+    }
+  }
+    break;
+  case SET: {
+    ChooserSet *cs = ChooserSet::FromStrategy(strategy);
+    if (!cs) return_value = false;
+    return_value = (cs->set_ % value);
+  }
+    break;
+  default:
+    return_value = false;
+  }
+  VLOG(3) << strategy.ToString() << " " << value.ToString() << " " << (return_value ? "true" : "false") << endl;
+  return return_value;
+}
+
+
 bool GlobalChooser::ChoiceIsPossible(OTuple strategy, 
 				     Object value) {
 
@@ -88,6 +157,7 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
 
 GlobalChooser::StrategyType GlobalChooser::GetStrategyType(OTuple strategy) {
   // TODO: make this not crash if the strategy is malformed
+  if (strategy == NULL) return NO_STRATEGY;
   if (strategy.Data().size() == 0) return NO_STRATEGY;
   GlobalChooser::StrategyType return_value = 
     StringToStrategyType(Upcase(Keyword(strategy.Data()[0]).Data()));
@@ -434,6 +504,16 @@ void InitChooserSets() {
   ChooserSet::misc_->L1_Insert(Keyword::Make("variable"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("tuple"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("pattern"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("set"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("booleans"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("functions"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("misc"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("generic"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("identified_flakes"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("quadratic_uint"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("quadratic_bitseq"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("universal"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("new_flake"));
 
   ChooserSet * u = 
     ChooserSet::universal_ = New<ChooserSet>(Keyword::Make("universal"));

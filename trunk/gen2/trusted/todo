@@ -2,7 +2,7 @@
 
 immediately:
 
-	Chooser display sucks. 
+	make sure you can't choose an identified flake
 
 Now:
 
@@ -10,6 +10,8 @@ Track complexity costs.
 Port previous learning algorithms.
 
 L8r:
+
+what if a bit sequence has length >31?  
 
 Give the executor/fixer options (maybe a strategy) so that it can have variations in strategy.
 Write a random executor.

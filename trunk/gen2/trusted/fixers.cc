@@ -75,11 +75,13 @@ bool StaticExecutor::Execute() {
     if (success) {
       VLOG(2) << "Great Success" << endl;
     } else {
-      VLOG(1) << "Devastating Failure" << endl;
+      VLOG(0) << "Devastating Failure" << endl
+	      << "Couldn't fix violation " << v->GetName().ToString()
+	      << endl;      
       break;
     }
     M.SetBatchMode(false);
-  }
+  } 
   return true;
 }
 

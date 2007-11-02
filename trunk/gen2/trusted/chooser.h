@@ -93,6 +93,8 @@ struct GlobalChooser {
 
   // const functions
   static bool ChoiceIsPossible(OTuple strategy, Object v);
+  static Object RandomChoice(OTuple strategy);
+
   static StrategyType GetStrategyType(OTuple strategy);
   static bool IsIndependent(OTuple strategy);
   // For independent strategies, gives you the likelihood of a choice. 
@@ -150,6 +152,9 @@ struct ArbitraryChoice : public Base {
   void L1_Erase();
   Base::Type GetBaseType() const { return Base::CHOICE;}
   Record GetRecordForDisplay() const;
+  string TextIdentifier() const {
+    return "ARBITRARY " + comment_ + " " + ln_likelihood_.ToString();
+  }
 
   Base * owner_;
   string comment_;
