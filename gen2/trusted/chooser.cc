@@ -33,9 +33,14 @@ Object GlobalChooser::RandomChoice(OTuple strategy) const {
   Object value; value = NULL;
 
   switch (stype) {
-  case INDEPENDENT_BOOL: {
+  case INDEPENDENT_BOOL: {    
     double param = Real(strategy.Data()[1]).Data();
-    if (RandomFraction() < param) return TRUE; else return FALSE;
+    Object ret_val;
+    double rf = RandomFraction();
+    if (rf < param) ret_val = TRUE; else ret_val = FALSE;
+    VLOG(0) << "Picking an independent bool parameter="
+	    << param << " rf=" << rf << " choice=" << ret_val << endl;
+    return ret_val;
   }
   case QUADRATIC_UINT: {
     return Integer::Make(RandomUintQuadratic());
@@ -44,6 +49,9 @@ Object GlobalChooser::RandomChoice(OTuple strategy) const {
     int length = RandomUintQuadratic(31);
     int bits = RandomUInt32() % (1 << length);
     return OBitSeq::Make(BitSeq(length, bits));
+  }
+  case STANDARD_REAL: {
+    return Real::Make(RandomDouble());
   }
   // THIS IS TERRIBLE, FIX THIS
   case NEW_FLAKE: {
@@ -94,6 +102,8 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
     return_value = (value.GetType() == Object::INTEGER && Integer(value).Data() >= 0); break;
   case QUADRATIC_BITSEQ:
     return_value = (value.GetType() == Object::OBITSEQ); break;
+  case STANDARD_REAL:
+    return_value = (value.GetType() == Object::REAL); break;
   case NEW_FLAKE:
     return_value = (value.GetType() == Object::FLAKE); break;
   case GENERIC: {
@@ -200,6 +210,9 @@ LL GlobalChooser::GetIndependentChoiceLnLikelihood
   case QUADRATIC_BITSEQ : {
     int num_bits = OBitSeq(value).Data().NumBits();
     return uintQuadraticLnProb(num_bits) - num_bits * Log(2);
+  }
+  case STANDARD_REAL: {
+    return DoubleLnLikelihood(Real(value).Data());
   }
   default:
     CHECK(false);
@@ -500,8 +513,10 @@ void InitChooserSets() {
   ChooserSet::misc_->L1_Insert(Keyword::Make("misc"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("generic"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("identified_flakes"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("independent_bool"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("quadratic_uint"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("quadratic_bitseq"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("standard_real"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("universal"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("new_flake"));
 
@@ -511,9 +526,13 @@ void InitChooserSets() {
   u->L1_Insert(OTuple(StringToObject("{set, functions, universal}")));
   u->L1_Insert(OTuple(StringToObject("{set, misc, universal}")));
   u->L1_Insert(OTuple(StringToObject("{set, identified_flakes, universal}")));
-  u->L1_Insert(OTuple(StringToObject("{generic, {new_flake} }")));
-  u->L1_Insert(OTuple(StringToObject("{generic, {quadratic_uint} }")));  
-  u->L1_Insert(OTuple(StringToObject("{generic, {quadratic_bitseq} }")));  
+  u->L1_Insert(OTuple(StringToObject("{generic, {new_flake}, universal }")));
+  u->L1_Insert(OTuple(StringToObject
+		      ("{generic, {quadratic_uint}, universal }")));  
+  u->L1_Insert(OTuple(StringToObject
+		      ("{generic, {quadratic_bitseq}, universal }")));  
+  u->L1_Insert(OTuple(StringToObject
+		      ("{generic, {standard_real}, universal }")));
 }
 
 void SetChooser::L1_Init(OTuple strategy) {

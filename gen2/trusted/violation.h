@@ -79,25 +79,29 @@ struct Violation : public Base {
   void N1_ComputedTimeChanged();
 
   // ---------- data ----------  
-  static map<void *, set<Violation *> > owned_violations_;
+  static map<Base *, set<Violation *> > owned_violations_;
   OTime time_;
   static int counts_[100];
 };
 
 
 // --------- const functions ----------
+
+// Find all violations owned by an owner
+set<Violation *> FindViolations(Base *owner);
+
 // Find all OwnedViolations of this type with this owner. 
-set<Violation *> FindViolations(void *owner, Violation::Type type);
+set<Violation *> FindViolations(Base *owner, Violation::Type type);
 
 // returns a single violation, or null. Checks that there are at most one.
 // TODO, this is inefficient in that it creates a set. 
-Violation * FindViolation(void *owner, Violation::Type type);
+Violation * FindViolation(Base *owner, Violation::Type type);
 
 
 // ---------- L1 functions ----------
 
 // Delete all OwnedViolations with this owner
-void L1_EraseOwnedViolations(void *owner);
+void L1_EraseOwnedViolations(Base *owner);
 
 
 // This is a violation that is owned by a c object called owner_.  It indexes
@@ -126,12 +130,13 @@ struct OwnedViolation : public Violation {
   // ---------- L1 functions ----------
   void L1_Init(Owner *owner) {
     owner_ = owner;
+    CHECK(!owner_->IsErased());
     Violation::L1_Init();
-    CL.InsertIntoMapOfSets(&Violation::owned_violations_, (void *)owner_, 
+    CL.InsertIntoMapOfSets(&Violation::owned_violations_, (Base *)owner_, 
 			   (Violation *)this);
   }
   void L1_Erase() {
-    CL.RemoveFromMapOfSets(&Violation::owned_violations_, (void *)owner_, 
+    CL.RemoveFromMapOfSets(&Violation::owned_violations_, (Base *)owner_, 
 			   (Violation *)this);
     Violation::L1_Erase();
   }

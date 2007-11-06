@@ -26,11 +26,17 @@
 CLASS_ENUM_DEFINE(Violation, Type);
 
 
-map<void *, set<Violation *> > Violation::owned_violations_;
+map<Base *, set<Violation *> > Violation::owned_violations_;
 int Violation::counts_[100];
 
+set<Violation *> FindViolations(Base *owner) {
+  set<Violation *> * s = Violation::owned_violations_ % owner;
+  if (!s) return set<Violation *>();
+  return *s;
+}
+
 // Find all OwnedViolations of this type with this owner. 
-set<Violation *> FindViolations(void *owner, Violation::Type type) {
+set<Violation *> FindViolations(Base *owner, Violation::Type type) {
   set<Violation *> ret;
   set<Violation *> * s = Violation::owned_violations_ % owner;
   if (!s) return ret;
@@ -40,7 +46,7 @@ set<Violation *> FindViolations(void *owner, Violation::Type type) {
 
 // returns a single violation, or null. Checks that there are at most one.
 // TODO, this is inefficient in that it creates a set. 
-Violation * FindViolation(void *owner, Violation::Type type) {
+Violation * FindViolation(Base *owner, Violation::Type type) {
   set<Violation *> s = FindViolations(owner, type);
   CHECK(s.size() <= 1);
   if (s.size()==1) return *s.begin();
@@ -48,11 +54,14 @@ Violation * FindViolation(void *owner, Violation::Type type) {
 }
 
 // Delete all OwnedViolations with this owner
-void L1_EraseOwnedViolations(void *owner) {
+void L1_EraseOwnedViolations(Base *owner) {
   // L1_Eraseing the violation removes it from the index, so this is a way
   // to avoid invalidating iterators. 
+  VLOG(2) << "Erasing violations for " << owner->GetName() << endl;
   while(Violation::owned_violations_ % owner) {
-    (*Violation::owned_violations_[owner].begin())->L1_Erase();
+    Violation *v = (*Violation::owned_violations_[owner].begin());
+    VLOG(2) << "  erasing violation " << v->GetName() << endl;
+    v->L1_Erase();
   }
 }
 
