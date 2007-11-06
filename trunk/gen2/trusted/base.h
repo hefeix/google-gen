@@ -52,10 +52,22 @@ class Base {
     return GEN_ALLOC.deallocate(ptr);
     }*/
 
+  bool AutomaticallyName() {
+    if (NameMatters()) return false;
+    L1_AutomaticallyName();
+    return true;
+  }
+  bool SetName(Object new_name) {
+    if (NameMatters()) return false;
+    L1_SetName(new_name);
+    return true;
+  }
+  virtual bool NameMatters() const { return false; }
+
   //Base();
   void L1_Init(); // shadow constructor
   Object GetName() const { return name_;}
-  void L1_SetName(Object new_name_);
+  void L1_SetName(Object new_name);
   void L1_AutomaticallyName();
   virtual Record GetRecordForDisplay() const;
   string GetURL() const; // link to object view
@@ -79,7 +91,7 @@ class Base {
   Object name_;
 };
 
-class Namer {
+class Namer { 
  public:
   Namer();
   friend class Base;
@@ -97,11 +109,19 @@ class Namer {
   int GetCurrentCount(Base::Type t) const { return current_count_[t];}
   int GetAllTimeCount(Base::Type t) const { return all_time_count_[t];}
 
+  void SetAutomaticallyNameAll(bool val) { automatically_name_all_ = val; }
+  void SetTrackCurrentCount(bool val) { track_current_count_ = val; }
+  bool AutomaticallyNameAll() const { return automatically_name_all_;}
+  bool TrackCurrentCount() const { return track_current_count_;}
+
  private:
   vector<map<Object, Base *> > index_;
   vector<int> current_count_;
   vector<int> all_time_count_;
   int next_name_; // for automatic naming
+
+  bool automatically_name_all_;
+  bool track_current_count_;
 };
 
 extern Namer N;

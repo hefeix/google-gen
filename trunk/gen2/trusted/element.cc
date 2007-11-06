@@ -54,6 +54,7 @@ void Element::N1_ChildChanged(int which_child) {
 }
 
 void Element::L1_CheckSetTimeViolation() {
+  if (IsErased()) return;
   if (M.batch_mode_) {
     M.L1_AddDelayedCheck(this, &Element::L1_CheckSetTimeViolation);
     return;
@@ -360,6 +361,7 @@ void DynamicElement::N1_BindingChanged() {
 }
 
 void DynamicElement::L1_CheckSetParentAndBindingViolations() {
+  if (IsErased()) return;
   if (M.batch_mode_) {
     M.L1_AddDelayedCheck(this, &Element::L1_CheckSetParentAndBindingViolations);
     return;
@@ -447,6 +449,7 @@ void DynamicExpression::L1_Erase() {
   DynamicElement::L1_Erase();
 }
 void DynamicExpression::L1_CheckSetValueViolation() {
+  if (IsErased()) return;
   if (M.batch_mode_) {
     M.L1_AddDelayedCheck(this, &Element::L1_CheckSetValueViolation);
     return;
@@ -532,6 +535,7 @@ bool DynamicLet::NeedsLetViolation() const {
   return (value_child->GetValue() != *binding_value);
 }
 void DynamicLet::L1_CheckSetLetViolation() {
+  if (IsErased()) return;
   if (M.batch_mode_) {
     M.L1_AddDelayedCheck(this, &Element::L1_CheckSetLetViolation);
     return;
@@ -567,6 +571,7 @@ bool DynamicPost::NeedsPostViolation() const {
   return false;
 }
 void DynamicPost::L1_CheckSetPostViolation() {
+  if (IsErased()) return;
   if (M.batch_mode_) {
     M.L1_AddDelayedCheck(this, &Element::L1_CheckSetPostViolation);
     return;
@@ -852,10 +857,6 @@ Record Element::GetRecordForDisplay() const {
   Record ret = Base::GetRecordForDisplay();
   Element * parent = GetParent();
   if (parent) ret["parent"] = parent->ShortDescription();
-  if (Violation::owned_violations_ % (void *)this) {
-    forall(run, Violation::owned_violations_[(void *)this]) 
-      ret["violations"] += (*run)->ShortDescription() + "<br>\n";
-  }
   ret["function"] = FunctionToString(GetFunction());
   ret["description"] = ShortDescription();
   ret["time"] = time_.ToString();

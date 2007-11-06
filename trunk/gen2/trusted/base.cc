@@ -21,8 +21,6 @@
 #include "webserver.h"
 #include "violation.h"
 
-const bool NAME_ALL = true;
-const bool TRACK_CURRENT_COUNT = true;
 
 #undef ITEM
 #define ITEM(x) #x
@@ -33,6 +31,8 @@ Namer::Namer() {
   index_.resize(Base::NumTypes());
   current_count_.resize(Base::NumTypes());
   all_time_count_.resize(Base::NumTypes());
+  automatically_name_all_ = false;
+  track_current_count_ = false;
 }
 Base * Namer::Lookup(Base::Type type, Object name) const {
   Base *const * look = Index(type) % name;
@@ -41,18 +41,15 @@ Base * Namer::Lookup(Base::Type type, Object name) const {
 }
 
 void Base::L1_SetName(Object new_name) {
-  Base ** clobbered = N.index_[GetBaseType()] % new_name;
-  if (clobbered) {
-    // we should only be clobbering automatic names, which are all integers.
-    CHECK(new_name.GetType() == Object::INTEGER);
-    CL.RemoveFromMap(&N.index_[GetBaseType()], new_name);
-  }
+  CHECK(new_name != NULL);
+  if (new_name == name_) return;
+  if (name_ != NULL) CL.RemoveFromMap(&N.index_[GetBaseType()], name_);
   CL.ChangeValue(&name_, new_name);
   CL.InsertIntoMap(&N.index_[GetBaseType()], new_name, this);
-  if (clobbered) (*clobbered)->L1_AutomaticallyName();
 }
 
 void Base::L1_AutomaticallyName() {
+  CHECK(!NameMatters());
   // do we care if the increment of next_name_ reverts??
   while (N.Index(GetBaseType()) 
 	 % (Object)Integer::Make(N.next_name_)) N.next_name_++;
@@ -60,12 +57,13 @@ void Base::L1_AutomaticallyName() {
 }
 
 void Base::L1_Erase() {
+  VLOG(2) << "Erasing object " << name_ << endl;
   L1_EraseOwnedViolations(this);  
   if (name_ != NULL) CL.RemoveFromMap(&N.index_[GetBaseType()], name_);
   #ifdef TRACK_ERASED
   CL.ChangeValue(&erased_, true);
   #endif
-  if (TRACK_CURRENT_COUNT) {
+  if (N.TrackCurrentCount()) {
     CL.ChangeValue(&N.current_count_[GetBaseType()],
 		   N.current_count_[GetBaseType()]-1);
   }
@@ -77,10 +75,10 @@ void Base::L1_Init() {
   #ifdef TRACK_ERASED
   erased_ = false;
   #endif
-  if (NAME_ALL) L1_AutomaticallyName();
+  if ( N.AutomaticallyNameAll() ) AutomaticallyName();
 
   N.all_time_count_[GetBaseType()]++;
-  if (TRACK_CURRENT_COUNT) {
+  if (N.TrackCurrentCount()) {
     CL.ChangeValue(&N.current_count_[GetBaseType()],
 		   N.current_count_[GetBaseType()]+1);
   }
@@ -93,6 +91,9 @@ Record Base::GetRecordForDisplay() const {
   #ifdef TRACK_ERASED
   if (IsErased()) ret["ERASED"] = "ERASED";
   #endif
+  set<Violation *> violations = FindViolations((Base *)this);
+  forall(run, violations) 
+    ret["violations"] += (*run)->ShortDescription() + "<br>\n";
   return ret;
 }
 string Base::GetURL() const { 

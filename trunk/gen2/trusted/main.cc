@@ -55,6 +55,8 @@ void Shell() {
 int main() {
   InitConstants();
   InitChooserSets();
+  N.SetAutomaticallyNameAll(true);
+  N.SetTrackCurrentCount(true);
   //ObjectsShell();
   // Blackboard::Shell();
   Shell();

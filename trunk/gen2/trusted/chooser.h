@@ -83,6 +83,7 @@ struct GlobalChooser {
 	ITEM(INDEPENDENT_BOOL),				\
 	ITEM(QUADRATIC_UINT),				\
 	ITEM(QUADRATIC_BITSEQ),				\
+	ITEM(STANDARD_REAL),				\
 	ITEM(NUM_INDEPENDENT_STRATEGIES),		\
 	ITEM(NEW_FLAKE),				\
         ITEM(SET),                                      \
@@ -169,6 +170,7 @@ struct Chooser : public Base {
   void L1_Init(OTuple strategy);
   void L1_Erase();
 
+  bool NameMatters() const { return true; }
   bool IsEmpty() const { return (total_choices_ == 0);}
   Base::Type GetBaseType() const { return Base::CHOOSER;}
   Record GetRecordForDisplay() const;
