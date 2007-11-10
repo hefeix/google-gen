@@ -22,7 +22,6 @@
 #include "objects.h"
 #include "record.h"
 
-#define TRACK_ERASED
 
 class OwnedPosting;
 
@@ -82,10 +81,8 @@ class Base {
   virtual OMap GetMap() { CHECK(false); return OMap();} // overriden for dynamic
   virtual ~Base() {};
 
-  #ifdef TRACK_ERASED
   bool IsErased() const { return erased_;}
   bool erased_;
-  #endif
 
  private:
   Object name_;

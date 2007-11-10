@@ -53,6 +53,7 @@ void Shell() {
 }
 
 int main() {
+  rand();
   InitConstants();
   InitChooserSets();
   N.SetAutomaticallyNameAll(true);

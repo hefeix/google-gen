@@ -31,6 +31,12 @@ struct StaticExecutor {
   // running a program
   static bool Execute();
   
+  // fix any violation
+
+  static bool FixViolation(Violation *violation);
+
+  static bool FixAllOwnedViolations(Base * owner);
+  
 
   // fixing particular types of violations
 

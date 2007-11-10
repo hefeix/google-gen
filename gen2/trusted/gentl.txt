@@ -1,0 +1,44 @@
+GENTL statements:
+
+pass: do nothing
+
+on: match some pattern and bind the variables.
+    For example, on pattern((F a b)(G b c)) ...
+
+delay: delay execution of the program by an increment in some time dimension.
+       There must be a delay statement between anything that reads from the 
+       blackboard and a post statement in order to avoid circular causation.
+       TODO: work out the math as to whether this is really correct. 
+
+let: Introduce a local variable and assign a value to it.
+
+post: post (output) a tuple to the blackboard.  
+
+if: Tests the value of a child expression and executes one child statement if
+    the value is true and another if the value is false.
+
+parallel: Run multiple child statements in parallel.
+
+
+GENTL expressions: 
+
+substitute: computes the substitution of an object under the current binding.
+
+choose: returns a random choice given a strategy.  see chooser.h
+
+constant: return a constant value
+
+equal: compare two values for equality. 
+
+sum: computes the sum of two numbers
+
+
+
+
+
+
+
+
+
+
+<look in objects.h to learn about the types of objects>
