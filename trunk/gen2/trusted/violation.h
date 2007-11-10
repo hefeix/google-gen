@@ -59,9 +59,23 @@ struct Violation : public Base {
   OTime GetTime() const { return time_; }
   Record GetRecordForDisplay() const;
   bool Exists() const;
-  #ifdef TRACK_ERASED
   virtual bool OwnerIsErased() const { return false;}
-  #endif
+
+  // --------- const functions ----------
+  
+  // Includes the ownedviolationswithdata.
+  set<Violation *> GetAllOwnedViolations(Base *owner);
+
+  // Find all owned violations owned by an owner
+  static const set<Violation *> * GetOwnedViolations(Base *owner);
+
+  // Find all OwnedViolations of this type with this owner. 
+  set<Violation *> FindViolations(Base *owner, Violation::Type type);
+  
+  // returns a single violation, or null. Checks that there are at most one.
+  // TODO, this is inefficient in that it creates a set. 
+  Violation * FindViolation(Base *owner, Violation::Type type);
+
 
   // ---------- L1 functions ----------  
   virtual ~Violation(){}
@@ -85,17 +99,6 @@ struct Violation : public Base {
 };
 
 
-// --------- const functions ----------
-
-// Find all violations owned by an owner
-set<Violation *> FindViolations(Base *owner);
-
-// Find all OwnedViolations of this type with this owner. 
-set<Violation *> FindViolations(Base *owner, Violation::Type type);
-
-// returns a single violation, or null. Checks that there are at most one.
-// TODO, this is inefficient in that it creates a set. 
-Violation * FindViolation(Base *owner, Violation::Type type);
 
 
 // ---------- L1 functions ----------

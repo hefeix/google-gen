@@ -139,6 +139,7 @@ class Object {
     return ::Hash32((uint32)def_, level);
   }
   uint32 DeepHash32(uint32 level = 0) const {
+    if (def_ == NULL) return 0xDEADBEEF;
     return def_->DeepHash32(level);
   }
 
@@ -319,27 +320,28 @@ inline const Object * operator %(const OMap & m, Object key) {
   return m.Data() % key;
 }
 
+inline uint32 Hash32(const Object & o, uint32 level = 0) {
+  return Hash32(o.GetDefinition(), level);
+}
+
 template <> 
 inline uint32 OTuple::Definition::DeepHash32(uint32 level) const {
   uint32 ret = ::Hash32((uint32)OTUPLE, level);
-  forall(run, data_) ret = run->DeepHash32(ret);
+  forall(run, data_) ret = ::Hash32(*run, ret);
   return ret;
 }
 template <> 
 inline uint32 OMap::Definition::DeepHash32(uint32 level) const {
   uint32 ret = ::Hash32((uint32)OMAP, level);
   forall(run, data_) {
-    ret = run->first.DeepHash32(ret);
-    ret = run->second.DeepHash32(ret);
+    ret = ::Hash32(run->first, ret);
+    ret = ::Hash32(run->second, ret);
   }
   return ret;
 }
 template <> 
 inline uint32 Escape::Definition::DeepHash32(uint32 level) const {
-  return ::Hash32(data_.DeepHash32(level), ESCAPE);
-}
-inline uint32 Hash32(const Object & o, uint32 level = 0) {
-  return o.DeepHash32(level);
+  return ::Hash32(::Hash32(data_, level), ESCAPE);
 }
 
 inline Pattern TupleToPattern(const Tuple & t) {

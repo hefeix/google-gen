@@ -20,69 +20,79 @@
 
 // UNTRUSTED
 
+bool StaticExecutor::FixViolation(Violation *v) {
+  #ifdef TRACK_ERASED
+  CHECK(!v->IsErased());
+  CHECK(!v->OwnerIsErased());
+  #endif
+  string tp = Violation::TypeToString(v->GetViolationType());
+  VLOG(2) << "About to fix " << tp << " " << v->GetName().ToString() << endl;
+  bool success = false;
+  switch(v->GetViolationType()) {
+  case Violation::MISSING_DYNAMIC_ON :
+    success = 
+      FixMissingDynamicOn(dynamic_cast<MissingDynamicOnViolation*>(v));
+    break;
+  case Violation::MISSING_ON_MATCH :
+    success = FixMissingOnMatch(dynamic_cast<MissingOnMatchViolation*>(v));
+    break;
+  case Violation::EXTRA_ON_MATCH :
+    success = FixExtraOnMatch(dynamic_cast<ExtraOnMatchViolation*>(v));
+    break;
+  case Violation::CHILD :
+    success = FixChildViolation(dynamic_cast<ChildViolation*>(v));
+    break;
+  case Violation::VALUE :
+    success = FixValue(dynamic_cast<ValueViolation*>(v));
+    break;
+  case Violation::IF :
+    success = FixIf(dynamic_cast<IfViolation*>(v));
+    break;
+  case Violation::TIME :
+    success = FixTime(dynamic_cast<TimeViolation*>(v));
+    break;
+  case Violation::POST :
+    success = FixPost(dynamic_cast<PostViolation*>(v));
+    break;
+  case Violation::LET :
+    success = FixLet(dynamic_cast<LetViolation*>(v));
+    break;
+  case Violation::BINDING_OLD_VALUES :
+    success = FixBindingOldValues
+      (dynamic_cast<BindingOldValuesViolation*>(v));
+    break;
+  default:
+    VLOG(1) << "Can't fix violation of type " << tp << endl;
+    break;
+  }
+  if (success) {
+    VLOG(2) << "Great Success" << endl;
+  } else {
+    VLOG(0) << "Devastating Failure" << endl
+	    << "Couldn't fix violation " << v->GetName().ToString()
+	    << endl;      
+    break;
+  }
+  return success;
+}
+
 bool StaticExecutor::Execute() {
   while (1) {
-    M.SetBatchMode(true);
     Violation * v = M.GetFirstViolation();
     if (!v) {
       VLOG(0) << "No more violations in Khazakhstan" << endl;
       break;
     }
-    #ifdef TRACK_ERASED
-    CHECK(!v->IsErased());
-    CHECK(!v->OwnerIsErased());
-    #endif
-    string tp = Violation::TypeToString(v->GetViolationType());
-    VLOG(2) << "About to fix " << tp << " " << v->GetName().ToString() << endl;
-    bool success = false;
-    switch(v->GetViolationType()) {
-    case Violation::MISSING_DYNAMIC_ON :
-      success = 
-	FixMissingDynamicOn(dynamic_cast<MissingDynamicOnViolation*>(v));
-      break;
-    case Violation::MISSING_ON_MATCH :
-      success = FixMissingOnMatch(dynamic_cast<MissingOnMatchViolation*>(v));
-      break;
-    case Violation::EXTRA_ON_MATCH :
-      success = FixExtraOnMatch(dynamic_cast<ExtraOnMatchViolation*>(v));
-      break;
-    case Violation::CHILD :
-      success = FixChildViolation(dynamic_cast<ChildViolation*>(v));
-      break;
-    case Violation::VALUE :
-      success = FixValue(dynamic_cast<ValueViolation*>(v));
-      break;
-    case Violation::IF :
-      success = FixIf(dynamic_cast<IfViolation*>(v));
-      break;
-    case Violation::TIME :
-      success = FixTime(dynamic_cast<TimeViolation*>(v));
-      break;
-    case Violation::POST :
-      success = FixPost(dynamic_cast<PostViolation*>(v));
-      break;
-    case Violation::LET :
-      success = FixLet(dynamic_cast<LetViolation*>(v));
-      break;
-    case Violation::BINDING_OLD_VALUES :
-      success = FixBindingOldValues
-	(dynamic_cast<BindingOldValuesViolation*>(v));
-      break;
-    default:
-      VLOG(1) << "Can't fix violation of type " << tp << endl;
-      break;
-    }
-    if (success) {
-      VLOG(2) << "Great Success" << endl;
-    } else {
-      VLOG(0) << "Devastating Failure" << endl
-	      << "Couldn't fix violation " << v->GetName().ToString()
-	      << endl;      
-      break;
-    }
+    M.SetBatchMode(true);
+    bool success = FixViolation(v);
     M.SetBatchMode(false);
+    if (!success) return false;
   } 
   return true;
+}
+
+bool StaticExecutor::FixAllOwnedViolations(Base *owner) {
+  while (
 }
 
 DynamicElement * StaticExecutor::MakeInstantiateChild(DynamicElement *parent, 
@@ -221,7 +231,7 @@ bool StaticExecutor::FixValue(ValueViolation *violation){
 	VLOG(0) << "Picked a choice " << choice << endl;
 	dc->L1_TryMakeChoice(strategy, choice);
       }
-    }     
+    }
   }
   if (violation->GetOwner()->ComputeValue() == NULL) {
     VLOG(0) 

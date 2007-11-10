@@ -704,6 +704,7 @@ Object DynamicEqual::ComputeValue() const {
 Object DynamicSum::ComputeValue() const {
   Object lhs = GetChildValue(StaticEqual::LHS);
   Object rhs = GetChildValue(StaticEqual::RHS);
+  VLOG(0) << "lhs=" << lhs << " rhs=" << rhs << endl;
   if (lhs.GetType() == Object::INTEGER
       && rhs.GetType() == Object::INTEGER) {
     return Integer::Make(Integer(lhs).Data() + Integer(rhs).Data());
@@ -821,6 +822,7 @@ void DynamicElement::L1_Init(StaticElement * static_parent,
     children_.push_back(child);    
   }
   N1_StoredOrComputedTimeChanged();
+  L1_CheckSetChildViolation();
 };
 
 DynamicElement * DynamicElement::FindParent() const {
