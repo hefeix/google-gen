@@ -426,6 +426,37 @@ string Upcase(string s);
 template <class S> S Singleton(typename S::key_type t) {
   S ret; ret.insert(t); return ret;
 }
+
+template <class A, class B, class C> struct triple {
+  A first;
+  B second;
+  C third;
+};
+template <class A, class B, class C> 
+  triple<A,B,C> make_triple(const A & a, const B & b, const C & c) {
+  triple<A,B,C> t;
+  t.first = a;
+  t.second = b;
+  t.third = c;
+}
+template <class A, class B, class C> 
+  bool operator == (const triple<A,B,C> & t1, const triple<A,B,C> &t2) {
+  return (t1.first == t2.first 
+	  && t1.second == t2.second
+	  && t1.third == t2.third);
+}
+template <class A, class B, class C> 
+  bool operator < (const triple<A,B,C> & t1, const triple<A,B,C> &t2) {
+  if (t1.first < t2.first) return true;
+  if (t2.first < t1.first) return false;
+  if (t1.second < t2.second) return true;
+  if (t2.second < t1.second) return false;
+  if (t1.third < t2.third) return true;
+  return false;
+}
+
+
+
 /*template<class T> set<T> SingletonSet(const T & t) {
   set<T> ret; ret.insert(t);
   return ret;

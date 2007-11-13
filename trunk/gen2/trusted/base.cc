@@ -60,9 +60,7 @@ void Base::L1_Erase() {
   VLOG(2) << "Erasing object " << name_ << endl;
   L1_EraseOwnedViolations(this);  
   if (name_ != NULL) CL.RemoveFromMap(&N.index_[GetBaseType()], name_);
-  #ifdef TRACK_ERASED
   CL.ChangeValue(&erased_, true);
-  #endif
   if (N.TrackCurrentCount()) {
     CL.ChangeValue(&N.current_count_[GetBaseType()],
 		   N.current_count_[GetBaseType()]-1);
@@ -72,9 +70,7 @@ void Base::L1_Erase() {
 
 void Base::L1_Init() {
   CL.Creating(this);
-  #ifdef TRACK_ERASED
   erased_ = false;
-  #endif
   if ( N.AutomaticallyNameAll() ) AutomaticallyName();
 
   N.all_time_count_[GetBaseType()]++;
@@ -88,9 +84,7 @@ Record Base::GetRecordForDisplay() const {
   Record ret;
   if (name_ != NULL) ret["name"] = name_.ToString();
   ret["type"] = TypeToString(GetBaseType());
-  #ifdef TRACK_ERASED
   if (IsErased()) ret["ERASED"] = "ERASED";
-  #endif
   set<Violation *> violations = FindViolations((Base *)this);
   forall(run, violations) 
     ret["violations"] += (*run)->ShortDescription() + "<br>\n";
