@@ -21,10 +21,8 @@
 // UNTRUSTED
 
 bool StaticExecutor::FixViolation(Violation *v) {
-  #ifdef TRACK_ERASED
   CHECK(!v->IsErased());
   CHECK(!v->OwnerIsErased());
-  #endif
   string tp = Violation::TypeToString(v->GetViolationType());
   VLOG(2) << "About to fix " << tp << " " << v->GetName().ToString() << endl;
   bool success = false;
@@ -92,7 +90,7 @@ bool StaticExecutor::Execute() {
 }
 
 bool StaticExecutor::FixAllOwnedViolations(Base *owner) {
-  while (
+  while (TODO
 }
 
 DynamicElement * StaticExecutor::MakeInstantiateChild(DynamicElement *parent, 

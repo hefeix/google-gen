@@ -25,84 +25,99 @@
 #define ITEM(x) #x
 CLASS_ENUM_DEFINE(Violation, Type);
 
-
-map<Base *, set<Violation *> > Violation::owned_violations_;
+// Static definitions
+Violation::MapType Violation::violations_;
+map<Violation::Type, set<Violation *> > 
+Violation::violations_by_type_;
+map<OTime, set<Violation *>, DataCompare<OTime> > 
+Violation::violations_by_time_;
 int Violation::counts_[100];
 
-set<Violation *> FindViolations(Base *owner) {
-  set<Violation *> * s = Violation::owned_violations_ % owner;
-  if (!s) return set<Violation *>();
-  return *s;
-}
+// Const functions
 
-// Find all OwnedViolations of this type with this owner. 
-set<Violation *> FindViolations(Base *owner, Violation::Type type) {
-  set<Violation *> ret;
-  set<Violation *> * s = Violation::owned_violations_ % owner;
-  if (!s) return ret;
-  forall(run, *s) if ((*run)->GetViolationType() == type) ret.insert(*run);
-  return ret;
-}
-
-// returns a single violation, or null. Checks that there are at most one.
-// TODO, this is inefficient in that it creates a set. 
-Violation * FindViolation(Base *owner, Violation::Type type) {
-  set<Violation *> s = FindViolations(owner, type);
-  CHECK(s.size() <= 1);
-  if (s.size()==1) return *s.begin();
-  return NULL;
-}
-
-// Delete all OwnedViolations with this owner
-void L1_EraseOwnedViolations(Base *owner) {
-  // L1_Eraseing the violation removes it from the index, so this is a way
-  // to avoid invalidating iterators. 
-  VLOG(2) << "Erasing violations for " << owner->GetName() << endl;
-  while(Violation::owned_violations_ % owner) {
-    Violation *v = (*Violation::owned_violations_[owner].begin());
-    VLOG(2) << "  erasing violation " << v->GetName() << endl;
-    v->L1_Erase();
-  }
-}
-
+// TODO this doesn't do everything we want yet
 Record Violation::GetRecordForDisplay() const { 
   Record ret = Base::GetRecordForDisplay();
   ret["Violation Type"] = TypeToString(GetViolationType());
+  ret["owner"] = owner_->ShortDescription();    
+  if (data_ != NULL)
+    ret["data"] = data_.ToString();
   return ret;
 }
 
+// Search functions
+Violation *
+Violation::Search(Base * owner, Type type, Object data) {
+  Violation ** v = violations_ % make_triple(owner, type, data);
+  if (v) return *v;
+  return NULL;
+}
 
+pair<MapIteratorType, MapIteratorType> 
+Violation::Search (Base * owner, Type type) {
+  return make_pair
+    (violations_.lower_bound(make_triple(owner, type, Object(NULL))),
+     violations_.lower_bound(make_triple(owner, type+1, Object(NULL))));
+}
 
-void Violation::L1_Init() {  
+pair<MapIteratorType, MapIteratorType> 
+Violation::Search (Base * owner) {
+  return make_pair
+    (violations_.lower_bound(make_triple(owner, NO_TYPE, Object(NULL))),
+     violations_.lower_bound(make_triple(owner+1, NO_TYPE, Object(NULL))));
+}
+
+set<Violation *>
+Violation::GetViolations(const pair<MapIteratorType, MapIteratorType> & p) {
+  set<Violation *> ret;
+  for (MapIteratorType c = p.first; c != p.second; c++) {
+    ret.insert(c->second);
+  }
+  return ret;
+}
+
+// Creation and destruction
+void Violation::L1_Init
+(Base * owner, Object data) {
   Base::L1_Init();
+  owner_ = owner;
+  CHECK(!owner_->IsErased());
+  data_ = data;
   time_ = ComputeTime();
-  // add to the model's set of violations
-  L1_InsertIntoGlobalMap();
+  L1_InsertIntoMaps();
   counts_[GetViolationType()]++;
-  L1_AutomaticallyName();
 }
-void Violation::L1_InsertIntoGlobalMap(){
-  CL.InsertIntoMapOfSets(&M.violations_by_type_, GetViolationType(), this);
-  CL.InsertIntoMapOfSets(&M.violations_by_time_, GetTime(), this);
+
+void Violation::L1_Erase() {
+  L1_RemoveFromMaps();
+  Base::L1_Erase();
 }
-void Violation::L1_RemoveFromGlobalMap(){
-  CL.RemoveFromMapOfSets(&M.violations_by_type_, GetViolationType(), this);
-  CL.RemoveFromMapOfSets(&M.violations_by_time_, GetTime(), this);
+
+void Violation::InsertIntoMaps() {
+  CL.InsertIntoMap(&violations_, GetTriple(), this);
+  CL.InsertIntoMapOfSets(&violations_by_type_, GetViolationType(), this);
+  CL.InsertIntoMapOfSets(&violations_by_time_, time_, this);
 }
+
+void Violation::RemoveFromMaps() {
+  CL.RemoveFromMap(&violations_, GetTriple());
+  CL.RemoveFromMapOfSets(&violations_by_type_, GetViolationType(), this);
+  CL.RemoveFromMapOfSets(&violations_by_time_, time_, this);
+}
+
+void Violation::L1_ChangeTime(OTime new_time) {
+  CL.RemoveFromMapOfSets(&violations_by_time_, time_, this);
+  CL.ChangeValue(&time_, new_time);
+  CL.InsertIntoMapOfSets(&violations_by_time_, time_, this);
+}
+
 void Violation::N1_ComputedTimeChanged() {
   OTime new_time = ComputeTime();
   if (new_time != time_) L1_ChangeTime(new_time);
 }
-void Violation::L1_ChangeTime(OTime new_time) {
-  CL.RemoveFromMapOfSets(&M.violations_by_time_, GetTime(), this);
-  CL.ChangeValue(&time_, new_time);
-  CL.InsertIntoMapOfSets(&M.violations_by_time_, GetTime(), this);
-}
 
-bool Violation::Exists() const {
-  set<Violation *> * s = M.violations_by_time_ % time_;
-  return (s && ((*s) % (Violation *)this) );
-}
+
+
 
 template<>
 OTime ProhibitionViolation::ComputeTime() const {
