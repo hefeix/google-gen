@@ -53,14 +53,15 @@ Violation::Search(Base * owner, Type type, Object data) {
   return NULL;
 }
 
-pair<MapIteratorType, MapIteratorType> 
+pair<Violation::MapIteratorType, Violation::MapIteratorType> 
 Violation::Search (Base * owner, Type type) {
   return make_pair
     (violations_.lower_bound(make_triple(owner, type, Object(NULL))),
-     violations_.lower_bound(make_triple(owner, type+1, Object(NULL))));
+     violations_.lower_bound(make_triple(owner, Violation::Type(type+1), 
+					 Object(NULL))));
 }
 
-pair<MapIteratorType, MapIteratorType> 
+pair<Violation::MapIteratorType, Violation::MapIteratorType> 
 Violation::Search (Base * owner) {
   return make_pair
     (violations_.lower_bound(make_triple(owner, NO_TYPE, Object(NULL))),
@@ -93,13 +94,13 @@ void Violation::L1_Erase() {
   Base::L1_Erase();
 }
 
-void Violation::InsertIntoMaps() {
+void Violation::L1_InsertIntoMaps() {
   CL.InsertIntoMap(&violations_, GetTriple(), this);
   CL.InsertIntoMapOfSets(&violations_by_type_, GetViolationType(), this);
   CL.InsertIntoMapOfSets(&violations_by_time_, time_, this);
 }
 
-void Violation::RemoveFromMaps() {
+void Violation::L1_RemoveFromMaps() {
   CL.RemoveFromMap(&violations_, GetTriple());
   CL.RemoveFromMapOfSets(&violations_by_type_, GetViolationType(), this);
   CL.RemoveFromMapOfSets(&violations_by_time_, time_, this);
@@ -116,8 +117,11 @@ void Violation::N1_ComputedTimeChanged() {
   if (new_time != time_) L1_ChangeTime(new_time);
 }
 
-
-
+/*
+template<class Owner, Violation::Type VType>
+OTime TypedViolation<Owner, VType>::ComputeTime() const {
+  return dynamic_cast<Element *>(owner_)->GetTime();
+  }*/
 
 template<>
 OTime ProhibitionViolation::ComputeTime() const {
@@ -126,27 +130,28 @@ OTime ProhibitionViolation::ComputeTime() const {
 template<>
 OTime MissingOnMatchViolation::ComputeTime() const {
   return 
-    DataMax(owner_->GetDynamicOnParent()->GetTime(), 	    
+    DataMax(GetTypedOwner()->GetDynamicOnParent()->GetTime(), 	    
 	    BB.FindLastTime
 	    (Substitute
-	     (data_.Data(), 
-	      owner_->GetDynamicOnParent()
+	     (OMap(data_).Data(), 
+	      GetTypedOwner()->GetDynamicOnParent()
 	      ->GetStaticOn()->GetPattern().Data())));
 }
 
 template<>
 OTime ExtraOnMatchViolation::ComputeTime() const {
-  CHECK(owner_->children_ % data_);
-  return owner_->children_[data_]->GetTime();
+  CHECK(GetTypedOwner()->children_ % OMap(data_));
+  return GetTypedOwner()->children_[data_]->GetTime();
 }
 template<>
 OTime TimeViolation::ComputeTime() const {
-  return DataMin(owner_->ComputeTime(), owner_->GetTime());
+  return DataMin(GetTypedOwner()->ComputeTime(), GetTypedOwner()->GetTime());
 }
 template<>
 OTime PostViolation::ComputeTime() const {
-  if (owner_->posting_ == NULL) return owner_->GetTime();
-  return DataMin(owner_->GetTime(), OTime::Make(owner_->posting_->time_));
+  if (GetTypedOwner()->posting_ == NULL) return GetTypedOwner()->GetTime();
+  return DataMin(GetTypedOwner()->GetTime(), 
+		 OTime::Make(GetTypedOwner()->posting_->time_));
 }
 
 

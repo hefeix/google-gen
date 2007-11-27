@@ -69,7 +69,6 @@ bool StaticExecutor::FixViolation(Violation *v) {
     VLOG(0) << "Devastating Failure" << endl
 	    << "Couldn't fix violation " << v->GetName().ToString()
 	    << endl;      
-    break;
   }
   return success;
 }
@@ -89,9 +88,9 @@ bool StaticExecutor::Execute() {
   return true;
 }
 
-bool StaticExecutor::FixAllOwnedViolations(Base *owner) {
+/*bool StaticExecutor::FixAllOwnedViolations(Base *owner) {
   while (TODO
-}
+  }*/
 
 DynamicElement * StaticExecutor::MakeInstantiateChild(DynamicElement *parent, 
 						      int which_child){
@@ -148,7 +147,7 @@ InstantiateExpression(DynamicExpression *e){
 }
 
 bool StaticExecutor::FixChildViolation(ChildViolation *violation) {
-  Element * e = violation->GetOwner();
+  Element * e = violation->GetTypedOwner();
   if (e->IsStatic()) {
     VLOG(1) << "Couldn't fix missing static link" << endl;
     return false;
@@ -176,13 +175,14 @@ bool StaticExecutor::FixChildViolation(ChildViolation *violation) {
 }
 bool StaticExecutor::FixMissingDynamicOn(MissingDynamicOnViolation *violation){
   VLOG(2) << "Fixing missing dynamic on " << endl;
-  StaticOn * static_on = violation->GetOwner();
+  StaticOn * static_on = violation->GetTypedOwner();
   MakeDynamicElement<DynamicOn>(static_on, OMap::Default());
   return true;
 }
 bool StaticExecutor::FixMissingOnMatch(MissingOnMatchViolation *violation) {
   VLOG(2) << "Fixing missing on match" << endl;
-  DynamicOn * d_on = dynamic_cast<DynamicOn *>(violation->GetOwner()->parent_);
+  DynamicOn * d_on 
+    = dynamic_cast<DynamicOn *>(violation->GetTypedOwner()->parent_);
   StaticOn * s_on = d_on->GetStaticOn();
   StaticElement * s_child = s_on->GetChild(StaticOn::CHILD);
   if (!s_child) {
@@ -200,8 +200,9 @@ bool StaticExecutor::FixMissingOnMatch(MissingOnMatchViolation *violation) {
 }
 bool StaticExecutor::FixExtraOnMatch(ExtraOnMatchViolation *violation) {
   VLOG(1) << "Fixing extra on match" << endl;
-  violation->GetOwner()->GetChild(violation->data_);
-  DynamicOn * d_on = dynamic_cast<DynamicOn*>(violation->GetOwner()->parent_);
+  violation->GetTypedOwner()->GetChild(violation->data_);
+  DynamicOn * d_on 
+    = dynamic_cast<DynamicOn*>(violation->GetTypedOwner()->parent_);
   StaticOn * s_on = d_on->GetStaticOn();
   StaticElement * s_child = s_on->GetChild(StaticOn::CHILD);
   if (!s_child) {
@@ -218,8 +219,8 @@ bool StaticExecutor::FixExtraOnMatch(ExtraOnMatchViolation *violation) {
 
 bool StaticExecutor::FixValue(ValueViolation *violation){
   VLOG(2) << "Fixing value violation " << endl;
-  if (violation->GetOwner()->ComputeValue() == NULL) {
-    if (violation->GetOwner()->GetFunction()==Element::CHOOSE) {
+  if (violation->GetTypedOwner()->ComputeValue() == NULL) {
+    if (violation->GetTypedOwner()->GetFunction()==Element::CHOOSE) {
       DynamicChoose *dc = dynamic_cast<DynamicChoose*>(violation->GetOwner());
       OTuple strategy = OTuple::ConvertOrNull
 	(dc->GetChildValue(StaticChoose::STRATEGY));
@@ -231,16 +232,16 @@ bool StaticExecutor::FixValue(ValueViolation *violation){
       }
     }
   }
-  if (violation->GetOwner()->ComputeValue() == NULL) {
+  if (violation->GetTypedOwner()->ComputeValue() == NULL) {
     VLOG(0) 
       << "Can't fix value violation because computed value is NULL" << endl;
     return false;
   }
-  violation->GetOwner()->ComputeSetValue();
+  violation->GetTypedOwner()->ComputeSetValue();
   return true;
 }
 bool StaticExecutor::FixIf(IfViolation *violation){
-  DynamicIf * d_if = violation->GetOwner();
+  DynamicIf * d_if = violation->GetTypedOwner();
   StaticIf * s_if = d_if->GetStaticIf();
   StaticElement * s_on_true = s_if->GetChild(StaticIf::ON_TRUE);
   StaticElement * s_on_false = s_if->GetChild(StaticIf::ON_FALSE);
@@ -265,13 +266,13 @@ bool StaticExecutor::FixIf(IfViolation *violation){
 }
 bool StaticExecutor::FixTime(TimeViolation *violation) {
   VLOG(2) << "Fixing time violation " << endl;
-  violation->GetOwner()->ComputeSetTime();
+  violation->GetTypedOwner()->ComputeSetTime();
   return true;
 
 }
 bool StaticExecutor::FixPost(PostViolation *violation) {
   VLOG(2) << "Fixing post violation " << endl;
-  DynamicPost * dp = violation->GetOwner();
+  DynamicPost * dp = violation->GetTypedOwner();
   CHECK(dp->NeedsPostViolation());
   Object computed = dp->ComputeTuple();
   if (computed.GetType() != Object::OTUPLE) {
@@ -306,7 +307,7 @@ bool StaticExecutor::FixPost(PostViolation *violation) {
 bool StaticExecutor::FixLet(LetViolation *violation) {
   VLOG(2) << "Fixing let violation" << endl;
   //sleep(1000);
-  DynamicLet *dl = violation->GetOwner();
+  DynamicLet *dl = violation->GetTypedOwner();
   CHECK(dl->NeedsLetViolation());
   VLOG(2) << "dl= " << dl->ShortDescription() << endl;
   //DynamicExpression *value_child 
@@ -319,7 +320,7 @@ bool StaticExecutor::FixLet(LetViolation *violation) {
 }
 bool StaticExecutor::FixBindingOldValues(BindingOldValuesViolation *violation){
   VLOG(2) << "fixing BINDING_OLD_VALUES violation " << endl;
-  DynamicElement *d = violation->GetOwner();
+  DynamicElement *d = violation->GetTypedOwner();
   // TODO: what if the binding isn't determined???
   d->ComputeSetBinding();
   return true;

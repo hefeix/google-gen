@@ -438,6 +438,7 @@ template <class A, class B, class C>
   t.first = a;
   t.second = b;
   t.third = c;
+  return t;
 }
 template <class A, class B, class C> 
   bool operator == (const triple<A,B,C> & t1, const triple<A,B,C> &t2) {

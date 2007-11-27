@@ -58,7 +58,7 @@ void Base::L1_AutomaticallyName() {
 
 void Base::L1_Erase() {
   VLOG(2) << "Erasing object " << name_ << endl;
-  L1_EraseOwnedViolations(this);  
+  Violation::L1_EraseViolations(this);  
   if (name_ != NULL) CL.RemoveFromMap(&N.index_[GetBaseType()], name_);
   CL.ChangeValue(&erased_, true);
   if (N.TrackCurrentCount()) {
@@ -85,7 +85,8 @@ Record Base::GetRecordForDisplay() const {
   if (name_ != NULL) ret["name"] = name_.ToString();
   ret["type"] = TypeToString(GetBaseType());
   if (IsErased()) ret["ERASED"] = "ERASED";
-  set<Violation *> violations = FindViolations((Base *)this);
+  set<Violation *> violations 
+    = Violation::GetViolations(Violation::Search((Base *)this));
   forall(run, violations) 
     ret["violations"] += (*run)->ShortDescription() + "<br>\n";
   return ret;

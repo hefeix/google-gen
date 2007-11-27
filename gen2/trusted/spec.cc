@@ -53,7 +53,7 @@ void Requirement::L1_Erase() {
 }
 void Requirement::Update(const QueryUpdate &update, SubType * sub){
   int count = subscription_->subscribee_->GetCount();
-  Violation * violation = FindViolation(this, Violation::REQUIREMENT);
+  Violation * violation = Violation::Search(this, Violation::REQUIREMENT, NULL);
   if (violation && count != 0) {
     L1_RemoveViolation();
   }
@@ -65,7 +65,7 @@ void Requirement::L1_AddViolation() {
   New<RequirementViolation>(this);
 }
 void Requirement::L1_RemoveViolation() {
-  Violation * violation = FindViolation(this, Violation::REQUIREMENT);
+  Violation * violation = Violation::Search(this, Violation::REQUIREMENT, NULL);
   violation->L1_Erase();
 }
 

@@ -56,7 +56,7 @@ struct Violation : public Base {
   // ---------- const functions ----------  
   virtual Base::Type GetBaseType() const { return Base::VIOLATION; }
   virtual Type GetViolationType() const = 0;
-  virtual Base * GetOwner() const { return owner_; }
+  Base * GetOwner() const { return owner_; }
   virtual OTime ComputeTime() const = 0;
   virtual bool OwnerIsErased() const { 
     CHECK(owner_); return owner_->IsErased();
@@ -92,7 +92,7 @@ struct Violation : public Base {
 
   static void L1_EraseViolations(Base *owner) {
     set<Violation *> s = GetViolations(Search(owner));
-    forall(run, s) run->L1_Erase();
+    forall(run, s) (*run)->L1_Erase();
   }
 
   // Deal with changing properties
@@ -120,10 +120,12 @@ struct TypedViolation : public Violation {
   // ---------- L2 functions ----------
     
   // ---------- const functions ----------
-  Owner *GetOwner() const { return dynamic_cast<Owner *>(owner_);}
+  Owner *GetTypedOwner() const { return dynamic_cast<Owner *>(owner_);}
   Violation::Type GetViolationType() const {return VType;}
   // this sometimes gets overridden
-  OTime ComputeTime() const { return owner_->GetTime();}
+  OTime ComputeTime() const { 
+    return ((Owner *)(owner_))->GetTime();
+  }
 
   // ---------- L1 functions ----------
   void L1_Init(Owner *owner, Object data) {
@@ -145,7 +147,7 @@ struct TypedViolation : public Violation {
     Violation * look = Violation::Search(owner, VType, data);
     if (!look) return NULL;
     look->L1_Erase();
-    return dynamic_cast<TypedViolation>(look);
+    return dynamic_cast<TypedViolation *>(look);
   }
 };
 
