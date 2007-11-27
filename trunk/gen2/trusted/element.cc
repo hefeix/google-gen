@@ -60,7 +60,7 @@ void Element::L1_CheckSetTimeViolation() {
     return;
   }
   OTime proper_time = ComputeTime();
-  Violation * violation = FindViolation(this, Violation::TIME);
+  Violation * violation = Violation::Search(this, Violation::TIME, NULL);
   if (proper_time != time_) {
     if (!violation) {
       New<TimeViolation>(this);
@@ -455,7 +455,7 @@ void DynamicExpression::L1_CheckSetValueViolation() {
     return;
   }
   bool perfect = (value_ != NULL && value_ == ComputeValue());
-  Violation * value_violation = FindViolation(this, Violation::VALUE);
+  Violation * value_violation = Violation::Search(this, Violation::VALUE, NULL);
   if (perfect && value_violation) {
     value_violation->L1_Erase(); 
     return;
@@ -482,13 +482,13 @@ void StaticOn::L1_Erase() {
 void DynamicOn::L1_Init(StaticElement *static_parent, OMap dummy) {
   DynamicStatement::L1_Init(static_parent, OMap::Default());
   Violation * missing_dynamic 
-    = FindViolation(GetStatic(), Violation::MISSING_DYNAMIC_ON);
+    = Violation::Search(GetStatic(), Violation::MISSING_DYNAMIC_ON, NULL);
   CHECK(missing_dynamic);
   missing_dynamic->L1_Erase();
 }
 void DynamicOn::L1_Erase(){
   CHECK(GetStatic());
-  CHECK(!FindViolation(GetStatic(), Violation::MISSING_DYNAMIC_ON));
+  CHECK(!Violation::Search(GetStatic(), Violation::MISSING_DYNAMIC_ON, NULL));
   New<MissingDynamicOnViolation>(GetStaticOn());
   DynamicStatement::L1_Erase();
 }
@@ -528,7 +528,8 @@ bool DynamicLet::NeedsLetViolation() const {
   if (!value_child) return false;
   DynamicStatement *child = GetSingleStatementChild(StaticLet::CHILD);
   if (!child) return false;
-  if (FindViolation(child, Violation::BINDING_VARIABLES)) return false;
+  if (Violation::Search(child, Violation::BINDING_VARIABLES), NULL) 
+    return false;
   const Object * binding_value = child->GetBinding().Data()
     % GetStatic()->GetObject(StaticLet::VARIABLE);
   CHECK(binding_value);
