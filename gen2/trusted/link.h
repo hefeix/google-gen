@@ -108,14 +108,6 @@ struct OnMultiLink : public MultiLink {
   typedef UpdateSubscription<QueryUpdate, Query, OnMultiLink> SubType;
   friend class UpdateSubscription<QueryUpdate, Query, OnMultiLink>;
   void Update(const QueryUpdate &update, SubType *sub);
-  map<OMap, Violation *> * GetViolationMap(Violation::Type vtype) {
-    if (vtype == Violation::MISSING_ON_MATCH) return &missing_;
-    if (vtype == Violation::EXTRA_ON_MATCH) return &extra_;
-    CHECK(false);
-    return NULL;
-  }
-  map<OMap, Violation *> missing_;
-  map<OMap, Violation *> extra_;
   SubType * subscription_;
 };
 

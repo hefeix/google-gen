@@ -38,7 +38,7 @@ Object GlobalChooser::RandomChoice(OTuple strategy) const {
     Object ret_val;
     double rf = RandomFraction();
     if (rf < param) ret_val = TRUE; else ret_val = FALSE;
-    VLOG(0) << "Picking an independent bool parameter="
+    VLOG(1) << "Picking an independent bool parameter="
 	    << param << " rf=" << rf << " choice=" << ret_val << endl;
     return ret_val;
   }

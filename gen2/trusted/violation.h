@@ -65,19 +65,19 @@ struct Violation : public Base {
   Record GetRecordForDisplay() const;
   
   // These functions search the violation index
-  typedef triple<Base *, Type, Object> IndexType;
+  typedef triple<const Base *, Type, Object> IndexType;
   typedef map<IndexType, Violation * > MapType;
   typedef MapType::iterator MapIteratorType;
 
-  triple<Base *, Type, Object> GetTriple() {
-    return make_triple(owner_, GetViolationType(), data_);
+  IndexType GetTriple() {
+    return make_triple((const Base *)owner_, GetViolationType(), data_);
   }
   static Violation * 
-  Search (Base * owner, Type type, Object data);
+  Search (const Base * owner, Type type, Object data);
   static pair<MapIteratorType, MapIteratorType> 
-    Search (Base * owner, Type type);
+    Search (const Base * owner, Type type);
   static pair<MapIteratorType, MapIteratorType>
-    Search (Base * owner);
+    Search (const Base * owner);
   static set<Violation *>
   GetViolations(const pair<MapIteratorType, MapIteratorType> & p);
 
@@ -228,9 +228,6 @@ typedef TypedViolation<DynamicExpression, Violation::VALUE>
 class DynamicPost;
 typedef TypedViolation<DynamicPost, Violation::POST>
   PostViolation;
-class DynamicIf;
-typedef TypedViolation<DynamicIf, Violation::IF>
-  IfViolation;
 
 
 #endif

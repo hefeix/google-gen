@@ -739,7 +739,6 @@ struct DynamicIf : public DynamicStatement {
     return dynamic_cast<DynamicExpression *>
       (GetSingleChild(StaticIf::CONDITION));
   }  
-  bool NeedsIfViolation() const;
   StaticIf *GetStaticIf() const { 
     return dynamic_cast<StaticIf*>(GetStatic());
   }

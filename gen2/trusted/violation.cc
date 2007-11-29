@@ -47,14 +47,14 @@ Record Violation::GetRecordForDisplay() const {
 
 // Search functions
 Violation *
-Violation::Search(Base * owner, Type type, Object data) {
+Violation::Search(const Base * owner, Type type, Object data) {
   Violation ** v = violations_ % make_triple(owner, type, data);
   if (v) return *v;
   return NULL;
 }
 
 pair<Violation::MapIteratorType, Violation::MapIteratorType> 
-Violation::Search (Base * owner, Type type) {
+Violation::Search (const Base * owner, Type type) {
   return make_pair
     (violations_.lower_bound(make_triple(owner, type, Object(NULL))),
      violations_.lower_bound(make_triple(owner, Violation::Type(type+1), 
@@ -62,7 +62,7 @@ Violation::Search (Base * owner, Type type) {
 }
 
 pair<Violation::MapIteratorType, Violation::MapIteratorType> 
-Violation::Search (Base * owner) {
+Violation::Search(const Base * owner) {
   return make_pair
     (violations_.lower_bound(make_triple(owner, NO_TYPE, Object(NULL))),
      violations_.lower_bound(make_triple(owner+1, NO_TYPE, Object(NULL))));

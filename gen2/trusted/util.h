@@ -455,7 +455,14 @@ template <class A, class B, class C>
   if (t1.third < t2.third) return true;
   return false;
 }
-
+/*template <class IteratorType> set<typename typeof(IteratorType->second)> >
+GetSeconds(const pair<IteratorType, IteratorType> & p) {
+  set<typeof(IteratorType->second)> ret;
+  for (IteratorType c= p.first; c!=p.second; c++) {
+    ret.insert(c->second);
+  }
+  return ret;
+  }*/
 
 
 /*template<class T> set<T> SingletonSet(const T & t) {

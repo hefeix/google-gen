@@ -45,7 +45,6 @@ struct StaticExecutor {
   static bool FixExtraOnMatch(ExtraOnMatchViolation *violation);
   static bool FixChildViolation(ChildViolation *violation);
   static bool FixValue(ValueViolation *violation);
-  static bool FixIf(IfViolation *violation);
   static bool FixTime(TimeViolation *violation);
   static bool FixPost(PostViolation *violation);
   static bool FixLet(LetViolation *violation);
@@ -56,11 +55,11 @@ struct StaticExecutor {
   static DynamicElement * 
   MakeInstantiateChild(DynamicElement *parent, int which_child);
   
-  static bool Instantiate(DynamicElement *e);
+  static bool FixElement(DynamicElement *e);
 
-  static bool InstantiateExpression(DynamicExpression *e);
+  static bool FixExpression(DynamicExpression *e);
 
-  static bool InstantiateStatement(DynamicStatement *s);
+  static bool FixStatement(DynamicStatement *s);
 
   
 };

@@ -77,11 +77,11 @@ string Model::ToString(bool html) const {
 }
 
 Violation * Model::GetViolationOfType(Violation::Type type) const {
-  const set<Violation *> * s = violations_by_type_ % type;
+  const set<Violation *> * s = Violation::violations_by_type_ % type;
   if (!s) return NULL;
   return *(s->begin());
 }
 Violation * Model::GetFirstViolation() const {
-  if (violations_by_time_.size() == 0) return NULL;
-  return *(violations_by_time_.begin()->second.begin());
+  if (Violation::violations_by_time_.size() == 0) return NULL;
+  return *(Violation::violations_by_time_.begin()->second.begin());
 }
