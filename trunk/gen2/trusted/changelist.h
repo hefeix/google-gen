@@ -24,6 +24,7 @@
 #include <map>
 #include "util.h"
 #include "allocators.h"
+#include "ranktree.h"
 
 typedef uint Checkpoint;
   
@@ -483,6 +484,14 @@ class Changelist {
       return;
     }
     Make (new(CL_ALLOC) MapRemoveChange<K, V, map<K,V> >(location, key));
+  }
+  template <class K, class V> void RemoveFromMap(rankmap<K,V> * location,
+						 const K& key) {
+    if (disabled_) {
+      location->erase(key);
+      return;
+    }
+    Make (new(CL_ALLOC) MapRemoveChange<K, V, rankmap<K,V> >(location, key));
   }
   template <class K, class V> void RemoveFromMap(hash_map<K,V> * location,
 						 const K& key) {

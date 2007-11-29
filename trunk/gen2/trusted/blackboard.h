@@ -382,6 +382,9 @@ class Blackboard {
   const IndexRow * GetConstIndexRow(OTuple wildcard_tuple) const;
   const TupleInfo * GetConstTupleInfo(OTuple tuple) const;
 
+  // Random tuples
+  bool GetRandomTuple(Tuple * result);
+  bool GetRandomTupleMatching(Tuple * result, const Tuple& wildcard_t); 
 
  private:
   // returns null on failure
@@ -390,7 +393,7 @@ class Blackboard {
   TupleInfo * GetTupleInfo(OTuple tuple);
 
   hash_map<OTuple, IndexRow *> index_;
-  hash_map<OTuple, TupleInfo *> tuple_info_;
+  rankmap<OTuple, TupleInfo *> tuple_info_;
   set<pair<int, Search*> > searches_to_flush_;
 
   SingleWTUpdate * current_wt_update_;

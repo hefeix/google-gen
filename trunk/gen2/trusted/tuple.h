@@ -67,6 +67,7 @@ struct GeneralizationIterator {
 
 // TODO? maybe this stuff doesn't belong in this file
 typedef pair<MPattern, MPattern > CandidateRule;
+
 inline static MPattern Concat(const CandidateRule & r) {
   MPattern ret = r.first; 
   ret.insert(ret.end(), r.second.begin(), r.second.end()); return ret; }

@@ -350,6 +350,23 @@ const TupleInfo * Blackboard::GetConstTupleInfo(OTuple tuple) const {
   return ((Blackboard *)(this))->GetTupleInfo(tuple);
 }
 
+// Random tuples
+bool Blackboard::GetRandomTuple(Tuple * result) {
+  if (tuple_info_.size() == 0) return false;
+  pair<OTuple, TupleInfo *> sample;
+  GetSampleElement(tuple_info_, &sample);
+  *result = sample.first.Data();
+  return true;
+}
+
+bool Blackboard::GetRandomTupleMatching(Tuple * result, const Tuple& wildcard_t) {
+  IndexRow * ir = GetIndexRow(OTuple::Make(wildcard_t));
+  if (!ir) return false;
+  pair<Time, TupleInfo*> sample;
+  GetSampleElement(ir->tuples_, &sample);
+  *result = sample.second->GetTuple().Data();
+  return true;
+}
 
 void Blackboard::L1_FlushUpdates() {
   flushed_query_update_.clear();
