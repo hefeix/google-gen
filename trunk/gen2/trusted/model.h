@@ -101,10 +101,6 @@ class Model : public Base{
   set<Requirement *> requirements_;
   set<Prohibition *> prohibitions_;
 
-  // The violations
-  map<Violation::Type, set<Violation *> > violations_by_type_;
-  map<OTime, set<Violation *>, DataCompare<OTime> > violations_by_time_;
-
   // Statements, Expressions, Dynamic counterparts, and choosers are base.
   // The namer can give you maps of these indexed by name.
 

@@ -159,17 +159,19 @@ void OnMultiLink::Update(const QueryUpdate &update, SubType *sub) {
     // them here. Luckily, with an on statement, there are none. 
     OMap m = s.data_;
     if (s.action_ == UPDATE_CREATE) {
-      if (extra_ % m) {
-	ExtraOnMatchViolation * v 
-	  = dynamic_cast<ExtraOnMatchViolation*>(extra_[m]);
-	v->L1_Erase();
+      Violation *extra 
+	= Violation::Search(this, Violation::EXTRA_ON_MATCH, m);
+      if (extra) {
+	extra->L1_Erase();
       } else {
 	New<MissingOnMatchViolation>(this, m);
       }
     }
     if (s.action_ == UPDATE_DESTROY) {
-      if (missing_ % m) {
-	missing_[m]->L1_Erase();
+      Violation *missing 
+	= Violation::Search(this, Violation::MISSING_ON_MATCH, m);
+      if (missing) {
+	missing->L1_Erase();
       } else {
 	CHECK(children_ % m);
 	New<ExtraOnMatchViolation>(this, m);
@@ -181,9 +183,11 @@ void OnMultiLink::Update(const QueryUpdate &update, SubType *sub) {
 	// instead of computing it again. That would be an optimization
 	children_[m]->N1_StoredOrComputedTimeChanged();
       } else {
-	CHECK(missing_ % m);	
+	Violation *missing 
+	  = Violation::Search(this, Violation::MISSING_ON_MATCH, m);	
+	CHECK(missing);	
 	// if we want to optimize ... use the time from the update.
-	missing_[m]->N1_ComputedTimeChanged();
+	missing->N1_ComputedTimeChanged();
       }
     }
   }
@@ -194,8 +198,10 @@ OnMultiLink::~OnMultiLink() {}
 void OnMultiLink::L1_AddChild(Element * child) {
   // L1_Erase leaves the bindings anyways when called on the child
   OMap binding = child->GetBinding();
-  if (missing_ % binding) {
-    missing_[binding]->L1_Erase();
+  Violation *missing 
+    = Violation::Search(this, Violation::MISSING_ON_MATCH, binding);
+  if (missing) {
+    missing->L1_Erase();
   } else {
     New<ExtraOnMatchViolation>(this, binding);
   }
@@ -204,8 +210,10 @@ void OnMultiLink::L1_AddChild(Element * child) {
 
 void OnMultiLink::L1_RemoveChild(Element * child) {
   OMap binding = child->GetBinding();
-  if (extra_ % binding) {
-    extra_[binding]->L1_Erase();
+  Violation *extra 
+    = Violation::Search(this, Violation::EXTRA_ON_MATCH, binding);
+  if (extra) {
+    extra->L1_Erase();
   } else {
     New<MissingOnMatchViolation>(this, binding);
   }

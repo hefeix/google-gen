@@ -43,9 +43,6 @@ bool StaticExecutor::FixViolation(Violation *v) {
   case Violation::VALUE :
     success = FixValue(dynamic_cast<ValueViolation*>(v));
     break;
-  case Violation::IF :
-    success = FixIf(dynamic_cast<IfViolation*>(v));
-    break;
   case Violation::TIME :
     success = FixTime(dynamic_cast<TimeViolation*>(v));
     break;
@@ -106,48 +103,56 @@ DynamicElement * StaticExecutor::MakeInstantiateChild(DynamicElement *parent,
     VLOG(1) << "Couldn't make dynamic child " << endl;
     return NULL;
   }
-  if (!Instantiate(ret)) {
+  if (!FixElement(ret)) {
     VLOG(1) << "Couldn't instantiate new dynamic element " << endl;
-    return false;
+    return NULL;
   };
   return ret;
 }
 
-bool StaticExecutor::Instantiate(DynamicElement *e) {
+bool StaticExecutor::FixElement(DynamicElement *e) {
   CHECK(e);
+  // e->ComputeSetBinding();
   e->ComputeSetTime();
+  for(int i=0; i<e->GetStatic()->NumChildren(); i++) {
+    DynamicElement * child = e->GetChild(i);
+    if (e->ChildShouldExist(i)) {
+      if (!child) {
+	if (!MakeInstantiateChild(e, i)) return false;
+      } else {
+	if (Violation::GetViolations(Violation::Search(child)).size())
+	  FixElement(child);
+      }
+    } else { // child should not exist
+      if (child) child->EraseTree();
+    }
+  }
   if (e->GetBaseType() == Base::DYNAMIC_STATEMENT) {
-    return InstantiateStatement(dynamic_cast<DynamicStatement *>(e));
+    return FixStatement((DynamicStatement*)e);
   } else {
-    return InstantiateExpression(dynamic_cast<DynamicExpression *>(e));
+    return FixExpression((DynamicExpression*)e);
   }
-}
-
-bool StaticExecutor::InstantiateStatement(DynamicStatement *s) {
-  CHECK(s);
-  for(int i=0; i<s->GetStatic()->NumChildren(); i++) {
-    if (s->ChildShouldExist(i))
-      if (!MakeInstantiateChild(s, i)) return false;
-  }
-  if (s->GetFunction() == Element::POST) {
-    dynamic_cast<DynamicPost *>(s)->AddCorrectPosting();
-  }
-
   return true;
 }
 
-bool StaticExecutor::
-InstantiateExpression(DynamicExpression *e){
-  CHECK(e);
-  for(int i=0; i<e->GetStatic()->NumChildren(); i++) {
-    if (!MakeInstantiateChild(e, i)) return false;
+bool StaticExecutor::FixStatement(DynamicStatement *s) {
+  CHECK(s);
+  if (s->GetFunction() == Element::POST) {
+    dynamic_cast<DynamicPost *>(s)->AddCorrectPosting();
   }
+  return true;
+}
+
+bool StaticExecutor::FixExpression(DynamicExpression *e){
+  CHECK(e);
   e->ComputeSetValue();
   return true;
 }
 
 bool StaticExecutor::FixChildViolation(ChildViolation *violation) {
   Element * e = violation->GetTypedOwner();
+  return FixElement(dynamic_cast<DynamicElement *>(e));
+  /*
   if (e->IsStatic()) {
     VLOG(1) << "Couldn't fix missing static link" << endl;
     return false;
@@ -172,6 +177,7 @@ bool StaticExecutor::FixChildViolation(ChildViolation *violation) {
     }
   }
   return true;
+  */
 }
 bool StaticExecutor::FixMissingDynamicOn(MissingDynamicOnViolation *violation){
   VLOG(2) << "Fixing missing dynamic on " << endl;
@@ -196,7 +202,7 @@ bool StaticExecutor::FixMissingOnMatch(MissingOnMatchViolation *violation) {
     VLOG(1) << "couldn't make dynamic element" << endl;
     return false;
   }
-  return StaticExecutor::Instantiate(e);
+  return StaticExecutor::FixElement(e);
 }
 bool StaticExecutor::FixExtraOnMatch(ExtraOnMatchViolation *violation) {
   VLOG(1) << "Fixing extra on match" << endl;
@@ -219,15 +225,17 @@ bool StaticExecutor::FixExtraOnMatch(ExtraOnMatchViolation *violation) {
 
 bool StaticExecutor::FixValue(ValueViolation *violation){
   VLOG(2) << "Fixing value violation " << endl;
-  if (violation->GetTypedOwner()->ComputeValue() == NULL) {
-    if (violation->GetTypedOwner()->GetFunction()==Element::CHOOSE) {
+  DynamicExpression *e = violation->GetTypedOwner();
+  CHECK(FixElement(e));
+  if (e->ComputeValue() == NULL) {
+    if (e->GetFunction()==Element::CHOOSE) {
       DynamicChoose *dc = dynamic_cast<DynamicChoose*>(violation->GetOwner());
       OTuple strategy = OTuple::ConvertOrNull
 	(dc->GetChildValue(StaticChoose::STRATEGY));
-      VLOG(0) << "Making random choice for strategy " << strategy << endl;
+      VLOG(1) << "Making random choice for strategy " << strategy << endl;
       if (strategy != NULL) {
 	Object choice = GC.RandomChoice(strategy);
-	VLOG(0) << "Picked a choice " << choice << endl;
+	VLOG(1) << "Picked a choice " << choice << endl;
 	dc->L1_TryMakeChoice(strategy, choice);
       }
     }
@@ -240,40 +248,17 @@ bool StaticExecutor::FixValue(ValueViolation *violation){
   violation->GetTypedOwner()->ComputeSetValue();
   return true;
 }
-bool StaticExecutor::FixIf(IfViolation *violation){
-  DynamicIf * d_if = violation->GetTypedOwner();
-  StaticIf * s_if = d_if->GetStaticIf();
-  StaticElement * s_on_true = s_if->GetChild(StaticIf::ON_TRUE);
-  StaticElement * s_on_false = s_if->GetChild(StaticIf::ON_FALSE);
-  if (!s_on_true || !s_on_false) {
-    VLOG(0) << "static if is missing children";
-    return false;
-  }
-  DynamicExpression * expr = d_if->GetConditionExpression();
-  if (!expr) {
-    VLOG(0) << "wtf, this violation shouldn't exist" << endl;
-    return false;
-  }
-  bool val = expr->value_ != Boolean::Make(false);
-  DynamicElement * on_true = d_if->GetSingleChild(StaticIf::ON_TRUE);
-  DynamicElement * on_false = d_if->GetSingleChild(StaticIf::ON_FALSE);
-  if (val && on_false) on_false->EraseTree();
-  if (!val && on_true) on_true->EraseTree();
-  if (val && !on_true) MakeDynamicElement(s_on_true ,d_if->GetBinding());
-  if (!val && !on_false) MakeDynamicElement(s_on_false ,d_if->GetBinding());
-  VLOG(2) << "Fixed if violation" << endl;
-  return true;
-}
 bool StaticExecutor::FixTime(TimeViolation *violation) {
   VLOG(2) << "Fixing time violation " << endl;
+  //  FixElement(dynamic_cast<DynamicElement *>(violation->GetTypedOwner()));
   violation->GetTypedOwner()->ComputeSetTime();
   return true;
-
 }
 bool StaticExecutor::FixPost(PostViolation *violation) {
   VLOG(2) << "Fixing post violation " << endl;
   DynamicPost * dp = violation->GetTypedOwner();
   CHECK(dp->NeedsPostViolation());
+  FixElement(dp);
   Object computed = dp->ComputeTuple();
   if (computed.GetType() != Object::OTUPLE) {
     if (!dp->posting_) { 
@@ -313,6 +298,7 @@ bool StaticExecutor::FixLet(LetViolation *violation) {
   //DynamicExpression *value_child 
   //  = dl->GetSingleExpressionChild(StaticLet::VALUE);
   // CHECK(value_child);
+  FixElement(dl);
   DynamicStatement *child = dl->GetSingleStatementChild(StaticLet::CHILD);  
   CHECK(child);
   VLOG(2) << "child= " << child->ShortDescription() << endl;

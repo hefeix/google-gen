@@ -494,10 +494,16 @@ void DynamicOn::L1_Erase(){
 }
 Record DynamicOn::GetRecordForDisplay() const {
   Record ret = DynamicStatement::GetRecordForDisplay();
-  forall(run, GetOnMultilink()->missing_)
-    ret["violations"] += run->second->ShortDescription() + "<br>\n";
-  forall(run, GetOnMultilink()->extra_)
-    ret["violations"] += run->second->ShortDescription() + "<br>\n";
+  set<Violation *> missing 
+    = Violation::GetViolations
+    (Violation::Search(this, Violation::MISSING_ON_MATCH));
+  set<Violation *> extra 
+    = Violation::GetViolations
+    (Violation::Search(this, Violation::EXTRA_ON_MATCH));
+  forall(run, missing)
+    ret["violations"] += (*run)->ShortDescription() + "<br>\n";
+  forall(run, extra)
+    ret["violations"] += (*run)->ShortDescription() + "<br>\n";
   return ret;
 }
 
@@ -705,7 +711,7 @@ Object DynamicEqual::ComputeValue() const {
 Object DynamicSum::ComputeValue() const {
   Object lhs = GetChildValue(StaticEqual::LHS);
   Object rhs = GetChildValue(StaticEqual::RHS);
-  VLOG(0) << "lhs=" << lhs << " rhs=" << rhs << endl;
+  VLOG(3) << "lhs=" << lhs << " rhs=" << rhs << endl;
   if (lhs.GetType() == Object::INTEGER
       && rhs.GetType() == Object::INTEGER) {
     return Integer::Make(Integer(lhs).Data() + Integer(rhs).Data());
