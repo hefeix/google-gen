@@ -225,6 +225,7 @@ bool StaticExecutor::FixExtraOnMatch(ExtraOnMatchViolation *violation) {
 
 bool StaticExecutor::FixValue(ValueViolation *violation){
   VLOG(2) << "Fixing value violation " << endl;
+
   DynamicExpression *e = violation->GetTypedOwner();
   CHECK(FixElement(e));
   if (e->ComputeValue() == NULL) {
@@ -239,6 +240,9 @@ bool StaticExecutor::FixValue(ValueViolation *violation){
 	dc->L1_TryMakeChoice(strategy, choice);
       }
     }
+
+    
+
   }
   if (violation->GetTypedOwner()->ComputeValue() == NULL) {
     VLOG(0) 

@@ -171,55 +171,70 @@ class NewFlakeChooser;
 // A static node other than an ON statement has no parent.
 typedef TypedViolation<StaticElement, Violation::STATIC_NO_PARENT>
   StaticNoParentViolation;
+
 // A static node makes an impossible choice
 typedef TypedViolation<StaticElement, Violation::STATIC_CHOICE>
   StaticChoiceViolation;
+
 // A dynamic node other than an ON statement has no parent.
 typedef TypedViolation<DynamicElement, Violation::DYNAMIC_NO_PARENT>
   DynamicNoParentViolation;
+
 // A dynamic node's binding contains the wrong set of variables
 // This violation is not present if there is a DynamicNoParentViolation
 typedef TypedViolation<DynamicElement, Violation::BINDING_VARIABLES>
   BindingVariablesViolation;
+
 // A dynamic node's binding has values for the old variables that 
 // differ from those of its parent
 // This violation is never present if there is a BindingVariablesViolation
 // or a DynamicNoParentViolation
 typedef TypedViolation<DynamicElement, Violation::BINDING_OLD_VALUES>
   BindingOldValuesViolation;
+
 // A let statement's value doesn't match it's child's binding.
 typedef TypedViolation<DynamicLet, Violation::LET>
   LetViolation;
+
 // A required tuple is not present on the blackboard
 typedef TypedViolation<Requirement, Violation::REQUIREMENT>
   RequirementViolation;
+
 // a tuple on the blackboard matches a prohibited pattern
 // data is an OTuple
 typedef TypedViolation<Prohibition, Violation::PROHIBITION>
   ProhibitionViolation;
+
 // an element is missing a child or has an extra child
 typedef TypedViolation<Element, Violation::CHILD>
   ChildViolation;
+
 // An on statement lacks a child for a binding which matches the blackboard.
 // Data is an OMap
 typedef TypedViolation<OnMultiLink, Violation::MISSING_ON_MATCH>
   MissingOnMatchViolation;
+
 // An on statement has a child whose binding does not match the blackboard.
 // Data is an OMap
 typedef TypedViolation<OnMultiLink, Violation::EXTRA_ON_MATCH>
   ExtraOnMatchViolation;
+
 // A new flake chooser generates a flake more than once. 
 // data is the flake
 typedef TypedViolation<NewFlakeChooser, Violation::NEW_FLAKE> NewFlakeViolation;
+
 // the time on a dynamic element may not be equal to its computed time.
 typedef TypedViolation<Element, Violation::TIME>
   TimeViolation;
+
 // a static on statement has no dynamic node
 typedef TypedViolation<StaticOn, Violation::MISSING_DYNAMIC_ON>
   MissingDynamicOnViolation;
+
 // the value of a dynamic expression doesn't match its computed value. 
 typedef TypedViolation<DynamicExpression, Violation::VALUE>
   ValueViolation;
+
 // Something is wrong with a dynamic output statement. This could be that the
 // posting is missing, the posting does not match the computed tuple or the 
 // computed time. The expression link could also be missing. 
@@ -228,6 +243,5 @@ typedef TypedViolation<DynamicExpression, Violation::VALUE>
 class DynamicPost;
 typedef TypedViolation<DynamicPost, Violation::POST>
   PostViolation;
-
 
 #endif

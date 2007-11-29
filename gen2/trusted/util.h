@@ -292,7 +292,7 @@ int RandomRoundoff(double d);
 // Extract a sample from a rankset or rankmap.
 template <class S>
 void GetSample(const S & full, S * result, uint sample_size) {
-  CHECK(sample_size < full.size());
+  CHECK(sample_size <= full.size());
   result->clear();
   if (sample_size * 3 >= full.size()) {
     int to_pick = sample_size;
@@ -315,6 +315,13 @@ void GetSample(const S & full, S * result, uint sample_size) {
     picked.insert(n);
     result->insert(*(full.nth(n)));
   }  
+}
+
+template <class S, class R>
+void GetSampleElement(const S& full, R * result) {
+  CHECK(full.size());
+  int n = RandomUInt32() % full.size();
+  *result = *(full.nth(n));  
 }
 
 #define EMPTY_SLOT (-1)
