@@ -91,6 +91,11 @@ void Posting::L1_ChangeTime(Time new_time) {
 TupleInfo::TupleInfo(Posting *first_posting, Blackboard *blackboard)
   :blackboard_(blackboard), tuple_(first_posting->tuple_) {
   CL.Creating(this);
+
+  // Maintain accurate counts
+  CL.ChangeValue(&blackboard_->total_tuples_, blackboard_->total_tuples_+1);
+  CL.AddToMapOfCounts(&blackboard_->lengths_, tuple_.size(), 1);
+
   CL.InsertIntoMap(&blackboard_->tuple_info_, tuple_, this);
   CL.InsertIntoSet
     (&postings_, make_pair(first_posting->time_, first_posting));
@@ -116,6 +121,11 @@ string TupleInfo::ToString() {
 }
 
 void TupleInfo::L1_Erase() {
+
+  // Maintain accurate counts 
+  CL.ChangeValue(&blackboard_->total_tuples_, blackboard_->total_tuples_-1);
+  CL.AddToMapOfCounts(&blackboard_->lengths_, tuple_.size(), -1);
+
   // first we send updates, then we remove the tuple from all index rows.
   SingleWTUpdate update = SingleWTUpdate::Destroy(tuple_, FirstTime());
   for (int pass=0; pass<2; pass++) {
@@ -221,16 +231,30 @@ void IndexRow::L1_SendCurrentAsUpdates(WTSubscription *sub) {
   }
 }
 
+bool IndexRow::GetRandomTuple(Tuple * result) {
+  pair<Time, TupleInfo*> tt;
+  if (!GetSampleElement(tuples_, &tt)) return false;
+  *result = tt.second->tuple_.Data();
+  return true;
+}
+
 void IndexRow::L1_ChangeTupleTime(TupleInfo *tuple_info, 
 				  Time old_time, Time new_time){  
 
   CL.RemoveFromSet(&tuples_, make_pair(old_time, tuple_info));
   CL.InsertIntoSet(&tuples_, make_pair(new_time, tuple_info));
 }
+
 void IndexRow::L1_AddTuple(TupleInfo *tuple_info) {
   Time time = tuple_info->FirstTime();
   CL.InsertIntoSet(&tuples_, make_pair(time, tuple_info));
+
+  if ( (wildcard_tuple_.Data().size() != 0) &&
+       (wildcard_tuple_.Data()[0] == WILDCARD) ) {
+    CL.AddToMapOfCounts(&first_term_counts_, tuple_info->tuple_.Data()[0], 1);
+  }
 }
+
 void IndexRow::L1_EraseIfUnnecessary(){
   if (tuples_.size() ||
       subscriptions_.size()) return;
@@ -238,6 +262,11 @@ void IndexRow::L1_EraseIfUnnecessary(){
 }
 
 void IndexRow::L1_RemoveTuple(TupleInfo *tuple_info) {
+  if ( (wildcard_tuple_.Data().size() != 0) &&
+       (wildcard_tuple_.Data()[0] == WILDCARD) ) {
+    CL.AddToMapOfCounts(&first_term_counts_, tuple_info->tuple_.Data()[0], -1);
+  }
+
   Time time = tuple_info->FirstTime();
   CL.RemoveFromSet(&tuples_, make_pair(time, tuple_info));
   L1_EraseIfUnnecessary();
@@ -366,6 +395,72 @@ bool Blackboard::GetRandomTupleMatching(Tuple * result, const Tuple& wildcard_t)
   GetSampleElement(ir->tuples_, &sample);
   *result = sample.second->GetTuple().Data();
   return true;
+}
+
+// We select a random tuple which contains all of the terms.
+// If situation_distribution is false, this selection is uniform. 
+// If situation_distribution is true, we first select a situation uniformly.  
+// A situation  is determined by the length of the tuple, the positions of the
+// given terms in the tuple, and the first term in the tuple (which is likely
+// to be a relation name).  
+
+bool Blackboard::GetRandomTupleContaining(Tuple * ret, 
+					  const set<Object>& terms,
+					  bool situation_distribution) {
+  CHECK(ret != NULL);
+  ret->clear();
+
+  // if (situation_distribution) then already_considered is the number of situations 
+  // considered.  Otherwise, it is the number of tuples already considered.
+  int already_considered = 0;
+  int n = terms.size();
+
+  // Run through the situation by lengths
+  forall(run, lengths_) {
+    int length = run->first;
+    if (length < terms.size()) continue;
+
+    // Run through the situation by positioning of the terms
+    for (PermutationIterator run_p(n, length); !run_p.done(); ++run_p){
+
+      // Creates a wildcard tuple for this situation
+      const vector<int> & perm = run_p.current();
+      Tuple t;
+      for (uint i=0; i<perm.size(); i++) {
+	t.push_back((perm[i]==EMPTY_SLOT)?WILDCARD:terms[perm[i]]);
+      }
+
+      IndexRow * ir = GetIndexRow(OTuple::Make(t));
+      if (!ir) continue;
+
+      if (situation_distribution && (t[0] == WILDCARD)) {
+	forall(run, ir->first_term_counts_) {
+	  t[0] = run->first;
+	  IndexRow * ir_special = GetIndexRow(OTuple::Make(t));
+	  CHECK(ir_special);
+	  already_considered++;
+	  if (rand() % already_considered == 0) {
+	    CHECK(ir_special->GetRandomTuple(&ret));
+	  }
+	}
+      } else {
+	bool to_select = false;
+	if (situation_distribution) {
+	  already_considered++;
+	  to_select = (rand() % already_considered == 0);
+	} else {
+	  already_considered += ir->size();
+	  to_select = (rand() % already_considered < (int) ir->size());
+	}
+	if (to_select) {
+	  CHECK(ir->GetRandomTuple(&ret));
+	  *ret = ir->GetRandomTuple;
+	}
+      }
+    }
+  }
+  if (ret->size()) return true;
+  return false;
 }
 
 void Blackboard::L1_FlushUpdates() {

@@ -302,10 +302,19 @@ struct IndexRow {
   string GetDescription() const { 
     return "IndexRow" + GetWildcardTuple().ToString();
   }
+
+  // Random tuples
+  bool GetRandomTuple(Tuple * result);
+  
   // contains (first time, tupleinfo *) for each tuple on the blackboard
   // that matches.
   typedef rankset<pair<Time, TupleInfo *> > TuplesType;
   TuplesType tuples_;
+
+  // This only exists for index rows with a WILDCARD in the 0th position
+  // and helps us select things in a situational distribution
+  map<Object, uint32> first_term_counts_;
+
   Blackboard * blackboard_;
 
   // The external subscriptions to this wildcard tuple.
@@ -328,6 +337,7 @@ class Blackboard {
 
   Blackboard() {
     current_wt_update_ = NULL;
+    total_tuples_ = 0;
   }
 
   void L1_AddPosting(Posting *p);
@@ -342,9 +352,12 @@ class Blackboard {
 
   static void Shell();
   void RandomTest();
-  uint64 GetNumWildcardMatches(OTuple wildcard_tuple);
 
+  // Some wildcard based searching
+  uint64 GetWildcardMatches(OTuple wildcard_tuple, vector<OTuple> * results);
+  uint64 GetNumWildcardMatches(OTuple wildcard_tuple);
   
+
   // it is error-prone to change the blackbard when there are searches
   // that are not being updated.  Let's keep track of whether such 
   // searches exist. 
@@ -384,7 +397,9 @@ class Blackboard {
 
   // Random tuples
   bool GetRandomTuple(Tuple * result);
-  bool GetRandomTupleMatching(Tuple * result, const Tuple& wildcard_t); 
+  bool GetRandomTupleMatching(Tuple * result, const Tuple& wildcard_t);
+  bool GetRandomTupleContaining(Tuple * ret, const set<Object>& terms,
+				bool situation_distribution);
 
  private:
   // returns null on failure
@@ -395,6 +410,10 @@ class Blackboard {
   hash_map<OTuple, IndexRow *> index_;
   rankmap<OTuple, TupleInfo *> tuple_info_;
   set<pair<int, Search*> > searches_to_flush_;
+
+  // number of stored tuples with these lengths
+  map<uint32, uint32> lengths_; 
+  uint32 total_tuples_;
 
   SingleWTUpdate * current_wt_update_;
 
