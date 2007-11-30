@@ -325,7 +325,7 @@ void GetSampleElement(const S& full, R * result) {
 }
 
 #define EMPTY_SLOT (-1)
-// runs through distinct assignments of a number of distincet items to a 
+// runs through distinct assignments of a number of distinct items to a 
 // greater or equal number of slots (which can fit at most one item each). 
 // The items are represented by the first non-negative integers, and the
 // empty slots by EMPTY_SLOT.

@@ -82,9 +82,7 @@ MaybeFindRandomManyExamplesRule(CandidateRule *ret,
   // Try to expand to a certain number of clauses
   uint num_clauses = 1; 
   while (RandomFraction() < 0.7) num_clauses++;  
-
-  // TODO uncomment so we can expandfully
-  // if (!pb.ExpandFully(num_clauses)) RETURN_TRACK(false);
+  if (!pb.ExpandFully(num_clauses)) RETURN_TRACK(false);
 
   // Return the candidate rule
   MPattern &p = pb.pattern_;
@@ -95,77 +93,72 @@ MaybeFindRandomManyExamplesRule(CandidateRule *ret,
   RETURN_TRACK(true);
 }
 
-
-/*
-bool Optimizer::PatternBuilder::ExpandFully(uint size) {
+bool PatternBuilder::TryExpandFully(uint size) {
   for (uint trials = 0; trials < 100 + 100 * size; trials++) {
     if (pattern_.size() < size) TryExpandOnce();
   }
   if (pattern_.size() < size) {
     VLOG(0) << "ExpandFully failed at size:" << size
-	    << " Pattern " << TupleVectorToString(pattern_) << endl;
+	    << " Pattern " << ToString(pattern_) << endl;
     RETURN_TRACK(false);
   }
   RETURN_TRACK(true);
 }
 
-bool Optimizer::PatternBuilder::TryExpandOnce() {
+// We pick variables from the pattern, and call those the anchors
+// Then we look for a new tuple containing all the objects that those variables map to in an example
+
+bool PatternBuilder::TryExpandOnce() {
 
   // Pick a number of anchors
   uint num_anchors = 1;
   while (RandomFraction() < 0.5) num_anchors++;
 
   // Pick that size of subset of anchors
+  // An anchor is an object that we're going to look for in an expanding tuple
   set<int> anchors;
   while(1) {
     anchors.clear();
     if (num_anchors > subs_[0].size()) num_anchors = subs_[0].size();
     while (anchors.size() < num_anchors) {
-      RandomElement(variter, subs_[0].sub_);
+      RandomElement(variter, subs_[0]);
       anchors.insert(variter->first);
     }
+
+    // We seem not to want to use the same set of anchors on multiple
+    // trials of tryexpandonce. So if we've seen this set before, take
+    // it with a lower probability
     int times_used = anchor_sets_tried_[anchors];
     if (RandomFraction() < (1.0/(1+times_used))) break;
   } 
-  if (VERBOSITY >= 2) {
-    string anchorstring;
-    forall(run, anchors) anchorstring += LEXICON.GetString(*run);
-    VLOG(2) << "anchors " << anchorstring << endl;
-  }
+  // Keep track of this new anchor set
   anchor_sets_tried_[anchors]++;
   
-  // Find the objects corresponding to those variables in the first example
-  set<int> object_anchors;
+  // Find the objects corresponding to the anchors using the first example
+  set<Object> object_anchors;
   forall(run, anchors) {
-    object_anchors.insert(subs_[0].Lookup(*run));
+    object_anchors.insert((subs_[0])[*run]);
   }
-  vector<int> v_object_anchors(object_anchors.begin(), object_anchors.end());
 
   // Get a random tuple with all the anchors
-  TupleIndex * ti = optimizer_->model_->GetTupleIndex();
   Tuple expansion_tuple;
-  bool found = ti->GetRandomTupleContaining(&expansion_tuple, v_object_anchors, true);
-  if (!found) RETURN_TRACK(false);
-  
-  // Make sure expansion tuple is earlier than the rule condition
-  // TODO: maybe at top level sometimes skip this and try to reverse time
-  const TrueTuple * expansion_tt = optimizer_->model_->GetTrueTuple(expansion_tuple);
-  CHECK(expansion_tt);
-  if (expansion_tt->GetTime() > target_time_) {
-    if (RandomFraction() < 1.0) RETURN_TRACK(false);
-  }
-    
-  // Can amortize this work but for now ...
-  // make sure this tuple isnt the same as our pattern substituted with subs_[0]
-  Pattern sub_0_pattern = pattern_;
-  set<Tuple> pattern0_tuples;
-  subs_[0].Substitute(&sub_0_pattern);
+  bool result = BB.GetRandomTupleContaining(&expansion_tuple, object_anchors);
+  if (!result) RETURN_TRACK(false);
+
+  // TODO, maybe check times here to make sure new tuple is later with a high prob
+
+  // Make sure this tuple isnt a duplicate of one of the tuples in the first example
+  MPattern sub_0_pattern = pattern_;
+  Substitute(subs_[0], &sub_0_pattern);
   for (uint c=0; c<sub_0_pattern.size(); c++)
     if (sub_0_pattern[c] == expansion_tuple)
       RETURN_TRACK(false);
 
-  // Turn some of the constants into varialbes based on subs_[0]
-  subs_[0].Reverse().Substitute(&expansion_tuple);  
+  // Turn some of the constants into variables based on subs_[0]
+  Map reverse_map = Reverse(subs_[0]);
+  Substitute(reverse_map, &expansion_tuple); 
+  // S 3 4, S 4 5, S b 5
+  // S 100 101, S 101 5
 
   // Run through all generalizations
   Tuple good_generalization;
@@ -176,16 +169,16 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
     Tuple generalized = gen.Current();
     for(uint i=0; i<subs_.size(); i++) {
       Tuple specified = generalized;
-      subs_[i].Substitute(&specified);
-      int num_results = ti->Lookup(specified, NULL);
+      Substitute(subs_[i], &specified);
+      int num_results = BB.GetNumWildcardMatches(OTuple::Make(specified));
       if (num_results != 1) {
 	works = false;
 	break;
       }
-      vector<Tuple> results;
-      ti->Lookup(specified, &results);
+      vector<OTuple> results;
+      BB.GetWildcardMatches(OTuple::Make(specified), &results);
       CHECK(results.size()==1);
-      expansion_tuples[i] = results[0];
+      expansion_tuples[i] = results[0].Data();
     }
     if (works) {
       any_good_generalization = true;
@@ -194,18 +187,19 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
     }
   }
   if (!any_good_generalization) RETURN_TRACK(false);
+
   for (uint i=0; i<good_generalization.size(); i++) {
     if (good_generalization[i] == WILDCARD) {
-      int var = Variable(subs_[0].FirstUnusedVariable());
+      Variable var = FirstUnusedVariable(subs_[0]);
       for (uint sub_num=0; sub_num<subs_.size(); sub_num++){ 
-	subs_[sub_num].Add(var, expansion_tuples[sub_num][i]);
+	subs_[sub_num][var] = expansion_tuples[sub_num][i];
       }
       good_generalization[i] = var;
     }
   }
   pattern_.push_back(good_generalization);
-  CollapseEquivalentVariables();
-  CollapseConstantVariables();
+  //CollapseEquivalentVariables();
+  //CollapseConstantVariables();
   if (VERBOSITY >= 2) {
     VLOG(2) << "Expanded to " << ToString() << endl;
   }
@@ -214,6 +208,7 @@ bool Optimizer::PatternBuilder::TryExpandOnce() {
   RETURN_TRACK(true);
 }
 
+/*
 void Optimizer::PatternBuilder::CollapseEquivalentVariables() {
   // the assignment of a variable is the mapping from substitution to constant.
   // this maps the assigment to the set of variables with that assignment. 

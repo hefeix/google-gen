@@ -29,8 +29,8 @@ struct PatternBuilder {
 
   bool TryInitializeFromTuple();
 
-  //bool TryExpandOnce();
-  //bool TryExpandFully(uint size);
+  bool TryExpandOnce();
+  bool TryExpandFully(uint size);
   
   //void CollapseEquivalentVariables();
   //void CollapseConstantVariables();

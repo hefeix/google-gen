@@ -22,6 +22,7 @@
 #include "spec.h"
 #include "fixers.h"
 #include "chooser.h"
+#include "ai.h"
 
 #include <fstream>
 
@@ -48,6 +49,12 @@ void Shell() {
       string func_name;
       cin >> func_name >> level;
       SetVerbosity(func_name, level);
+    }
+    if (command == "ai") {
+      string comments;
+      CandidateRule cr;
+      Optimizer::MaybeFindRandomManyExamplesRule(&cr, &comments);
+      cout << "rule:" << ToString(cr) << endl;
     }
   }
 }
