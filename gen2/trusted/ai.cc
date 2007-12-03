@@ -82,7 +82,7 @@ MaybeFindRandomManyExamplesRule(CandidateRule *ret,
   // Try to expand to a certain number of clauses
   uint num_clauses = 1; 
   while (RandomFraction() < 0.7) num_clauses++;  
-  if (!pb.ExpandFully(num_clauses)) RETURN_TRACK(false);
+  if (!pb.TryExpandFully(num_clauses)) RETURN_TRACK(false);
 
   // Return the candidate rule
   MPattern &p = pb.pattern_;
@@ -99,7 +99,7 @@ bool PatternBuilder::TryExpandFully(uint size) {
   }
   if (pattern_.size() < size) {
     VLOG(0) << "ExpandFully failed at size:" << size
-	    << " Pattern " << ToString(pattern_) << endl;
+	    << " Pattern " << ::ToString(pattern_) << endl;
     RETURN_TRACK(false);
   }
   RETURN_TRACK(true);
