@@ -108,7 +108,7 @@ OMap Restrict(const OMap & m, const SType & keys){
 
 Map Reverse(const Map & m);
 
-Variable FirstUnusedVariable(Map m);
+Variable FirstUnusedVariable(const Map & m);
 
   
 // Is m1 a subset of m2.
@@ -162,5 +162,8 @@ void RenameVariablesInOrder(MPattern * v, Map *m);
 // I believe that this may be NP-hard, but let's at least make an attempt. 
 // TODO: comment what is canonical
 MPattern Canonicalize(const MPattern & v, Map *sub);
+
+// Put a rule (an ordered pair of tuple vectors) in canonical form.
+CandidateRule CanonicalizeRule(const CandidateRule & r, Map * out_sub);
 
 #endif

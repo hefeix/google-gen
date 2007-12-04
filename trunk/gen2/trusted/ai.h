@@ -32,20 +32,33 @@ struct PatternBuilder {
   bool TryExpandOnce();
   bool TryExpandFully(uint size);
   
-  //void CollapseEquivalentVariables();
-  //void CollapseConstantVariables();
+  void CollapseEquivalentVariables();
+  void CollapseConstantVariables();
 
   string ToString();
 
   MPattern pattern_;
   vector<Map> subs_;
-  map<set<int>, int> anchor_sets_tried_;
+  map<set<Object>, int> anchor_sets_tried_;
 };
 
 struct Optimizer{
   static bool 
   MaybeFindRandomManyExamplesRule(CandidateRule * ret, 
 				  string *comments);
+
+  bool FindSampling(const MPattern & p, SamplingInfo * result, 
+		    int64 max_work,
+		    vector<Map> * subs,
+		    uint64 * estimated_num_results,
+		    uint64 * actual_num_results,
+		    set<uint> * bad_clauses, // don't sample these
+		    SamplingInfo *hint);
+
+  bool VetteCandidateRule(CandidateRule r, 
+			  CandidateRule * simplified_rule, 
+			  int64 max_work, string *comments);
+
 };
 
 

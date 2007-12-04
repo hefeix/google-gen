@@ -233,7 +233,8 @@ void IndexRow::L1_SendCurrentAsUpdates(WTSubscription *sub) {
 
 bool IndexRow::GetRandomTuple(Tuple * result) {
   pair<Time, TupleInfo*> tt;
-  if (!GetSampleElement(tuples_, &tt)) return false;
+  if (tuples_.size() == 0) return false;
+  GetSampleElement(tuples_, &tt);
   *result = tt.second->tuple_.Data();
   return true;
 }
@@ -327,6 +328,8 @@ void Blackboard::L1_RemovePosting(Posting * p){
   ti->L1_RemovePosting(p);
 }
 
+
+
 Query * Blackboard::L1_GetExecuteQuery(OPattern p, SamplingInfo sampling, 
 				       int64 *max_work_now){
   if (!sampling.sampled_) {
@@ -355,10 +358,21 @@ TupleInfo * Blackboard::GetTupleInfo(OTuple t){
   return NULL;
 }
 
-uint64 Blackboard::GetNumWildcardMatches(OTuple wildcard_tuple) {
+uint64 Blackboard::GetWildcardMatches(OTuple wildcard_tuple, 
+				      vector<OTuple> * results) {
+  if (results) results->clear();
   IndexRow * ir = GetIndexRow(wildcard_tuple);
   if (!ir) return 0;
+  if (results) {
+    forall(run, ir->tuples_) {
+      results->push_back(run->second->tuple_);
+    }
+  }
   return ir->size();
+}
+
+uint64 Blackboard::GetNumWildcardMatches(OTuple wildcard_tuple) {
+  return GetWildcardMatches(wildcard_tuple, NULL);
 }
 
 IndexRow * Blackboard::GetIndexRow(OTuple wildcard_tuple){
@@ -407,6 +421,8 @@ bool Blackboard::GetRandomTupleMatching(Tuple * result, const Tuple& wildcard_t)
 bool Blackboard::GetRandomTupleContaining(Tuple * ret, 
 					  const set<Object>& terms,
 					  bool situation_distribution) {
+  vector<Object> v_terms;
+  v_terms.insert(v_terms.end(), terms.begin(), terms.end());
   CHECK(ret != NULL);
   ret->clear();
 
@@ -417,7 +433,7 @@ bool Blackboard::GetRandomTupleContaining(Tuple * ret,
 
   // Run through the situation by lengths
   forall(run, lengths_) {
-    int length = run->first;
+    uint length = run->first;
     if (length < terms.size()) continue;
 
     // Run through the situation by positioning of the terms
@@ -427,7 +443,7 @@ bool Blackboard::GetRandomTupleContaining(Tuple * ret,
       const vector<int> & perm = run_p.current();
       Tuple t;
       for (uint i=0; i<perm.size(); i++) {
-	t.push_back((perm[i]==EMPTY_SLOT)?WILDCARD:terms[perm[i]]);
+	t.push_back((perm[i]==EMPTY_SLOT)?WILDCARD:v_terms[perm[i]]);
       }
 
       IndexRow * ir = GetIndexRow(OTuple::Make(t));
@@ -440,7 +456,7 @@ bool Blackboard::GetRandomTupleContaining(Tuple * ret,
 	  CHECK(ir_special);
 	  already_considered++;
 	  if (rand() % already_considered == 0) {
-	    CHECK(ir_special->GetRandomTuple(&ret));
+	    CHECK(ir_special->GetRandomTuple(ret));
 	  }
 	}
       } else {
@@ -453,8 +469,7 @@ bool Blackboard::GetRandomTupleContaining(Tuple * ret,
 	  to_select = (rand() % already_considered < (int) ir->size());
 	}
 	if (to_select) {
-	  CHECK(ir->GetRandomTuple(&ret));
-	  *ret = ir->GetRandomTuple;
+	  CHECK(ir->GetRandomTuple(ret));
 	}
       }
     }

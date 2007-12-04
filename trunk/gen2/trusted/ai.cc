@@ -116,7 +116,7 @@ bool PatternBuilder::TryExpandOnce() {
 
   // Pick that size of subset of anchors
   // An anchor is an object that we're going to look for in an expanding tuple
-  set<int> anchors;
+  set<Object> anchors;
   while(1) {
     anchors.clear();
     if (num_anchors > subs_[0].size()) num_anchors = subs_[0].size();
@@ -142,7 +142,8 @@ bool PatternBuilder::TryExpandOnce() {
 
   // Get a random tuple with all the anchors
   Tuple expansion_tuple;
-  bool result = BB.GetRandomTupleContaining(&expansion_tuple, object_anchors);
+  bool result = BB.GetRandomTupleContaining(&expansion_tuple, 
+					    object_anchors, true);
   if (!result) RETURN_TRACK(false);
 
   // TODO, maybe check times here to make sure new tuple is later with a high prob
@@ -198,8 +199,8 @@ bool PatternBuilder::TryExpandOnce() {
     }
   }
   pattern_.push_back(good_generalization);
-  //CollapseEquivalentVariables();
-  //CollapseConstantVariables();
+  CollapseEquivalentVariables();
+  CollapseConstantVariables();
   if (VERBOSITY >= 2) {
     VLOG(2) << "Expanded to " << ToString() << endl;
   }
@@ -208,51 +209,424 @@ bool PatternBuilder::TryExpandOnce() {
   RETURN_TRACK(true);
 }
 
-/*
-void Optimizer::PatternBuilder::CollapseEquivalentVariables() {
+
+void PatternBuilder::CollapseEquivalentVariables() {
   // the assignment of a variable is the mapping from substitution to constant.
   // this maps the assigment to the set of variables with that assignment. 
-  map<vector<int>, set<int> > assingments_to_variables;
-  forall(run_var, subs_[0].sub_){
-    int var = run_var->first;
-    vector<int> assignment;
+  map<vector<Object>, set<Variable> > assingments_to_variables;
+  forall(run_var, subs_[0]){
+    Variable var = Variable(run_var->first);
+    vector<Object> assignment;
     for(uint i=0; i<subs_.size(); i++) {
-      assignment.push_back(subs_[i].Lookup(var));
+      assignment.push_back(subs_[i][var]);
     }
     assingments_to_variables[assignment].insert(var);
   }
-  Substitution pattern_tweak;
+  Map pattern_tweak;
   forall(run_a, assingments_to_variables) if (run_a->second.size() > 1) {
-    int canonical_var = *(run_a->second.begin());
+    Variable canonical_var = *(run_a->second.begin());
     forall(run_var, run_a->second) {
-      int var = *run_var;
+      Variable var = *run_var;
       if (var == canonical_var) continue;
-      for (uint i=0; i<subs_.size(); i++) subs_[i].sub_.erase(var);
-      pattern_tweak.Add(var, canonical_var);
+      for (uint i=0; i<subs_.size(); i++) subs_[i].erase(var);
+      pattern_tweak[var] = canonical_var;
     }
   }
-  pattern_tweak.Substitute(&pattern_);
+  Substitute(pattern_tweak, &pattern_);
 }
 
-void Optimizer::PatternBuilder::CollapseConstantVariables() {
-  Substitution pattern_tweak;
+void PatternBuilder::CollapseConstantVariables() {
+  Map pattern_tweak;
   CHECK(subs_.size() > 0);
-  Substitution example = subs_[0];
-  forall(run_var, example.sub_) {
-    int var = run_var->first;
-    set<int> values;
+  Map example = subs_[0];
+  forall(run_var, example) {
+    Variable var = run_var->first;
+    set<Object> values;
     for (uint i=0; i<subs_.size(); i++)
-      values.insert(subs_[i].Lookup(var));
+      values.insert(subs_[i][var]);
     if (values.size() == 1) {
-      pattern_tweak.Add(var, *values.begin());
+      pattern_tweak[var] =  *values.begin();
       for (uint i=0; i<subs_.size(); i++)
-	subs_[i].sub_.erase(var);
+	subs_[i].erase(var);
     }
   }
-  pattern_tweak.Substitute(&pattern_);
+  Substitute(pattern_tweak, &pattern_);
 }
 
-*/
+
+
+bool Optimizer::
+FindSampling(const MPattern & p, SamplingInfo * result, 
+	     int64 max_work,
+	     vector<Map> * subs, 
+	     uint64 * estimated_num_results,
+	     uint64 * actual_num_results,
+	     set<uint> * bad_clauses, // don't sample these
+	     SamplingInfo *hint){
+  CHECK(estimated_num_results);
+  VLOG(1) << "Finding sampling for " << ToString(p) 
+	  << " max_work=" << max_work << endl;
+
+  const int first_denominator = 1024;
+  // Sample more aggressively at first, then less agressively
+  for (int denominator = first_denominator; denominator>0; denominator >>=1 ) {
+    bool all_take_too_long = true;
+    
+    for (int sample_clause_i=(denominator==first_denominator && hint)?-1:0; 
+	 sample_clause_i<((denominator==1)?1:(int)p.size()); 
+	 sample_clause_i++) {
+      uint sample_clause = sample_clause_i;
+      
+
+      VLOG(2) << "Trying sample_clause:" << sample_clause << endl;
+      
+      SamplingInfo sampling;
+      bool sampled = (denominator > 1);
+      if (sample_clause_i == -1) {
+	sampling = *hint;
+      } else if (sampled) {
+	sampling = SamplingInfo(sample_clause, 1.0/denominator);
+      }
+      if (bad_clauses && ((*bad_clauses) % (uint)sampling.position_) 
+	  && sampling.sampled_) continue;
+
+      int64 max_work_now = max_work;
+      uint64 num_results;
+      bool success = 
+	model_->GetTupleIndex()->FindSatisfactions
+	(p, sampling, subs, &num_results, &max_work_now);
+
+      VLOG(2) << "Sample_clause: " 
+	      << sample_clause << (success ? " GOOD" : " BAD") << endl;
+      
+      if (!success) continue;
+      all_take_too_long = false;
+      if (!sampled) {
+	*result = sampling; 
+	if (estimated_num_results)
+	  *estimated_num_results = num_results;
+	if (actual_num_results)
+	  *actual_num_results = num_results;
+	VLOG(1) << "Unsampled" << endl;
+	RETURN_TRACK(true);
+      }
+      // If sampled, don't accept too few results
+      if (num_results < 5) continue;
+      if (subs) {
+	CHECK(subs->size() == num_results);
+	set<int> sampled_tuple_variables 
+	  = GetVariables(p[sampling.position_]);
+	bool any_multivalued_variables = false;
+	forall(run, sampled_tuple_variables){
+	  int compare_to = (*subs)[0].Lookup(*run);
+	  for (uint i=1; i<subs->size(); i++) {
+	    if ((*subs)[i].Lookup(*run) != compare_to) {
+	      any_multivalued_variables = true;
+	      break;
+	    }
+	  }
+	  if (any_multivalued_variables) break;
+	}
+	if (!any_multivalued_variables) continue;
+      }
+      *result = sampling;
+      if (estimated_num_results)
+	*estimated_num_results = (uint64)(num_results / sampling.GetFraction());
+      if (actual_num_results)
+	*actual_num_results = num_results;
+      VLOG(1) << "Sampling clause " << p[sampling.position_].ToString() 
+	      << " d:" << (1/sampling.GetFraction()) << endl;
+      RETURN_TRACK(true);
+    }
+
+    if (all_take_too_long) {
+      VLOG(1) << "Sampling failed at denom:" << denominator << endl;
+      RETURN_TRACK(false);
+    }
+  }
+  VLOG(1) << "Sampling failed" << endl;
+  RETURN_TRACK(false);
+}
+
+
+
+bool Optimizer::VetteCandidateRule(CandidateRule r,
+				   CandidateRule *simplified_rule,
+				   int64 max_work, 
+				   string *comments){
+  VLOG(1) << "Raw=" << ToString(r) << endl;
+  if (comments) *comments += " Raw=" + ToString(r);
+  
+  // Make sure existing preconditions limit results
+  if ( (GetVariables(r.first).size() != 0) &&
+       (Intersection(GetVariables(r.first), 
+		     GetVariables(r.second)).size()==0) ) {
+    VLOG(1) << "Precondition and result disconnected" << endl;
+    RETURN_TRACK(false);
+  }
+
+  // Canonicalize 
+  r = CanonicalizeRule(r, NULL);
+  VLOG(1) << "Canonicalized=" << ToString(r) << endl;
+
+  // look for a good sampling
+  SamplingInfo combined_sampling;
+  vector<Substitution> full_subs;
+  uint64 estimated_num_firings;
+  uint64 actual_num_firings;
+  if (!FindSampling(Concat(r), &combined_sampling, max_work, &full_subs, 
+		    &estimated_num_firings, &actual_num_firings, NULL, NULL)) {
+    VLOG(1) << "Couldn't find sampling for rule" << endl;
+    RETURN_TRACK(false);
+  }
+  if (estimated_num_firings > 5 * model_->GetNumTrueTuples()) {
+    VLOG(1) << "Too many firings" << endl;
+    RETURN_TRACK(false);
+  }  
+  VLOG(1) << "Set total sampling actual_num_firings:" 
+	  << actual_num_firings << endl;
+
+  SamplingInfo precondition_sampling;
+  uint64 estimated_num_satisfactions;
+  uint64 actual_num_satisfactions;
+  SamplingInfo * hint = &combined_sampling;
+  if (combined_sampling.sampled_ 
+      && combined_sampling.position_ >= r.first.size()) hint = NULL;
+
+  if (!FindSampling(r.first, &precondition_sampling, max_work, NULL,
+		    &estimated_num_satisfactions, 
+		    &actual_num_satisfactions, NULL, hint)) {
+    VLOG(1) << "Couldn't find sampling for precondition" << endl;
+    RETURN_TRACK(false);
+  }
+  if (estimated_num_satisfactions > 2000000) {
+    VLOG(1) << "Too many satisfactions" << endl;
+    RETURN_TRACK(false);
+  }
+  VLOG(1) << "Set precondition sampling actual_num_sat:" 
+	  << actual_num_satisfactions << endl;
+
+  // Test whether the rule makes any sense or not
+
+  // First get the firing cost (TODO get the first firings instead)
+  LL firing_ll;
+  VLOG(1) << "(EST) #sat:" << estimated_num_satisfactions
+	  << " (EST) #fir:" << estimated_num_firings << endl;
+  if (estimated_num_satisfactions > estimated_num_firings) {
+    firing_ll += BinaryChoiceLnLikelihood
+      (estimated_num_satisfactions, estimated_num_firings);
+  }
+
+  // Now from the examples, try to get the per firing naming cost
+  LL naming_ll;
+  set<int> creative_vars = GetVariables(r.second) - GetVariables(r.first);
+  set<Chooser *> all_choosers = model_->GetAllObjectChoosers();
+  forall(run_var, creative_vars) {
+    vector<int> objects;
+    for (int c=0; c<(int)full_subs.size(); c++) {
+      CHECK (full_subs[c].Contains(*run_var));
+      int object = full_subs[c].Lookup(*run_var);
+	objects.push_back(object);
+    }
+    // Pick the best chooser for this variable
+    // TODO: move this into model as FindBestChooserForChoices(vector<int>);
+    LL best_chooser_ll;
+    Chooser * best_chooser = NULL;
+    forall(run_chooser, all_choosers) {
+      bool good_chooser = true;
+      Chooser * this_chooser = *run_chooser;
+      LL this_chooser_ll;
+      for (int c=0; c<(int)objects.size(); c++) {
+	int object_count = this_chooser->GetCount(objects[c]);
+	if (object_count == 0) {
+	  // The global chooser is always a good chooser
+	  if (this_chooser != model_->GetGlobalChooser()) {
+	    good_chooser = false;
+	    break;
+	  }
+	}
+	LL local_ll;
+	local_ll += Log(object_count + 1);
+	local_ll -= Log(this_chooser->total_ + 1);
+	if (this_chooser == model_->GetGlobalChooser()) {
+	  VLOG(1) << "Globalcount:" << object_count
+		  << " Globaltotal:" << this_chooser->total_ 
+		  << " LL:" << local_ll.ToString() << endl;
+	}
+	this_chooser_ll += local_ll;
+      }
+      if (good_chooser) {
+	if ((best_chooser == NULL) ||
+	    (this_chooser_ll > best_chooser_ll)) {
+	  best_chooser = this_chooser;
+	  best_chooser_ll = this_chooser_ll;
+	}
+      }
+    }
+    if (best_chooser == NULL) {
+      VLOG(0) << "CandidateRule:" << CandidateRuleToString(r) << endl;
+      VLOG(0) << "CreativeVars size:" << creative_vars.size() << endl;
+      forall(run_var_debug, creative_vars) {
+	VLOG(0) << "var:" << *run_var_debug << endl;
+      }
+      CHECK(best_chooser);
+    }
+    if (best_chooser != model_->GetGlobalChooser()) {
+      VLOG(1) << "Found a better chooser!" << endl;
+      if (VERBOSITY >= 1) {
+	for (int c=0; c<(int)objects.size(); c++) {
+	  int object_count = best_chooser->GetCount(objects[c]);
+	  VLOG(1) << "count:" << object_count
+		  << " total:" << best_chooser->total_ << endl;
+	}
+      }
+    }
+    naming_ll += best_chooser_ll;
+  }
+  VLOG(1) << "naming firing multiplier:" 
+	  << int(estimated_num_firings/actual_num_firings) << endl;
+  naming_ll = naming_ll * int(estimated_num_firings / actual_num_firings);
+
+  // Here maybe we shouldn't charge for the preconditions if they already exist
+  LL rule_encoding_ll = model_->RuleEncodingCost(r);
+  
+  // Now guess the benefit of the rule
+  LL benefits;
+  for (int c=0; c<(int)full_subs.size(); c++) {
+    Pattern rhs = r.second;
+    full_subs[c].Substitute(&rhs);
+    for (int c2=0; c2<(int)rhs.size(); c2++) {
+      Tuple t = rhs[c2];
+      CHECK(t.IsConstantTuple());
+      const TrueTuple * tt = model_->GetTrueTuple(t);
+      CHECK(tt);
+      benefits += GuessBenefit(tt);
+    }
+  }
+  benefits = benefits * int(estimated_num_firings / actual_num_firings);
+
+  VLOG(1) << "firing_ll:" << firing_ll.ToString() << endl;
+  VLOG(1) << "naming_ll:" << naming_ll.ToString() << endl;
+  VLOG(1) << "rule_encoding_ll:" << rule_encoding_ll << endl;
+  VLOG(1) << "benefits:" << benefits.ToString() << endl;
+
+  LL total_ll = benefits + rule_encoding_ll + firing_ll + naming_ll;
+  if (total_ll < LL(0)) {
+    VLOG(1) << "Too useless, rejected" << endl;
+    RETURN_TRACK(false);
+  }
+  
+  // remove boring variables, collapse equal variables, and remove 
+  // variable free tuples.
+  CandidateRule old_r = r;
+  PatternBuilder pb(this, Concat(r), full_subs);
+  pb.CollapseEquivalentVariables();
+  pb.CollapseConstantVariables();
+  r.first = Pattern(pb.pattern_.begin(), pb.pattern_.begin()+r.first.size());
+  r.second = Pattern(pb.pattern_.begin()+r.first.size(), pb.pattern_.end());
+  r.first = RemoveVariableFreeTuples(r.first);
+  r.second = RemoveVariableFreeTuples(r.second);
+  if (old_r != r) {
+    // Note estimated num firings may be wrong here, may want to recalculate if using numbers
+    r = CanonicalizeRule(r, NULL);
+    VLOG(1) << "Collapsed rule " << CandidateRuleToString(r) << endl;
+  }
+
+  // Try to remove preconditions that are not very restrictive.
+  int since_last_improvement = 0;
+  uint remove_clause = 0;
+  for (;since_last_improvement < int(r.first.size()); since_last_improvement++){
+    if (precondition_sampling.sampled_ &&
+	since_last_improvement == int(r.first.size()-1)) {
+      remove_clause = precondition_sampling.position_;
+    } else {
+      remove_clause = (remove_clause + 1) % r.first.size();
+      if (precondition_sampling.sampled_ &&
+	  remove_clause == precondition_sampling.position_)
+	remove_clause = (remove_clause + 1) % r.first.size();
+    }
+
+    VLOG(1) << "Considering removing " << remove_clause << " " << r.first[remove_clause].ToString() << endl;
+    VLOG(2) << "since_last_improvement=" << since_last_improvement << endl;
+    vector<Tuple> simplified_preconditions 
+      = RemoveFromVector(r.first, remove_clause);
+
+    // if a variable is in the result and occurs only in this clause the clause is necessary
+    if ((Intersection(GetVariables(r.first[remove_clause]), 
+		      GetVariables(r.second))
+	 - GetVariables(simplified_preconditions)).size()) {
+      VLOG(1) << "Test failed - necessary variable" << endl;
+      continue;
+    }
+
+    // Don't disconnect the pattern if it's not already disconnected 
+    // TODO: maybe later check the #disconnected components of both are the same
+    if (IsConnectedPattern(r.first) 
+	&& !IsConnectedPattern(simplified_preconditions)) {
+      VLOG(1) << "Test failed - disconnects preconditions" << endl;
+      continue;
+    }
+    
+    if (precondition_sampling.sampled_ && 
+	remove_clause == precondition_sampling.position_) {      
+      // pick a new sampling clause.
+      set<uint> bad_clauses; 
+      bad_clauses.insert(remove_clause);
+      if (!FindSampling(r.first, &precondition_sampling, max_work, NULL,
+			&estimated_num_satisfactions, 
+			&actual_num_satisfactions, &bad_clauses, NULL)) 
+	break;
+      VLOG(1) << "Changed precondition sampling actual_num_satifactions:" 
+	      << actual_num_satisfactions << endl;
+    }
+  
+    uint64 simplified_num_satisfactions = 0;
+    int64 max_work_now = max_work;
+    SamplingInfo simplified_sampling;
+    simplified_sampling = precondition_sampling;
+    simplified_sampling.RemovePosition(remove_clause);
+    if (!model_->GetTupleIndex()->FindSatisfactions
+	(simplified_preconditions, 
+	 simplified_sampling, 
+	 NULL, // substitutions
+	 &simplified_num_satisfactions,
+	 &max_work_now)) {
+      VLOG(1) << "Test failed ... I can't get no satisfaction" << endl;
+      continue;
+    }
+
+    VLOG(1) << "test #sat:" << simplified_num_satisfactions 
+	    << " <=? #original_sat (*1.1):" << actual_num_satisfactions * 1.1 << endl;
+    if (simplified_num_satisfactions  > actual_num_satisfactions * 1.1)
+      continue;
+
+    // adjust the samplinginfo object
+    VLOG(1) << "Removing clause " << r.first[remove_clause].ToString() << endl;
+    precondition_sampling = simplified_sampling;
+    r.first = RemoveFromVector(r.first, remove_clause);
+    actual_num_satisfactions = simplified_num_satisfactions;
+    since_last_improvement = -1; // start back at zero.
+    VLOG(1) << "removed clause pattern=" << TupleVectorToString(r.first)
+	    << endl;
+    VLOG(1) << "sampling=" << simplified_sampling.ToString() << endl;
+  }
+
+  r = CanonicalizeRule(r, NULL);
+  if ((recently_checked_ % r) 
+      && (recently_checked_[r] 
+	  >= model_->GetUtility())) {
+    VLOG(1) << "Recently checked" << endl;
+    RETURN_TRACK(false);
+  }
+
+  CHECK(simplified_rule);
+  *simplified_rule = r;
+
+  VLOG(1) << "Candidate=" << CandidateRuleToString(r) << endl;
+  RETURN_TRACK(true);
+} 
+
+
 
 
 
