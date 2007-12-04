@@ -1,12 +1,21 @@
 {
-  on pattern() post (F 0 0);
-  on pattern((F x y))
-    delay #0
-      if (choose (constant (independent_bool 0.001)) ) {
+  on pattern() 
+    parallel {
+      post (S 0 1);
+      post (C 0 0);
+  }
+  on pattern((S x y))
+    delay #
+      if (equal (substitute y) 100) {
         pass;
-	let a (sum (substitute x) 1)
-	  let b (sum (substitute x) (substitute y) )
-	  post (substitute (F a b) );
+	let z (sum (substitute y) 1)
+	  post (substitute (S y z) );
       }
+  on pattern((C x 0)(S x y)) 
+    delay #0
+       post (substitute (C y 1) );
+  on pattern((C x 1)(S x y)) 
+    delay #0
+       post (substitute (C y 0) );
 }
 

@@ -439,3 +439,41 @@ MPattern Canonicalize(const MPattern & v, Map*sub){
 }
 
 
+
+CandidateRule CanonicalizeRule(const CandidateRule & r, 
+			       Map * out_sub) {
+  const MPattern & preconditions = r.first;
+  const MPattern & result = r.second;
+  Map sub;
+  MPattern c_pre = Canonicalize(preconditions, &sub);
+  int last_variable_in_preconditions = -1;
+  forall(run, sub) 
+    last_variable_in_preconditions >?= run->second.Data();
+  int next_var = last_variable_in_preconditions+1;
+  MPattern c_res = result;
+  for (uint i=0; i<c_res.size(); i++) 
+    for (uint j=0; j<c_res[i].size(); j++) {
+      Object & w_ref = c_res[i][j];
+      if (sub % w_ref)
+	w_ref = Variable::Make( (1<<20) + Variable(sub[w_ref]).Data());
+    }
+  Substitution res_sub;
+  c_res = Canonicalize(c_res, &res_sub);
+  for (uint i=0; i<c_res.size(); i++) 
+    for (uint j=0; j<c_res[i].size(); j++) {
+      Object & w_ref = c_res[i][j];
+      if (w_ref.GetType() == Object::VARIABLE) {
+	if (Variable(w_ref).Data() >= (1<<20)) 
+	  w_ref = Variable::Make(Variable(w_ref).Data()-(1<<20));
+	else 
+	  w_ref = Variable::Make(Variable(w_ref).Data() + next_var);
+      }
+    }
+  if (out_sub) {
+    *out_sub = res_sub;
+    forall (run, *out_sub)
+      run->second = Variable::Make(Variable(run->second).Data()+next_var);
+    out_sub.insert(sub.begin(), sub.end());
+  }
+  return make_pair(c_pre, c_res);
+}
