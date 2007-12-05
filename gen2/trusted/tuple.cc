@@ -446,34 +446,47 @@ CandidateRule CanonicalizeRule(const CandidateRule & r,
   const MPattern & result = r.second;
   Map sub;
   MPattern c_pre = Canonicalize(preconditions, &sub);
+
+  VLOG(1) << "original: " << ToString(r)
+	  << " canonical pre: " << MPatternToOPattern(c_pre)
+	  << " sub:" << OMap::Make(sub) << endl;
+
   int last_variable_in_preconditions = -1;
   forall(run, sub) 
-    last_variable_in_preconditions >?= run->second.Data();
+    last_variable_in_preconditions >?= Variable(run->second).Data();
+
+  VLOG(1) << "last variable:" << last_variable_in_preconditions << endl;
   int next_var = last_variable_in_preconditions+1;
+
   MPattern c_res = result;
   for (uint i=0; i<c_res.size(); i++) 
     for (uint j=0; j<c_res[i].size(); j++) {
       Object & w_ref = c_res[i][j];
-      if (sub % w_ref)
-	w_ref = Variable::Make( (1<<20) + Variable(sub[w_ref]).Data());
+      if (sub % w_ref) {
+	w_ref = Escape::Make(sub[w_ref]);
+      }
+      else if (w_ref.GetType() == Object::ESCAPE) {
+	w_ref = Escape::Make(w_ref);
+      }
     }
-  Substitution res_sub;
+  VLOG(1) << "step 2 c_res:" << MPatternToOPattern(c_res) << endl;
+  Map res_sub;
   c_res = Canonicalize(c_res, &res_sub);
+  VLOG(1) << "step 3 c_res:" << MPatternToOPattern(c_res) << endl;
   for (uint i=0; i<c_res.size(); i++) 
     for (uint j=0; j<c_res[i].size(); j++) {
       Object & w_ref = c_res[i][j];
-      if (w_ref.GetType() == Object::VARIABLE) {
-	if (Variable(w_ref).Data() >= (1<<20)) 
-	  w_ref = Variable::Make(Variable(w_ref).Data()-(1<<20));
-	else 
+      if (w_ref.GetType() == Object::VARIABLE)
 	  w_ref = Variable::Make(Variable(w_ref).Data() + next_var);
-      }
+      if (w_ref.GetType() == Object::ESCAPE)
+	w_ref = Escape(w_ref).Data();
     }
+  VLOG(1) << "step 4 c_res:" << MPatternToOPattern(c_res) << endl;
   if (out_sub) {
     *out_sub = res_sub;
     forall (run, *out_sub)
       run->second = Variable::Make(Variable(run->second).Data()+next_var);
-    out_sub.insert(sub.begin(), sub.end());
+    out_sub->insert(sub.begin(), sub.end());
   }
   return make_pair(c_pre, c_res);
 }

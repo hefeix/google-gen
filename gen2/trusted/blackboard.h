@@ -337,8 +337,26 @@ class Blackboard {
 
   Blackboard() {
     current_wt_update_ = NULL;
-    total_tuples_ = 0;
   }
+
+  uint64 GetNumTuples() {
+    return tuple_info_.size();
+  }
+
+  // Simple way to query and get results back
+  bool FindSatisfactions(OPattern pattern,
+			 const SamplingInfo & sampling,
+			 vector<Map> * substitutions,
+			 vector<Time> * times,
+			 uint64 * num_satisfactions,
+			 int64 * max_work_now);
+			 
+
+  // Some wildcard based searching
+  uint64 GetWildcardMatches(OTuple wildcard_tuple, vector<OTuple> * results);
+  uint64 GetNumWildcardMatches(OTuple wildcard_tuple);
+
+
 
   void L1_AddPosting(Posting *p);
   void L1_RemovePosting(Posting *p);
@@ -352,11 +370,6 @@ class Blackboard {
 
   static void Shell();
   void RandomTest();
-
-  // Some wildcard based searching
-  uint64 GetWildcardMatches(OTuple wildcard_tuple, vector<OTuple> * results);
-  uint64 GetNumWildcardMatches(OTuple wildcard_tuple);
-  
 
   // it is error-prone to change the blackbard when there are searches
   // that are not being updated.  Let's keep track of whether such 
@@ -413,7 +426,6 @@ class Blackboard {
 
   // number of stored tuples with these lengths
   map<uint32, uint32> lengths_; 
-  uint32 total_tuples_;
 
   SingleWTUpdate * current_wt_update_;
 

@@ -319,6 +319,11 @@ class alloc_vector : public vector<A, GenAlloc<A> >{
   alloc_vector() : vector<A, GenAlloc<A> >(){}
   alloc_vector(const alloc_vector<A>&o) 
     :vector<A, GenAlloc<A> >(o){}
+  template<class InputIterator>
+    alloc_vector(InputIterator begin, InputIterator end) {
+    for (InputIterator run = begin; run != end; run++)
+      this->push_back(*run);
+  }
 };
 
 DEFINE_HASH_CLASS_1(alloc_vector);
