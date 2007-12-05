@@ -26,6 +26,10 @@
 
 struct PatternBuilder {
   PatternBuilder() {}
+  PatternBuilder(const MPattern& p, const vector<Map>& subs) {
+    pattern_ = p;
+    subs_ = subs;
+  } 
 
   bool TryInitializeFromTuple();
 
@@ -46,19 +50,20 @@ struct Optimizer{
   static bool 
   MaybeFindRandomManyExamplesRule(CandidateRule * ret, 
 				  string *comments);
-
-  bool FindSampling(const MPattern & p, SamplingInfo * result, 
-		    int64 max_work,
-		    vector<Map> * subs,
-		    uint64 * estimated_num_results,
-		    uint64 * actual_num_results,
-		    set<uint> * bad_clauses, // don't sample these
-		    SamplingInfo *hint);
-
-  bool VetteCandidateRule(CandidateRule r, 
-			  CandidateRule * simplified_rule, 
-			  int64 max_work, string *comments);
-
+  
+  static bool
+  FindSampling(const MPattern & p, SamplingInfo * result, 
+	       int64 max_work,
+	       vector<Map> * subs,
+	       uint64 * estimated_num_results,
+	       uint64 * actual_num_results,
+	       set<uint> * bad_clauses, // don't sample these
+	       SamplingInfo *hint);
+  static bool
+  VetteCandidateRule(CandidateRule r, 
+		     CandidateRule * simplified_rule, 
+		     int64 max_work, string *comments);
+  
 };
 
 

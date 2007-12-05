@@ -365,6 +365,10 @@ inline Pattern MPatternToPattern(const MPattern &p) {
   return ret;
 }
 
+inline OPattern MPatternToOPattern(const MPattern& p) {
+  return OPattern::Make(MPatternToPattern(p));
+}
+
 template <class T> struct DataCompare{
   bool operator()(const T& t1, const T& t2) {
     if (t2 == NULL) return false;

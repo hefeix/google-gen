@@ -93,7 +93,6 @@ TupleInfo::TupleInfo(Posting *first_posting, Blackboard *blackboard)
   CL.Creating(this);
 
   // Maintain accurate counts
-  CL.ChangeValue(&blackboard_->total_tuples_, blackboard_->total_tuples_+1);
   CL.AddToMapOfCounts(&blackboard_->lengths_, tuple_.size(), 1);
 
   CL.InsertIntoMap(&blackboard_->tuple_info_, tuple_, this);
@@ -123,7 +122,6 @@ string TupleInfo::ToString() {
 void TupleInfo::L1_Erase() {
 
   // Maintain accurate counts 
-  CL.ChangeValue(&blackboard_->total_tuples_, blackboard_->total_tuples_-1);
   CL.AddToMapOfCounts(&blackboard_->lengths_, tuple_.size(), -1);
 
   // first we send updates, then we remove the tuple from all index rows.
@@ -271,6 +269,31 @@ void IndexRow::L1_RemoveTuple(TupleInfo *tuple_info) {
   Time time = tuple_info->FirstTime();
   CL.RemoveFromSet(&tuples_, make_pair(time, tuple_info));
   L1_EraseIfUnnecessary();
+}
+
+// Note, can't return the times without the substitutions
+bool Blackboard::FindSatisfactions
+(OPattern pattern,
+ const SamplingInfo & sampling,
+ vector<Map> * substitutions,
+ vector<Time> * times,
+ uint64 * num_satisfactions,
+ int64 * max_work_now) {
+
+  Checkpoint before_query = CL.GetCheckpoint();
+  Query * q = L1_GetExecuteQuery(pattern, sampling, max_work_now);
+  if (q == NULL) {
+    CL.Rollback(before_query);
+    return false;
+  }
+  if (num_satisfactions) {
+    *num_satisfactions = q->GetCount();
+  }
+  if (substitutions) {
+    q->GetSubstitutions(substitutions, times);
+  }
+  CL.Rollback(before_query);
+  return true;
 }
 
 void Blackboard::PrintNonupdateQueries() {
