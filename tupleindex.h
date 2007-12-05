@@ -109,9 +109,11 @@ class TupleIndex{
  private:
   struct Node {
     set<pair<uint32, Tuple> > specifications_;
+
     // maps first term to number of tuples starting with that term
     // present if first term is variable
     map<int, int> *first_term_counts_; 
+
     Tuple GetRandomTuple() const;
     void GetRange(const SamplingInfo & s, 
 		  set<pair<uint32, Tuple> >::iterator * start,
