@@ -671,20 +671,47 @@ void StaticConstant::N1_ObjectChanged(int which) {
 }
 
 string StaticConstant::ToString() const {
+  bool can_be_concise = true;
   Object o = GetObject(OBJECT);
-  if (o==NULL) return "null";
-  string ret = HTMLEscape(o.ToString());
   if (o.GetType() == Object::OTUPLE) {
     Tuple t = OTuple(o).Data();
     if (t.size() > 0 && t[0].GetType() == Object::KEYWORD) {
-      ret =  "(constant " + ret + ")";
+      can_be_concise = false;
     }
   }
+  if (DeepSubstitutePossible(o)) can_be_concise = false;
+  if (!can_be_concise) return Expression::ToString();
+
+  string ret = HTMLEscape(o.ToString());
   return GetLink(ret);
 }
 Object DynamicConstant::ComputeValue() const {
   return GetObject(StaticConstant::OBJECT);
 }
+string StaticSubstitute::ToString() const {
+  bool can_be_concise = false;
+  Expression *child = GetExpressionChild(StaticSubstitute::CHILD);
+  if (child) {
+    if (child->GetFunction() == Element::CONSTANT) {
+      StaticConstant *constant = dynamic_cast<StaticConstant *>(child);
+      Object o = constant->GetObject(StaticConstant::OBJECT);
+      can_be_concise = true;
+      if (o.GetType() == Object::OTUPLE) {
+	Tuple t = OTuple(o).Data();
+	if (t.size() > 0 && t[0].GetType() == Object::KEYWORD) {
+	  can_be_concise = false;
+	}
+      }      
+      if (!DeepSubstitutePossible(o)) can_be_concise = false;
+      if (can_be_concise) {
+	string ret = HTMLEscape(o.ToString());
+	return GetLink(ret);
+      }
+    }
+  }
+  return Expression::ToString();
+}
+
 string StaticElement::ParameterListToString() const {
   string ret;
   for (int i=0; i<NumObjects(); i++) {

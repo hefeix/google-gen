@@ -75,6 +75,9 @@ LL BinaryChoiceLnLikelihood(uint num_total, uint num_positive){
   return -Log(num_total+1) - LnCombinations(num_total, num_positive);
 }
 
+LL StringLnLikelihood(string s) {
+  return -(s.size() * Log(256));
+}
 
 LL DoubleLnLikelihood(double d) {
   DoubleBits db(d);

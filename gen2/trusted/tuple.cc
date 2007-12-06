@@ -175,10 +175,29 @@ Object DeepSubstitute(const Map & m, Object o) {
     Tuple ret;
     OTuple t = o;
     for (uint i=0; i<t.Data().size(); i++)
-      ret.push_back(DeepSubstitute(m, OTuple(t).Data()[i]));
+      ret.push_back(DeepSubstitute(m, t.Data()[i]));
     return OTuple::Make(ret);
   }
   return Replacement(m, o);
+}
+bool DeepSubstitutePossible(Object o) {
+  if (o.GetType() == Object::OPATTERN) {
+    Pattern ret;
+    OPattern p = o;
+    for (uint i=0; i<p.Data().size(); i++)
+      if (DeepSubstitutePossible(p.Data()[i])) return true;
+    return false;
+  }
+  if (o.GetType() == Object::OTUPLE) {
+    Tuple ret;
+    OTuple t = o;
+    for (uint i=0; i<t.Data().size(); i++)
+      if (DeepSubstitutePossible(t.Data()[i])) return true;	
+    return false;
+  }
+  if (o.GetType() == Object::VARIABLE 
+      || o.GetType() == Object::ESCAPE) return true;
+  return false;
 }
 
 void Add(Map * m, Object key, Object value) {

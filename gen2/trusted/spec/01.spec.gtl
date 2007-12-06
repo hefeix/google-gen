@@ -1,0 +1,26 @@
+{
+  on pattern()	
+    parallel {	
+      post (S 0	1);
+      post (C 0 0);	
+    }
+  on pattern((S x y))
+    delay #
+      if (equal y 100) {
+        pass;
+	let z (sum y 1)
+	  post (S y z);
+      }
+  on pattern((C x 0)(S x y)) 
+    delay #0
+       post (C y 1);
+  on pattern((C x 1)(S x y)) 
+    delay #0
+       post (C y 0);
+  on pattern((C a b))
+    delay #0
+       post (maketuple COUT (concat "(C POS_" (tostring a) " *CHAR_" (tostring b) ")\n"));
+  on pattern((S a b))
+    delay #0
+       post (maketuple COUT (concat "(S POS_" (tostring a) " *POS_" (tostring b) ")\n"));
+}

@@ -75,6 +75,7 @@ inline LL BinaryChoiceLnLikelihood(pair<int, int> p){
 }
 
 LL DoubleLnLikelihood(double d);
+LL StringLnLikelihood(string s);
 double RandomDouble();
 
 #endif

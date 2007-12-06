@@ -117,8 +117,7 @@ vector<Statement *> ParseStatements(const Tuple & t) {
       Statement * s = ParseSingleStatement(t, &position);
       //cerr << "Parsed single statement " 
       //	   << Element::FunctionToString(s->GetFunction())
-      //   << " from positions " << old_position << " to " << position 
-      //   << endl;
+      //   << " Tuple:" << OTuple::Make(t) << endl;
       CHECK(s);
       if (parent) {
 	  CHECK(parent->NumStatementChildren() == 1);
@@ -146,8 +145,14 @@ Expression * ParseExpression(const Object & o){
   if (o.GetType() != Object::OTUPLE 
       || t.size() == 0
       || t[0].GetType() != Object::KEYWORD) {
-    ret = New<StaticConstant>();
-    ret->SetObject(0, o);
+    // here we expected an expression, but it we got some object that wasn't an OTuple starting
+    // with a keyword.  We'll assume that it is a constant expression or a substitute expression. 
+    bool substitute = DeepSubstitutePossible(o);
+    Expression *constant = New<StaticConstant>();
+    constant->SetObject(0, o);
+    if (!substitute) return constant;
+    ret = New<StaticSubstitute>();
+    constant->LinkToParent(ret, StaticSubstitute::CHILD);
     return ret;
   }
   Keyword type = t[0];

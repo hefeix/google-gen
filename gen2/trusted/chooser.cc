@@ -53,6 +53,11 @@ Object GlobalChooser::RandomChoice(OTuple strategy) const {
   case STANDARD_REAL: {
     return Real::Make(RandomDouble());
   }
+  case STANDARD_STRING: {
+    string s;
+    for (int i=0; i<6; i++) s += ('A' + (rand() % 26));
+    return String::Make(s);
+  }
   // THIS IS TERRIBLE, FIX THIS
   case NEW_FLAKE: {
     string s;
@@ -104,6 +109,8 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
     return_value = (value.GetType() == Object::OBITSEQ); break;
   case STANDARD_REAL:
     return_value = (value.GetType() == Object::REAL); break;
+  case STANDARD_STRING:
+    return_value = (value.GetType() == Object::STRING); break;
   case NEW_FLAKE:
     return_value = (value.GetType() == Object::FLAKE); break;
   case GENERIC: {
@@ -213,6 +220,9 @@ LL GlobalChooser::GetIndependentChoiceLnLikelihood
   }
   case STANDARD_REAL: {
     return DoubleLnLikelihood(Real(value).Data());
+  }
+  case STANDARD_STRING: {
+    return StringLnLikelihood(String(value).Data());
   }
   default:
     CHECK(false);
@@ -502,6 +512,7 @@ void InitChooserSets() {
   ChooserSet::identified_flakes_ 
     = New<ChooserSet>(Keyword::Make("identified_flakes"));
 
+  // This chooser set chooses keywords
   ChooserSet::misc_ =
     New<ChooserSet>(Keyword::Make("misc"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("variable"));
@@ -517,8 +528,10 @@ void InitChooserSets() {
   ChooserSet::misc_->L1_Insert(Keyword::Make("quadratic_uint"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("quadratic_bitseq"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("standard_real"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("standard_string"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("universal"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("new_flake"));
+  ChooserSet::misc_->L1_Insert(WILDCARD);
 
   ChooserSet * u = 
     ChooserSet::universal_ = New<ChooserSet>(Keyword::Make("universal"));
@@ -533,6 +546,8 @@ void InitChooserSets() {
 		      ("{generic, {quadratic_bitseq}, universal }")));  
   u->L1_Insert(OTuple(StringToObject
 		      ("{generic, {standard_real}, universal }")));
+  u->L1_Insert(OTuple(StringToObject
+		      ("{generic, {standard_string}, universal }")));
 }
 
 void SetChooser::L1_Init(OTuple strategy) {

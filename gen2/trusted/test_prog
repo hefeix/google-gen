@@ -1,26 +1,98 @@
 {
-  on pattern() 
-    parallel {
-      post (S 0 1);
-      post (C 0 0);
-      post (maketuple OUT 0 (tostring 0) )
-  }
+   on pattern() 
+      delay # 
+      parallel {
+         post (POS 0);
+         post (TIME 0);
+	 post (PS 12 0);
+         post (LAYER 0);
+	 post (LAYER 1);
+	 post (LV 0 0 "H");
+	 post (LV 0 1 "O");
+	 post (LV 0 2 "R");
+	 post (LV 0 3 "S");
+	 post (LV 0 4 "E");
+	 post (LV 0 5 "S");
+	 post (LV 0 6 " ");
+	 post (LV 0 7 " ");
+	 post (LV 0 8 " ");
+	 post (LV 0 9 " ");
+	 post (LV 0 10 " ");
+	 post (LV 0 11 " ");
+	 post (LV 0 12 " ");
+
+	 post (LV 1 0 "C");
+	 post (LV 1 1 "O");
+	 post (LV 1 2 "W");
+	 post (LV 1 3 "S");
+	 post (LV 1 4 " ");
+	 post (LV 1 5 " ");
+	 post (LV 1 6 " ");
+	 post (LV 1 7 " ");
+	 post (LV 1 8 " ");
+	 post (LV 1 9 " ");
+	 post (LV 1 10 " ");
+	 post (LV 1 11 " ");
+	 post (LV 1 12 " ");
+
+	 post (LP 0 0 3); <at time 0 layer 0 is at position 3>
+	 post (LP 0 1 12); <at time 0 layer 1 is at position 12>
+      }
+
+   on pattern((POS p)) parallel {
+      delay #     
+      if (equal p 12) {
+        pass;
+        let q (sum p 1)
+	   parallel {
+             post (POS q);
+	     post (PS p q);
+	   }
+      }
+   }
+
+   on pattern((TIME t)) parallel {
+      delay #     
+      if (equal t 100) {
+        pass;
+        let u (sum t 1)
+	   parallel {
+             post (TIME u);
+	     post (TS t u);
+	   }
+      }
+   }
+   
+   on pattern((TIME t)(POS p)) parallel {
+       delay #
+       post (TOPN t p 0 " ");
+   }
+   on pattern((TOPN t p n c) (TLPV t l p v
+
+}
+<
+  on pattern()	
+    parallel {	
+      post (S 0	1);
+      post (C 0 0);	
+    }
   on pattern((S x y))
     delay #
-      if (equal (substitute y) 100) {
+      if (equal y 100) {
         pass;
-	let z (sum (substitute y) 1)
-	  post (substitute (S y z) );
+	let z (sum y 1)
+	  post (S y z);
       }
   on pattern((C x 0)(S x y)) 
     delay #0
-       post (substitute (C y 1) );
+       post (C y 1);
   on pattern((C x 1)(S x y)) 
     delay #0
-       post (substitute (C y 0) );
-  on pattern((S a b) (C b c) (OUT a d))
-    delay #00
-       post (maketuple OUT (substitute b) (concat (substitute d)
-             (tostring (substitute c))))
-}
-
+       post (C y 0);
+  on pattern((C a b))
+    delay #0
+       post (maketuple COUT (concat "(C POS_" (tostring a) " *CHAR_" (tostring b) ")\n"));
+  on pattern((S a b))
+    delay #0
+       post (maketuple COUT (concat "(S POS_" (tostring a) " *POS_" (tostring b) ")\n"));
+>
