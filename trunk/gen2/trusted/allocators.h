@@ -25,6 +25,8 @@
 #include "shorthand.h"
 #include "hash.h"
 
+#define DEBUG_ALLOCATIONS
+
 #define LINEAR_ALLOCATOR_BLOCK_SIZE (16 << 20)
 // maximum size (in *s)
 #define GENERAL_ALLOCATOR_MAX_ITEM_SIZE 65
@@ -166,7 +168,6 @@ class GeneralAllocator {
   }
 };
 
-
 class LinearAllocator {
  public:
   void * allocate(size_t size){
@@ -177,11 +178,11 @@ class LinearAllocator {
     if (ints_needed > space_left) AddBlock();
     void * ret = last_block_end_;
     last_block_end_ += ints_needed;
+    // cout << "allocating " << ret << " size:" << size << endl;
     return ret;
   }
 
   void deallocate(void * ptr){
-    return;
     int block_num = blocks_.size()-1;
     while (!(ptr >= blocks_[block_num] 
 	     && ptr < blocks_[block_num]+LINEAR_ALLOCATOR_BLOCK_SIZE)) {

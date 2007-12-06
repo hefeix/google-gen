@@ -287,8 +287,6 @@ template <class M, class K, class V> class MapOfCountsAddChange
 };
 
 
-
-
 // Create one of these when you new an object
 template <class C> class DeleteOnRollbackChange : public Change {
  public:
@@ -407,9 +405,9 @@ template <class C, class P> class MemberCall1Change : public Change {
 //    my_changelist.Rollback(cp);
 // }
 
-//#define new(CL_ALLOC) new
+// #define new(CL_ALLOC) new
 
-// extern LinearAllocator CL_ALLOC;
+extern LinearAllocator CL_ALLOC;
 
 class Changelist {
  public:

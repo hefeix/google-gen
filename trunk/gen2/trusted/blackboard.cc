@@ -280,6 +280,8 @@ bool Blackboard::FindSatisfactions
  uint64 * num_satisfactions,
  int64 * max_work_now) {
 
+  VLOG(1) << "finding sats for " << pattern << endl;
+
   Checkpoint before_query = CL.GetCheckpoint();
   Query * q = L1_GetExecuteQuery(pattern, sampling, max_work_now);
   if (q == NULL) {

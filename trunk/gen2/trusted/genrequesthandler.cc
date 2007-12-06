@@ -61,6 +61,15 @@ string GenRequestHandler::TypeListHTML(Base::Type type) const {
   return ret;
 }
 
+string BlackboardSearchForm(Record params) {
+  string ret = "<form action=/blackboard-search>";
+  ret += "<br>search pattern( <input name=pattern ";
+  ret += "value=\"" + params["pattern"] + "\"";
+  ret += "type=text> )";
+  ret += " sampling <input name=sampling-info type=text>";
+  ret += "<input type=submit></form><br>";
+  return ret;
+}
 
 string GenRequestHandler::Handle(Record params) {
   string ret = SimpleHTMLHeader() + TopNavHTML();
@@ -116,12 +125,50 @@ string GenRequestHandler::Handle(Record params) {
     return ret;
   }
   if (command == "blackboard") {
+    ret += BlackboardSearchForm(params);
     ret += RecordToHTMLTable(BB.GetRecordForDisplay());
     return ret;
   }
-  //if (command == "program") {
+  if (command == "blackboard-search") {
+    ret += BlackboardSearchForm(params);
+    if (params["pattern"] == "") {
+      return ret;
+    }
+    OPattern p = OPattern(StringToObject("pattern (" + params["pattern"] + ")"));
+
+    if (p == NULL) {
+      ret += "error parsing pattern";
+      return ret;
+    }
+    SamplingInfo s = SamplingInfo::Unsampled();
+    if (params["sampling-info"] != "") {
+      SamplingInfo s = SamplingInfo::StringToSamplingInfo(params["sampling-info"]);
+    }
+    vector<Map> subs;
+    vector<Time> times;
+    uint64 num_sats = 0;
+    int64 max_work = 1000000;
+    bool result = BB.FindSatisfactions(p, s, &subs, &times, &num_sats, &max_work);
+    if (!result) {
+      ret += "query took too long<br>";
+      return ret;
+    }
+    ret += "#sats: " + itoa(num_sats) + "<br>";
+    for (uint c=0; c<subs.size(); c++) {
+      OPattern new_pattern = Substitute(subs[c], p);
+      ret += new_pattern.ToString() + " " + times[c].ToString() + " <br>\n";
+      if (c == 1000) {
+	ret += "...<br>";
+	break;
+      }
+    }
+
+  }
+
+  if (command == "program") {
     ret += M.ToString(true);
-    // }
+  }
+
   return ret;
 }
 

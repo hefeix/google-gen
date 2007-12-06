@@ -284,7 +284,7 @@ FindSampling(const MPattern & p, SamplingInfo * result_sampling,
 	 sample_clause_i++) {
       uint sample_clause = sample_clause_i;
       
-      VLOG(2) << "Trying sample_clause:" << sample_clause << endl;
+      VLOG(1) << "Trying sample_clause:" << sample_clause << endl;
       
       SamplingInfo sampling;
       bool sampled = (denominator > 1);
@@ -307,8 +307,9 @@ FindSampling(const MPattern & p, SamplingInfo * result_sampling,
 	 NULL,
 	 &num_results,
 	 &max_work_now);
-      VLOG(2) << "Sample_clause: " 
-	      << sample_clause << (success ? " GOOD" : " BAD") << endl;
+      VLOG(1) << "Sample_clause: " 
+	      << sample_clause << (success ? " GOOD" : " BAD") 
+	      << " denom:" << denominator << endl;
       if (!success) continue;
 
       all_take_too_long = false;
@@ -325,7 +326,10 @@ FindSampling(const MPattern & p, SamplingInfo * result_sampling,
       }
 
       // If sampled, don't accept too few results
-      if (num_results < 5) continue;
+      if (num_results < 5) {
+	VLOG(1) << "<5 results continuing" << endl;
+	continue;
+      }
 
       // If we're getting substitutions, check that at least one of the
       // sampled variables has multiple values
@@ -344,7 +348,10 @@ FindSampling(const MPattern & p, SamplingInfo * result_sampling,
 	  }
 	  if (any_multivalued_variables) break;
 	}
-	if (!any_multivalued_variables) continue;
+	if (!any_multivalued_variables) {
+	  VLOG(1) << "no multivalued variables continuing" << endl;
+	  continue;
+	}
       }
 
       // If so, we're done!!!
@@ -507,8 +514,8 @@ bool Optimizer::VetteCandidateRule(CandidateRule r,
     uint64 simplified_num_satisfactions = 0;
     int64 max_work_now = max_work;
     SamplingInfo simplified_sampling;
-    simplified_sampling = precondition_sampling;
-    simplified_sampling.RemovePosition(remove_clause);
+    simplified_sampling = 
+      precondition_sampling.RemovePosition(remove_clause);
   
     if (BB.FindSatisfactions
 	(MPatternToOPattern(simplified_preconditions),

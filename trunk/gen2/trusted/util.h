@@ -311,7 +311,7 @@ void GetSample(const S & full, S * result, uint sample_size) {
     int n;
     do { 
       n = RandomUInt32() % full.size();
-    } while (!(picked % n));
+    } while (picked % n);
     picked.insert(n);
     result->insert(*(full.nth(n)));
   }  

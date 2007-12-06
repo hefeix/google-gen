@@ -52,7 +52,8 @@ void Changelist::Rollback(Checkpoint cp){
   Change * last_to_go = history_[cp];
   while (history_.size() > (uint)cp){
     history_.back()->Undo();
-    delete history_.back();
+    // We should be calling the destructors, but they arent called
+    history_.back()->~Change();
     history_.pop_back();
   }
   CL_ALLOC.deallocate(last_to_go);
@@ -60,7 +61,6 @@ void Changelist::Rollback(Checkpoint cp){
 void Changelist::MakeChangesPermanent(){
   for (uint i=0; i<history_.size(); i++) {
     history_[i]->MakePermanent();
-    delete history_[i];
   }
   history_.clear();
   CL_ALLOC.Clear();
