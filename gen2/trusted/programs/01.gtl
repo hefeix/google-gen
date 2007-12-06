@@ -1,0 +1,21 @@
+{
+  on pattern() 
+    parallel {
+      post (S 0 1);
+      post (C 0 0);
+  }
+  on pattern((S x y))
+    delay #
+      if (equal (substitute y) 100) {
+        pass;
+	let z (sum (substitute y) 1)
+	  post (substitute (S y z) );
+      }
+  on pattern((C x 0)(S x y)) 
+    delay #0
+       post (substitute (C y 1) );
+  on pattern((C x 1)(S x y)) 
+    delay #0
+       post (substitute (C y 0) );
+}
+
