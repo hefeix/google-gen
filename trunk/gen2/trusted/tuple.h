@@ -80,6 +80,7 @@ inline static CandidateRule SplitOffLast(const MPattern & p) {
 inline Object Replacement(const Map & m, const Object &o) {
   const Object * found = m%o;
   if (found) return *found;
+  if (o.GetType() == Object::ESCAPE) return Escape(o).Data();
   return o;
 };
 void Substitute(const Map &m, Tuple * t);
@@ -92,6 +93,9 @@ OPattern Substitute(const Map &m, OPattern p);
 
 // recursively substitutes Patterns and tuples.  
 Object DeepSubstitute(const Map & m, Object o);
+
+// returns true if DeepSubstitute could change this object for some context.
+bool DeepSubstitutePossible(Object o);
 
 VariableSet GetDomainVariables(OMap m);
 

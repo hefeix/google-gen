@@ -84,6 +84,7 @@ struct GlobalChooser {
 	ITEM(QUADRATIC_UINT),				\
 	ITEM(QUADRATIC_BITSEQ),				\
 	ITEM(STANDARD_REAL),				\
+	ITEM(STANDARD_STRING),                          \
 	ITEM(NUM_INDEPENDENT_STRATEGIES),		\
 	ITEM(NEW_FLAKE),				\
         ITEM(SET),                                      \

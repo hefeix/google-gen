@@ -804,6 +804,7 @@ struct StaticSubstitute : public Expression {
   DECLARE_FUNCTION_ENUMS;
 
   virtual Function GetFunction() const { return SUBSTITUTE;}
+  string ToString() const;
 };
 struct DynamicSubstitute : public DynamicExpression {
   Object ComputeValue() const;
