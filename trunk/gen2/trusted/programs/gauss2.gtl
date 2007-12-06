@@ -1,0 +1,12 @@
+{
+  on pattern() post (F 0 0);
+  on pattern((F x y))
+    delay #0
+      if (choose (constant (independent_bool 0.01)) ) {
+        pass;
+	let a (sum (substitute x) 1)
+	  let b (sum (substitute x) (substitute y) )
+	  post (substitute (F a b) );
+      }
+}
+
