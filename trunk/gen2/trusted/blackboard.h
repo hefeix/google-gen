@@ -333,6 +333,8 @@ class Blackboard {
   string GetURL() const;
   Record GetRecordForDisplay() const;
 
+  string CollectCOUT() const;
+
   Blackboard() {
     current_wt_update_ = NULL;
   }
@@ -351,8 +353,9 @@ class Blackboard {
 			 
 
   // Some wildcard based searching
-  uint64 GetWildcardMatches(OTuple wildcard_tuple, vector<OTuple> * results);
-  uint64 GetNumWildcardMatches(OTuple wildcard_tuple);
+  uint64 GetWildcardMatches(OTuple wildcard_tuple, 
+			    vector<OTuple> * results) const;
+  uint64 GetNumWildcardMatches(OTuple wildcard_tuple) const;
 
 
 
@@ -414,7 +417,7 @@ class Blackboard {
 
  private:
   // returns null on failure
-  IndexRow * GetIndexRow(OTuple wildcard_tuple);
+  IndexRow * GetIndexRow(OTuple wildcard_tuple) const;
   IndexRow * GetAddIndexRow(OTuple wildcard_tuple);
   TupleInfo * GetTupleInfo(OTuple tuple);
 

@@ -722,6 +722,25 @@ Object DynamicSum::ComputeValue() const {
   }
   return Object();
 }
+Object DynamicConcat::ComputeValue() const {
+  string ret;
+  for (int i=0; i<NumChildren(); i++) {
+    Object child_val = GetChildValue(i);
+    if (child_val.GetType() != Object::STRING) return Object();
+    ret += String(child_val).Data();
+  }
+  return String::Make(ret);
+}
+Object DynamicMakeTuple::ComputeValue() const {
+  Tuple t;
+  for (int i=0; i<NumChildren(); i++) {
+    t.push_back(GetChildValue(i));
+  }
+  return OTuple::Make(t);
+}
+Object DynamicToString::ComputeValue() const { 
+  return String::Make(GetChildValue(StaticToString::ARG).ToString());
+}
 
 void DynamicChoose::L1_Init(StaticElement * static_parent, OMap binding) {
   choice_ = NULL;

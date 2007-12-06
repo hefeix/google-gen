@@ -36,7 +36,8 @@ string GenRequestHandler::TopNavHTML() const {
       + "/" + itoa(N.GetAllTimeCount(t)) 
       + ") ";
   }
-  ret += HTMLLink(BB.GetURL(), "Blackboard");
+  ret += HTMLLink(BB.GetURL(), "Blackboard") + " ";
+  ret += HTMLLink("cout", "COUT");
   ret += "</font><br><p>";
   return ret;
 }
@@ -164,9 +165,11 @@ string GenRequestHandler::Handle(Record params) {
     }
 
   }
-
   if (command == "program") {
     ret += M.ToString(true);
+  }
+  if (command == "cout") {
+    ret += "<pre>" + BB.CollectCOUT() + "</pre>";
   }
 
   return ret;
