@@ -45,6 +45,9 @@ Expression * MakeExpressionByKeyword(Keyword type){
   case Element::CHOOSE: return MakeExpression<StaticChoose>();
   case Element::EQUAL: return MakeExpression<StaticEqual>();
   case Element::SUM: return MakeExpression<StaticSum>();
+  case Element::CONCAT: return MakeExpression<StaticConcat>();
+  case Element::MAKETUPLE: return MakeExpression<StaticMakeTuple>();
+  case Element::TOSTRING: return MakeExpression<StaticToString>();
   default: CHECK(false);
   }
   return NULL;
@@ -93,7 +96,7 @@ vector<Statement *> ParseStatements(const Tuple & t) {
       position++;
     } else if (o.GetType() == Object::OTUPLE) {
       vector<Statement *> subs = ParseStatements(OTuple(o).Data());
-      if (parent->GetFunction() == Element::PARALLEL) {
+      if (parent->HasVariableNumChildren()) {
 	CHECK((int)parent->static_children_.size() 
 	      == parent->NumExpressionChildren());
 	while (parent->static_children_.size() < 
@@ -149,11 +152,20 @@ Expression * ParseExpression(const Object & o){
   }
   Keyword type = t[0];
   ret = MakeExpressionByKeyword(type);
-  
-  CHECK((int)t.size()-1 == ret->NumObjects() + ret->NumChildren());
+    
+  CHECK(ret->HasVariableNumChildren() || 
+	(int)t.size()-1 == ret->NumObjects() + ret->NumChildren());
+
   for (int i=0; i<ret->NumObjects(); i++) {
     ret->SetObject(i, t[1+i]);
   }
+
+  if (ret->HasVariableNumChildren()) {
+    CHECK((int)ret->static_children_.size() == 0);
+    while (ret->static_children_.size() + ret->NumObjects() + 1 < t.size())
+      ret->static_children_.push_back(New<SingleLink>(ret));
+  }
+
   for (int i=0; i<ret->NumChildren(); i++) {
     Expression * sub = ParseExpression(t[1+ret->NumObjects()+i]);
     sub->LinkToParent(ret, i);

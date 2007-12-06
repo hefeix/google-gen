@@ -42,6 +42,9 @@ struct Element : public Base {
 	ITEM(CONSTANT),					\
 	ITEM(EQUAL),					\
 	ITEM(SUM),					\
+	ITEM(TOSTRING),					\
+	ITEM(CONCAT),					\
+	ITEM(MAKETUPLE),				\
 	ITEM(FUNCTION_ERROR)				\
 	};
   CLASS_ENUM_DECLARE(Element, Function);
@@ -148,6 +151,7 @@ struct StaticElement : public Element {
   void SetObject(int which, Object new_value);
 
   // ---------- const functions ----------  
+  virtual bool HasVariableNumChildren() const { return false; }
   bool IsDynamic() const { return false; }
   OTime ComputeTime() const { return CREATION;}
   StaticElement * GetParent() const;
@@ -420,12 +424,15 @@ struct DynamicExpression : public DynamicElement {
 };
 
 #define DECLARE_FUNCTION_ENUMS \
-  int StringToChild(string s) const{ return StringToChildName(s);} \
-  string ChildToString(int c) const{ return ChildNameToString((ChildName)c);} \
+  int StringToChild(string s) const{ return StringToChildName(s);}	\
+  string ChildToString(int c) const{					\
+    if (HasVariableNumChildren()) return "CHILD(" + itoa(c) + ")";	\
+    return ChildNameToString((ChildName)c);}				\
   int StringToObject(string s) const{ return StringToObjectName(s);} \
   string ObjectToString(int o) const{return ObjectNameToString((ObjectName)o);}\
   int NumObjects() const { return NumObjectNames();} \
-  int NumChildren() const { return NumChildNames();}
+  int NumChildren() const { return HasVariableNumChildren()?	\
+      static_children_.size():NumChildNames();}
 
 struct StaticPass : public Statement {
   #define StaticPassChildNameList {				\
@@ -764,14 +771,11 @@ struct StaticParallel : public Statement {
   #define StaticParallelObjectNameList {				\
 	};
   CLASS_ENUM_DECLARE(StaticParallel, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   int NumExpressionChildren() const { return 0;}
-  int NumChildren() const { return static_children_.size(); }
-  int StringToChild(string s) const { CHECK(false); return 0;}
-  string ChildToString(int i) const { return "CHILD(" + itoa(i) + ")";}
-  int StringToObject(string s) const { CHECK(false); return 0;}
-  string ObjectToString(int i) const { CHECK(false); return "";}
+  bool HasVariableNumChildren() const { return true; }
 
   virtual Function GetFunction() const { return PARALLEL;}
 
@@ -824,6 +828,7 @@ struct StaticEqual : public Expression {
 struct DynamicEqual : public DynamicExpression {
   Object ComputeValue() const;
 };
+
 struct StaticSum : public Expression {
    #define StaticSumChildNameList {	 		\
     ITEM(LHS),						\
@@ -834,9 +839,54 @@ struct StaticSum : public Expression {
     };
   CLASS_ENUM_DECLARE(StaticSum, ObjectName);
   DECLARE_FUNCTION_ENUMS;
-  virtual Function GetFunction() const { return SUM;}
+  Function GetFunction() const { return SUM;}
 };
 struct DynamicSum : public DynamicExpression {
+  Object ComputeValue() const;
+};
+
+struct StaticToString : public Expression {
+   #define StaticToStringChildNameList {	 		\
+    ITEM(ARG),						\
+      };
+  CLASS_ENUM_DECLARE(StaticToString, ChildName);
+  #define StaticToStringObjectNameList {				\
+    };
+  CLASS_ENUM_DECLARE(StaticToString, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return TOSTRING;}
+};
+struct DynamicToString : public DynamicExpression {
+  Object ComputeValue() const;
+};
+
+struct StaticConcat : public Expression {
+   #define StaticConcatChildNameList {	 		\
+      };
+  CLASS_ENUM_DECLARE(StaticConcat, ChildName);
+   #define StaticConcatObjectNameList {		\
+    };
+  CLASS_ENUM_DECLARE(StaticConcat, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return CONCAT;}
+  bool HasVariableNumChildren() const { return true; }
+};
+struct DynamicConcat : public DynamicExpression {
+  Object ComputeValue() const;
+};
+
+struct StaticMakeTuple : public Expression {
+   #define StaticMakeTupleChildNameList {	 		\
+      };
+  CLASS_ENUM_DECLARE(StaticMakeTuple, ChildName);
+   #define StaticMakeTupleObjectNameList {		\
+    };
+  CLASS_ENUM_DECLARE(StaticMakeTuple, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return MAKETUPLE;}
+  bool HasVariableNumChildren() const { return true; }
+};
+struct DynamicMakeTuple : public DynamicExpression {
   Object ComputeValue() const;
 };
 
@@ -975,12 +1025,6 @@ struct FunctionExpression : pubic Expression {
   vector<Expression *> args_;
 };
 
-// Returns the sum of var_ over all matches of pattern_
-struct SumExpression : public Expression {
-  Pattern pattern_;
-  Variable var_;
-};
-
 // Returns an integer - the number of satisfactions
 struct CountExpresison : public Expression { 
   Pattern pattern_;
@@ -1005,6 +1049,9 @@ struct RandomBoolExpression : public Expression {
        FUNCTION(Constant, CONSTANT)				\
        FUNCTION(Equal, EQUAL)				\
        FUNCTION(Sum, SUM)				\
+       FUNCTION(ToString, TOSTRING)				\
+       FUNCTION(Concat, CONCAT)				\
+       FUNCTION(MakeTuple, MAKETUPLE)				\
  
 
     

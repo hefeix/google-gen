@@ -3,6 +3,7 @@
     parallel {
       post (S 0 1);
       post (C 0 0);
+      post (maketuple OUT 0 (tostring 0) )
   }
   on pattern((S x y))
     delay #
@@ -17,5 +18,9 @@
   on pattern((C x 1)(S x y)) 
     delay #0
        post (substitute (C y 0) );
+  on pattern((S a b) (C b c) (OUT a d))
+    delay #00
+       post (maketuple OUT (substitute b) (concat (substitute d)
+             (tostring (substitute c))))
 }
 

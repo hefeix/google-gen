@@ -384,7 +384,7 @@ TupleInfo * Blackboard::GetTupleInfo(OTuple t){
 }
 
 uint64 Blackboard::GetWildcardMatches(OTuple wildcard_tuple, 
-				      vector<OTuple> * results) {
+				      vector<OTuple> * results) const {
   if (results) results->clear();
   IndexRow * ir = GetIndexRow(wildcard_tuple);
   if (!ir) return 0;
@@ -396,12 +396,12 @@ uint64 Blackboard::GetWildcardMatches(OTuple wildcard_tuple,
   return ir->size();
 }
 
-uint64 Blackboard::GetNumWildcardMatches(OTuple wildcard_tuple) {
+uint64 Blackboard::GetNumWildcardMatches(OTuple wildcard_tuple) const {
   return GetWildcardMatches(wildcard_tuple, NULL);
 }
 
-IndexRow * Blackboard::GetIndexRow(OTuple wildcard_tuple){
-  IndexRow ** find = index_ % wildcard_tuple;
+IndexRow * Blackboard::GetIndexRow(OTuple wildcard_tuple) const{
+  IndexRow *const* find = index_ % wildcard_tuple;
   if (find) return *find;
   return NULL;
 }
@@ -833,6 +833,19 @@ Record Blackboard::GetRecordForDisplay() const {
   forall(run, tuple_info_) {
     ret["tuples"] += run->first.ToString() + " " 
       + run->second->ShortDescription() + "<br>\n";
+  }
+  return ret;
+}
+
+string Blackboard::CollectCOUT() const { 
+  vector<OTuple> v;
+  OTuple t = StringToObject("(COUT *)");
+  GetWildcardMatches(t, &v);
+  string ret;
+  for (uint i=0; i<v.size(); i++) {
+    Object second = v[i].Data()[1];
+    if (second.GetType()==Object::STRING)
+      ret += String(second).Data();
   }
   return ret;
 }
