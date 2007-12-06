@@ -31,7 +31,6 @@ struct Blackboard;
 struct Query;
 struct Search;
 
-
 struct SamplingInfo{
   bool   sampled_;
   int    position_;
@@ -70,7 +69,7 @@ struct Posting {
 };
 
 struct TupleInfo {
-  TupleInfo(Posting *first_posting, Blackboard *blackboard);  
+  TupleInfo(Posting *first_posting, Blackboard *blackboard);
   void L1_Erase();
   Time FirstTime() const;
   Record GetRecordForDisplay() const;
@@ -272,7 +271,6 @@ public Subscription<UpdateType, SubscribeeType> {
   SubscriberType * subscriber_;
   DataType data_;
 };
-
 
 struct IndexRow {
   string GetURL() const;
