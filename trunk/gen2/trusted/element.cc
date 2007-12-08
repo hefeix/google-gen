@@ -24,7 +24,9 @@
 #undef ITEM
 #define ITEM(x) #x
 
+#define FUNCTION(func, FUNC) ITEM(FUNC),
 CLASS_ENUM_DEFINE(Element, Function);
+#undef FUNCTION
 
 #define FUNCTION(f, F)				\
   CLASS_ENUM_DEFINE(Static##f, ChildName);	\
@@ -570,11 +572,21 @@ bool DynamicPost::NeedsPostViolation() const {
   if (computed.GetType() != Object::OTUPLE) {
     // If the computed value is not a tuple, there should be no posting. 
     // It is a posting violation if one exists.
-    return posting_;
+    if (posting_) {
+      return true;
+    } else {
+      return false;
+    }
   }
-  if (!posting_) return true;
-  if (posting_->tuple_ != computed) return true;
-  if (posting_->time_ != time_.Data()) return true;
+  if (!posting_) {
+    return true;
+  }
+  if (posting_->tuple_ != computed) {
+    return true;
+  }
+  if (posting_->time_ != time_.Data()) {
+    return true;
+  }
   return false;
 }
 void DynamicPost::L1_CheckSetPostViolation() {

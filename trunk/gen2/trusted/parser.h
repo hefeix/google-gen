@@ -33,9 +33,14 @@ Statement * ParseSingleStatement(const Tuple & t, uint * position);
 vector<Statement *> ParseStatements(const Tuple & t); // ad hoc parser.
 Expression * ParseExpression(const Object & o); // ad hoc parser.
 
+inline Element::Function TypeKeywordToFunction(Keyword type) {
+  return Element::StringToFunction(Upcase(type.Data()));
+}
+
 Statement * MakeStatementByKeyword(Keyword type);
 
 Expression * MakeExpressionByKeyword(Keyword type);
+
 
 
 

@@ -24,30 +24,41 @@
 #include "extensions.h"
 #include "chooser.h"
 
+#define ALL_STATEMENTS \
+  FUNCTION(Pass, PASS)				\
+       FUNCTION(On, ON)				\
+       FUNCTION(Repeat, REPEAT)			\
+       FUNCTION(Delay, DELAY)			\
+       FUNCTION(Let, LET)			\
+       FUNCTION(Post, POST)			\
+       FUNCTION(If, IF)				\
+       FUNCTION(Parallel, PARALLEL)		\
+    
+#define ALL_EXPRESSIONS						\
+  FUNCTION(Substitute, SUBSTITUTE)				\
+       FUNCTION(Choose, CHOOSE)					\
+       FUNCTION(Constant, CONSTANT)				\
+       FUNCTION(Equal, EQUAL)					\
+       FUNCTION(Sum, SUM)					\
+       FUNCTION(ToString, TOSTRING)				\
+       FUNCTION(Concat, CONCAT)					\
+       FUNCTION(MakeTuple, MAKETUPLE)				\
+  
+#define ALL_FUNCTIONS ALL_STATEMENTS ALL_EXPRESSIONS
+
+
 
 struct Element : public Base {  
   public:
 
-  #define ElementFunctionList {			\
-      ITEM(PASS),					\
-	ITEM(ON),					\
-	ITEM(REPEAT),					\
-	ITEM(DELAY),					\
-	ITEM(LET),					\
-	ITEM(POST),					\
-	ITEM(IF),					\
-	ITEM(PARALLEL),					\
-	ITEM(SUBSTITUTE),				\
-	ITEM(CHOOSE),					\
-	ITEM(CONSTANT),					\
-	ITEM(EQUAL),					\
-	ITEM(SUM),					\
-	ITEM(TOSTRING),					\
-	ITEM(CONCAT),					\
-	ITEM(MAKETUPLE),				\
-	ITEM(FUNCTION_ERROR)				\
-	};
+#define FUNCTION(func, FUNC) ITEM(FUNC), 
+#define ElementFunctionList {				\
+    ALL_STATEMENTS					\
+      ITEM(NUM_STATEMENT_FUNCTIONS),			\
+      ALL_EXPRESSIONS					\
+      };
   CLASS_ENUM_DECLARE(Element, Function);
+#undef FUNCTION
 
   // ---------- L2 functions ----------  
   void SetTime(OTime new_time);
@@ -55,6 +66,12 @@ struct Element : public Base {
 
   // ---------- const functions ----------  
 
+  static bool IsStatementFunction(Function f) {
+    return (f >=0 && f < NUM_STATEMENT_FUNCTIONS);
+  }
+  static bool IsExpressionFunction(Function f) {
+    return (f > NUM_STATEMENT_FUNCTIONS && f < NumFunctions());
+  }
   virtual bool IsDynamic() const = 0;
   bool IsStatic() const { return !IsDynamic();}
   virtual OMap GetBinding() const { CHECK(false); return OMap();}
@@ -279,7 +296,7 @@ struct DynamicElement : public Element{
   OTime ComputeTime() const;
   string ToString() const;
   virtual Function GetFunction() const { 
-    if (!GetStatic()) return FUNCTION_ERROR;
+    if (!GetStatic()) return Function(-1);
     return GetStatic()->GetFunction();}
   // this only works for single links.
   virtual OMap GetIntroducedBinding(int which_child) const { 
@@ -1036,25 +1053,6 @@ struct RandomBoolExpression : public Expression {
 };
 */
 
-#define ALL_FUNCTIONS \
-  FUNCTION(Pass, PASS)				\
-       FUNCTION(On, ON)				\
-       FUNCTION(Repeat, REPEAT)			\
-       FUNCTION(Delay, DELAY)			\
-       FUNCTION(Let, LET)			\
-       FUNCTION(Post, POST)			\
-       FUNCTION(If, IF)				\
-       FUNCTION(Parallel, PARALLEL)				\
-       FUNCTION(Substitute, SUBSTITUTE)				\
-       FUNCTION(Choose, CHOOSE)				\
-       FUNCTION(Constant, CONSTANT)				\
-       FUNCTION(Equal, EQUAL)				\
-       FUNCTION(Sum, SUM)				\
-       FUNCTION(ToString, TOSTRING)				\
-       FUNCTION(Concat, CONCAT)				\
-       FUNCTION(MakeTuple, MAKETUPLE)				\
- 
 
-    
 
 #endif

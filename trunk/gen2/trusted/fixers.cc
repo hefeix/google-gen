@@ -263,10 +263,12 @@ bool StaticExecutor::FixPost(PostViolation *violation) {
   DynamicPost * dp = violation->GetTypedOwner();
   CHECK(dp->NeedsPostViolation());
   FixElement(dp);
+  if (!dp->NeedsPostViolation()) return true;
   Object computed = dp->ComputeTuple();
   if (computed.GetType() != Object::OTUPLE) {
     if (!dp->posting_) { 
       VLOG(2) << "Error - why is there a post violation" << endl;
+      CHECK(false);
       return true;
     }
     VLOG(2) << "Removing posting" << endl;
@@ -285,12 +287,17 @@ bool StaticExecutor::FixPost(PostViolation *violation) {
     return true;
   }
   // So the posting time must be wrong.
-  CHECK(dp->posting_->time_ != dp->time_.Data());
-  VLOG(2) << "Correcting posting time from" 
-       << OTime::Make(dp->posting_->time_).ToString()
-       << " to " << dp->time_.ToString() << endl;
-  dp->SetCorrectPostingTime();
-  return true;
+  if (dp->posting_->time_ != dp->time_.Data()) {
+    VLOG(2) << "Correcting posting time from" 
+	    << OTime::Make(dp->posting_->time_).ToString()
+	    << " to " << dp->time_.ToString() << endl;
+    dp->SetCorrectPostingTime();
+    return true;
+  }
+  cerr << "Why is there a posting violation " << violation->GetName()
+       << endl;
+  CHECK(false);
+  return false;
 }
 
 bool StaticExecutor::FixLet(LetViolation *violation) {

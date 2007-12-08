@@ -22,32 +22,28 @@
 // UNTRUSTED
 
 Statement * MakeStatementByKeyword(Keyword type){
-  Element::Function function = Element::StringToFunction(Upcase(type.Data()));
+  Element::Function function = TypeKeywordToFunction(type);
+  CHECK(Element::IsStatementFunction(function));
+
   switch (function) {
-  case Element::PASS: return MakeStatement<StaticPass>();
-  case Element::ON: return MakeStatement<StaticOn>();
-  case Element::REPEAT: return MakeStatement<StaticRepeat>();
-  case Element::DELAY: return MakeStatement<StaticDelay>();
-  case Element::LET: return MakeStatement<StaticLet>();
-  case Element::POST: return MakeStatement<StaticPost>();
-  case Element::IF: return MakeStatement<StaticIf>();
-  case Element::PARALLEL: return MakeStatement<StaticParallel>();
+#define FUNCTION(Func, FUNC) case Element::FUNC: \
+    return MakeStatement<Static##Func>();
+    ALL_STATEMENTS;
+#undef FUNCTION
   default: CHECK(false);
   }
   return NULL;
 }
 
 Expression * MakeExpressionByKeyword(Keyword type){
-  Element::Function function = Element::StringToFunction(Upcase(type.Data()));
+  Element::Function function = TypeKeywordToFunction(type);
+  CHECK(Element::IsExpressionFunction(function));
+
   switch (function) {
-  case Element::SUBSTITUTE: return MakeExpression<StaticSubstitute>();
-  case Element::CONSTANT: return MakeExpression<StaticConstant>();
-  case Element::CHOOSE: return MakeExpression<StaticChoose>();
-  case Element::EQUAL: return MakeExpression<StaticEqual>();
-  case Element::SUM: return MakeExpression<StaticSum>();
-  case Element::CONCAT: return MakeExpression<StaticConcat>();
-  case Element::MAKETUPLE: return MakeExpression<StaticMakeTuple>();
-  case Element::TOSTRING: return MakeExpression<StaticToString>();
+#define FUNCTION(Func, FUNC) case Element::FUNC: \
+    return MakeExpression<Static##Func>();
+    ALL_EXPRESSIONS;
+#undef FUNCTION
   default: CHECK(false);
   }
   return NULL;
@@ -139,14 +135,23 @@ vector<Statement *> ParseStatements(const Tuple & t) {
 Expression * ParseExpression(const Object & o){
   //cout << "Expression::Parse " << o << endl;
   if (o == NULL) return NULL;
-  Tuple t;
   Expression *ret;
-  if (o.GetType() == Object::OTUPLE) t = OTuple(o).Data();
-  if (o.GetType() != Object::OTUPLE 
-      || t.size() == 0
-      || t[0].GetType() != Object::KEYWORD) {
-    // here we expected an expression, but it we got some object that wasn't an OTuple starting
-    // with a keyword.  We'll assume that it is a constant expression or a substitute expression. 
+  Tuple t;
+  Keyword type;
+  bool parse_failure = true;
+  if (o.GetType() == Object::OTUPLE) {
+    t = OTuple(o).Data();   
+    if (t.size() > 0 && t[0].GetType() == Object::KEYWORD) {
+      type = t[0];
+      if (Element::IsExpressionFunction(TypeKeywordToFunction(type))) {
+	parse_failure = false;
+      }
+    }
+  }
+  if (parse_failure) {
+    // here we expected an expression, but got some object that wasn't
+    // an OTuple starting with a function name.  We'll assume that it is a 
+    // constant expression or a substitute expression. 
     bool substitute = DeepSubstitutePossible(o);
     Expression *constant = New<StaticConstant>();
     constant->SetObject(0, o);
@@ -155,7 +160,6 @@ Expression * ParseExpression(const Object & o){
     constant->LinkToParent(ret, StaticSubstitute::CHILD);
     return ret;
   }
-  Keyword type = t[0];
   ret = MakeExpressionByKeyword(type);
     
   CHECK(ret->HasVariableNumChildren() || 
