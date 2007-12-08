@@ -50,6 +50,10 @@ Object GlobalChooser::RandomChoice(OTuple strategy) const {
     int bits = RandomUInt32() % (1 << length);
     return OBitSeq::Make(BitSeq(length, bits));
   }
+  case UNIFORM_UINT: {
+    int max = Integer(strategy.Data()[1]).Data();
+    return Integer::Make(RandomUInt32() % max);
+  }
   case STANDARD_REAL: {
     return Real::Make(RandomDouble());
   }
@@ -104,7 +108,13 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
   case INDEPENDENT_BOOL:
     return_value = (value.GetType() == Object::BOOLEAN); break;
   case QUADRATIC_UINT:
-    return_value = (value.GetType() == Object::INTEGER && Integer(value).Data() >= 0); break;
+    return_value = (value.GetType() == Object::INTEGER 
+		    && Integer(value).Data() >= 0); break;
+  case UNIFORM_UINT:
+    return_value = (value.GetType() == Object::INTEGER 
+		    && Integer(value).Data() >= 0
+		    && Integer(value).Data() 
+		    < Integer(strategy.Data()[1]).Data()); break;
   case QUADRATIC_BITSEQ:
     return_value = (value.GetType() == Object::OBITSEQ); break;
   case STANDARD_REAL:
@@ -213,6 +223,10 @@ LL GlobalChooser::GetIndependentChoiceLnLikelihood
     int i = Integer(value).Data();
     CHECK(i >= 0);
     return uintQuadraticLnProb(i);
+  }
+  case UNIFORM_UINT: {
+    int max = Integer(strategy.Data()[1]).Data();
+    return -Log(max);
   }
   case QUADRATIC_BITSEQ : {
     int num_bits = OBitSeq(value).Data().NumBits();
@@ -526,6 +540,7 @@ void InitChooserSets() {
   ChooserSet::misc_->L1_Insert(Keyword::Make("identified_flakes"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("independent_bool"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("quadratic_uint"));
+  ChooserSet::misc_->L1_Insert(Keyword::Make("uniform_uint"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("quadratic_bitseq"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("standard_real"));
   ChooserSet::misc_->L1_Insert(Keyword::Make("standard_string"));

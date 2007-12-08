@@ -1,12 +1,15 @@
+Delay stuff:
+ -Insert an infinitessimal delay in the on statement. 
+ -Enable -inf and inf bit sequences and bit sequences of length >31
 
+New Statements/expressions
+ MapReduce Expression
+ ForEach statement
+ can the two be combined ?
 
-immediately:
-
-	make sure you can't choose an identified flake
 
 Now:
 
-Track complexity costs.
 Port previous learning algorithms.
 
 L8r:

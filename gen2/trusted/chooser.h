@@ -45,6 +45,9 @@ The StaticChoose implements this.  It has one subexpresion corrsponding to
 { quadratic_uint }
     Returns unsigned integer x with probabilitiy 1/(x+1)(x+2)
 
+{ uniform_uint, Integer max }
+Uniformly returns an element of {0, 1, .. max-1}
+
 { quadratic_bitseq }
     Returns a bitseq where the length is chosen according to quadratic_uint
     and the bits are chosen uniformly.
@@ -82,6 +85,7 @@ struct GlobalChooser {
       ITEM(NO_STRATEGY),				\
 	ITEM(INDEPENDENT_BOOL),				\
 	ITEM(QUADRATIC_UINT),				\
+	ITEM(UNIFORM_UINT),				\
 	ITEM(QUADRATIC_BITSEQ),				\
 	ITEM(STANDARD_REAL),				\
 	ITEM(STANDARD_STRING),                          \
