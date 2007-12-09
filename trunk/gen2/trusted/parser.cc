@@ -50,6 +50,11 @@ Expression * MakeExpressionByKeyword(Keyword type){
 }
 
 Statement * ParseSingleStatement(const Tuple & t, uint * position) {
+  if (t[*position].GetType() != Object::KEYWORD) {
+    cerr << "expected a statement keyword got" 
+	 << t[*position] << endl;
+    CHECK(false);
+  }
   Keyword stype = t[(*position)++];
   if (stype == NULL) return NULL;
   Statement * ret = MakeStatementByKeyword(stype);
@@ -100,8 +105,10 @@ vector<Statement *> ParseStatements(const Tuple & t) {
 	  parent->static_children_.push_back(New<SingleLink>(parent));
 	}
       }
-      //cerr << "o=" << o.ToString() << endl;
-      CHECK(parent->NumStatementChildren() == (int)subs.size());      
+      if (parent->NumStatementChildren() != (int)subs.size()) {
+	cerr << "o=" << o.ToString() << endl;
+	CHECK(false);
+      }
       for (uint i=0; i<subs.size(); i++) {
 	if (subs[i])
 	  subs[i]->LinkToParent(parent, parent->NumExpressionChildren()+i);

@@ -830,10 +830,12 @@ Record Blackboard::GetRecordForDisplay() const {
   Record ret;
   ret["type"] = "BLACKBOARD";
   ret["num tuples"] = itoa(tuple_info_.size());
+  ret["tuples"] = "<table>"; 
   forall(run, tuple_info_) {
-    ret["tuples"] += run->first.ToString() + " " 
-      + run->second->ShortDescription() + "<br>\n";
+    ret["tuples"] += "<tr><td>" + run->second->ShortDescription() 
+      + "</td><td>" + run->second->FirstTime().ToString() + "</tr>\n";
   }
+  ret["tuples"] += "</table>";
   return ret;
 }
 
