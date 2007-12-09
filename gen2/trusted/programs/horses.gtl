@@ -101,7 +101,7 @@
    < generate all the times and time-successor relations and the clicks>
    on pattern((TIME t)) parallel {
       delay #     
-      if (equal t 200) {
+      if (equal t 500) {
         pass;
         let u (sum t 1)
 	   parallel {
