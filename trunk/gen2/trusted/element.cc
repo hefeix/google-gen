@@ -515,9 +515,11 @@ OTime DynamicOn::ComputeTime() const {
 
 OTime DynamicOn::ComputeChildTime(const Link * link, 
 				  const Element * child) const{
-  return DataMax(time_,
-		 BB.FindLastTime(Substitute(child->GetBinding().Data(), 
-					    GetPattern().Data())));
+  return OTime::Make
+    (max(time_.Data(),
+	 BB.FindLastTime(Substitute(child->GetBinding().Data(), 
+				    GetPattern().Data())).Data()
+	 + BitSeq::Min() ) );
 }
 
 void StaticRepeat::L1_Init() {
