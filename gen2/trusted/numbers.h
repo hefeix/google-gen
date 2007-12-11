@@ -86,27 +86,45 @@ struct DoubleBits{
 
 
 
+/*
+  
+
+
+*/
+
 struct BitSeq{
-  BitSeq() { data_ = 0x80000000; }
-  BitSeq(int num_bits, uint32 bits) {
-    CHECK(num_bits < 32);
-    bits = (bits << 1) + 1;
-    data_ = bits << (31-num_bits);
-  }
-  uint32 data_;
+  BitSeq() { data_.push_back(true);}
+
+  vector<bool> data_;
+
   int NumBits() const {
-    return (31 - NumTrailingZeros(data_)); 
+    return data_.size() - 1;
   }
-  int operator [](int i) const{
-    return (data_ >> (31-i)) & 1;
+  bool operator [](int i) const{
+    return (data_[i]);
   }
-  uint32 GetBits()  const {
-    return data_ >> (32-NumBits());
+  static BitSeq Min() {
+    BitSeq s;
+    s.data_.clear();
+    return s;
+  }
+  bool IsMin() const {
+    return data_.size() == 0;
+  }
+  void AppendInPlace(bool bit) {
+    CHECK(!IsMin());
+    data_[NumBits()-1] = bit;
+    data_.push_back(true);
+  }
+  void PopBackInPlace() {
+    CHECK(NumBits() > 0);
+    data_.pop_back();
+    data_[NumBits()-1] = true;
   }
   string ToString() const{
+    if (IsMin()) return "#m";
     string ret = "#";
-    int n = NumBits();
-    for (int i=0; i<n; i++) {
+    for (int i=0; i<NumBits(); i++) {
       ret += (*this)[i]?'1':'0';
     }
     return ret;
@@ -124,19 +142,32 @@ inline bool operator !=(const BitSeq & s1, const BitSeq & s2) {
 inline bool operator >(const BitSeq & s1, const BitSeq & s2) {
   return s1.data_ > s2.data_;
 }
-inline BitSeq Append (const BitSeq & s, bool bit) {
-  return BitSeq(s.NumBits()+1, s.GetBits()*2+(bit?1:0));
+inline BitSeq Append(const BitSeq & s, bool bit) {
+  BitSeq ret = s;
+  ret.AppendInPlace(bit);
+  return ret;  
 }
+inline BitSeq PopBack(const BitSeq & s) {
+  BitSeq ret = s;
+  ret.PopBackInPlace();
+  return ret;  
+}
+
 inline istream & operator>>(istream & input, BitSeq & s) {
   input >> ws;
   CHECK(input.peek() == '#');
   input.get();
   s = BitSeq();
   char c;
+  if (input.peek() == 'm') {
+    s = BitSeq::Min();
+    input >> c;
+    return input;
+  }
   while (isdigit(input.peek())) {
     input >> c;
-    if (c=='1') s = Append(s, true);
-    else if (c=='0') s = Append(s, false);
+    if (c=='1') s.AppendInPlace(true);
+    else if (c=='0') s.AppendInPlace(false);
     else CHECK(false);
   }
   return input;

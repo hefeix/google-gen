@@ -46,9 +46,12 @@ Object GlobalChooser::RandomChoice(OTuple strategy) const {
     return Integer::Make(RandomUintQuadratic());
   }
   case QUADRATIC_BITSEQ: {
-    int length = RandomUintQuadratic(31);
-    int bits = RandomUInt32() % (1 << length);
-    return OBitSeq::Make(BitSeq(length, bits));
+    int length = RandomUintQuadratic();
+    BitSeq s;
+    for (int i=0; i<length; i++) {
+      s.AppendInPlace(rand() % 2);
+    }
+    return OBitSeq::Make(s);
   }
   case UNIFORM_UINT: {
     int max = Integer(strategy.Data()[1]).Data();

@@ -1,6 +1,3 @@
-Delay stuff:
- -Insert an infinitessimal delay in the on statement. 
- -Enable -inf and inf bit sequences and bit sequences of length >31
 
 New Statements/expressions
  MapReduce Expression

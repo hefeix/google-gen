@@ -1,6 +1,5 @@
 {
    on pattern() 
-      delay # 
       parallel {
          post (POS 0);
          post (TIME 0);
@@ -80,7 +79,6 @@
    <generate all the positions and position-successor relations>
    on pattern((POS p)) parallel {
       post (SUM_MOD_13 p 0 p);
-      delay #
       if (equal p 12) {
         pass;
         let q (sum p 1)
@@ -92,7 +90,6 @@
    }
    
    on pattern((SUM_MOD_13 p q r) (PS q x) (PS r y)) {
-      delay #
       post (SUM_MOD_13 p x y);
    }
 
@@ -100,7 +97,6 @@
 
    < generate all the times and time-successor relations and the clicks>
    on pattern((TIME t)) parallel {
-      delay #     
       if (equal t 200) {
         pass;
         let u (sum t 1)
@@ -114,31 +110,31 @@
       }
    }
 
-   on pattern((CLICK t p d) (LAYER_VISIBLE t p l)) delay #
+   on pattern((CLICK t p d) (LAYER_VISIBLE t p l)) 
      post (CLICK_HIT t p l d);
 
-   on pattern((CLICK t p d) (NO_OBSTRUCTION t p n) (NUM_LAYERS n)) delay #
+   on pattern((CLICK t p d) (NO_OBSTRUCTION t p n) (NUM_LAYERS n)) 
      post (NO_CLICK_ABOVE t n);
 
-   on pattern((CLICK_HIT t p l d)) delay # parallel {
+   on pattern((CLICK_HIT t p l d)) parallel {
       post (NO_CLICK_ABOVE t l);
       post (NO_CLICK_BELOW t l);
    }
-   on pattern((NO_CLICK_ABOVE t l) (LS m l)) delay # parallel {
+   on pattern((NO_CLICK_ABOVE t l) (LS m l)) parallel {
       post (NO_CLICK_ABOVE t m);
       post (NO_CLICK_HIT t m);
    }
-   on pattern((NO_CLICK_BELOW t l) (LS l m) (LAYER m)) delay # parallel {
+   on pattern((NO_CLICK_BELOW t l) (LS l m) (LAYER m)) parallel {
       post (NO_CLICK_BELOW t m);
       post (NO_CLICK_HIT t m);
    }
 
-   on pattern((NO_CLICK_HIT t l) (TS t u) (LP t l p)) delay # parallel {
+   on pattern((NO_CLICK_HIT t l) (TS t u) (LP t l p)) parallel {
       post (LP u l p);
    }
-   on pattern((CLICK_HIT t p l true) (TS t u) (LP t l x) (PS y x)) delay #
+   on pattern((CLICK_HIT t p l true) (TS t u) (LP t l x) (PS y x)) 
       post (LP u l y);
-   on pattern((CLICK_HIT t p l false) (TS t u) (LP t l x) (PS x y)) delay #
+   on pattern((CLICK_HIT t p l false) (TS t u) (LP t l x) (PS x y)) 
       post (LP u l y);
 
    <figure out which character is at each position of each layer at each time
@@ -150,19 +146,16 @@
    x=letter
    >
    on pattern ((LP t l p) (SUM_MOD_13 p q r) (WORD l q x)) { 
-      delay #
       post (LAYER_CHAR t l r x);
    }
 
    <figure out which layer is visible at any time and position>
    on pattern ((TIME t) (POS p)) {
-      delay #
       parallel {
          post (NO_OBSTRUCTION t p 0);
       }
    }  
    on pattern ((NO_OBSTRUCTION t p l) (LS l m) (LAYER_CHAR t l p c)) {
-      delay #
       if (equal c " ") {
          post (NO_OBSTRUCTION t p m);
 	 parallel {
@@ -173,7 +166,6 @@
    }
 
    on pattern ((NO_OBSTRUCTION t p l) (NUM_LAYERS l)) {
-     delay #
      post (CHAR_VISIBLE t p " ");
    }
 
