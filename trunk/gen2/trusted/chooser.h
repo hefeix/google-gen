@@ -97,6 +97,8 @@ struct GlobalChooser {
 	};
   CLASS_ENUM_DECLARE(GlobalChooser, StrategyType);
 
+  //static void Init();
+
   // const functions
   bool ChoiceIsPossible(OTuple strategy, Object v) const;
   Object RandomChoice(OTuple strategy) const;
@@ -134,6 +136,7 @@ struct GlobalChooser {
   // choice from that strategy.
   hash_map<Choice *, pair<Choice *, Choice *> > meta_choices_;
   LL ln_likelihood_; // for choices not covered in choosers.
+
 };
 
 extern GlobalChooser GC;
@@ -224,6 +227,8 @@ struct GenericChooser : public Chooser {
 class SetChooser;
 
 struct ChooserSet : public Base {
+  static void Init();
+
   void L1_Init(Object name) {
     Base::L1_Init();
     L1_SetName(name);
@@ -245,7 +250,6 @@ struct ChooserSet : public Base {
   static ChooserSet *misc_;
 };
 
-void InitChooserSets();
 
 struct SetChooser : public Chooser {
   void L1_Init(OTuple strategy);

@@ -61,13 +61,16 @@ void Shell() {
 
 int main() {
   rand();
-  InitConstants();
-  InitChooserSets();
+  Object::Init();
+  ChooserSet::Init();
+  Object::DoneAddingKeywords();
+
   N.SetAutomaticallyNameAll(true);
   N.SetTrackCurrentCount(true);
+
   //ObjectsShell();
   // Blackboard::Shell();
 
   Shell();
-  DestroyConstants();
+  Object::Destroy();
 }
