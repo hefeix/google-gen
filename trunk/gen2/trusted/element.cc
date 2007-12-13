@@ -164,8 +164,9 @@ void StaticElement::L1_CreateChoices(set<Variable> * variables_so_far, Object ob
   if (obj.GetType() == Object::VARIABLE) {
     // Choose the keyword variable from (meta (set misc))
     CL.PushBack(&choices_,(Base *)
-		New<Choice>(this, universal_strategy, Keyword::Make("variable")));
-
+		New<Choice>(this, universal_strategy, 
+			    Keyword::Make("variable")));
+    
     // Choose the backreference or new variable
     CL.PushBack(&choices_,(Base *)
 		New<ArbitraryChoice>(this, - Log(variables_so_far->size() + 1), "backref"));
@@ -189,7 +190,8 @@ void StaticElement::L1_CreateChoices(set<Variable> * variables_so_far, Object ob
   if (obj.GetType() == Object::OPATTERN) {
     const Pattern & p = OPattern(obj).Data();
     CL.PushBack(&choices_, (Base *)
-		New<Choice>(this, universal_strategy, Keyword::Make("pattern")));
+		New<Choice>(this, universal_strategy, 
+			    Keyword::Make("pattern_choice")));
     // TODO: check for duplicate tuples - if so, don't save n!
     CL.PushBack(&choices_, (Base *)
 		New<ArbitraryChoice>(this, LnFactorial(p.size()), 
