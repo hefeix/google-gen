@@ -153,12 +153,13 @@ class Object {
   static bool IsReservedWord(string s) { return (reserved_words_ % s); }
   static bool IsKeyword(string s) { return (keywords_ % s); }
   static void DoneAddingKeywords() { done_adding_keywords_ = true;}
+  static void Init();
+  static void Destroy();
 
-
- protected:
   static set<string> reserved_words_;
   static set<string> keywords_; // subset of reserved_words_
   static bool done_adding_keywords_;
+ protected:
 
   Definition * def_;
   void PointTo(Definition *def){
@@ -401,8 +402,8 @@ template <class T> const T & DataMin(const T & t1, const T & t2) {
 int VariableToInt(Variable v);
 Variable IntToVariable(int i);
 
-void InitConstants();
-void DestroyConstants();
+//void InitConstants();
+//void DestroyConstants();
 // keywords that need to be created in InitKeywords
 extern Keyword WILDCARD;
 extern Keyword SEMICOLON;

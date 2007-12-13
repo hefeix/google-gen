@@ -27,7 +27,6 @@
 #define ALL_STATEMENTS \
   FUNCTION(Pass, PASS)				\
        FUNCTION(On, ON)				\
-       FUNCTION(Repeat, REPEAT)			\
        FUNCTION(Delay, DELAY)			\
        FUNCTION(Let, LET)			\
        FUNCTION(Post, POST)			\
@@ -194,12 +193,12 @@ struct StaticElement : public Element {
   // the objects and expression children
   string ParameterListToString() const; 
   // What new variables are introduced by this node
-  virtual VariableSet GetIntroducedVariables(int which_child) const;
+  virtual set<Variable> GetIntroducedVariables(int which_child) const;
   // What variables exist at this node. 
   // This is the union of GetIntroducedVariables() up the static tree, 
   // not including this node. 
-  VariableSet ComputeVariables() const;
-  inline const VariableSet & GetVariables() const { return variables_;}
+  set<Variable> ComputeVariables() const;
+  inline const set<Variable> & GetVariables() const { return variables_;}
 
   Record GetRecordForDisplay() const;
   set<Element *> GetAllChildren() const;
@@ -248,7 +247,7 @@ struct StaticElement : public Element {
   vector<SingleLink *> static_children_; // statements and expressions
   vector<Object> objects_;
   vector<Base *> choices_;
-  VariableSet variables_;
+  set<Variable> variables_;
 
 };
 
@@ -491,7 +490,7 @@ struct StaticOn : public Statement {
   int NumExpressionChildren() const { return CHILD;}
   OPattern GetPattern() const { return GetObject(PATTERN);}
   virtual Function GetFunction() const { return ON;}
-  VariableSet GetIntroducedVariables(int which_child) const;
+  set<Variable> GetIntroducedVariables(int which_child) const;
   // ---------- L1 functions ----------  
   void L1_Init();
   void L1_Erase();
@@ -527,7 +526,7 @@ struct DynamicOn : public DynamicStatement {
 };
 
 
-struct StaticRepeat : public Statement {
+/*struct StaticRepeat : public Statement {
   #define StaticRepeatChildNameList {				\
       ITEM(REPETITIONS),					\
       ITEM(CHILD),					\
@@ -545,10 +544,10 @@ struct StaticRepeat : public Statement {
   Variable GetRepetitionVariable() const { 
     return GetObject(REPETITION_VARIABLE);}
   virtual Function GetFunction() const { return REPEAT;}
-  VariableSet GetIntroducedVariables(int which_child) const {
+  set<Variable> GetIntroducedVariables(int which_child) const {
     if (which_child == CHILD) 
-      return Singleton<VariableSet>(GetRepetitionVariable());
-    return VariableSet();
+      return Singleton<set<Variable>>(GetRepetitionVariable());
+    return set<Variable>();
   }
   // ---------- L1 functions ----------  
   void L1_Init();
@@ -573,7 +572,7 @@ struct DynamicRepeat : public DynamicStatement {
     CHECK(false);
   }
   // ---------- data ----------  
-};
+  };*/
 
 
 struct StaticDelay : public Statement { 
@@ -641,9 +640,9 @@ struct StaticLet : public Statement {
   Variable GetVariable() const { return GetObject(VARIABLE);}
   virtual Function GetFunction() const { return LET;}
 
-  VariableSet GetIntroducedVariables(int which_child) const {
-    if (which_child == CHILD) return Singleton<VariableSet>(GetVariable());
-    return VariableSet();
+  set<Variable> GetIntroducedVariables(int which_child) const {
+    if (which_child == CHILD) return Singleton<set<Variable> >(GetVariable());
+    return set<Variable>();
   }
   // ---------- L1 functions ----------  
   void L1_Init();
