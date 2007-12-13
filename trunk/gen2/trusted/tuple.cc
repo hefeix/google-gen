@@ -128,8 +128,8 @@ int GeneralizationIterator::GeneralizeMask() const{
   return generalize_mask_;
 }
 
-VariableSet GetDomainVariables(OMap m) {
-  VariableSet ret;
+set<Variable> GetDomainVariables(OMap m) {
+  set<Variable> ret;
   forall(run, m.Data()) {
     ret.insert(Variable(run->first));
   }
@@ -235,21 +235,21 @@ bool IsSubsetOf(const Map & m1, const Map & m2) {
   return true;
 }
 
-VariableSet GetVariables(const Tuple & t) {
-  VariableSet ret;
+set<Variable> GetVariables(const Tuple & t) {
+  set<Variable> ret;
   for (uint i=0; i<t.size(); i++)
     if (IsVariable(t[i])) ret.insert(t[i]);
   return ret;
 }
-VariableSet GetVariables(const MPattern & v) {
-  VariableSet ret;
+set<Variable> GetVariables(const MPattern & v) {
+  set<Variable> ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
       if (IsVariable(v[i][j])) ret.insert(v[i][j]);
   return ret;
 }
-VariableSet GetVariables(const Pattern & v) {
-  VariableSet ret;
+set<Variable> GetVariables(const Pattern & v) {
+  set<Variable> ret;
   for (uint i=0; i<v.size(); i++) 
     for (uint j=0; j<v[i].size(); j++)
       if (IsVariable(v[i].Data()[j])) ret.insert(v[i].Data()[j]);
@@ -473,7 +473,7 @@ CandidateRule CanonicalizeRule(const CandidateRule & r,
 
   int last_variable_in_preconditions = -1;
   forall(run, sub) 
-    last_variable_in_preconditions >?= Variable(run->second).Data();
+    last_variable_in_preconditions >?= VariableToInt(run->second);
 
   VLOG(1) << "last variable:" << last_variable_in_preconditions << endl;
   int next_var = last_variable_in_preconditions+1;

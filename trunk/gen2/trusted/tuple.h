@@ -97,7 +97,7 @@ Object DeepSubstitute(const Map & m, Object o);
 // returns true if DeepSubstitute could change this object for some context.
 bool DeepSubstitutePossible(Object o);
 
-VariableSet GetDomainVariables(OMap m);
+set<Variable> GetDomainVariables(OMap m);
 
 // Adds a key-value pair to a Map.
 void Add(Map *m, Object key, Object value);
@@ -120,9 +120,9 @@ Variable FirstUnusedVariable(const Map & m);
 // onto the domain of m1.
 bool IsSubsetOf(const Map  & m1, const Map & m2);
 
-VariableSet GetVariables(const Tuple & t);
-VariableSet GetVariables(const MPattern & v);
-VariableSet GetVariables(const Pattern & v);
+set<Variable> GetVariables(const Tuple & t);
+set<Variable> GetVariables(const MPattern & v);
+set<Variable> GetVariables(const Pattern & v);
 
 // find ths connected components of the pattern.  
 // Two tuples are connected if they share variables

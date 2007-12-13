@@ -15,6 +15,8 @@ Boolean TRUE;
 Boolean FALSE;
 
 bool Object::done_adding_keywords_ = false;
+set<string> Object::reserved_words_;
+set<string> Object::keywords_;
 
 Object Object::AddKeyword(string k) {
   // We are letting keywords be added multiple times. 
@@ -69,13 +71,13 @@ int VariableToInt(Variable v){
   }
   CHECK(s.size() > 1);
   if (s[0] != 'v') return -1;
-  int i= atoi(v.c_str()+1);
+  int i= atoi(s.c_str()+1);
   if (i<26) return -1;
   return i;  
 }
 Variable IntToVariable(int i) {
   CHECK(i>=0);
-  while (g_int_to_variable_cache.size() <= i) {
+  while ((int)g_int_to_variable_cache.size() <= i) {
     int sz = g_int_to_variable_cache.size();
     Variable v = Variable::Make
       ((sz<26)?(string() + char('a'+sz)):("v" + itoa(sz)));
@@ -104,13 +106,7 @@ template<>
 string Keyword::Definition::ToStringSpecific(bool verbose) const { return data_; }
 
 template<>
-string Variable::Definition::ToStringSpecific(bool verbose) const { 
-  if (data_ < 26)
-    return string() + (char('a' + data_));
-  if (data_ < 0)  
-    return "u" + itoa(-data_);
-  return "v" + itoa(data_);
-}
+string Variable::Definition::ToStringSpecific(bool verbose) const { return data_;}
 
 template<>
 string OTuple::Definition::ToStringSpecific(bool verbose) const {

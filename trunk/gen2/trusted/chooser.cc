@@ -162,8 +162,12 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
     break;
   case SET: {
     ChooserSet *cs = ChooserSet::FromStrategy(strategy);
-    if (!cs) return_value = false;
-    return_value = (cs->set_ % value);
+    if (!cs) {
+      return_value = false;
+      VLOG(0) << "couldn't find chooser set with strategy " << strategy
+	      << endl;
+    }
+    else return_value = (cs->set_ % value);
   }
     break;
   default:
@@ -178,6 +182,11 @@ GlobalChooser::GetStrategyType(OTuple strategy) const {
   // TODO: make this not crash if the strategy is malformed
   if (strategy == NULL) return NO_STRATEGY;
   if (strategy.Data().size() == 0) return NO_STRATEGY;
+  if (strategy.Data()[0].GetType() != Object::KEYWORD) {
+    cerr << "error - expected a keyword, got " << strategy.Data()[0]
+	 << " strategy=" << strategy << endl;
+    CHECK(false);
+  }
   GlobalChooser::StrategyType return_value = 
     StringToStrategyType(Upcase(Keyword(strategy.Data()[0]).Data()));
   VLOG(3) << "strategy:" << strategy.ToString() << " type:" << return_value << endl;
@@ -519,6 +528,11 @@ ChooserSet * ChooserSet::universal_;
 ChooserSet * ChooserSet::misc_;
 
 void ChooserSet::Init() {
+  for (int i=0; i<GlobalChooser::NumStrategyTypes(); i++) {
+    Object::AddKeyword(Downcase(GlobalChooser::StrategyTypeToString
+				(GlobalChooser::StrategyType(i))));
+  }
+  
   booleans_ = New<ChooserSet>(Object::AddKeyword("booleans"));
   booleans_->L1_Insert(TRUE);
   booleans_->L1_Insert(FALSE);
@@ -531,27 +545,6 @@ void ChooserSet::Init() {
   }
   identified_flakes_ 
     = New<ChooserSet>(Object::AddKeyword("identified_flakes"));
-  
-  // This chooser set chooses keywords
-  misc_ = New<ChooserSet>(Object::AddKeyword("misc"));
-  misc_->L1_Insert(Object::AddKeyword("variable"));
-  misc_->L1_Insert(Object::AddKeyword("tuple"));
-  misc_->L1_Insert(Object::AddKeyword("pattern"));
-  misc_->L1_Insert(Object::AddKeyword("set"));
-  misc_->L1_Insert(Object::AddKeyword("booleans"));
-  misc_->L1_Insert(Object::AddKeyword("functions"));
-  misc_->L1_Insert(Object::AddKeyword("misc"));
-  misc_->L1_Insert(Object::AddKeyword("generic"));
-  misc_->L1_Insert(Object::AddKeyword("identified_flakes"));
-  misc_->L1_Insert(Object::AddKeyword("independent_bool"));
-  misc_->L1_Insert(Object::AddKeyword("quadratic_uint"));
-  misc_->L1_Insert(Object::AddKeyword("uniform_uint"));
-  misc_->L1_Insert(Object::AddKeyword("quadratic_bitseq"));
-  misc_->L1_Insert(Object::AddKeyword("standard_real"));
-  misc_->L1_Insert(Object::AddKeyword("standard_string"));
-  misc_->L1_Insert(Object::AddKeyword("universal"));
-  misc_->L1_Insert(Object::AddKeyword("new_flake"));
-  misc_->L1_Insert(WILDCARD);
 
   ChooserSet * u = 
     universal_ = New<ChooserSet>(Object::AddKeyword("universal"));
@@ -568,6 +561,17 @@ void ChooserSet::Init() {
 		      ("{generic, {standard_real}, universal }")));
   u->L1_Insert(OTuple(StringToObject
 		      ("{generic, {standard_string}, universal }")));
+
+
+  
+  // This chooser set chooses keywords
+  misc_ = New<ChooserSet>(Object::AddKeyword("misc"));
+  forall(run, Object::keywords_) {
+    misc_->L1_Insert(Keyword::Make(*run) );
+  }
+  // what are these for?
+  misc_->L1_Insert(Object::AddKeyword("variable"));
+  misc_->L1_Insert(Object::AddKeyword("tuple"));
 }
 
 void SetChooser::L1_Init(OTuple strategy) {

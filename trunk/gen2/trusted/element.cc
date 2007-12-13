@@ -242,15 +242,15 @@ void DynamicElement::L1_Erase() {
   Element::L1_Erase();
 }
 
-VariableSet StaticElement::ComputeVariables() const { 
-  if (!parent_) return VariableSet();
+set<Variable> StaticElement::ComputeVariables() const { 
+  if (!parent_) return set<Variable>();
   StaticElement * parent = GetParent();
   return Union(parent->GetVariables(), 
 	       parent->GetIntroducedVariables(WhichChildAmI()));
 }
 
 void StaticElement::L1_RecursivelyComputeSetVariables() {
-  VariableSet new_variables = ComputeVariables();
+  set<Variable> new_variables = ComputeVariables();
   if (new_variables == variables_) return;
   CL.ChangeValue(&variables_, new_variables);
   L1_CreateChoices();
@@ -260,8 +260,8 @@ void StaticElement::L1_RecursivelyComputeSetVariables() {
   }
 }
 
-VariableSet StaticElement::GetIntroducedVariables(int which_child) const {
-  return VariableSet();
+set<Variable> StaticElement::GetIntroducedVariables(int which_child) const {
+  return set<Variable>();
 }
 
 StaticElement * StaticElement::GetChild(int which) const { 
@@ -474,7 +474,7 @@ void StaticOn::L1_Init(){
   Statement::L1_Init();
   New<MissingDynamicOnViolation>(this);
 }
-VariableSet StaticOn::GetIntroducedVariables(int which_child) const {
+set<Variable> StaticOn::GetIntroducedVariables(int which_child) const {
   return ::GetVariables(GetPattern().Data());
 }
 void StaticOn::L1_Erase() {
@@ -521,12 +521,12 @@ OTime DynamicOn::ComputeChildTime(const Link * link,
 				    GetPattern().Data())).Data()
 	 + BitSeq::Min() ) );
 }
-
+/*
 void StaticRepeat::L1_Init() {
   Statement::L1_Init();
   L1_SetObject(REPETITION_VARIABLE, M.L1_GetNextUniqueVariable());
 }
-
+*/
 void StaticDelay::L1_Init() {
   Statement::L1_Init();
 }
@@ -828,7 +828,7 @@ Link * DynamicElement::FindDynamicParentLink() const {
   if (!dp) {
     cerr << "binding=" << binding_ << endl
 	 << "restricted=" << Restrict(binding_, sp->GetVariables()) << endl;
-    VariableSet vars = sp->GetVariables();
+    set<Variable> vars = sp->GetVariables();
     forall(run, vars) cerr << (*run) << " ";
     cerr << endl;
   }
