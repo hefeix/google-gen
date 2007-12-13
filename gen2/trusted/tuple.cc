@@ -36,7 +36,7 @@ void WildcardsToVariablesInline(Tuple *t) {
   int nextvar = 0;
   for (uint c=0; c<t->size(); c++)
     if ((*t)[c] == WILDCARD) 
-      (*t)[c] = Variable::Make(nextvar++);
+      (*t)[c] = IntToVariable(nextvar++);
 }
 Tuple WildcardsToVariables(const Tuple &t){
   Tuple ret = t;
@@ -222,7 +222,8 @@ Map Reverse(const Map & m) {
 }
 Variable FirstUnusedVariable(const Map & m){
   for (uint i=0; true; i++) {
-    if (!(m % Object(Variable::Make(i)))) return Variable::Make(i);
+    Variable v = IntToVariable(i);
+    if (!(m % Object(v))) return v;
   }
 }
 bool IsSubsetOf(const Map & m1, const Map & m2) {
@@ -344,7 +345,7 @@ void RenameVariablesInOrder(MPattern * v, Map *m){
     for (uint j=0; j<(*v)[i].size(); j++) {
       Object & w_ref = (*v)[i][j];
       if (IsVariable(w_ref) && !(sub % w_ref)) {
-	Add(&sub, w_ref, Variable::Make(next_var));
+	Add(&sub, w_ref, IntToVariable(next_var));
 	next_var++;
       }
     }
@@ -478,6 +479,7 @@ CandidateRule CanonicalizeRule(const CandidateRule & r,
   int next_var = last_variable_in_preconditions+1;
 
   MPattern c_res = result;
+  // escape the variables in the results that are also in the preconditions
   for (uint i=0; i<c_res.size(); i++) 
     for (uint j=0; j<c_res[i].size(); j++) {
       Object & w_ref = c_res[i][j];
@@ -490,21 +492,26 @@ CandidateRule CanonicalizeRule(const CandidateRule & r,
     }
   VLOG(1) << "step 2 c_res:" << MPatternToOPattern(c_res) << endl;
   Map res_sub;
+  // canonicalize the result
   c_res = Canonicalize(c_res, &res_sub);
   VLOG(1) << "step 3 c_res:" << MPatternToOPattern(c_res) << endl;
+  // make the new variables in the result not conflict with the
+  // variables in the precondition.
   for (uint i=0; i<c_res.size(); i++) 
     for (uint j=0; j<c_res[i].size(); j++) {
       Object & w_ref = c_res[i][j];
       if (w_ref.GetType() == Object::VARIABLE)
-	  w_ref = Variable::Make(Variable(w_ref).Data() + next_var);
+	w_ref = IntToVariable(VariableToInt(Variable(w_ref)) + next_var);
       if (w_ref.GetType() == Object::ESCAPE)
 	w_ref = Escape(w_ref).Data();
     }
   VLOG(1) << "step 4 c_res:" << MPatternToOPattern(c_res) << endl;
+  // report the substitution
   if (out_sub) {
     *out_sub = res_sub;
     forall (run, *out_sub)
-      run->second = Variable::Make(Variable(run->second).Data()+next_var);
+      run->second 
+      = IntToVariable(VariableToInt(Variable(run->second))+next_var);
     out_sub->insert(sub.begin(), sub.end());
   }
   return make_pair(c_pre, c_res);

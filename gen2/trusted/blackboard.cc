@@ -528,7 +528,7 @@ Object RandomConstant() {
   return Integer::Make(rand() % 3 + 1);
 }
 Object RandomVariable() {
-  return Variable::Make(rand() % 3);
+  return Variable::Make("v" + itoa(rand() % 3) );
 }
 
 OTuple RandomConstantTuple() {

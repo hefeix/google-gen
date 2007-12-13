@@ -27,6 +27,9 @@
 
 CLASS_ENUM_DEFINE(GlobalChooser, StrategyType);
 
+//static void GlobalChooser::Init() {
+//}
+
 Object GlobalChooser::RandomChoice(OTuple strategy) const {
 
   StrategyType stype = GetStrategyType(strategy);
@@ -515,44 +518,43 @@ ChooserSet * ChooserSet::identified_flakes_;
 ChooserSet * ChooserSet::universal_;
 ChooserSet * ChooserSet::misc_;
 
-void InitChooserSets() {
-  ChooserSet::booleans_ = New<ChooserSet>(Keyword::Make("booleans"));
-  ChooserSet::booleans_->L1_Insert(TRUE);
-  ChooserSet::booleans_->L1_Insert(FALSE);
+void ChooserSet::Init() {
+  booleans_ = New<ChooserSet>(Object::AddKeyword("booleans"));
+  booleans_->L1_Insert(TRUE);
+  booleans_->L1_Insert(FALSE);
 
-  ChooserSet::functions_ = New<ChooserSet>(Keyword::Make("functions"));
+  functions_ = New<ChooserSet>(Object::AddKeyword("functions"));
   for (int i=0; i<Element::NumFunctions(); i++) {
-    ChooserSet::functions_->L1_Insert
-      (Keyword::Make(Downcase
-		     (Element::FunctionToString(Element::Function(i)))));
+    functions_->L1_Insert
+      (Object::AddKeyword(Downcase
+			  (Element::FunctionToString(Element::Function(i)))));
   }
-  ChooserSet::identified_flakes_ 
-    = New<ChooserSet>(Keyword::Make("identified_flakes"));
-
+  identified_flakes_ 
+    = New<ChooserSet>(Object::AddKeyword("identified_flakes"));
+  
   // This chooser set chooses keywords
-  ChooserSet::misc_ =
-    New<ChooserSet>(Keyword::Make("misc"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("variable"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("tuple"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("pattern"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("set"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("booleans"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("functions"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("misc"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("generic"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("identified_flakes"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("independent_bool"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("quadratic_uint"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("uniform_uint"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("quadratic_bitseq"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("standard_real"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("standard_string"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("universal"));
-  ChooserSet::misc_->L1_Insert(Keyword::Make("new_flake"));
-  ChooserSet::misc_->L1_Insert(WILDCARD);
+  misc_ = New<ChooserSet>(Object::AddKeyword("misc"));
+  misc_->L1_Insert(Object::AddKeyword("variable"));
+  misc_->L1_Insert(Object::AddKeyword("tuple"));
+  misc_->L1_Insert(Object::AddKeyword("pattern"));
+  misc_->L1_Insert(Object::AddKeyword("set"));
+  misc_->L1_Insert(Object::AddKeyword("booleans"));
+  misc_->L1_Insert(Object::AddKeyword("functions"));
+  misc_->L1_Insert(Object::AddKeyword("misc"));
+  misc_->L1_Insert(Object::AddKeyword("generic"));
+  misc_->L1_Insert(Object::AddKeyword("identified_flakes"));
+  misc_->L1_Insert(Object::AddKeyword("independent_bool"));
+  misc_->L1_Insert(Object::AddKeyword("quadratic_uint"));
+  misc_->L1_Insert(Object::AddKeyword("uniform_uint"));
+  misc_->L1_Insert(Object::AddKeyword("quadratic_bitseq"));
+  misc_->L1_Insert(Object::AddKeyword("standard_real"));
+  misc_->L1_Insert(Object::AddKeyword("standard_string"));
+  misc_->L1_Insert(Object::AddKeyword("universal"));
+  misc_->L1_Insert(Object::AddKeyword("new_flake"));
+  misc_->L1_Insert(WILDCARD);
 
   ChooserSet * u = 
-    ChooserSet::universal_ = New<ChooserSet>(Keyword::Make("universal"));
+    universal_ = New<ChooserSet>(Object::AddKeyword("universal"));
   u->L1_Insert(OTuple(StringToObject("{set, booleans, universal}")));
   u->L1_Insert(OTuple(StringToObject("{set, functions, universal}")));
   u->L1_Insert(OTuple(StringToObject("{set, misc, universal}")));

@@ -14,17 +14,37 @@ OTime NEVER;
 Boolean TRUE;
 Boolean FALSE;
 
-void InitConstants(){
-  cout << "Calling InitConstants" << endl;
-  WILDCARD = Keyword::Make("*");
-  SEMICOLON = Keyword::Make(";");
+bool Object::done_adding_keywords_ = false;
+
+Object Object::AddKeyword(string k) {
+  // We are letting keywords be added multiple times. 
+  // AddKeyword() should really only be called inside init functions
+  // (at the beginning of the program execution)
+  // CHECK(!reserved_words_ % k);
+  CHECK(!done_adding_keywords_);
+  keywords_.insert(k);
+  AddReservedWord(k);
+  return Keyword::Make(k);  
+}
+
+void Object::Init(){
+  cout << "Calling Object::Init" << endl;
+  AddReservedWord("pattern");
+  AddReservedWord("null");
+  AddReservedWord("never");
+  AddReservedWord("time");
+  AddReservedWord("true");
+  AddReservedWord("false");
+  
+  WILDCARD = AddKeyword("*");
+  SEMICOLON = AddKeyword(";");
   NEVER = OTime::Make(Time::Never());
   CREATION = OTime::Make(Time());
   TRUE = Boolean::Make(true);
   FALSE = Boolean::Make(false);
 };
 
-void DestroyConstants() {
+void Object::Destroy() {
   cout << "Calling DestroyConstants" << endl;
   WILDCARD = NULL;
   SEMICOLON = NULL;
@@ -33,6 +53,39 @@ void DestroyConstants() {
   TRUE = NULL;
   FALSE = NULL;
 }
+
+static vector<Variable> g_int_to_variable_cache;
+static map<Variable, int> g_variable_to_int_cache;
+
+int VariableToInt(Variable v){
+  int * look = g_variable_to_int_cache % v;
+  if (look) return *look;
+  string s = v.Data();
+  if (s.size() == 1) {
+    if (islower(s[0])) {
+      return s[0] - 'a';
+    }
+    return -1;
+  }
+  CHECK(s.size() > 1);
+  if (s[0] != 'v') return -1;
+  int i= atoi(v.c_str()+1);
+  if (i<26) return -1;
+  return i;  
+}
+Variable IntToVariable(int i) {
+  CHECK(i>=0);
+  while (g_int_to_variable_cache.size() <= i) {
+    int sz = g_int_to_variable_cache.size();
+    Variable v = Variable::Make
+      ((sz<26)?(string() + char('a'+sz)):("v" + itoa(sz)));
+    g_int_to_variable_cache.push_back(v);
+    g_variable_to_int_cache[v] = sz;
+  }
+  return g_int_to_variable_cache[i];
+}
+
+
 
 // There must be some black magic going on here, but the compiler is happy.
 template<Object::Type OT, class D>
@@ -298,6 +351,7 @@ istream & operator >>(istream & input, Object & o){
     return input;
   } 
 
+  // read a contiguous string of a-z A-Z and _s
   CHECK(IsNameChar(firstchar));
   string s;
   s += firstchar;
@@ -306,24 +360,14 @@ istream & operator >>(istream & input, Object & o){
     input >> c;
     s.push_back(c);
   }
-  if (isupper(s[0])) { // it's a flake
+
+  // If it starts with an uppercase, it's a flake
+  if (isupper(s[0])) {
     o = Flake::Make(s);
     return input;
   } 
-  CHECK(islower(s[0]));
-  if (s.size() == 1) {
-    o = Variable::Make(s[0]-'a');
-    return input;
-  } 
-  if (isdigit(s[1])) {
-    if (s[0]=='v') {
-      o = Variable::Make(atoi(&(s[1])));
-      return input;
-    } 
-    CHECK(s[0]=='u');
-    o = Variable::Make(-atoi(&(s[1])));
-    return input;
-  }
+
+  // These are particular objects.
   if (s=="true") {
     o = TRUE;
     return input;
@@ -336,14 +380,16 @@ istream & operator >>(istream & input, Object & o){
     o = NEVER;
     return input;
   }
+
+  // These are object type strings
   if (s=="time") {
     OMap t;
     input >> t;
     vector<pair<BitSeq, int> > coordinates;
     forall(run, t.Data()) {
-      OBitSeq s = run->first;
+      OBitSeq seq = run->first;
 	Integer n = run->second;
-	coordinates.push_back(make_pair(s.Data(), n.Data()));	
+	coordinates.push_back(make_pair(seq.Data(), n.Data()));	
 	sort(coordinates.begin(), coordinates.end());
     }
     o = OTime::Make(Time(coordinates));
@@ -363,8 +409,18 @@ istream & operator >>(istream & input, Object & o){
     o = NULL;
     return input;
   }
-  o = Keyword::Make(s);
+
+  if (Object::IsKeyword(s)) {
+    o = Keyword::Make(s);
+    return input;
+  }
+
+  CHECK(!Object::IsReservedWord(s));
+
+  o = Variable::Make(s);
   return input;
+
+  // we no longer support this unique variable thing.  What the heck was that again anyway? TODO
 }
 
 void ObjectsShell(){
@@ -374,8 +430,8 @@ void ObjectsShell(){
     //    cout << o.ToString() << endl;
     cout << o.ToString(true) << endl << endl;
     v.push_back(o);
-    if (o==Keyword::Make("clear")) v = vector<Object>();
-    if (o==Keyword::Make("done")) break;
+    if (o==Flake::Make("Clear")) v = vector<Object>();
+    if (o==Flake::Make("Done")) break;
   }
 }
   

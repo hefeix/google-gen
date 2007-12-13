@@ -29,7 +29,7 @@ Model::Model(){
   batch_mode_ = false;
   ln_likelihood_ = 0;
   next_name_ = 0;
-  next_unique_variable_ = -1;
+  next_unique_variable_ = 1;
   webserver_ = new WebServer(&request_handler_);
   webserver_->StartInThread();
   L1_AutomaticallyName();
@@ -38,8 +38,8 @@ Model::Model(){
 Model::~Model(){}
 
 Variable Model::L1_GetNextUniqueVariable() {
-  Variable ret = Variable::Make(next_unique_variable_);
-  CL.ChangeValue(&next_unique_variable_, next_unique_variable_-1);
+  Variable ret = Variable::Make("u" + itoa(next_unique_variable_));
+  CL.ChangeValue(&next_unique_variable_, next_unique_variable_+1);
   return ret;
 }
 

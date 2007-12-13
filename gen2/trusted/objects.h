@@ -143,7 +143,23 @@ class Object {
     return def_->DeepHash32(level);
   }
 
+  // Any string starting with a lower-case letter that is not a reserved
+  // word is interpreted as a variable.
+  // TODO: populate this with static functions
+  static void AddReservedWord(string w) {
+    reserved_words_.insert(w);
+  }
+  static Object AddKeyword(string k);
+  static bool IsReservedWord(string s) { return (reserved_words_ % s); }
+  static bool IsKeyword(string s) { return (keywords_ % s); }
+  static void DoneAddingKeywords() { done_adding_keywords_ = true;}
+
+
  protected:
+  static set<string> reserved_words_;
+  static set<string> keywords_; // subset of reserved_words_
+  static bool done_adding_keywords_;
+
   Definition * def_;
   void PointTo(Definition *def){
     if (def_) {
@@ -158,9 +174,6 @@ class Object {
     }
   }
 };
-
-
-
 
 inline bool operator ==(const Object & o1, const Object & o2) {
   return (o1.GetDefinition()==o2.GetDefinition());
@@ -300,7 +313,7 @@ typedef vector<Tuple> MPattern; // mutable 2 levels down
 
 typedef SpecificObject<Object::FLAKE, string> Flake;
 typedef SpecificObject<Object::KEYWORD, string> Keyword;
-typedef SpecificObject<Object::VARIABLE, int> Variable;
+typedef SpecificObject<Object::VARIABLE, string> Variable;
 typedef SpecificObject<Object::OTUPLE, Tuple > OTuple;
 typedef SpecificObject<Object::OMAP, Map> OMap;
 typedef SpecificObject<Object::BOOLEAN, bool> Boolean;
@@ -313,8 +326,7 @@ typedef SpecificObject<Object::OBITSEQ, BitSeq> OBitSeq;
 typedef SpecificObject<Object::STRING, string> String;
 typedef SpecificObject<Object::ESCAPE, Object> Escape;
 
-typedef set<Variable> VariableSet;
-
+// typedef set<Variable> VariableSet;
 
 inline const Object * operator %(const OMap & m, Object key) {
   return m.Data() % key;
@@ -386,6 +398,8 @@ template <class T> const T & DataMin(const T & t1, const T & t2) {
   return t2;
 }
 
+int VariableToInt(Variable v);
+Variable IntToVariable(int i);
 
 void InitConstants();
 void DestroyConstants();
