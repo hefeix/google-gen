@@ -303,8 +303,11 @@ void Choice::L1_Init(Base *owner, OTuple strategy, Object value) {
 }
 
 void Choice::L1_Change(OTuple new_strategy, Object new_value){
-  if (!GC.ChoiceIsPossible(new_strategy, new_value))
+  if (!GC.ChoiceIsPossible(new_strategy, new_value)) {
+    //  VLOG(0) << "couldn't make choice.  strategy=" << new_strategy
+    // << " value=" << new_value << endl;
     new_value = NULL;
+  }
   GC.L1_Remove(this);
   CL.ChangeValue(&strategy_, new_strategy);
   CL.ChangeValue(&value_, new_value);
@@ -546,6 +549,11 @@ void ChooserSet::Init() {
   identified_flakes_ 
     = New<ChooserSet>(Object::AddKeyword("identified_flakes"));
 
+  // this needs to be here because it needs to be interpreted as a keyword
+  // in StringToObject below.
+
+  Object::AddKeyword("misc");
+
   ChooserSet * u = 
     universal_ = New<ChooserSet>(Object::AddKeyword("universal"));
   u->L1_Insert(OTuple(StringToObject("{set, booleans, universal}")));
@@ -565,13 +573,14 @@ void ChooserSet::Init() {
 
   
   // This chooser set chooses keywords
-  misc_ = New<ChooserSet>(Object::AddKeyword("misc"));
+  misc_ = New<ChooserSet>(Keyword::Make("misc") );
   forall(run, Object::keywords_) {
     misc_->L1_Insert(Keyword::Make(*run) );
   }
-  // what are these for?
+  // These help in encoding the static elements.
   misc_->L1_Insert(Object::AddKeyword("variable"));
   misc_->L1_Insert(Object::AddKeyword("tuple"));
+  misc_->L1_Insert(Object::AddKeyword("pattern_choice"));
 }
 
 void SetChooser::L1_Init(OTuple strategy) {
