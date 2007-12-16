@@ -1,201 +1,24 @@
 {
-   on pattern() 
-      parallel {
-         post (POS 0);
-         post (TIME 0);
-	 post (PS 12 0);
-         post (LAYER 0);
-	 post (WORD 0 0 "H");
-	 post (WORD 0 1 "O");
-	 post (WORD 0 2 "R");
-	 post (WORD 0 3 "S");
-	 post (WORD 0 4 "E");
-	 post (WORD 0 5 "S");
-	 post (WORD 0 6 " ");
-	 post (WORD 0 7 " ");
-	 post (WORD 0 8 " ");
-	 post (WORD 0 9 " ");
-	 post (WORD 0 10 " ");
-	 post (WORD 0 11 " ");
-	 post (WORD 0 12 " ");
-
-	 post (LS 0 1);
-	 post (LAYER 1);
-	 post (WORD 1 0 "R");
-	 post (WORD 1 1 " ");
-	 post (WORD 1 2 " ");
-	 post (WORD 1 3 " ");
-	 post (WORD 1 4 " ");
-	 post (WORD 1 5 " ");
-	 post (WORD 1 6 " ");
-	 post (WORD 1 7 " ");
-	 post (WORD 1 8 " ");
-	 post (WORD 1 9 " ");
-	 post (WORD 1 10 " ");
-	 post (WORD 1 11 " ");
-	 post (WORD 1 12 " ");
-	 post (LS 1 2);
-
-	 post (LAYER 2);
-	 post (WORD 2 0 "E");
-	 post (WORD 2 1 "L");
-	 post (WORD 2 2 "E");
-	 post (WORD 2 3 "P");
-	 post (WORD 2 4 "H");
-	 post (WORD 2 5 "A");
-	 post (WORD 2 6 "N");
-	 post (WORD 2 7 "T");
-	 post (WORD 2 8 "S");
-	 post (WORD 2 9 " ");
-	 post (WORD 2 10 " ");
-	 post (WORD 2 11 " ");
-	 post (WORD 2 12 " ");
-
-	 post (LS 2 3);
-	 post (LAYER 3);
-	 post (WORD 3 0 "C");
-	 post (WORD 3 1 "O");
-	 post (WORD 3 2 "W");
-	 post (WORD 3 3 "S");
-	 post (WORD 3 4 " ");
-	 post (WORD 3 5 " ");
-	 post (WORD 3 6 " ");
-	 post (WORD 3 7 " ");
-	 post (WORD 3 8 " ");
-	 post (WORD 3 9 " ");
-	 post (WORD 3 10 " ");
-	 post (WORD 3 11 " ");
-	 post (WORD 3 12 " ");
-	 post (LS 3 4);
-
-	 post (NUM_LAYERS 4);
-
-	 post (LP 0 0 3); 
-	 post (LP 0 1 12); <at time 0 layer 1 is at position 12>
-	 post (LP 0 2 7); 
-	 post (LP 0 3 5); 
-      }
-
-   <generate all the positions and position-successor relations>
-   on pattern((POS p)) parallel {
-      post (SUM_MOD_13 p 0 p);
-      if (equal p 12) {
-        pass;
-        let q (sum p 1)
-	   parallel {
-             post (POS q);
-	     post (PS p q);
-	   }
-      }
-   }
-   
-   on pattern((SUM_MOD_13 p q r) (PS q x) (PS r y)) {
-      post (SUM_MOD_13 p x y);
-   }
-
-   
-
-   < generate all the times and time-successor relations and the clicks>
-   on pattern((TIME t)) parallel {
-      if (equal t 200) {
-        pass;
-        let u (sum t 1)
-	   parallel {
-             post (TIME u);
-	     post (TS t u);
-	     let d (choose (independent_bool 0.5) )
-	       let p (choose (uniform_uint 13) )
-	          post (CLICK t p d);
-	   }
-      }
-   }
-
-   on pattern((CLICK t p d) (LAYER_VISIBLE t p l)) 
-     post (CLICK_HIT t p l d);
-
-   on pattern((CLICK t p d) (NO_OBSTRUCTION t p n) (NUM_LAYERS n)) 
-     post (NO_CLICK_ABOVE t n);
-
-   on pattern((CLICK_HIT t p l d)) parallel {
-      post (NO_CLICK_ABOVE t l);
-      post (NO_CLICK_BELOW t l);
-   }
-   on pattern((NO_CLICK_ABOVE t l) (LS m l)) parallel {
-      post (NO_CLICK_ABOVE t m);
-      post (NO_CLICK_HIT t m);
-   }
-   on pattern((NO_CLICK_BELOW t l) (LS l m) (LAYER m)) parallel {
-      post (NO_CLICK_BELOW t m);
-      post (NO_CLICK_HIT t m);
-   }
-
-   on pattern((NO_CLICK_HIT t l) (TS t u) (LP t l p)) parallel {
-      post (LP u l p);
-   }
-   on pattern((CLICK_HIT t p l true) (TS t u) (LP t l x) (PS y x)) 
-      post (LP u l y);
-   on pattern((CLICK_HIT t p l false) (TS t u) (LP t l x) (PS x y)) 
-      post (LP u l y);
-
-   <figure out which character is at each position of each layer at each time
-   t=time 
-   l=layer 
-   p=position of word start 
-   q=position in word 
-   r=global position
-   x=letter
-   >
-   on pattern ((LP t l p) (SUM_MOD_13 p q r) (WORD l q x)) { 
-      post (LAYER_CHAR t l r x);
-   }
-
-   <figure out which layer is visible at any time and position>
-   on pattern ((TIME t) (POS p)) {
-      parallel {
-         post (NO_OBSTRUCTION t p 0);
-      }
-   }  
-   on pattern ((NO_OBSTRUCTION t p l) (LS l m) (LAYER_CHAR t l p c)) {
-      if (equal c " ") {
-         post (NO_OBSTRUCTION t p m);
-	 parallel {
-	    post (LAYER_VISIBLE t p l);
-	    post (CHAR_VISIBLE t p c);
-	 }
-      }
-   }
-
-   on pattern ((NO_OBSTRUCTION t p l) (NUM_LAYERS l)) {
-     post (CHAR_VISIBLE t p " ");
-   }
-
-
-
-
-}
-<
-  on pattern()	
-    parallel {	
-      post (S 0	1);
-      post (C 0 0);	
-    }
-  on pattern((S x y))
+  on pattern() {	
+    post (S 0 1)
+    post (C 0 0)
+  }
+  on pattern((S pos1 pos2))
     delay #
-      if (equal y 100) {
-        pass;
-	let z (sum y 1)
-	  post (S y z);
-      }
+      if equal(pos2, 100) 
+        pass
+	post (s pos2 (sum pos2 1) )
+      
   on pattern((C x 0)(S x y)) 
     delay #0
-       post (C y 1);
+       post (C y 1)
   on pattern((C x 1)(S x y)) 
     delay #0
        post (C y 0);
   on pattern((C a b))
     delay #0
-       post (maketuple COUT (concat "(C POS_" (tostring a) " *CHAR_" (tostring b) ")\n"));
+       post (COUT concat("(C POS_" tostring(a) " *CHAR_" tostring(b) ")\n"))
   on pattern((S a b))
     delay #0
-       post (maketuple COUT (concat "(S POS_" (tostring a) " *POS_" (tostring b) ")\n"));
->
+       post (COUT concat("(S POS_" tostring(a) " *POS_" tostring(b) ")\n"));
+}

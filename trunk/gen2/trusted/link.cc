@@ -45,14 +45,12 @@ OTime Link::ComputeChildTime(const Element *child) const {
 }
 int Link::WhichChildAmI() const { 
   Base::Type pt = GetParent()->GetBaseType();
-  if (pt == Base::STATEMENT
-      || pt == Base::EXPRESSION) {
+  if (pt == Base::STATIC_ELEMENT) {
     StaticElement *parent = dynamic_cast<StaticElement *>(GetParent());
     for (uint i=0; i<parent->static_children_.size(); i++) 
       if (this == parent->static_children_[i]) return i;
   }
-  if (pt == Base::DYNAMIC_STATEMENT
-      || pt == Base::DYNAMIC_EXPRESSION) {
+  if (pt == Base::DYNAMIC_ELEMENT) {
     DynamicElement *parent = dynamic_cast<DynamicElement *>(GetParent());
     for (uint i=0; i<parent->children_.size(); i++) 
       if (this == parent->children_[i]) return i;

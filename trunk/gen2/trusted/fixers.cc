@@ -127,24 +127,9 @@ bool StaticExecutor::FixElement(DynamicElement *e) {
       if (child) child->EraseTree();
     }
   }
-  if (e->GetBaseType() == Base::DYNAMIC_STATEMENT) {
-    return FixStatement((DynamicStatement*)e);
-  } else {
-    return FixExpression((DynamicExpression*)e);
+  if (e->GetFunction() == Element::POST) {
+    dynamic_cast<DynamicPost *>(e)->AddCorrectPosting();
   }
-  return true;
-}
-
-bool StaticExecutor::FixStatement(DynamicStatement *s) {
-  CHECK(s);
-  if (s->GetFunction() == Element::POST) {
-    dynamic_cast<DynamicPost *>(s)->AddCorrectPosting();
-  }
-  return true;
-}
-
-bool StaticExecutor::FixExpression(DynamicExpression *e){
-  CHECK(e);
   e->ComputeSetValue();
   return true;
 }
@@ -226,7 +211,7 @@ bool StaticExecutor::FixExtraOnMatch(ExtraOnMatchViolation *violation) {
 bool StaticExecutor::FixValue(ValueViolation *violation){
   VLOG(2) << "Fixing value violation " << endl;
 
-  DynamicExpression *e = violation->GetTypedOwner();
+  DynamicElement *e = violation->GetTypedOwner();
   CHECK(FixElement(e));
   if (e->ComputeValue() == NULL) {
     if (e->GetFunction()==Element::CHOOSE) {
@@ -310,7 +295,7 @@ bool StaticExecutor::FixLet(LetViolation *violation) {
   //  = dl->GetSingleExpressionChild(StaticLet::VALUE);
   // CHECK(value_child);
   FixElement(dl);
-  DynamicStatement *child = dl->GetSingleStatementChild(StaticLet::CHILD);  
+  DynamicElement *child = dl->GetSingleChild(StaticLet::CHILD);  
   CHECK(child);
   VLOG(2) << "child= " << child->ShortDescription() << endl;
   return child->ComputeSetBinding();

@@ -99,7 +99,6 @@ void StaticElement::UnlinkFromParent() {
 
 void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
   CHECK(!parent_);
-  CHECK(new_parent->ChildType(which_child) == GetBaseType());
   new_parent->static_children_[which_child]->L1_AddChild(this);
   StaticNoParentViolation::L1_RemoveIfPresent(this);
   L1_RecursivelyComputeSetVariables();
@@ -143,6 +142,7 @@ void StaticElement::L1_Init() {
   L1_CreateChoices();
 }
 void StaticElement::L1_Erase() {
+  CHECK(parent_ == NULL);
   for (uint i=0; i<static_children_.size(); i++) {
     static_children_[i]->L1_Erase();
   }
@@ -272,20 +272,6 @@ StaticElement * StaticElement::GetChild(int which) const {
 DynamicElement * StaticElement::GetDynamic(OMap binding) const {
   return dynamic_cast<DynamicElement *>(dynamic_children_->GetChild(binding));
 }
-Statement * StaticElement::GetStatementChild(int which) const {
-  CHECK(which < NumStatementChildren());
-  return dynamic_cast<Statement *>(GetChild(which + NumExpressionChildren()));
-}
-vector<Statement *> StaticElement::GetStatementChildren() const {
-  vector<Statement *> ret;
-  for (int i=0; i<NumStatementChildren(); i++) {
-    ret.push_back(GetStatementChild(i));
-  }
-  return ret;
-}
-Expression * StaticElement::GetExpressionChild(int which) const{
-  return dynamic_cast<Expression *>(GetChild(which));
-}
 Object StaticElement::GetObject(int which) const{
   return objects_[which];
 }
@@ -333,7 +319,7 @@ bool Element::NeedsChildViolation() const {
 }
 
 Object DynamicElement::GetChildValue(int which) const { 
-  DynamicExpression * child = GetSingleExpressionChild(which);
+  DynamicElement * child = GetSingleChild(which);
   if (!child) return Object();
   return child->GetValue();
 }
@@ -404,55 +390,23 @@ DynamicElement * DynamicElement::GetSingleChild(int which) const {
   return (DynamicElement *)(l->GetChild());
 }
 
-DynamicExpression * DynamicElement::GetSingleExpressionChild(int which) const {
-  return dynamic_cast<DynamicExpression *>(GetSingleChild(which));
-}
-DynamicStatement * DynamicElement::GetSingleStatementChild(int which) const{
-    return dynamic_cast<DynamicStatement *>(GetSingleChild(which));
-}
 OTime DynamicElement::ComputeTime() const { 
   if (!parent_) return CREATION;
   return parent_->ComputeChildTime(this);
 }
-string DynamicElement::ToString() const{
+string DynamicElement::ToString(int indent) const{
   return HTMLEscape(GetBinding().ToString()) 
     + GetStatic()->ToString();
 }
 
-
-
-void Statement::L1_Init() {
-  StaticElement::L1_Init();
-}
-
-// Can't erase statements that are linked
-void Statement::L1_Erase() {
-  CHECK(parent_ == NULL);
-  Base::L1_Erase();
-}
-
-void DynamicExpression::L1_Init(StaticElement * static_parent, 
-				OMap binding){
-  DynamicElement::L1_Init(static_parent, binding);
-  value_ = NULL;
-  N1_StoredValueChanged();
-  N1_ComputedValueChanged(); 
-
-  // there should already be a violation at the parent
-  // if (GetParent()) GetParent()->L1_ChildExpressionValueChanged();
-}
-void DynamicExpression::SetValue(Object new_value) {
+void DynamicElement::SetValue(Object new_value) {
   CL.ChangeValue(&value_, new_value);
   N1_StoredValueChanged(); 
   if (GetParent()) 
-    GetParent()->N1_ChildExpressionValueChanged(WhichChildAmI());  
+    GetParent()->N1_ChildValueChanged(WhichChildAmI());  
 }
 
-void DynamicExpression::L1_Erase() {
-  CHECK(!GetParent());
-  DynamicElement::L1_Erase();
-}
-void DynamicExpression::L1_CheckSetValueViolation() {
+void DynamicElement::L1_CheckSetValueViolation() {
   if (IsErased()) return;
   if (M.batch_mode_) {
     M.L1_AddDelayedCheck(this, &Element::L1_CheckSetValueViolation);
@@ -473,18 +427,18 @@ void DynamicExpression::L1_CheckSetValueViolation() {
 
 
 void StaticOn::L1_Init(){
-  Statement::L1_Init();
+  StaticElement::L1_Init();
   New<MissingDynamicOnViolation>(this);
 }
 set<Variable> StaticOn::GetIntroducedVariables(int which_child) const {
   return ::GetVariables(GetPattern().Data());
 }
 void StaticOn::L1_Erase() {
-  Statement::L1_Erase();
+  StaticElement::L1_Erase();
 }
 // this thing has no dynamic parent. 
 void DynamicOn::L1_Init(StaticElement *static_parent, OMap dummy) {
-  DynamicStatement::L1_Init(static_parent, OMap::Default());
+  DynamicElement::L1_Init(static_parent, OMap::Default());
   Violation * missing_dynamic 
     = Violation::Search(GetStatic(), Violation::MISSING_DYNAMIC_ON, NULL);
   CHECK(missing_dynamic);
@@ -494,10 +448,10 @@ void DynamicOn::L1_Erase(){
   CHECK(GetStatic());
   CHECK(!Violation::Search(GetStatic(), Violation::MISSING_DYNAMIC_ON, NULL));
   New<MissingDynamicOnViolation>(GetStaticOn());
-  DynamicStatement::L1_Erase();
+  DynamicElement::L1_Erase();
 }
 Record DynamicOn::GetRecordForDisplay() const {
-  Record ret = DynamicStatement::GetRecordForDisplay();
+  Record ret = DynamicElement::GetRecordForDisplay();
   set<Violation *> missing 
     = Violation::GetViolations
     (Violation::Search(this, Violation::MISSING_ON_MATCH));
@@ -525,20 +479,20 @@ OTime DynamicOn::ComputeChildTime(const Link * link,
 }
 /*
 void StaticRepeat::L1_Init() {
-  Statement::L1_Init();
+  StaticElement::L1_Init();
   L1_SetObject(REPETITION_VARIABLE, M.L1_GetNextUniqueVariable());
 }
 */
 void StaticDelay::L1_Init() {
-  Statement::L1_Init();
+  StaticElement::L1_Init();
 }
 void StaticLet::L1_Init() {
-  Statement::L1_Init();
+  StaticElement::L1_Init();
 }
 bool DynamicLet::NeedsLetViolation() const {
-  DynamicExpression *value_child = GetSingleExpressionChild(StaticLet::VALUE);
+  DynamicElement *value_child = GetSingleChild(StaticLet::VALUE);
   if (!value_child) return false;
-  DynamicStatement *child = GetSingleStatementChild(StaticLet::CHILD);
+  DynamicElement *child = GetSingleChild(StaticLet::CHILD);
   if (!child) return false;
   if (Violation::Search(child, Violation::BINDING_VARIABLES), NULL) 
     return false;
@@ -558,10 +512,10 @@ void DynamicLet::L1_CheckSetLetViolation() {
 }
 
 void StaticPost::L1_Init() {
-  Statement::L1_Init();
+  StaticElement::L1_Init();
 }
 Record DynamicPost::GetRecordForDisplay() const {
-  Record ret = DynamicStatement::GetRecordForDisplay();
+  Record ret = DynamicElement::GetRecordForDisplay();
   if (posting_) ret["posting"] = posting_->ShortDescription();
   else ret["posting"] = "NULL";
   return ret;
@@ -605,7 +559,7 @@ void DynamicPost::L1_CheckSetPostViolation() {
     PostViolation::L1_RemoveIfPresent(this);
 }
 void DynamicPost::AddCorrectPosting() {
-  DynamicExpression * expr = GetTupleExpression();
+  DynamicElement * expr = GetSingleChild(StaticPost::TUPLE);
   if (!expr) return;
   Object t = expr->value_;
   if (t.GetType() != Object::OTUPLE) return;
@@ -631,13 +585,13 @@ void DynamicPost::RemovePosting() {
 }
 
 void StaticIf::L1_Init() {
-  Statement::L1_Init();
+  StaticElement::L1_Init();
 }
 
 bool DynamicIf::ChildShouldExist(int which_child) const { 
   if (which_child == StaticIf::ON_TRUE
       || which_child == StaticIf::ON_FALSE) {
-    DynamicExpression * expr = GetConditionExpression();
+    DynamicElement * expr = GetSingleChild(StaticIf::CONDITION);
     if (!expr) return false;
     bool val = expr->value_ != FALSE;
     if (which_child == StaticIf::ON_TRUE) return val;
@@ -646,104 +600,77 @@ bool DynamicIf::ChildShouldExist(int which_child) const {
   return true;
 }
 
-void Expression::L1_Init() {
-  StaticElement::L1_Init();
-}
-
-string Statement::ToStringRecursive(int indent) const {
-  string indentstring;
-  for (int i=0; i<indent; i++) indentstring += GetSpace(true);
-  string ret = indentstring;
-  if (this == NULL) return ret + "null" + GetNewLine(true);
-  ret += ToString();
-  vector<Statement *> children = GetStatementChildren();
-  if (children.size() > 1 || GetFunction() == PARALLEL) {
-    ret += " {" + GetNewLine(true);
-    for (uint i=0; i<children.size(); i++) 
-      ret += children[i]->ToStringRecursive(indent+2);
-    ret += indentstring + "}" + GetNewLine(true);
-    return ret;
+string StaticElement::ToString(int indent) const {
+  if (this == NULL) return "null";
+  string ret = GetLink(FunctionKeyword().ToString());
+  if (GetFunction() == Element::MAKETUPLE) ret="";
+  for (int i=0; i<NumObjects(); i++) {
+    ret += " " + HTMLEscape(GetObject(i).ToString());
   }
-  if (children.size() == 0) {
-    return ret + " ;" + GetNewLine(true);
+  if (ChildrenGoInTuple()) {
+    if (GetFunction() == Element::MAKETUPLE) ret += GetLink("{");
+    else ret += " {";
   }
-  CHECK(children.size() == 1);
-  return ret + GetNewLine(true) + children[0]->ToStringRecursive(indent+2);
-}
-string Statement::ToString() const {
-  return GetLink(FunctionKeyword().ToString()) + ParameterListToString();
-}
-string Expression::ToString() const {
-  return "(" + GetLink(FunctionKeyword().ToString())
-    + ParameterListToString() + ")";
+  for (int i=0; i<NumChildren(); i++) {
+    StaticElement *child = GetChild(i);
+    if (ChildUsesSeparateLine(i)) {
+      ret += "\n" + string(indent+2, ' ') + child->ToString(indent+2);
+    } else {
+      ret += " " + child->ToString(indent);
+    }
+    //if (i+1 != NumChildren) ret += ",";    
+  }
+  if (ChildrenGoInTuple()) {
+    if (NumChildren() > 0 && ChildUsesSeparateLine(NumChildren()-1)) 
+      ret += "\n" + string(indent, ' ');
+    if (GetFunction() == Element::MAKETUPLE) ret += GetLink("}");
+    else ret += "}";
+  }
+  return ret;
 }
 
 void StaticConstant::N1_ObjectChanged(int which) {
   StaticElement::N1_ObjectChanged(which);
   CHECK(which == OBJECT);
   forall(run, dynamic_children_->children_) {
-    dynamic_cast<DynamicExpression *>(run->second)->L1_CheckSetValueViolation();
+    run->second->L1_CheckSetValueViolation();
   }
 }
 
-string StaticConstant::ToString() const {
+string StaticConstant::ToString(int indent) const {
   bool can_be_concise = true;
   Object o = GetObject(OBJECT);
-  if (o.GetType() == Object::OTUPLE) {
-    Tuple t = OTuple(o).Data();
-    if (t.size() > 0 && t[0].GetType() == Object::KEYWORD) {
+  if (o.GetType() == Object::OTUPLE)  can_be_concise = false;
+  if (o.GetType() == Object::VARIABLE) can_be_concise = false;
+  if (o.GetType() == Object::KEYWORD) {
+    if (Element::TypeKeywordToFunction(Keyword(o)) != -1)
       can_be_concise = false;
-    }
   }
-  if (DeepSubstitutePossible(o)) can_be_concise = false;
-  if (!can_be_concise) return Expression::ToString();
-
+  if (!can_be_concise) return StaticElement::ToString(indent);
   string ret = HTMLEscape(o.ToString());
   return GetLink(ret);
 }
 Object DynamicConstant::ComputeValue() const {
   return GetObject(StaticConstant::OBJECT);
 }
-string StaticSubstitute::ToString() const {
-  bool can_be_concise = false;
-  Expression *child = GetExpressionChild(StaticSubstitute::CHILD);
+string StaticSubstitute::ToString(int indent) const {
+  StaticElement *child = GetChild(StaticSubstitute::CHILD);
   if (child) {
     if (child->GetFunction() == Element::CONSTANT) {
       StaticConstant *constant = dynamic_cast<StaticConstant *>(child);
       Object o = constant->GetObject(StaticConstant::OBJECT);
-      can_be_concise = true;
-      if (o.GetType() == Object::OTUPLE) {
-	Tuple t = OTuple(o).Data();
-	if (t.size() > 0 && t[0].GetType() == Object::KEYWORD) {
-	  can_be_concise = false;
-	}
-      }      
-      if (!DeepSubstitutePossible(o)) can_be_concise = false;
-      if (can_be_concise) {
+      if (o.GetType() == Object::VARIABLE) { 
 	string ret = HTMLEscape(o.ToString());
 	return GetLink(ret);
       }
     }
   }
-  return Expression::ToString();
+  return StaticElement::ToString();
 }
 
-string StaticElement::ParameterListToString() const {
-  string ret;
-  for (int i=0; i<NumObjects(); i++) {
-    ret += " " + GetObject(i).ToString();
-  }
-  ret = HTMLEscape(ret);
-  for (int i=0; i<NumExpressionChildren(); i++) {
-    Expression * expr = GetExpressionChild(i);
-    if (expr) ret += " " + expr->ToString();
-    else ret += " null";
-  }
-  return ret;
-}
 Object DynamicSubstitute::ComputeValue() const {
-  DynamicExpression * child 
-    = GetSingleExpressionChild(StaticSubstitute::CHILD);
+  DynamicElement * child 
+    = GetSingleChild(StaticSubstitute::CHILD);
   if (!child) return Object();
   return DeepSubstitute(GetBinding().Data(), child->GetValue());
 }
@@ -787,12 +714,12 @@ Object DynamicToString::ComputeValue() const {
 
 void DynamicChoose::L1_Init(StaticElement * static_parent, OMap binding) {
   choice_ = NULL;
-  DynamicExpression::L1_Init(static_parent, binding);
+  DynamicElement::L1_Init(static_parent, binding);
 }
 
 void DynamicChoose::L1_Erase() {
   if (choice_) choice_->L1_Erase();
-  DynamicExpression::L1_Erase();
+  DynamicElement::L1_Erase();
 }
 
 bool DynamicChoose::L1_TryMakeChoice(OTuple strategy, Object value) {
@@ -892,6 +819,9 @@ void DynamicElement::L1_Init(StaticElement * static_parent,
   }
   N1_StoredOrComputedTimeChanged();
   L1_CheckSetChildViolation();
+  value_ = NULL;
+  N1_StoredValueChanged();
+  N1_ComputedValueChanged(); 
 };
 
 DynamicElement * DynamicElement::FindParent() const {
@@ -905,8 +835,7 @@ DynamicElement * DynamicElement::FindParent() const {
 // or disconnected from this parent node. 
 void DynamicElement::N1_ChildChanged(int which_child) {
   Element::N1_ChildChanged(which_child);
-  if (GetStatic()->IsExpressionChild(which_child))
-    N1_ChildExpressionValueChanged(which_child);
+  N1_ChildValueChanged(which_child);
 }
 
 DynamicElement * MakeDynamicElement(StaticElement *static_parent, 
@@ -936,7 +865,7 @@ Record Element::GetRecordForDisplay() const {
 
 Record StaticElement::GetRecordForDisplay() const {
   Record ret = Element::GetRecordForDisplay();
-  ret["program"] = "<tt>" + ToStringRecursive() + "</tt>";
+  ret["program"] = "<tt>" + ToString() + "</tt>";
   set<Element *> dynamic_children = dynamic_children_->GetChildren();
   int count =0;
   forall(run, dynamic_children) {
@@ -972,13 +901,10 @@ Record DynamicElement::GetRecordForDisplay() const {
     ret["children"] += GetStatic()->ChildToString(i) 
       + ": " + children_[i]->ChildListings(5);
   }
-  return ret;
-}
-Record DynamicExpression::GetRecordForDisplay() const { 
-  Record ret = DynamicElement::GetRecordForDisplay();
   ret["value"] = value_.ToString();
   if (value_ != ComputeValue()) {
     ret["value"] += " (computed=" + ComputeValue().ToString() + ")";
   }
   return ret;
 }
+
