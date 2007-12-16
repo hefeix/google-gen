@@ -72,7 +72,7 @@ string Model::ToString(bool html) const {
     }
   }
   ret += "}" + GetNewLine(html);
-  if (html) ret = "<tt>" + ret + "</tt>";
+  if (html) ret = "<pre>" + ret + "</pre>";
   return ret;
 }
 

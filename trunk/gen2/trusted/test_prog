@@ -5,9 +5,10 @@
   }
   on pattern((S pos1 pos2))
     delay #
-      if equal(pos2, 100) 
+      if { equal(pos2, 100) 
         pass
 	post (s pos2 (sum pos2 1) )
+	}
       
   on pattern((C x 0)(S x y)) 
     delay #0
@@ -22,3 +23,5 @@
     delay #0
        post (COUT concat("(S POS_" tostring(a) " *POS_" tostring(b) ")\n"));
 }
+
+

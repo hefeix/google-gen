@@ -99,6 +99,10 @@ void StaticElement::UnlinkFromParent() {
 
 void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
   CHECK(!parent_);
+  while(new_parent->NumChildren() <= which_child) {
+    CHECK(new_parent->HasVariableNumChildren());    
+    new_parent->static_children_.push_back(New<SingleLink>(new_parent));
+  }
   new_parent->static_children_[which_child]->L1_AddChild(this);
   StaticNoParentViolation::L1_RemoveIfPresent(this);
   L1_RecursivelyComputeSetVariables();
@@ -614,9 +618,10 @@ string StaticElement::ToString(int indent) const {
   for (int i=0; i<NumChildren(); i++) {
     StaticElement *child = GetChild(i);
     if (ChildUsesSeparateLine(i)) {
-      ret += "\n" + string(indent+2, ' ') + child->ToString(indent+2);
+      ret += "\n" + string(indent+2, ' ') 
+	+ (child?(child->ToString(indent+2)):string("null"));
     } else {
-      ret += " " + child->ToString(indent);
+      ret += " " + (child?(child->ToString(indent)):string("null"));
     }
     //if (i+1 != NumChildren) ret += ",";    
   }
@@ -865,7 +870,7 @@ Record Element::GetRecordForDisplay() const {
 
 Record StaticElement::GetRecordForDisplay() const {
   Record ret = Element::GetRecordForDisplay();
-  ret["program"] = "<tt>" + ToString() + "</tt>";
+  ret["program"] = "<pre>" + ToString() + "</pre>";
   set<Element *> dynamic_children = dynamic_children_->GetChildren();
   int count =0;
   forall(run, dynamic_children) {
