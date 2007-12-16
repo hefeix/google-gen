@@ -36,7 +36,7 @@ StaticElement * MakeStaticElementByKeyword(Keyword type){
 }
 
 StaticElement * ParseElement(const Tuple & t, uint * position) {
-  Object o = t[*position++];
+  Object o = t[(*position)++];
   if (o.GetType() == Object::VARIABLE) { 
     // it's a substitute
     StaticElement *constant = New<StaticConstant>();
@@ -48,10 +48,10 @@ StaticElement * ParseElement(const Tuple & t, uint * position) {
   if (o.GetType() == Object::OTUPLE) {
     // its a maketuple
     o = Keyword::Make("maketuple");
-    *position--;
+    (*position)--;
   }
   if (o.GetType() != Object::KEYWORD
-      || Element::TypeKeywordToFunction(o) != -1) {
+      || Element::TypeKeywordToFunction(o) == -1) {
     // it's a constant
     StaticElement *constant = New<StaticConstant>();
     constant->SetObject(StaticConstant::OBJECT, o);
@@ -60,13 +60,13 @@ StaticElement * ParseElement(const Tuple & t, uint * position) {
   StaticElement * ret = MakeStaticElementByKeyword(o);
   for (int i=0; i<ret->NumObjects(); i++) {
     CHECK(*position < t.size());
-    o = t[*position++];
+    o = t[(*position)++];
     ret->SetObject(i, o);
   }
   vector<StaticElement *> children;
   if (ret->ChildrenGoInTuple()) {
     CHECK(*position < t.size());
-    o = t[*position++];
+    o = t[(*position)++];
     CHECK(o.GetType() == Object::OTUPLE);
     children = ParseElements(OTuple(o).Data());
   } else {
