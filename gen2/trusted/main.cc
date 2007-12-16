@@ -32,7 +32,8 @@ void Shell() {
   ifstream input("test_prog");
   input >> M;
   cout << M;
-  StaticExecutor::Execute();
+  // TODO
+  // StaticExecutor::Execute();
   string command;
   while ((cout << "\n?") && (cin >> command)) {
     if (command == "q") break;

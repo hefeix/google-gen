@@ -21,7 +21,82 @@
 // This is all the code that involves reading and writing the model.
 // UNTRUSTED
 
-StaticElement * MakeStaticElementByKeyword(Keyword type){
+inline Object GetNext(const Tuple& t, uint * pos) {
+  CHECK (*pos < t.size());
+  return t[(*pos)++];
+}
+
+StaticElement * ParseElement(const Tuple & t, uint * pos) {
+
+  // Get the next object
+  Object o = GetNext(t, pos);
+
+  // a single variable object is a substitute with a constant below
+  if (o.GetType() == Object::VARIABLE) { 
+    StaticElement *constant = New<StaticConstant>();
+    constant->SetObject(StaticConstant::OBJECT, o);
+    StaticElement *ret = New<StaticSubstitute>();
+    constant->LinkToParent(ret, StaticSubstitute::CHILD);
+    return ret;
+  }
+
+  // Hack so an OTuple interprets as if a maketuple keyword exists before it
+  // and then reads its parameters from the otuple as a regular function does
+  if (o.GetType() == Object::OTUPLE) {
+    o = Keyword::Make("maketuple");
+    (*pos)--;
+  }
+
+  // If it's not a function name, it's a constant
+  if (o.GetType() != Object::KEYWORD
+      || Element::TypeKeywordToFunction(o) == -1) {
+    StaticElement *constant = New<StaticConstant>();
+    constant->SetObject(StaticConstant::OBJECT, o);
+    return constant;
+  }
+
+  // Here, o is now a keyword that specifies a function
+  // Create the static element
+  Keyword function_keyword = o;
+  StaticElement * ret = MakeStaticElementByKeyword(function_keyword);
+
+  // Read it's objects
+  for (int i=0; i<ret->NumObjects(); i++) {
+    ret->SetObject(i, GetNext(t, pos)); }
+
+  // Read its children and hook them up to the parent
+  vector<StaticElement *> children;
+  if (ret->ChildrenGoInTuple()) {
+    o = GetNext(t, pos);
+    if (o.GetType() != Object::OTUPLE) {
+      cerr << "Expecting a tuple, got:" << o << endl;
+      cerr << "While parsing function keyword:" << function_keyword << endl;
+      CHECK(false);
+    }
+    children = ParseElements(OTuple(o).Data());
+  } else {
+    CHECK(!ret->HasVariableNumChildren());
+    for (int i=0; i<ret->NumChildren(); i++) {
+      children.push_back(ParseElement(t, pos));
+    }
+  }
+  for (uint i=0; i<children.size(); i++) {
+    children[i]->LinkToParent(ret, i);
+  }
+  return ret;
+}
+
+vector<StaticElement *> ParseElements(const Tuple & t) {
+  uint pos = 0;
+  vector<StaticElement *> ret;
+  while (pos < t.size()) {
+    StaticElement *e = ParseElement(t, &pos);
+    ret.push_back(e);
+  }
+  return ret;
+}
+
+StaticElement * MakeStaticElementByKeyword(Keyword type) {
   Element::Function function = Element::TypeKeywordToFunction(type);
   CHECK(function != -1);
 
@@ -33,75 +108,6 @@ StaticElement * MakeStaticElementByKeyword(Keyword type){
   default: CHECK(false);
   }
   return NULL;
-}
-
-StaticElement * ParseElement(const Tuple & t, uint * position) {
-  Object o = t[(*position)++];
-  if (o.GetType() == Object::VARIABLE) { 
-    // it's a substitute
-    StaticElement *constant = New<StaticConstant>();
-    constant->SetObject(StaticConstant::OBJECT, o);
-    StaticElement *ret = New<StaticSubstitute>();
-    constant->LinkToParent(ret, StaticSubstitute::CHILD);
-    return ret;
-  }
-  if (o.GetType() == Object::OTUPLE) {
-    // its a maketuple
-    o = Keyword::Make("maketuple");
-    (*position)--;
-  }
-  if (o.GetType() != Object::KEYWORD
-      || Element::TypeKeywordToFunction(o) == -1) {
-    // it's a constant
-    StaticElement *constant = New<StaticConstant>();
-    constant->SetObject(StaticConstant::OBJECT, o);
-    return constant;
-  }
-  StaticElement * ret = MakeStaticElementByKeyword(o);
-  for (int i=0; i<ret->NumObjects(); i++) {
-    CHECK(*position < t.size());
-    o = t[(*position)++];
-    ret->SetObject(i, o);
-  }
-  vector<StaticElement *> children;
-  if (ret->ChildrenGoInTuple()) {
-    CHECK(*position < t.size());
-    o = t[(*position)++];
-    CHECK(o.GetType() == Object::OTUPLE);
-    children = ParseElements(OTuple(o).Data());
-  } else {
-    CHECK(!ret->HasVariableNumChildren());
-    for (int i=0; i<ret->NumChildren(); i++) {
-      children.push_back(ParseElement(t, position));
-    }
-  }
-  for (uint i=0; i<children.size(); i++) {
-    children[i]->LinkToParent(ret, i);
-  }
-  /*if (*position < t.size()  && t[*position].GetType() == Object::OMAP) {
-    OMap m = t[(*position)++];
-    forall(run, m.Data()) {
-      Keyword key = run->first;
-      Object value = run->second;
-      if (key.Data() == "name") {
-	ret->L1_SetName(value);	
-      }
-      if (key.Data() == "parent") {
-	// TODO
-      }
-    }
-    } */ 
-  return ret;
-}
-
-vector<StaticElement *> ParseElements(const Tuple & t) {
-  uint position = 0;
-  vector<StaticElement *> ret;
-  while (position < t.size()) {
-    StaticElement *e = ParseElement(t, &position);
-    ret.push_back(e);
-  }
-  return ret;
 }
 
 
