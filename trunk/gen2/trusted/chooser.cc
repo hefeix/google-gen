@@ -166,6 +166,7 @@ bool GlobalChooser::ChoiceIsPossible(OTuple strategy,
       return_value = false;
       VLOG(0) << "couldn't find chooser set with strategy " << strategy
 	      << endl;
+      CHECK(false);
     }
     else return_value = (cs->set_ % value);
   }
