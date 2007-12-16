@@ -57,7 +57,7 @@ void Model::Load(istream &input) {
     cerr << "Input file doesn't contain a tuple" << endl;
   }
   //cerr << "Loading from tuple " << t.ToString() << endl;
-  vector<Statement *> v = ParseStatements(t.Data());
+  vector<StaticElement *> v = ParseElements(t.Data());
   //cout << "Just loaded" << endl;
   //for (uint i=0; i<v.size(); i++) cout << v[i]->ToString(0, false);
   //cout << "End program" << endl;
@@ -65,10 +65,10 @@ void Model::Load(istream &input) {
 
 string Model::ToString(bool html) const {
   string ret = "{" + GetNewLine(html); 
-  forall(run, N.Index(Base::STATEMENT)) {
-    Statement *s = dynamic_cast<Statement *>(run->second);
+  forall(run, N.Index(Base::STATIC_ELEMENT)) {
+    StaticElement *s = dynamic_cast<StaticElement *>(run->second);
     if (s->parent_ == NULL) {
-      ret += s->ToStringRecursive(2);
+      ret += s->ToString(2);
     }
   }
   ret += "}" + GetNewLine(html);

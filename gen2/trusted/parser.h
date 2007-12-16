@@ -27,22 +27,12 @@
 
 #include "element.h"
 
+// ad hoc parser.
 // position points to where to start parsing, and is changed by the function
 // to the end of what was parsed.
-Statement * ParseSingleStatement(const Tuple & t, uint * position);
-vector<Statement *> ParseStatements(const Tuple & t); // ad hoc parser.
-Expression * ParseExpression(const Object & o); // ad hoc parser.
+StaticElement * ParseElement(const Tuple & t, uint * position);
+vector<StaticElement *> ParseElements(const Tuple & t); 
 
-inline Element::Function TypeKeywordToFunction(Keyword type) {
-  return Element::StringToFunction(Upcase(type.Data()));
-}
-
-Statement * MakeStatementByKeyword(Keyword type);
-
-Expression * MakeExpressionByKeyword(Keyword type);
-
-
-
-
+StaticElement * MakeStaticElementByKeyword(Keyword type);
 
 #endif

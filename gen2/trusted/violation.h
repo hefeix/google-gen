@@ -157,7 +157,6 @@ class SingleLink;
 class OnMultiLink;
 class Element;
 class StaticOn;
-class DynamicExpression;
 class DynamicLet;
 class NewFlakeChooser;
 
@@ -231,8 +230,8 @@ typedef TypedViolation<Element, Violation::TIME>
 typedef TypedViolation<StaticOn, Violation::MISSING_DYNAMIC_ON>
   MissingDynamicOnViolation;
 
-// the value of a dynamic expression doesn't match its computed value. 
-typedef TypedViolation<DynamicExpression, Violation::VALUE>
+// the value of a dynamic element doesn't match its computed value. 
+typedef TypedViolation<DynamicElement, Violation::VALUE>
   ValueViolation;
 
 // Something is wrong with a dynamic output statement. This could be that the

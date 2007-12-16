@@ -28,19 +28,17 @@ class OwnedPosting;
 class Base {
  public:
   #define BaseTypeList {				\
-      ITEM(STATEMENT),					\
-	ITEM(EXPRESSION),				\
-	ITEM(DYNAMIC_STATEMENT),			\
-	ITEM(DYNAMIC_EXPRESSION),			\
+      ITEM(STATIC_ELEMENT),				\
+	ITEM(DYNAMIC_ELEMENT),				\
 	ITEM(CHOICE),					\
-	ITEM(CHOOSER),					\
+	ITEM(CHOOSER),						\
 	ITEM(CHOOSER_SET),					\
-	ITEM(REQUIREMENT),				\
-	ITEM(PROHIBITION),				\
-	ITEM(GIVEN),					\
+	ITEM(REQUIREMENT),					\
+	ITEM(PROHIBITION),					\
+	ITEM(GIVEN),						\
 	ITEM(VIOLATION),					\
 	ITEM(LINK),						\
-	ITEM(MODEL)					\
+	ITEM(MODEL)						\
 	};
   CLASS_ENUM_DECLARE(Base, Type);
 

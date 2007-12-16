@@ -56,12 +56,6 @@ struct StaticExecutor {
   MakeInstantiateChild(DynamicElement *parent, int which_child);
   
   static bool FixElement(DynamicElement *e);
-
-  static bool FixExpression(DynamicExpression *e);
-
-  static bool FixStatement(DynamicStatement *s);
-
-  
 };
 
 #endif
