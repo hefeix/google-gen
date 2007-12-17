@@ -14,13 +14,13 @@
      post (C y 1)
 
   on pattern((C x 1)(S x y)) 
-     post (C y 0);
+     post (C y 0)
 
   on pattern((C a b))
        post (COUT concat("(C POS_" tostring(a) " *CHAR_" tostring(b) ")\n"))
   
   on pattern((S a b))
-       post (COUT concat("(S POS_" tostring(a) " *POS_" tostring(b) ")\n"));
+       post (COUT concat("(S POS_" tostring(a) " *POS_" tostring(b) ")\n"))
 }
 
 

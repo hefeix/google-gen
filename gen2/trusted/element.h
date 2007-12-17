@@ -165,7 +165,8 @@ struct StaticElement : public Element {
   inline const set<Variable> & GetVariables() const { return variables_;}
 
   virtual bool ChildrenGoInTuple() const { return HasVariableNumChildren(); }
-  virtual bool ChildUsesSeparateLine(int which_child) const { return false;}
+  virtual bool ElementNeedsSeparateLine() const { return false;}
+  virtual bool ChildNeedsSeparateLine(int which_child) const { return false;}
 
   Record GetRecordForDisplay() const;
   set<Element *> GetAllChildren() const;
@@ -366,7 +367,8 @@ struct StaticOn : public StaticElement {
   OPattern GetPattern() const { return GetObject(PATTERN);}
   virtual Function GetFunction() const { return ON;}
   set<Variable> GetIntroducedVariables(int which_child) const;
-  bool ChildUsesSeparateLine(int which_child) const { return true;}
+  bool ElementNeedsSeparateLine() const { return true;}
+  bool ChildNeedsSeparateLine(int which_child) const { return true;}
   // ---------- L1 functions ----------  
   void L1_Init();
   void L1_Erase();
@@ -417,7 +419,8 @@ struct StaticDelay : public StaticElement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   Function GetFunction() const { return DELAY;}
-  bool ChildUsesSeparateLine(int which_child) const { 
+  bool ElementNeedsSeparateLine() const { return true;}
+  bool ChildNeedsSeparateLine(int which_child) const { 
     return (which_child==CHILD);}
 
   // ---------- L1 functions ----------  
@@ -481,7 +484,8 @@ struct StaticLet : public StaticElement {
     StaticElement::N1_ObjectChanged(which);
     CHECK(NumDynamicChildren() == 0);
   }
-  bool ChildUsesSeparateLine(int which_child) const { 
+  bool ElementNeedsSeparateLine() const { return true;}
+  bool ChildNeedsSeparateLine(int which_child) const { 
     return (which_child==CHILD);}
   // ---------- data ----------  
 };
@@ -526,6 +530,7 @@ struct StaticPost : public StaticElement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   virtual Function GetFunction() const { return POST;}
+  bool ElementNeedsSeparateLine() const { return true;}
   // ---------- L1 functions ----------  
   void L1_Init();
   // ---------- data ----------  
@@ -578,14 +583,11 @@ struct StaticIf : public StaticElement {
   CLASS_ENUM_DECLARE(StaticIf, ObjectName);
   DECLARE_FUNCTION_ENUMS;
   bool ChildrenGoInTuple() const { return true;}
-  bool ChildUsesSeparateLine(int which_child) const {
+  bool ChildNeedsSeparateLine(int which_child) const {
     if (which_child == CONDITION) return false;
     for (int c = ON_TRUE; c<NumChildren(); c++) {
       StaticElement *e = GetChild(c);
-      if (!e) continue;
-      if (e->GetFunction() == Element::POST) return true;
-      if (e->NumChildren() > 0
-	  && e->ChildUsesSeparateLine(e->NumChildren()-1)) return true;
+      if (e && e->ElementNeedsSeparateLine()) return true;
     }
     return false;
   }
@@ -724,13 +726,10 @@ struct StaticMakeTuple : public StaticElement {
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return MAKETUPLE;}
   bool HasVariableNumChildren() const { return true; }
-  bool ChildUsesSeparateLine(int which_child) const {
+  bool ChildNeedsSeparateLine(int which_child) const {
     for (int c = 0; c<NumChildren(); c++) {
       StaticElement *e = GetChild(c);
-      if (!e) continue;
-      if (e->GetFunction() == Element::POST) return true;
-      if (e->NumChildren() > 0
-	  && e->ChildUsesSeparateLine(e->NumChildren()-1)) return true;
+      if (e && e->ElementNeedsSeparateLine()) return true;
     }
     return false;
   }
