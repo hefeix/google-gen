@@ -605,31 +605,41 @@ bool DynamicIf::ChildShouldExist(int which_child) const {
 }
 
 string StaticElement::ToString(int indent) const {
-  if (this == NULL) return "null";
   string ret = GetLink(FunctionKeyword().ToString());
-  if (GetFunction() == Element::MAKETUPLE) ret="";
+  if (GetFunction() == Element::MAKETUPLE) {
+    ret="";
+  }
   for (int i=0; i<NumObjects(); i++) {
     ret += " " + HTMLEscape(GetObject(i).ToString());
   }
   if (ChildrenGoInTuple()) {
-    if (GetFunction() == Element::MAKETUPLE) ret += GetLink("{");
-    else ret += " {";
+    if (GetFunction() == Element::MAKETUPLE) ret += GetLink("(");
+    else ret += " (";
+  } else {
+    ret += " ";
   }
+  bool separate_line = false;
   for (int i=0; i<NumChildren(); i++) {
+    int child_indent = indent;
     StaticElement *child = GetChild(i);
-    if (ChildUsesSeparateLine(i)) {
-      ret += "\n" + string(indent+2, ' ') 
-	+ (child?(child->ToString(indent+2)):string("null"));
+    separate_line = (ChildNeedsSeparateLine(i) 
+		     || (child && child->ElementNeedsSeparateLine()));
+    if (separate_line) {      
+      if (child && child->GetFunction() == MAKETUPLE){
+      } else {
+	child_indent = indent + 2;
+	ret += "\n" + string(child_indent, ' ');
+      }
     } else {
-      ret += " " + (child?(child->ToString(indent)):string("null"));
-    }
-    //if (i+1 != NumChildren) ret += ",";    
+      if (i>0) ret += " ";
+    }    
+    if (child) ret += child->ToString(child_indent);
+    else ret += "null";
   }
   if (ChildrenGoInTuple()) {
-    if (NumChildren() > 0 && ChildUsesSeparateLine(NumChildren()-1)) 
-      ret += "\n" + string(indent, ' ');
-    if (GetFunction() == Element::MAKETUPLE) ret += GetLink("}");
-    else ret += "}";
+    if (separate_line) ret += "\n" + string(indent, ' ');
+    if (GetFunction() == Element::MAKETUPLE) ret += GetLink(")");
+    else ret += ")";
   }
   return ret;
 }

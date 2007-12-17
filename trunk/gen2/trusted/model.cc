@@ -64,14 +64,15 @@ void Model::Load(istream &input) {
 }
 
 string Model::ToString(bool html) const {
-  string ret = "{" + GetNewLine(html); 
+  string ret = "{";
   forall(run, N.Index(Base::STATIC_ELEMENT)) {
     StaticElement *s = dynamic_cast<StaticElement *>(run->second);
     if (s->parent_ == NULL) {
+      ret += "\n\n  ";
       ret += s->ToString(2);
     }
   }
-  ret += "}" + GetNewLine(html);
+  ret += "\n\n}";
   if (html) ret = "<pre>" + ret + "</pre>";
   return ret;
 }
