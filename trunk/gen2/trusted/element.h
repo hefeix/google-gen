@@ -340,6 +340,7 @@ struct DynamicElement : public Element{
   
 };
 
+// Why aren't these just functions of StaticElement?
 #define DECLARE_FUNCTION_ENUMS \
   int StringToChild(string s) const{ return StringToChildName(s);}	\
   string ChildToString(int c) const{					\
@@ -400,7 +401,6 @@ struct DynamicOn : public DynamicElement {
   void L1_Init(StaticElement* parent, OMap dummy);
   void L1_Erase();
   // --------- N1 notifiers ----------
-  void N1_ChildValueChanged(int which_child) { CHECK(false); }
   // ---------- data ----------  
 };
 
@@ -814,6 +814,7 @@ template <class T> T * MakeStaticElement() {
   CHECK(static_cast<Element *>((T *)NULL) == NULL);
   return New<T>();
 }
+
 template <class T> T * MakeDynamicElement(StaticElement *static_parent, 
 					  OMap binding) {
   CHECK(static_cast<DynamicElement *>((T *)NULL) == NULL);
@@ -822,7 +823,5 @@ template <class T> T * MakeDynamicElement(StaticElement *static_parent,
 
 DynamicElement * MakeDynamicElement(StaticElement *static_parent, 
 				    OMap binding);
-
-
 
 #endif

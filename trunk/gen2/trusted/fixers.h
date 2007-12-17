@@ -25,8 +25,6 @@
 #include "model.h"
 #include "element.h"
 
-
-
 struct StaticExecutor {
   // running a program
   static bool Execute();
