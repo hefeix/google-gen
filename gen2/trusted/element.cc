@@ -391,6 +391,11 @@ void DynamicElement::L1_CheckSetParentAndBindingViolations() {
 
 DynamicElement * DynamicElement::GetSingleChild(int which) const { 
   SingleLink * l = dynamic_cast<SingleLink *>(children_[which]);
+  if (l == NULL) {
+    cerr << "Link does not exit for dynamic: " << FunctionToString(GetFunction()) << endl;
+    cerr << "Name:" << GetName() << endl;
+    CHECK(false);
+  }
   return (DynamicElement *)(l->GetChild());
 }
 

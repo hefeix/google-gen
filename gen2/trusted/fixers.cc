@@ -114,7 +114,10 @@ bool StaticExecutor::FixElement(DynamicElement *e) {
   CHECK(e);
   // e->ComputeSetBinding();
   e->ComputeSetTime();
+
+  // Instantiate singlelink children that should exist
   for(int i=0; i<e->GetStatic()->NumChildren(); i++) {
+    if (e->LinkType(i) != Link::SINGLE) continue;
     DynamicElement * child = e->GetChild(i);
     if (e->ChildShouldExist(i)) {
       if (!child) {
@@ -164,12 +167,14 @@ bool StaticExecutor::FixChildViolation(ChildViolation *violation) {
   return true;
   */
 }
+
 bool StaticExecutor::FixMissingDynamicOn(MissingDynamicOnViolation *violation){
   VLOG(2) << "Fixing missing dynamic on " << endl;
   StaticOn * static_on = violation->GetTypedOwner();
   MakeDynamicElement<DynamicOn>(static_on, OMap::Default());
   return true;
 }
+
 bool StaticExecutor::FixMissingOnMatch(MissingOnMatchViolation *violation) {
   VLOG(2) << "Fixing missing on match" << endl;
   DynamicOn * d_on 
@@ -189,6 +194,7 @@ bool StaticExecutor::FixMissingOnMatch(MissingOnMatchViolation *violation) {
   }
   return StaticExecutor::FixElement(e);
 }
+
 bool StaticExecutor::FixExtraOnMatch(ExtraOnMatchViolation *violation) {
   VLOG(1) << "Fixing extra on match" << endl;
   violation->GetTypedOwner()->GetChild(violation->data_);
@@ -226,8 +232,6 @@ bool StaticExecutor::FixValue(ValueViolation *violation){
       }
     }
 
-    
-
   }
   if (violation->GetTypedOwner()->ComputeValue() == NULL) {
     VLOG(0) 
@@ -237,6 +241,7 @@ bool StaticExecutor::FixValue(ValueViolation *violation){
   violation->GetTypedOwner()->ComputeSetValue();
   return true;
 }
+
 bool StaticExecutor::FixTime(TimeViolation *violation) {
   VLOG(2) << "Fixing time violation " << endl;
   //  FixElement(dynamic_cast<DynamicElement *>(violation->GetTypedOwner()));
