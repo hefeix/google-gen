@@ -444,7 +444,11 @@ struct DynamicDelay : public DynamicElement {
     }
     return time_;
   }
-  Object ComputeValue() const { return GetChildValue(StaticDelay::CHILD);}
+
+  // Dynamic lets can't pass values up, that would allow later actions
+  // to influence earlier actions
+  Object ComputeValue() const { return FALSE;}
+
   // ---------- L1 functions ----------  
   // ---------- N1 notifiers ----------
   void N1_ChildValueChanged(int which_child) { 
