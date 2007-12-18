@@ -648,3 +648,125 @@ void ConditionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
   }
   wt_subscription_->L1_ChangeNeeds(new_needs);
 }
+
+TimedQuery::TimedQuery(Blackboard *blackboard, const Pattern &pattern,
+		       Time time_limit) {
+  query_sub_ = NULL;
+  time_limit_ = time_limit;
+  L1_SetPattern(pattern);
+  blackboard_ = blackboard;
+}
+
+void TimedQuery::L1_RemoveQuery() {
+  forall(run, subscriptions_) {
+    forall(run2, run->second) {
+      L1_SendCurrentAsUpdates(*run2, true);
+    }
+  }
+  query_sub_->L1_Erase();
+  CL.ChangeValue(&query_sub_, NULL);  
+}
+void TimedQuery::L1_SetPattern(Pattern new_pattern) {
+  if (query_sub_) L1_RemoveQuery();
+  Query * query 
+    = blackboard_->L1_GetExecuteQuery(OPattern::Make(pattern),
+				      SamplingInfo(), NULL);
+  query_sub_ 
+    = new SubType(query, UPDATE_COUNT | UPDATE_WHICH | UPDATE_TIME, this);
+  query_sub_->L1_SendCurrentAsUpdates();  
+}
+void TimedQuery::Update(const QueryUpdate &update, SubType *sub) {
+  QueryUpdate out_update_;
+  out_update_.count_delta_ = 0;
+
+  forall(run, update.changes_) {
+    SingleQueryUpdate s = *run;
+    OMap m = s.data_;
+    if (s.action_ == UPDATE_CREATE) {
+      CL.InsertIntoSet(&results_, make_pair(s.new_time_, m));
+      if (s.new_time_ < time_limit) {
+	out_update_.count_delta_++;
+	out_update.changes_.push_back(s);
+      }
+    }
+    if (s.action_ == UPDATE_DESTROY) {
+      CL.RemoveFromSet(&results_, make_pair(s.old_time_, m));
+      if (s.old_time_ < time_limit) {
+	out_update.count_delta_--;
+	out_update.changes_.push_back(s);
+      }
+    }
+    if (s.action_ == UPDATE_CHANGE_TIME) {
+      CL.RemoveFromSet(&results_, make_pair(s.old_time_, m));
+      CL.InsertIntoSet(&results_, make_pair(s.new_time_, m));
+      if ((s.old_time_ < time_limit) && !(s.new_time_ < time_limit)) { 
+	out_update.count_delta_--;
+	out_update.changes_.push_back
+	  (SingleQueryUpdate::Destroy(m, s.old_time_));
+      }
+      if (!(s.old_time_ < time_limit) && (s.new_time_ < time_limit)) { 
+	out_update.count_delta_++;
+	out_update.changes_.push_back
+	  (SingleQueryUpdate::Create(m, s.new_time_));
+      }      
+    }
+  }
+  L1_SendUpdate(out_update);
+}
+void TimedQuery::L1_SetTimeLimit(Time new_time_limit) {
+  if (new_time_limit == time_limit_) return;
+  bool moving_forward = (new_time_limit > time_limit_);
+  bool interval_start = min(new_time_limit, time_limit_);
+  bool interval_end = max(new_time_limit, time_limit_);
+  typeof(results_)::iterator iter_start 
+    = results_.lower_bound(make_pair(interval_start, OMap(NULL)));
+  typeof(results_)::iterator iter_end 
+    = results_.lower_bound(make_pair(interval_end, OMap(NULL)));
+  if (iter_start == iter_end) return;
+  QueryUpdate out_update;
+  out_update.count_delta_ = 0;
+  for (typeof(results_)::iterator run = iter_start; run!=iter_end; ++run) {    
+    if (moving_forward) {
+      out_update.count_delta_++;
+      out_update.changes_.push_back
+	(SingleQueryUpdate::Create(run->second, run->first));
+    } else {
+      out_update.count_delta_--;
+      out_update.changes_.push_back
+	(SingleQueryUpdate::Destroy(run->second, run->first));
+    }
+  }
+  L1_SendUpdate(out_update);
+}
+void TimedQuery::L1_SendUpdate(const QueryUpdate & out_update) {
+  // maybe this should be a subroutine... 
+  // now send out the update
+  forall(run, subscriptions_) {
+    UpdateNeeds needs = run->first;
+    // for now we only support these needs. might change later.
+    CHECK(needs == UPDATE_COUNT | UPDATE_WHICH);
+    forall(run2, run->second) {
+      TimedQuerySubscription *sub = *run2;
+      sub->Update(out_update);    
+    }
+  }  
+}
+
+void TimedQuery::L1_SendCurrentAsUpdates(TimedQuerySubscription *sub, 
+					 bool reverse) {
+  QueryUpdate out_update;
+  out_update.count_delta_ = 0;
+  forall(run, results_) {
+    if (!(run->first < time_limit_)) break;
+    if (reverse) {
+      out_update.count_delta_--;
+      out_update.changes_.push_back
+	(SingleQueryUpdate::Destroy(run->second, run->first));
+    } else {
+      out_update.count_delta_++;
+      out_update.changes_.push_back
+	(SingleQueryUpdate::Create(run->second, run->first));
+    }
+  }
+  L1_SendUpdate(out_update);
+}
