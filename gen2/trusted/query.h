@@ -249,4 +249,33 @@ struct PartitionSearch : public Search {
   map<int, QueryUpdate> queued_query_updates_;
 };
 
+struct TimedQuery;
+typedef Subscription<QueryUpdate, TimedQuery> TimedQuerySubscription; 
+
+struct TimedQuery {
+  // This doesn't accept sampling for now. May want to do it later. 
+  // It also might be more efficient to add time limits to the Query object. 
+  // but this is simpler for now. 
+
+  Time time_limit_;
+  Pattern pattern_;
+
+  typedef UpdateSubscription<QueryUpdate, Query, TimedQuery> SubType;
+  
+  TimedQuery::TimedQuery(Blackboard *blackboard, 
+			 const Pattern &pattern,
+			 Time time_limit);
+  void L1_SetTimeLimit(Time new_time_limit);
+  void L1_SetPattern(Pattern new_pattern);
+  void L1_SendCurrentAsUpdates(TimedQuerySubscription *sub, bool reverse);  
+  void Update(const QueryUpdate &update, SubType *sub);  
+  map<UpdateNeeds, set<TimedQuerySubscription *> > subscriptions_;
+  // cached results of the query
+  // includes the results regardless of whether they are in time. 
+  set<pair<Time, OMap> > results_;
+  SubType * query_sub_;
+  Blackboard *blackboard_;
+};
+
+
 #endif
