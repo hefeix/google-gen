@@ -41,6 +41,8 @@ struct StaticExecutor {
   static bool FixMissingDynamicOn(MissingDynamicOnViolation *violation);
   static bool FixMissingOnMatch(MissingOnMatchViolation *violation);
   static bool FixExtraOnMatch(ExtraOnMatchViolation *violation);
+  static bool FixMissingMatch(MissingMatchViolation *violation);
+  static bool FixExtraMatch(ExtraMatchViolation *violation);
   static bool FixChildViolation(ChildViolation *violation);
   static bool FixValue(ValueViolation *violation);
   static bool FixTime(TimeViolation *violation);

@@ -37,10 +37,10 @@ ALL_FUNCTIONS
 void Element::SetTime(OTime new_time) {
   if (time_ == new_time) return;
   CL.ChangeValue(&time_, new_time);
-  N1_StoredOrComputedTimeChanged();
+  N1_StoredTimeChanged();
   set<Element *> dep = GetAllChildren();
   forall(run, dep) {
-    (*run)->N1_StoredOrComputedTimeChanged();
+    (*run)->N1_ComputedTimeChanged();
   }  
 }
 
@@ -75,6 +75,7 @@ void Element::L1_CheckSetTimeViolation() {
 }
 
 void Element::L1_CheckSetChildViolation() {
+  if (IsErased()) return;
   if (M.batch_mode_) {
     M.L1_AddDelayedCheck(this, &Element::L1_CheckSetChildViolation);
     return;
@@ -93,7 +94,7 @@ void StaticElement::UnlinkFromParent() {
   StaticElement *parent = GetParent();
   parent_->L1_RemoveChild(this);
   if (GetFunction() != ON) StaticNoParentViolation::L1_CreateIfAbsent(this);
-  N1_StoredOrComputedTimeChanged();
+  N1_ComputedTimeChanged();
   parent->N1_ChildChanged(which_child_was_i);
 }
 
@@ -106,7 +107,7 @@ void StaticElement::LinkToParent(StaticElement *new_parent, int which_child) {
   new_parent->static_children_[which_child]->L1_AddChild(this);
   StaticNoParentViolation::L1_RemoveIfPresent(this);
   L1_RecursivelyComputeSetVariables();
-  N1_StoredOrComputedTimeChanged();
+  N1_ComputedTimeChanged();
   GetParent()->N1_ChildChanged(which_child);
 }
 
@@ -140,7 +141,7 @@ void StaticElement::L1_Init() {
   for (int i=0; i<NumChildren(); i++) 
     static_children_.push_back(New<SingleLink>(this));  
   objects_.resize(NumObjects());
-  N1_StoredOrComputedTimeChanged();
+  N1_ComputedTimeChanged();
   if (GetFunction() != ON) 
     StaticNoParentViolation::L1_CreateIfAbsent(this);
   L1_CreateChoices();
@@ -409,10 +410,13 @@ string DynamicElement::ToString(int indent) const{
 }
 
 void DynamicElement::SetValue(Object new_value) {
+  Object old_value = value_;
+  if (new_value == old_value) return;
   CL.ChangeValue(&value_, new_value);
   N1_StoredValueChanged(); 
-  if (GetParent()) 
-    GetParent()->N1_ChildValueChanged(WhichChildAmI());  
+  if (GetParent()) {
+    GetParent()->N1_ChildValueChanged(WhichChildAmI(), old_value, new_value);  
+  }
 }
 
 void DynamicElement::L1_CheckSetValueViolation() {
@@ -492,6 +496,35 @@ void StaticRepeat::L1_Init() {
   L1_SetObject(REPETITION_VARIABLE, M.L1_GetNextUniqueVariable());
 }
 */
+
+
+
+set<Variable> StaticMatch::GetIntroducedVariables(int which_child) const {
+  return ::GetVariables(GetPattern().Data()) - GetVariables();
+}
+Record DynamicMatch::GetRecordForDisplay() const {
+  Record ret = DynamicElement::GetRecordForDisplay();
+  set<Violation *> missing 
+    = Violation::GetViolations
+    (Violation::Search(this, Violation::MISSING_MATCH));
+  set<Violation *> extra 
+    = Violation::GetViolations
+    (Violation::Search(this, Violation::EXTRA_MATCH));
+  forall(run, missing)
+    ret["violations"] += (*run)->ShortDescription() + "<br>\n";
+  forall(run, extra)
+    ret["violations"] += (*run)->ShortDescription() + "<br>\n";
+  ret["pattern (current)"] = GetCurrentPattern().ToString();
+  ret["pattern (computed)"] = ComputePattern().ToString();
+  ret["time limit"] = GetTimedQuery()->GetTimeLimit().ToString();
+  ret["sum"] = itoa(sum_);
+  return ret;
+}
+
+
+
+
+
 void StaticDelay::L1_Init() {
   StaticElement::L1_Init();
 }
@@ -792,18 +825,21 @@ bool DynamicElement::LinkToParent() {
   CHECK(parent_ == parent);
   L1_CheckSetParentAndBindingViolations();
   GetParent()->N1_ChildChanged(WhichChildAmI());
-  N1_StoredOrComputedTimeChanged();
+  GetParent()->N1_ChildValueChanged(WhichChildAmI(), NULL, value_);
+  N1_ComputedTimeChanged();
   return true;
 }
 
 void DynamicElement::UnlinkFromParent() {
   DynamicElement * dynamic_parent = GetParent();
   int which_child = WhichChildAmI();
+  Object old_val = value_;
   CHECK(parent_);
   parent_->L1_RemoveChild(this);
+  dynamic_parent->N1_ChildValueChanged(which_child, old_val, NULL);
   dynamic_parent->N1_ChildChanged(which_child);
   L1_CheckSetParentAndBindingViolations();
-  N1_StoredOrComputedTimeChanged();
+  N1_ComputedTimeChanged();
 }
 
 
@@ -831,13 +867,16 @@ void DynamicElement::L1_Init(StaticElement * static_parent,
     case Link::ON:
       child = New<OnMultiLink>(dynamic_cast<DynamicOn *>(this));
       break;
+    case Link::MATCH:
+      child = New<MatchMultiLink>(dynamic_cast<DynamicMatch *>(this));
+      break;
     default:
       CHECK(false);
       break;
     }
     children_.push_back(child);    
   }
-  N1_StoredOrComputedTimeChanged();
+  N1_ComputedTimeChanged();
   L1_CheckSetChildViolation();
   value_ = NULL;
   N1_StoredValueChanged();
@@ -849,13 +888,6 @@ DynamicElement * DynamicElement::FindParent() const {
   CHECK(static_parent_->parent_);
   return GetStatic()->GetParent()->GetDynamic
     (Restrict(GetBinding(), GetStatic()->GetVariables()));
-}
-
-// The following is called externally when a child is connected to
-// or disconnected from this parent node. 
-void DynamicElement::N1_ChildChanged(int which_child) {
-  Element::N1_ChildChanged(which_child);
-  N1_ChildValueChanged(which_child);
 }
 
 DynamicElement * MakeDynamicElement(StaticElement *static_parent, 
@@ -897,8 +929,8 @@ Record StaticElement::GetRecordForDisplay() const {
   }
   for (int i=0; i<NumChildren(); i++) {
     if (i>0) ret["children"] += "<br>\n";
-    ret["children"] += 
-      ChildToString(i) + ": " + static_children_[i]->ChildListings();
+    ret["children"] += ChildToString(i);
+    ret["children"] += ": " + static_children_[i]->ChildListings();
   }
   for (int i=0; i<NumObjects(); i++) {
     if (i>0) ret["children"] += "<br>\n";
@@ -918,8 +950,11 @@ Record DynamicElement::GetRecordForDisplay() const {
   if (!GetStatic()) return ret;
   for (uint i=0; i<children_.size(); i++) {
     if (i>0) ret["children"] += "<br>\n";
-    ret["children"] += GetStatic()->ChildToString(i) 
-      + ": " + children_[i]->ChildListings(5);
+    ret["children"] += GetStatic()->ChildToString(i);
+    if (LinkType(i) != Link::SINGLE) {
+      ret["children"] += children_[i]->ShortDescription() + "<br>\n";
+    }
+    ret["children"] + ": " + children_[i]->ChildListings(5);
   }
   ret["value"] = value_.ToString();
   if (value_ != ComputeValue()) {

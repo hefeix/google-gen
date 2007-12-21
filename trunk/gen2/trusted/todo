@@ -1,12 +1,6 @@
 Now:
 
-New Statements/expressions
- MapReduce Expression
- ForEach statement
- can the two be combined ?
-
-Figure out how to have multi-letter variable names. 
-List of reserved words.  Everything else parses as a variable. 
+When the binding changes at a dynamic match, the MISSING_MATCH and EXTRA_MATCH violations become all wrong.  Fix this. 
 
 Port previous learning algorithms.
 

@@ -28,16 +28,19 @@ class StaticElement;
 
 // we use the convention that parents own all links.
 struct Link : public Base {
-  enum Type{
-    SINGLE,
-    MULTI,
-    ON,
+#define LinkTypeList {				\
+  ITEM(SINGLE),					\
+    ITEM(MULTI),				\
+    ITEM(ON),					\
+    ITEM(MATCH),				\
   };
+  CLASS_ENUM_DECLARE(Link, Type);
 
   // ---------- L2 functions ----------
 
   // ---------- const functions ----------
   Base::Type GetBaseType() const { return Base::LINK; }
+  virtual Link::Type GetLinkType() const = 0;
   Element * GetParent() const { return parent_;}
   // needed by various violations
   OTime GetTime() const;
@@ -80,6 +83,8 @@ struct MultiLink : public Link {
   // Accessors
   Element * GetChild(OMap m) const;
   set<Element *> GetChildren() const;
+  Record GetRecordForDisplay() const;
+  Link::Type GetLinkType() const { return Link::MULTI;}
 
   // To make the compiler happy
   virtual ~MultiLink(){}
@@ -89,6 +94,7 @@ struct MultiLink : public Link {
 };
 
 class DynamicOn;
+class DynamicMatch;
 
 // this is a multilink where the children should exactly match the
 // satisfactions of a pattern.  Violations are created automatically. 
@@ -101,12 +107,52 @@ struct OnMultiLink : public MultiLink {
   // Accessors
   // casts GetParent() to a DynamicOn
   DynamicOn * GetDynamicOnParent() const;
+  Link::Type GetLinkType() const { return Link::ON;}
 
   void L1_AddChild(Element *child);
   void L1_RemoveChild(Element *child);
 
   typedef UpdateSubscription<QueryUpdate, Query, OnMultiLink> SubType;
   friend class UpdateSubscription<QueryUpdate, Query, OnMultiLink>;
+  void Update(const QueryUpdate &update, SubType *sub);
+  SubType * subscription_;
+};
+
+// this is a multilink where the children should exactly match the
+// satisfactions of a pattern.  Violations are created automatically. 
+struct MatchMultiLink : public MultiLink {
+  // Init and Erase
+  void L1_Init(DynamicMatch *parent);
+  void L1_Erase() { 
+    subscription_->L1_Erase();
+    MultiLink::L1_Erase();
+  }
+  Record GetRecordForDisplay() const;
+  Link::Type GetLinkType() const { return Link::MATCH;}
+
+  // Accessors
+  // casts GetParent() to a DynamicMatch
+  DynamicMatch * GetDynamicMatchParent() const;
+  TimedQuery * GetTimedQuery() const {
+    if (!subscription_) return NULL;
+    return subscription_->subscribee_;
+  }
+  OPattern GetPattern() const {
+    TimedQuery * q = GetTimedQuery();
+    if (!q) return NULL;
+    return q->GetPattern();
+  }
+  OTime GetTimeLimit() const {
+    TimedQuery *q = GetTimedQuery();
+    if (!q) return NULL;
+    return q->GetTimeLimit();
+  }
+
+  void L1_AddChild(Element *child);
+  void L1_RemoveChild(Element *child);
+
+  typedef UpdateSubscription<QueryUpdate, TimedQuery, MatchMultiLink> SubType;
+  friend class UpdateSubscription<QueryUpdate, Query, MatchMultiLink>;
   void Update(const QueryUpdate &update, SubType *sub);
   SubType * subscription_;
 };
@@ -123,6 +169,7 @@ struct SingleLink : public Link {
   // Accessors
   Element * GetChild() const { return child_;  }
   set<Element *> GetChildren() const;
+  Link::Type GetLinkType() const { return Link::SINGLE;}
 
   // For compiler warnings
   virtual ~SingleLink(){}

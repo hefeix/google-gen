@@ -25,20 +25,21 @@
 #include "chooser.h"
 
 #define ALL_FUNCTIONS \
-       FUNCTION(On, ON)				\
+  FUNCTION(On, ON)				\
+       FUNCTION(Match, MATCH)			\
        FUNCTION(Delay, DELAY)			\
        FUNCTION(Let, LET)			\
        FUNCTION(Post, POST)			\
-       FUNCTION(If, IF)				\
-       FUNCTION(MakeTuple, MAKETUPLE)		\
+       FUNCTION(If, IF)						\
+       FUNCTION(MakeTuple, MAKETUPLE)				\
        FUNCTION(Substitute, SUBSTITUTE)				\
        FUNCTION(Choose, CHOOSE)					\
        FUNCTION(Constant, CONSTANT)				\
-       FUNCTION(Equal, EQUAL)					\
-       FUNCTION(Sum, SUM)					\
-       FUNCTION(ToString, TOSTRING)				\
-       FUNCTION(Concat, CONCAT)					\
-  
+       FUNCTION(Equal, EQUAL)						\
+       FUNCTION(Sum, SUM)						\
+       FUNCTION(ToString, TOSTRING)					\
+       FUNCTION(Concat, CONCAT)		     		\
+
 struct Element : public Base {  
   public:
 
@@ -113,9 +114,8 @@ struct Element : public Base {
   // ---------- N1 notifiers ----------  
   // call this if the stored time or computed time may have changed. 
   // creates a time violation (or destroys one) as necessary. 
-  void N1_StoredOrComputedTimeChanged() {
-    L1_CheckSetTimeViolation();
-  }
+  virtual void N1_StoredTimeChanged() { L1_CheckSetTimeViolation();}
+  virtual void N1_ComputedTimeChanged() { L1_CheckSetTimeViolation();}
 
   // a child was connected or disconnected.
   virtual void N1_ChildChanged(int which_child);
@@ -317,12 +317,10 @@ struct DynamicElement : public Element{
 
   // this gets called when the value of a child changes, 
   // or when a child is created(Init) or destroyed(L1_Erase).   
-  virtual void N1_ChildValueChanged(int which_child) { 
-    L1_CheckSetValueViolation();}
-
-  // The following is called externally when a child is connected to
-  // or disconnected from this parent node. 
-  void N1_ChildChanged(int which_child);
+  virtual void N1_ChildValueChanged(int which_child, Object old_val, 
+				    Object new_val){ 
+    L1_CheckSetValueViolation();
+  }
 
   // called when the binding changes
   virtual void N1_BindingChanged();
@@ -404,6 +402,82 @@ struct DynamicOn : public DynamicElement {
   // ---------- data ----------  
 };
 
+struct StaticMatch : public StaticElement {
+  #define StaticMatchChildNameList {				\
+      ITEM(CHILD),						\
+	};
+  CLASS_ENUM_DECLARE(StaticMatch, ChildName);
+  #define StaticMatchObjectNameList {				\
+      ITEM(PATTERN),					\
+	};
+  CLASS_ENUM_DECLARE(StaticMatch, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+
+  // ---------- L2 functions ----------  
+  // ---------- const functions ----------  
+  OPattern GetPattern() const { return GetObject(PATTERN);}
+  virtual Function GetFunction() const { return MATCH;}
+  set<Variable> GetIntroducedVariables(int which_child) const;
+  bool ElementNeedsSeparateLine() const { return true;}
+  bool ChildNeedsSeparateLine(int which_child) const { return false;}
+  // ---------- L1 functions ----------  
+  // ---------- N1 notifiers ----------  
+  void N1_ObjectChanged(int which){
+    StaticElement::N1_ObjectChanged(which);
+    CHECK(NumDynamicChildren() == 0);
+  }
+
+  // ---------- data ----------  
+};
+
+struct DynamicMatch : public DynamicElement {
+  // ---------- L2 functions ----------  
+  // ---------- const functions ----------  
+  Link::Type LinkType(int which_child) const{ return Link::MATCH;}
+  StaticMatch *GetStaticMatch() const { 
+    return dynamic_cast<StaticMatch*>(GetStatic()); }
+  MatchMultiLink * GetMatchMultilink() const { 
+    return dynamic_cast<MatchMultiLink *>(children_[StaticMatch::CHILD]); }
+  OPattern ComputePattern() const {
+    return Substitute(GetBinding().Data(), GetStaticMatch()->GetPattern()); }
+  OPattern GetCurrentPattern() const { 
+    CHECK(GetMatchMultilink());
+    return GetMatchMultilink()->GetPattern(); }
+  TimedQuery * GetTimedQuery() const {
+    CHECK(GetMatchMultilink());
+    return GetMatchMultilink()->GetTimedQuery();
+  }
+  Record GetRecordForDisplay() const;
+  Object ComputeValue() const { return Integer::Make(sum_);}
+  // ---------- L1 functions ----------
+  void L1_Init(StaticElement* parent, OMap binding) {
+    sum_ = 0;
+    DynamicElement::L1_Init(parent, binding);
+    GetTimedQuery()->L1_SetTimeLimit(GetTime());
+    GetTimedQuery()->L1_SetPattern(ComputePattern());    
+  }
+  // --------- N1 notifiers ----------
+  void N1_ChildValueChanged(int which_child, Object old_val, Object new_val) { 
+    int64 diff = 0;
+    if (old_val.GetType() == Object::INTEGER) diff -= Integer(old_val).Data();
+    if (new_val.GetType() == Object::INTEGER) diff += Integer(new_val).Data();
+    if (diff != 0) {
+      CL.ChangeValue(&sum_, sum_+diff);
+    }
+    DynamicElement::N1_ChildValueChanged(which_child, old_val, new_val);
+  }
+  void N1_BindingChanged() {
+    GetTimedQuery()->L1_SetPattern(ComputePattern());    
+    DynamicElement::N1_BindingChanged();
+  }
+  void N1_StoredTimeChanged() {
+    DynamicElement::N1_StoredTimeChanged();
+    GetTimedQuery()->L1_SetTimeLimit(GetTime());
+  }
+  // ---------- data ----------
+  int64 sum_;
+};
+
 
 struct StaticDelay : public StaticElement { 
   #define StaticDelayChildNameList {				\
@@ -451,11 +525,11 @@ struct DynamicDelay : public DynamicElement {
 
   // ---------- L1 functions ----------  
   // ---------- N1 notifiers ----------
-  void N1_ChildValueChanged(int which_child) { 
-    DynamicElement::N1_ChildValueChanged(which_child);
+  void N1_ChildValueChanged(int which_child, Object old_val, Object new_val) { 
+    DynamicElement::N1_ChildValueChanged(which_child, old_val, new_val);
     // todo: check whether the times are right on the children
     DynamicElement * child = GetSingleChild(StaticDelay::CHILD);
-    if (child) child->N1_StoredOrComputedTimeChanged();
+    if (child) child->N1_ComputedTimeChanged();
   }
   // ---------- data ----------  
 };
@@ -514,8 +588,8 @@ struct DynamicLet : public DynamicElement {
     L1_CheckSetLetViolation();
   }
   // ---------- N1 notifiers ----------
-  void N1_ChildValueChanged(int which_child) { 
-    DynamicElement::N1_ChildValueChanged(which_child);
+  void N1_ChildValueChanged(int which_child, Object old_val, Object new_val) { 
+    DynamicElement::N1_ChildValueChanged(which_child, old_val, new_val);
     L1_CheckSetLetViolation();
   }
   // ---------- data ----------  
@@ -562,11 +636,15 @@ struct DynamicPost : public DynamicElement {
     DynamicElement::L1_Init(static_parent, binding);
     L1_CheckSetPostViolation();
   }
+  void L1_Erase() {
+    if (posting_) posting_->L1_Erase();
+    DynamicElement::L1_Erase();
+  }
   // see if it's perfect, then create or remove violation if necessary.
   void L1_CheckSetPostViolation();
   // ---------- N1 notifiers ----------
-  void N1_ChildValueChanged(int which_child) { 
-    DynamicElement::N1_ChildValueChanged(which_child);
+  void N1_ChildValueChanged(int which_child, Object old_val, Object new_val) { 
+    DynamicElement::N1_ChildValueChanged(which_child, old_val, new_val);
     L1_CheckSetPostViolation();
   }  
   // ---------- data ----------  
@@ -623,9 +701,15 @@ struct DynamicIf : public DynamicElement {
     DynamicElement::L1_Init(static_parent, binding);
   }
   // ---------- N1 notifiers ----------
-  void N1_ChildValueChanged(int which_child) {
-    DynamicElement::N1_ChildValueChanged(which_child);
-    L1_CheckSetChildViolation();
+  void N1_ChildValueChanged(int which_child, Object old_val, Object new_val) {
+    /*cerr << "DynamicIf::N1_ChildValueChanged :"
+	 << " child="
+	 << StaticIf::ChildNameToString(StaticIf::ChildName(which_child))
+	 << " old_val=" << old_val
+	 << " new_val=" << new_val << endl;*/
+    if (old_val == new_val) return;
+    DynamicElement::N1_ChildValueChanged(which_child, old_val, new_val);
+    if (which_child == StaticIf::CONDITION) L1_CheckSetChildViolation();
   }
   // ---------- data ----------  
 };
@@ -772,8 +856,8 @@ struct DynamicChoose : public DynamicElement {
   bool L1_TryMakeCorrectChoice();
 
   // ---------- N1 Notifiers ----------  
-  void N1_ChildValueChanged(int which_child) {
-    DynamicElement::N1_ChildValueChanged(which_child);
+  void N1_ChildValueChanged(int which_child, Object old_val, Object new_val) {
+    DynamicElement::N1_ChildValueChanged(which_child, old_val, new_val);
     L1_TryMakeCorrectChoice();
   }
   void N1_StoredValueChanged() {

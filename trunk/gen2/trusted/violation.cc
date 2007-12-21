@@ -42,6 +42,7 @@ Record Violation::GetRecordForDisplay() const {
   ret["owner"] = owner_->ShortDescription();    
   if (data_ != NULL)
     ret["data"] = data_.ToString();
+  ret["time"] = time_.ToString();
   return ret;
 }
 
