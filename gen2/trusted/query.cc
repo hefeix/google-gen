@@ -649,49 +649,53 @@ void ConditionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
   wt_subscription_->L1_ChangeNeeds(new_needs);
 }
 
-TimedQuery::TimedQuery(Blackboard *blackboard, const Pattern &pattern,
-		       Time time_limit) {
+TimedQuery::TimedQuery(Blackboard *blackboard, const OPattern &pattern,
+		       OTime time_limit) {
   query_sub_ = NULL;
+  pattern_ = NULL;
   time_limit_ = time_limit;
   L1_SetPattern(pattern);
   blackboard_ = blackboard;
 }
 
-void TimedQuery::L1_RemoveQuery() {
-  forall(run, subscriptions_) {
-    forall(run2, run->second) {
-      L1_SendCurrentAsUpdates(*run2, true);
+void TimedQuery::L1_SetPattern(OPattern new_pattern) {
+  if (pattern_ == new_pattern) return;
+  if (pattern_ != NULL) {
+    forall(run, subscriptions_) {
+      forall(run2, run->second) {
+	L1_SendCurrentAsUpdates(*run2, true);
+      }
     }
+    query_sub_->L1_Erase();
+    CL.ChangeValue(&query_sub_, (SubType *)NULL);  
+    CHECK(results_.size() == 0);
   }
-  query_sub_->L1_Erase();
-  CL.ChangeValue(&query_sub_, NULL);  
-}
-void TimedQuery::L1_SetPattern(Pattern new_pattern) {
-  if (query_sub_) L1_RemoveQuery();
+  CL.ChangeValue(&pattern_, new_pattern);
+  if (pattern_ == NULL) return;
   Query * query 
-    = blackboard_->L1_GetExecuteQuery(OPattern::Make(pattern),
+    = blackboard_->L1_GetExecuteQuery(pattern_,
 				      SamplingInfo(), NULL);
   query_sub_ 
     = new SubType(query, UPDATE_COUNT | UPDATE_WHICH | UPDATE_TIME, this);
   query_sub_->L1_SendCurrentAsUpdates();  
 }
 void TimedQuery::Update(const QueryUpdate &update, SubType *sub) {
-  QueryUpdate out_update_;
-  out_update_.count_delta_ = 0;
+  QueryUpdate out_update;
+  out_update.count_delta_ = 0;
 
   forall(run, update.changes_) {
     SingleQueryUpdate s = *run;
     OMap m = s.data_;
     if (s.action_ == UPDATE_CREATE) {
       CL.InsertIntoSet(&results_, make_pair(s.new_time_, m));
-      if (s.new_time_ < time_limit) {
-	out_update_.count_delta_++;
+      if (s.new_time_ < TimeLimitData()) {
+	out_update.count_delta_++;
 	out_update.changes_.push_back(s);
       }
     }
     if (s.action_ == UPDATE_DESTROY) {
       CL.RemoveFromSet(&results_, make_pair(s.old_time_, m));
-      if (s.old_time_ < time_limit) {
+      if (s.old_time_ < TimeLimitData()) {
 	out_update.count_delta_--;
 	out_update.changes_.push_back(s);
       }
@@ -699,12 +703,12 @@ void TimedQuery::Update(const QueryUpdate &update, SubType *sub) {
     if (s.action_ == UPDATE_CHANGE_TIME) {
       CL.RemoveFromSet(&results_, make_pair(s.old_time_, m));
       CL.InsertIntoSet(&results_, make_pair(s.new_time_, m));
-      if ((s.old_time_ < time_limit) && !(s.new_time_ < time_limit)) { 
+      if ((s.old_time_ < TimeLimitData()) && !(s.new_time_ < TimeLimitData())){ 
 	out_update.count_delta_--;
 	out_update.changes_.push_back
 	  (SingleQueryUpdate::Destroy(m, s.old_time_));
       }
-      if (!(s.old_time_ < time_limit) && (s.new_time_ < time_limit)) { 
+      if (!(s.old_time_ < TimeLimitData()) && (s.new_time_ < TimeLimitData())){ 
 	out_update.count_delta_++;
 	out_update.changes_.push_back
 	  (SingleQueryUpdate::Create(m, s.new_time_));
@@ -713,19 +717,23 @@ void TimedQuery::Update(const QueryUpdate &update, SubType *sub) {
   }
   L1_SendUpdate(out_update);
 }
-void TimedQuery::L1_SetTimeLimit(Time new_time_limit) {
+void TimedQuery::L1_SetTimeLimit(OTime new_time_limit) {
   if (new_time_limit == time_limit_) return;
-  bool moving_forward = (new_time_limit > time_limit_);
-  bool interval_start = min(new_time_limit, time_limit_);
-  bool interval_end = max(new_time_limit, time_limit_);
-  typeof(results_)::iterator iter_start 
+  Time old_tl = TimeLimitData();
+  CL.ChangeValue(&time_limit_, new_time_limit);
+  Time new_tl = TimeLimitData();
+  if (new_tl == old_tl) return;
+  bool moving_forward = (new_tl > old_tl);
+  Time interval_start = min(old_tl, new_tl);
+  Time interval_end = max(old_tl, new_tl);
+  ResultsType::iterator iter_start 
     = results_.lower_bound(make_pair(interval_start, OMap(NULL)));
-  typeof(results_)::iterator iter_end 
+  ResultsType::iterator iter_end 
     = results_.lower_bound(make_pair(interval_end, OMap(NULL)));
   if (iter_start == iter_end) return;
   QueryUpdate out_update;
   out_update.count_delta_ = 0;
-  for (typeof(results_)::iterator run = iter_start; run!=iter_end; ++run) {    
+  for (ResultsType::iterator run = iter_start; run!=iter_end; ++run) {    
     if (moving_forward) {
       out_update.count_delta_++;
       out_update.changes_.push_back
@@ -757,7 +765,7 @@ void TimedQuery::L1_SendCurrentAsUpdates(TimedQuerySubscription *sub,
   QueryUpdate out_update;
   out_update.count_delta_ = 0;
   forall(run, results_) {
-    if (!(run->first < time_limit_)) break;
+    if (!(run->first < TimeLimitData())) break;
     if (reverse) {
       out_update.count_delta_--;
       out_update.changes_.push_back
@@ -769,4 +777,20 @@ void TimedQuery::L1_SendCurrentAsUpdates(TimedQuerySubscription *sub,
     }
   }
   L1_SendUpdate(out_update);
+}
+void TimedQuery::L1_AddParent() { 
+  CL.ChangeValue(&parent_count_, parent_count_+1);
+}
+void TimedQuery::L1_RemoveParent() { 
+  CL.ChangeValue(&parent_count_, parent_count_-1);
+  CHECK(parent_count_ >=0);
+  if (parent_count_==0) L1_Erase();
+}
+void TimedQuery::L1_Erase() {
+  CHECK(parent_count_ == 0);
+  L1_SetPattern(NULL);
+  CL.Destroying(this);
+}
+uint64 TimedQuery::GetCount() const {
+  return results_.num_lt(make_pair(TimeLimitData(), OMap(NULL)));
 }

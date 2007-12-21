@@ -22,6 +22,13 @@
 #include "webserver.h"
 #include "options.h"
 
+#undef ITEM
+#define ITEM(x) #x
+
+CLASS_ENUM_DEFINE(Link, Type);
+
+
+
 void Link::L1_Init(Element *parent) {
   // Creating called at the beginning of the base class
   Base::L1_Init();
@@ -64,6 +71,16 @@ Record Link::GetRecordForDisplay() const {
   Record ret = Base::GetRecordForDisplay();
   ret["parent"] = GetParent()->ShortDescription();
   ret["children"] = ChildListings();
+  ret["link_type"] = Link::TypeToString(GetLinkType());
+  return ret;
+}
+Record MultiLink::GetRecordForDisplay() const { 
+  return Link::GetRecordForDisplay();
+}
+Record MatchMultiLink::GetRecordForDisplay() const { 
+  Record ret = MultiLink::GetRecordForDisplay();
+  ret["pattern"] = GetPattern().ToString();
+  ret["time_limit"] = GetTimeLimit().ToString();
   return ret;
 }
 string Link::ChildListings(int max_children) const{
@@ -179,7 +196,7 @@ void OnMultiLink::Update(const QueryUpdate &update, SubType *sub) {
       if (children_ % m) {
 	// Note - We could use max(parent_->time_, s.new_time_)
 	// instead of computing it again. That would be an optimization
-	children_[m]->N1_StoredOrComputedTimeChanged();
+	children_[m]->N1_ComputedTimeChanged();
       } else {
 	Violation *missing 
 	  = Violation::Search(this, Violation::MISSING_ON_MATCH, m);	
@@ -214,6 +231,72 @@ void OnMultiLink::L1_RemoveChild(Element * child) {
     extra->L1_Erase();
   } else {
     New<MissingOnMatchViolation>(this, binding);
+  }
+  MultiLink::L1_RemoveChild(child);
+}
+
+
+
+DynamicMatch * MatchMultiLink::GetDynamicMatchParent() const {
+  return dynamic_cast<DynamicMatch *>(GetParent());
+}
+
+void MatchMultiLink::L1_Init(DynamicMatch *parent) {
+  MultiLink::L1_Init(parent);
+  TimedQuery * q = new TimedQuery(&BB, NULL, NULL);
+  subscription_ = new SubType(q, UPDATE_COUNT | UPDATE_WHICH, this);
+  // subscription_->L1_SendCurrentAsUpdates();  // should be no matches.
+}
+void MatchMultiLink::Update(const QueryUpdate &update, SubType *sub) {
+  forall(run, update.changes_) {
+    SingleQueryUpdate s = *run;
+    // if there were any bindings_ at the parent, we would have to union 
+    // them here. Luckily, with an on statement, there are none. 
+    OMap m = Union(s.data_, GetDynamicMatchParent()->GetBinding());
+    if (s.action_ == UPDATE_CREATE) {
+      Violation *extra = Violation::Search(this, Violation::EXTRA_MATCH, m);
+      if (extra) {
+	extra->L1_Erase();
+      } else {
+	New<MissingMatchViolation>(this, m);
+      }
+    }
+    if (s.action_ == UPDATE_DESTROY) {
+      Violation *missing = Violation::Search(this, Violation::MISSING_MATCH, m);
+      if (missing) {
+	missing->L1_Erase();
+      } else {
+	CHECK(children_ % m);
+	New<ExtraMatchViolation>(this, m);
+      }
+    }
+    if (s.action_ == UPDATE_CHANGE_TIME) {
+      CHECK(false);
+    }
+  }
+}
+
+void MatchMultiLink::L1_AddChild(Element * child) {
+  // L1_Erase leaves the bindings anyways when called on the child
+  OMap binding = child->GetBinding();
+  Violation *missing 
+    = Violation::Search(this, Violation::MISSING_MATCH, binding);
+  if (missing) {
+    missing->L1_Erase();
+  } else {
+    New<ExtraMatchViolation>(this, binding);
+  }
+  MultiLink::L1_AddChild(child);
+}
+
+void MatchMultiLink::L1_RemoveChild(Element * child) {
+  OMap binding = child->GetBinding();
+  Violation *extra 
+    = Violation::Search(this, Violation::EXTRA_MATCH, binding);
+  if (extra) {
+    extra->L1_Erase();
+  } else {
+    New<MissingMatchViolation>(this, binding);
   }
   MultiLink::L1_RemoveChild(child);
 }

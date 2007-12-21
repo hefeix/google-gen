@@ -399,6 +399,12 @@ template <class T> const T & DataMin(const T & t1, const T & t2) {
   return t2;
 }
 
+inline OMap Union(OMap m1, OMap m2) {
+  CHECK(m1 != NULL);
+  CHECK(m2 != NULL);
+  return OMap::Make(Union(m1.Data(), m2.Data()));
+}
+
 int VariableToInt(Variable v);
 Variable IntToVariable(int i);
 

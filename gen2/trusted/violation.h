@@ -37,6 +37,8 @@ struct Violation : public Base {
       ITEM(MISSING_DYNAMIC_ON),			\
       ITEM(MISSING_ON_MATCH),			\
       ITEM(EXTRA_ON_MATCH),			\
+      ITEM(MISSING_MATCH),			\
+      ITEM(EXTRA_MATCH),			\
       ITEM(VALUE),				\
       ITEM(POST),				\
       ITEM(IF),				\
@@ -155,6 +157,7 @@ class StaticElement;
 class DynamicElement;
 class SingleLink;
 class OnMultiLink;
+class MatchMultiLink;
 class Element;
 class StaticOn;
 class DynamicLet;
@@ -217,6 +220,16 @@ typedef TypedViolation<OnMultiLink, Violation::MISSING_ON_MATCH>
 // Data is an OMap
 typedef TypedViolation<OnMultiLink, Violation::EXTRA_ON_MATCH>
   ExtraOnMatchViolation;
+
+// A match statement lacks a child for a binding which matches the blackboard.
+// Data is an OMap
+typedef TypedViolation<MatchMultiLink, Violation::MISSING_MATCH>
+  MissingMatchViolation;
+
+// A match statement has a child whose binding does not match the blackboard.
+// Data is an OMap
+typedef TypedViolation<MatchMultiLink, Violation::EXTRA_MATCH>
+  ExtraMatchViolation;
 
 // A new flake chooser generates a flake more than once. 
 // data is the flake

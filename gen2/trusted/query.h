@@ -257,24 +257,42 @@ struct TimedQuery {
   // It also might be more efficient to add time limits to the Query object. 
   // but this is simpler for now. 
 
-  Time time_limit_;
-  Pattern pattern_;
-
   typedef UpdateSubscription<QueryUpdate, Query, TimedQuery> SubType;
   
   TimedQuery::TimedQuery(Blackboard *blackboard, 
-			 const Pattern &pattern,
-			 Time time_limit);
-  void L1_SetTimeLimit(Time new_time_limit);
-  void L1_SetPattern(Pattern new_pattern);
+			 const OPattern &pattern,
+			 OTime time_limit);
+  OPattern GetPattern() const { return pattern_;}
+  OTime GetTimeLimit() const { return time_limit_;}
+  void L1_SetTimeLimit(OTime new_time_limit);
+  void L1_SetPattern(OPattern new_pattern);
   void L1_SendCurrentAsUpdates(TimedQuerySubscription *sub, bool reverse);  
+  void L1_SendUpdate(const QueryUpdate & out_update); // helper
   void Update(const QueryUpdate &update, SubType *sub);  
+  void L1_AddParent();
+  void L1_RemoveParent();
+  void L1_AddedSubscription() { L1_AddParent();}
+  void L1_RemovedSubscription() { L1_RemoveParent();}
+  void L1_ChangedSubscriptionNeeds() { CHECK(false); }
+  void L1_Erase();
+  uint64 GetCount() const;
+  // caution: nondeterministic in the case of sampling
+  void GetSubstitutions(vector<Map> * substitutions, vector<Time> *times) const;
+  Time TimeLimitData() const { 
+    if (time_limit_ == NULL) return Time();
+    return time_limit_.Data();
+  }
+
+  OTime time_limit_;
+  OPattern pattern_;  
   map<UpdateNeeds, set<TimedQuerySubscription *> > subscriptions_;
   // cached results of the query
   // includes the results regardless of whether they are in time. 
-  set<pair<Time, OMap> > results_;
+  typedef rankset<pair<Time, OMap> > ResultsType;
+  ResultsType results_;
   SubType * query_sub_;
   Blackboard *blackboard_;
+  int parent_count_;
 };
 
 

@@ -34,7 +34,7 @@
   (const_)iterator nth(uint n); 
 
   // first iterator not less than k
-  (const_)iterator first_ge(const Key &k);
+  (const_)iterator lower_bound(const Key &k);
 
   // returns the rank.
   uint index(const (const_)iterator &iter) const;
@@ -269,10 +269,10 @@ class RankTree {
   const_iterator find(const Key &k) const{ return _find(k);}
 
   // first element greater than or equal to k
-  Node * _first_ge(const Key &k) const {
+  Node * _lower_bound(const Key &k) const {
     Node *parent;
     Node **look = search(k, &parent);
-    if (*look) return iterator(*look);
+    if (*look) return *look;
     if (!parent) return NULL;
     if (look == &(parent->left_)) {
       return parent;
@@ -281,8 +281,8 @@ class RankTree {
     while (n->WhichChild()) n = n->parent_;
     return n->parent_;
   }
-  iterator first_ge(const Key &k) { return _first_ge(k); }
-  const_iterator first_ge(const Key &k) const { return _first_ge(k); }
+  iterator lower_bound(const Key &k) { return _lower_bound(k); }
+  const_iterator lower_bound(const Key &k) const { return _lower_bound(k); }
 
   Node * _nth(uint i) const {
     CHECK(i<size());
@@ -315,7 +315,7 @@ class RankTree {
   
   uint num_lt(const Key & k) const {
     // TODO: can be made faster.
-    const_iterator find = first_ge(k);
+    const_iterator find = lower_bound(k);
     return index(find);
   }
   uint num_ge(const Key &k) const {

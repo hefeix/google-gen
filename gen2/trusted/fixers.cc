@@ -37,6 +37,12 @@ bool StaticExecutor::FixViolation(Violation *v) {
   case Violation::EXTRA_ON_MATCH :
     success = FixExtraOnMatch(dynamic_cast<ExtraOnMatchViolation*>(v));
     break;
+  case Violation::MISSING_MATCH :
+    success = FixMissingMatch(dynamic_cast<MissingMatchViolation*>(v));
+    break;
+  case Violation::EXTRA_MATCH :
+    success = FixExtraMatch(dynamic_cast<ExtraMatchViolation*>(v));
+    break;
   case Violation::CHILD :
     success = FixChildViolation(dynamic_cast<ChildViolation*>(v));
     break;
@@ -213,6 +219,44 @@ bool StaticExecutor::FixExtraOnMatch(ExtraOnMatchViolation *violation) {
   d_child->EraseTree();
   return true;
 }
+bool StaticExecutor::FixMissingMatch(MissingMatchViolation *violation) {
+  VLOG(2) << "Fixing missing match" << endl;
+  DynamicMatch * d_match 
+    = dynamic_cast<DynamicMatch *>(violation->GetTypedOwner()->parent_);
+  StaticMatch * s_match = d_match->GetStaticMatch();
+  StaticElement * s_child = s_match->GetChild(StaticMatch::CHILD);
+  if (!s_child) {
+    VLOG(1) 
+      << "can't fix misisng match because static match has no child" << endl;
+    return false;
+  }
+  OMap binding = Union(violation->data_, d_match->GetBinding());;
+  DynamicElement *e = MakeDynamicElement(s_child, binding);
+  if (!e) {
+    VLOG(1) << "couldn't make dynamic element" << endl;
+    return false;
+  }
+  return StaticExecutor::FixElement(e);
+}
+
+bool StaticExecutor::FixExtraMatch(ExtraMatchViolation *violation) {
+  VLOG(1) << "Fixing extra match" << endl;
+  violation->GetTypedOwner()->GetChild(violation->data_);
+  DynamicMatch * d_match 
+    = dynamic_cast<DynamicMatch*>(violation->GetTypedOwner()->parent_);
+  StaticMatch * s_match = d_match->GetStaticMatch();
+  StaticElement * s_child = s_match->GetChild(StaticMatch::CHILD);
+  if (!s_child) {
+    VLOG(1) << "can't fix misisng match because static match has no child" 
+	    << endl;
+    return false;
+  }
+  OMap binding = violation->data_;
+  DynamicElement * d_child = s_child->GetDynamic(binding);
+  CHECK(d_child);
+  d_child->EraseTree();
+  return true;
+}\
 
 bool StaticExecutor::FixValue(ValueViolation *violation){
   VLOG(2) << "Fixing value violation " << endl;
