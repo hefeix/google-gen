@@ -250,8 +250,6 @@ void MatchMultiLink::L1_Init(DynamicMatch *parent) {
 void MatchMultiLink::Update(const QueryUpdate &update, SubType *sub) {
   forall(run, update.changes_) {
     SingleQueryUpdate s = *run;
-    // if there were any bindings_ at the parent, we would have to union 
-    // them here. Luckily, with an on statement, there are none. 
     OMap m = Union(s.data_, GetDynamicMatchParent()->GetBinding());
     if (s.action_ == UPDATE_CREATE) {
       Violation *extra = Violation::Search(this, Violation::EXTRA_MATCH, m);
