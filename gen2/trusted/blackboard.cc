@@ -839,15 +839,45 @@ Record Blackboard::GetRecordForDisplay() const {
   return ret;
 }
 
-string Blackboard::CollectCOUT() const { 
+string Blackboard::Print(int page) const { 
   vector<OTuple> v;
-  OTuple t = StringToObject("(COUT *)");
+  OTuple t = StringToObject("(PRINT " 
+			    + ((page==-1)?"*":itoa(page)) 
+			    +  " * * *)");
   GetWildcardMatches(t, &v);
-  string ret;
+
+  // page, lines
+  map<int, vector<string> > output;
+  if (page != -1) output[page];
+  
   for (uint i=0; i<v.size(); i++) {
-    Object second = v[i].Data()[1];
-    if (second.GetType()==Object::STRING)
-      ret += String(second).Data();
+    Object page_num_obj = v[i].Data()[1];
+    if (page_num_obj.GetType() != Object::INTEGER) continue;
+    int page_num = Integer(page_num_obj).Data();
+    Object line_num_obj = v[i].Data()[2];
+    if (line_num_obj.GetType() != Object::INTEGER) continue;
+    int line_num = Integer(line_num_obj).Data();
+    Object char_num_obj = v[i].Data()[3];
+    if (char_num_obj.GetType() != Object::INTEGER) continue;
+    int char_num = Integer(char_num_obj).Data();
+    Object char_obj = v[i].Data()[4];
+    if (char_obj.GetType() != Object::STRING) continue;
+    string s = String(char_obj).Data();
+    if (s.size() != 1) continue;
+    char c = s[0];
+
+    vector<string> & page_ref = output[page_num];
+    while ((int)page_ref.size() <= line_num) page_ref.push_back("");    
+    string & line_ref = page_ref[line_num];
+    while ((int)line_ref.size() <= char_num) line_ref += ' '; 
+    line_ref[char_num] = c;
+  }
+  string ret;
+  forall(run, output) {
+    ret += "------------------ p." + itoa(run->first) + '\n';
+    forall(run_lines, run->second) {
+      ret += (*run_lines) + "\n";
+    }
   }
   return ret;
 }

@@ -732,8 +732,8 @@ Object DynamicEqual::ComputeValue() const {
 			 == GetChildValue(StaticEqual::RHS) ) );
 }
 Object DynamicSum::ComputeValue() const {
-  Object lhs = GetChildValue(StaticEqual::LHS);
-  Object rhs = GetChildValue(StaticEqual::RHS);
+  Object lhs = GetChildValue(StaticSum::LHS);
+  Object rhs = GetChildValue(StaticSum::RHS);
   VLOG(3) << "lhs=" << lhs << " rhs=" << rhs << endl;
   if (lhs.GetType() == Object::INTEGER
       && rhs.GetType() == Object::INTEGER) {
@@ -744,6 +744,16 @@ Object DynamicSum::ComputeValue() const {
     return Real::Make(Real(lhs).Data() + Real(rhs).Data());
   }
   return Object();
+}
+Object DynamicNth::ComputeValue() const {
+  Object tuple_obj = GetChildValue(StaticNth::TUPLE);
+  Object n_obj = GetChildValue(StaticNth::N);
+  if (tuple_obj.GetType() != Object::OTUPLE) return Object();
+  if (n_obj.GetType() != Object::INTEGER) return NULL;
+  int64 n = Integer(n_obj).Data();
+  const Tuple & tuple = OTuple(tuple_obj).Data();
+  if (n < 0 || n >= tuple.size()) return Object();
+  return tuple[n];
 }
 Object DynamicConcat::ComputeValue() const {
   string ret;

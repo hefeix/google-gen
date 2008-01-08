@@ -37,7 +37,7 @@ string GenRequestHandler::TopNavHTML() const {
       + ") ";
   }
   ret += HTMLLink(BB.GetURL(), "Blackboard") + " ";
-  ret += HTMLLink("cout", "COUT");
+  ret += HTMLLink("print", "PRINT");
   ret += "</font><br><p>";
   return ret;
 }
@@ -168,8 +168,10 @@ string GenRequestHandler::Handle(Record params) {
   if (command == "program") {
     ret += M.ToString(true);
   }
-  if (command == "cout") {
-    ret += "<pre>" + BB.CollectCOUT() + "</pre>";
+  if (command == "print") {
+    int page = -1;
+    if (params["page"] != "") page = atoi(params["page"].c_str());
+    ret += "<pre>" + BB.Print(page) + "</pre>";
   }
 
   return ret;
