@@ -87,9 +87,12 @@ struct DoubleBits{
 
 
 /*
-  
+  A bit sequence is a finite sequence of bits with an implied ordering. 
+  appending a 0 makes a sequence smaller and a 1 makes it larger. 
 
-
+  We store a bit sequence as a vector of booleans terminated by an extra true.
+  This way, they compare correctly by the default lexicographic comparison of 
+  vectors. 
 */
 
 struct BitSeq{
@@ -113,13 +116,13 @@ struct BitSeq{
   }
   void AppendInPlace(bool bit) {
     CHECK(!IsMin());
-    data_[NumBits()-1] = bit;
+    data_[NumBits()] = bit;
     data_.push_back(true);
   }
   void PopBackInPlace() {
     CHECK(NumBits() > 0);
     data_.pop_back();
-    data_[NumBits()-1] = true;
+    data_[NumBits()] = true;
   }
   string ToString() const{
     if (IsMin()) return "#m";

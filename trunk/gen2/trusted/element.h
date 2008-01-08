@@ -32,6 +32,7 @@
        FUNCTION(Post, POST)			\
        FUNCTION(If, IF)						\
        FUNCTION(MakeTuple, MAKETUPLE)				\
+       FUNCTION(Nth, NTH)				\
        FUNCTION(Substitute, SUBSTITUTE)				\
        FUNCTION(Choose, CHOOSE)					\
        FUNCTION(Constant, CONSTANT)				\
@@ -825,6 +826,24 @@ struct StaticMakeTuple : public StaticElement {
 struct DynamicMakeTuple : public DynamicElement {
   Object ComputeValue() const;
 };
+
+struct StaticNth : public StaticElement {
+   #define StaticNthChildNameList {	 		\
+    ITEM(TUPLE),						\
+    ITEM(N),						\
+      };
+  CLASS_ENUM_DECLARE(StaticNth, ChildName);
+  #define StaticNthObjectNameList {				\
+    };
+  CLASS_ENUM_DECLARE(StaticNth, ObjectName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return NTH;}
+  bool ChildrenGoInTuple() const { return true;}
+};
+struct DynamicNth : public DynamicElement {
+  Object ComputeValue() const;
+};
+
 
 
 struct StaticChoose : public StaticElement { 

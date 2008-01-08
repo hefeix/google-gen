@@ -333,7 +333,7 @@ class Blackboard {
   string GetURL() const;
   Record GetRecordForDisplay() const;
 
-  string CollectCOUT() const;
+  string Print(int page) const;
 
   Blackboard() {
     current_wt_update_ = NULL;

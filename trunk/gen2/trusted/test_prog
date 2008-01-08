@@ -29,7 +29,9 @@
        }
     )          
     
-  on pattern((IS_ROW x)(IS_COL y)) post (IS_CELL (x y))
+  on pattern((IS_ROW x)(IS_COL y)) {
+     post (IS_CELL (x y))
+  }
   on pattern((ROW_ADJACENT a b)(COL_ADJACENT c d)) 
      post (CELL_ADJACENT (a c) (b d))
   on pattern((ROW_ADJACENT a b)(IS_COL c)) 
@@ -38,7 +40,7 @@
      post (CELL_ADJACENT (c a) (c b))
 
   on pattern((IS_COL x)) post (FULL 0 (0 x))
-  on pattern((IS_TIME t)(IS_CELL c)) delay #
+  on pattern((IS_TIME t)(IS_CELL c)) delay #0
      post (NUM_NEIGHBORS t c match pattern((CELL_ADJACENT c a)(FULL t a)) 1)
 
   on pattern((TS t u)(NUM_NEIGHBORS t c 3)) 
@@ -46,4 +48,12 @@
   on pattern((TS t u)(NUM_NEIGHBORS t c 2)(FULL t c))
      post (FULL u c)
      
+ < the print statements >
+  on pattern((FULL t cell))
+     post (PRINT t nth(cell 0) sum(nth(cell 1) 1) "X")
+
+  on pattern((IS_TIME t) (IS_ROW row)) {
+     post (PRINT t row 0 "|")
+     post (PRINT t row 6 "|")
+  }
 }
