@@ -874,9 +874,8 @@ void GivenSearch::L1_FlushUpdates() {
     const QueryUpdate & update = run_q->second;
     count_delta += update.count_delta_;
     if (!need_subs) continue;
-    Map additional_sub;
-    CHECK(ComputeSubstitution(GetVariableTuple().Data(),
-			      run_q->first.Data(), &additional_sub));
+
+    Map additional_sub = run_q->first.Data();
     forall(run_c, update.changes_) {
       const SingleQueryUpdate & single = *run_c;
       SingleQueryUpdate out_single = single;
@@ -886,95 +885,9 @@ void GivenSearch::L1_FlushUpdates() {
 	out_update_with_subs.changes_.push_back(out_single);
     }
   }
+
   // Ok now we have processed the updates, delete them
-  CL.ChangeValue(&queued_query_updates_, map<OTuple, QueryUpdate>());
-
-  if (queued_wt_update_) { 
-    query_->blackboard_->flushed_wt_update_.insert(query_);
-    OTuple tuple = queued_wt_update_->data_;
-    Map additional_sub;
-    if (!ComputeSubstitution(GetVariableTuple().Data(),
-			     tuple.Data(), &additional_sub)) 
-      goto step2;
-    
-    // It's a creation
-    if (queued_wt_update_->action_ == UPDATE_CREATE) {
-      // add a tuple
-      Query * child_query;
-      L1_MaybeAddChild(tuple, NULL, &child_query);
-      if (child_query) {
-	count_delta += child_query->GetCount();
-	if (need_subs) {
-	  vector<Map> subs;
-	  vector<Time> times;
-	  child_query->GetSubstitutions(&subs, need_times?(&times):NULL);
-	  if (need_times) {
-	    for (uint i=0; i<times.size(); i++) 
-	      times[i] = max(times[i], queued_wt_update_->new_time_);
-	  }
-	  for (uint i=0; i<subs.size(); i++) {
-	    SingleQueryUpdate s 
-	      = SingleQueryUpdate::Create(OMap::Make(Union(subs[i], additional_sub)), 
-					  need_times?times[i]:Time());
-	    out_update_with_subs.changes_.push_back(s);
-	    if (need_times) out_update_with_times.changes_.push_back(s);
-	  }
-	}
-      }
-      goto step2;
-    }
-
-    // It's a deletion or a time change.
-    if (children_ % tuple) { // ignore it if it doesn't match
-      Query * child_query = children_[tuple].first;
-      GivenQSub *subscription = children_[tuple].second;
-      if (queued_wt_update_->action_ == UPDATE_DESTROY) { // it's a tuple deletion
-	count_delta -= child_query->GetCount();
-	if (need_subs) {
-	  vector<Map> subs;
-	  vector<Time> times;
-	  child_query->GetSubstitutions(&subs, need_times?(&times):NULL);
-	  if (need_times) {
-	    for (uint i=0; i<times.size(); i++) times[i] 
-	      = max(times[i], queued_wt_update_->old_time_);
-	  }
-	  for (uint i=0; i<subs.size(); i++) {
-	    SingleQueryUpdate s 
-	      = SingleQueryUpdate::Destroy(OMap::Make(Union(subs[i], additional_sub)),
-					   need_times?times[i]:Time());
-	    out_update_with_subs.changes_.push_back(s);
-	    if (need_times) out_update_with_times.changes_.push_back(s);
-	  }
-	}
-	child_query->L1_RemoveParent();
-	subscription->L1_Erase();	
-	CL.RemoveFromMap(&children_, tuple);
-	goto step2;
-      } 
-	
-      // change time on a tuple
-      CHECK(queued_wt_update_->action_ == UPDATE_CHANGE_TIME);
-      if (!need_times) goto step2;
-      vector<Map> subs;
-      vector<Time> times;
-      child_query->GetSubstitutions(&subs, &times);
-      for (uint i=0; i<subs.size(); i++) {
-	Time old_time = max(times[i], queued_wt_update_->old_time_);
-	Time new_time = max(times[i], queued_wt_update_->new_time_);
-	if (old_time != new_time) {
-	  out_update_with_times.changes_.push_back
-	    (SingleQueryUpdate::ChangeTime
-	     (OMap::Make(Union(subs[i], additional_sub)),
-	      old_time, new_time));
-	}
-      }
-    }
-  }
-  
- step2:
-  // Done with the wt update, delete it
-  SingleWTUpdate * nullptr = NULL;
-  CL.ChangeValue(&queued_wt_update_, nullptr);
+  CL.ChangeValue(&queued_query_updates_, map<OMap, QueryUpdate>());
 
   out_update.count_delta_ = 
     out_update_with_subs.count_delta_ = 
@@ -995,8 +908,6 @@ void GivenSearch::L1_FlushUpdates() {
   }
 
 }
-
-
 
 TimedQuery::TimedQuery(Blackboard *blackboard, const OPattern &pattern,
 		       OTime time_limit) {
