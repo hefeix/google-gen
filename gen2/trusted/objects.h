@@ -156,6 +156,8 @@ class Object {
   static void Init();
   static void Destroy();
 
+  // true/false/pattern are reserved words but not keywords
+  // keywords are the only allowed string values for the Keyword type
   static set<string> reserved_words_;
   static set<string> keywords_; // subset of reserved_words_
   static bool done_adding_keywords_;

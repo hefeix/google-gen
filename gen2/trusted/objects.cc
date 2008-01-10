@@ -6,7 +6,6 @@
 #define ITEM(x) #x
 CLASS_ENUM_DEFINE(Object, Type);
 
-
 Keyword SEMICOLON;
 Keyword WILDCARD;
 OTime CREATION;

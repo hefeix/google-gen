@@ -20,6 +20,14 @@
 
 // TODO: Changing counts with CL?
 
+// Define builtin relation keywords
+Keyword SUCCESSOR;
+
+// Add in the builtin keywords
+void Query::Init() {
+  SUCCESSOR = AddBuiltinRelation("successor");
+}
+
 // Parents is a count of things that need you to exist
 void Query::L1_AddParent() { 
   CL.ChangeValue(&parent_count_, parent_count_+1);
@@ -73,6 +81,95 @@ void Query::Verify() const {
   }
 }
 
+// Returns whether or not a simplification is possible using this tuple
+bool Query::FindBuiltinCondition(int position,
+				 int64 * num_substitutions, 
+				 vector<OMap> * substitutions) const {
+
+  // Prepare the result
+  CHECK(num_substitutions);
+  if (substitutions) substitutions->clear();
+
+  // Make sure it's a builtin relation
+  Tuple tuple = pattern_[position];
+  Object relation = tuple[0];
+  if (!IsBuiltinRelation(relation)) return false;
+
+  // SUCCESSOR e.g. (successor 3 4)
+  if (relation == SUCCESSOR) {
+    // Sanity check
+    if (tuple.size() != 3) {
+      *num_substitutions = 0;
+      return true;
+    }
+    // Type check
+    int num_vars = 0;
+    int num_ints = 0;
+    for (int c=1; c<tuple.size(); c++) {
+      switch (tuple[c].GetType()) {
+      case Object::VARIABLE: num_vars++; break;
+      case Object::INTEGER: num_ints++; break;
+      default: *num_substitutions = 0; return true; break;
+      }
+    }
+    // We could maybe detect ranges or other things here but not now
+    if (num_vars == 2) return false;
+    if (num_vars == 0) CHECK(false); // this should have been simplified
+
+    // There's one substitution
+    *num_substitutions = 1;
+    if (!substitutions) return true;
+
+    // One substitution
+    Map one_sub;
+    if (tuple[1].GetType() == Object::VARIABLE) {
+      one_sub[tuple[1]] = Integer::Make(Integer(tuple[2]).Data() - 1);
+    } else {
+      one_sub[tuple[2]] = Integer::Make(Integer(tuple[1]).Data() + 1);
+    }
+    substitutions->push_back(OMap::Make(one_sub));
+    return true;
+  }
+  return false;
+}
+
+// Returning NULL here means it's unsatisfiable
+pair<OPattern, SamplingInfo> 
+Query::SimplifyBuiltins(OPattern p, SamplingInfo sampling) {
+  const Pattern& pp = p.Data();
+  Pattern result;
+  int sampling_shift = 0;
+  for (int position = 0; position<pp.size(); position++) {
+    const OTuple & tuple = pp[position];
+    Object relation = tuple.Data()[0];
+    if (IsConstantTuple(tuple) && IsBuiltinRelation(relation)) {
+      if (EvaluateBuiltin(tuple)) {
+	// You can't sample builtins
+	CHECK(position != sampling.position_);
+	if (position < sampling.position_)
+	  sampling_shift++;
+	continue;
+      }
+      return make_pair<OPattern(), sampling>;
+    }
+    result.push_back(*run);
+  }
+  SamplingInfo sampling_result = sampling;
+  sampling_result.position_ -= sampling_shift;
+  return make_pair(OPattern::Make(result), sampling_result);
+}
+
+bool Query::EvaluateBuiltin(OTuple t) {
+  Object relation = t[0];
+  if (relation == SUCCESSOR) {
+    if (t.size() != 3) return false;
+    if (t[1].GetType() != Object::INTEGER) return false;
+    if (t[2].GetType() != Object::INTEGER) return false;
+    return (Integer(t[1]).Data() + 1 == Integer(t[2]).Data());
+  }
+  return false;
+}
+
 void Query::GetSubstitutions(vector<Map> * substitutions,
 			     vector<Time> *times) const {
   return search_->GetSubstitutions(substitutions, times);
@@ -112,14 +209,16 @@ void Query::L1_SendCurrentAsUpdates(QuerySubscription *sub){
 
 
 bool Query::L1_Search(int64 *max_work_now){
+
   CHECK(search_ == NULL);
   if (pattern_.size() == 0) {
     new NoTuplesSearch(this);
     return search_->L1_Search(max_work_now);
   }
+
   if (pattern_.size() == 1) {
      const Tuple& t = pattern_[0].Data();
-     if (!HasDuplicateVariables(t)) {
+     if (!IsBuiltinRelationTuple(t) && !HasDuplicateVariables(t)) {
        new OneTupleSearch(this);
        return search_->L1_Search(max_work_now);
      }
@@ -129,14 +228,27 @@ bool Query::L1_Search(int64 *max_work_now){
   vector<uint64> num_matches;
   for (uint i=0; i<pattern_.size(); i++)  {
     const Tuple& t = pattern_[i].Data();
-    num_matches.push_back(blackboard_->GetNumWildcardMatches
-			  (OTuple::Make(VariablesToWildcards(t))));
+    if (IsBuiltinRelationTuple(t)) {
+      int64 num_subs = 0;
+      if (FindBuiltinCondition(i, &num_subs, NULL))
+	num_matches.push_back(num_subs);
+      else num_matches.push_back(MAXUINT64);
+    } else {
+      num_matches.push_back(blackboard_->GetNumWildcardMatches
+			    (OTuple::Make(VariablesToWildcards(t))));
+    }
+   
   }
   int best_tuple 
     = min_element(num_matches.begin(), num_matches.end())-num_matches.begin();
+  uint64 least_matches = num_matches[best_tuple];
+  
+  // Best you can do is a builtin that can't simplify
+  if (least_matches == MAXUINT64) 
+    return false;
+
 #define NO_PARTITION
 #ifndef NO_PARTITION
-  uint64 least_matches = num_matches[best_tuple];
   int num_components = GetConnectedComponents(pattern_, NULL);
   if ( (num_components > 1) && (least_matches > 0) ) {
     // Partition node TODO
@@ -145,6 +257,8 @@ bool Query::L1_Search(int64 *max_work_now){
     return false;
   }
 #endif
+
+  TODO make either a condition search or a split search
 
   // Condition node
   new ConditionSearch(this, best_tuple);
@@ -330,7 +444,6 @@ void PartitionSearch::Update(const QueryUpdate &update,
   query_->blackboard_->L1_AddSearchToFlush(this);
 }
 void PartitionSearch::L1_FlushUpdates() {
-  // WORKING TODO
 }
 void PartitionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
   for (uint i=0; i<children_.size(); i++) {
@@ -648,6 +761,242 @@ void ConditionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
   }
   wt_subscription_->L1_ChangeNeeds(new_needs);
 }
+
+GivenSearch::GivenSearch(Query * query, const vector<Map>& subs) :
+  Search(query), subs_(subs) {
+}
+
+bool GivenSearch::L1_Search(int64 * max_work_now) {
+
+  MOREWORK(subs_.size());
+  
+  count_ = 0;
+  forall(run_maps, subs_) {
+
+    OMap sub = *run_maps;
+    Pattern sub_pattern = Substitute(sub.Data(), query_->pattern_);
+    pair<OPattern, SamplingInfo> simpler = 
+      Query::SimplifyBuiltins
+      (OPattern::Make(sub_pattern), query_->sampling_);    
+
+    // Test whether particular substitution is unsatisfiable
+    if (simpler.first == NULL) continue;
+
+    Query * q = query_->blackboard_->
+      L1_GetExecuteQuery(simpler.first, 
+			 simpler.second, 
+			 max_work_now);
+    if (!q) return false;
+    q->L1_AddParent();
+    GivenQSub * new_qsub = NULL;
+    if (query_->needs_) {
+      new_qsub = new GivenQSub(q, query_->needs_, this, sub);
+    }
+
+    CL.InsertIntoMap(&children_, sub, make_pair(q, new_qsub));
+    CL.ChangeValue(&count_, count_ + q->GetCount());
+  }
+
+  return true;
+}
+
+void GivenSearch::GetSubstitutions(vector<Map> * substitutions,
+				   vector<Time> * times) const {
+  // Clear the results
+  substitutions->clear();
+  if (times) times->clear();
+
+  forall(run, children_) {
+    Map sub = run->first.Data();
+    Query * child_query = run->second.first;
+    vector<Map> child_subs;
+    vector<Time> child_times;
+    child_query->GetSubstitutions(&child_subs, times?(&child_times):NULL);
+    for (uint i=0; i<child_subs.size(); i++) {
+      Add(&(child_subs[i]), sub);
+      substitutions->push_back(child_subs[i]);
+      if (times) times->push_back(child_times[i]);
+    }
+  }
+}
+
+void GivenSearch::L1_EraseSubclass() {
+  forall(run, children_) run->second.first->L1_RemoveParent();
+}
+
+void GivenSearch::Update
+(const QueryUpdate &update, 
+ const GivenQSub *subscription,
+ OMap m) {
+  CHECK(!(queued_query_updates_ % m));
+  CL.InsertIntoMap(&queued_query_updates_, m, update);
+  query_->blackboard_->L1_AddSearchToFlush(this);
+}
+
+void GivenSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
+  forall(run, children_) {
+    GivenQSub * & sub_ref = run->second.second;
+    if (sub_ref == NULL) {
+      CHECK(query_->needs_ == 0);  
+      CL.ChangeMapValue
+	(&children_, run->first, 
+	 make_pair(run->second.first, 
+		   new GivenQSub(run->second.first, 
+				     new_needs, this, run->first)));
+      continue;
+    }
+    if (new_needs == 0) {
+      sub_ref->L1_Erase();
+      CL.ChangeMapValue
+	(&children_, run->first, 
+	 make_pair(run->second.first, (GivenQSub*)NULL));
+      continue;
+    }
+
+    sub_ref->L1_ChangeNeeds(new_needs);
+  }
+}
+
+// Not Done Yet
+void GivenSearch::L1_FlushUpdates() {
+
+  // Three different outputs correspond to not needing which or time,
+  // needing which only, or needing both
+  QueryUpdate out_update, out_update_with_subs, out_update_with_times;
+
+  int64 count_delta = 0;
+  bool need_subs = query_->needs_ & UPDATE_WHICH;
+  bool need_times = query_->needs_ & UPDATE_TIME;
+  
+  // first run over all query updates.
+  forall(run_q, queued_query_updates_) {
+    query_->blackboard_->flushed_query_update_.insert(query_);
+    const QueryUpdate & update = run_q->second;
+    count_delta += update.count_delta_;
+    if (!need_subs) continue;
+    Map additional_sub;
+    CHECK(ComputeSubstitution(GetVariableTuple().Data(),
+			      run_q->first.Data(), &additional_sub));
+    forall(run_c, update.changes_) {
+      const SingleQueryUpdate & single = *run_c;
+      SingleQueryUpdate out_single = single;
+      out_single.data_ = OMap::Make(Union(single.data_.Data(), additional_sub));
+      out_update_with_times.changes_.push_back(out_single);
+      if (out_single.action_ != UPDATE_CHANGE_TIME)
+	out_update_with_subs.changes_.push_back(out_single);
+    }
+  }
+  // Ok now we have processed the updates, delete them
+  CL.ChangeValue(&queued_query_updates_, map<OTuple, QueryUpdate>());
+
+  if (queued_wt_update_) { 
+    query_->blackboard_->flushed_wt_update_.insert(query_);
+    OTuple tuple = queued_wt_update_->data_;
+    Map additional_sub;
+    if (!ComputeSubstitution(GetVariableTuple().Data(),
+			     tuple.Data(), &additional_sub)) 
+      goto step2;
+    
+    // It's a creation
+    if (queued_wt_update_->action_ == UPDATE_CREATE) {
+      // add a tuple
+      Query * child_query;
+      L1_MaybeAddChild(tuple, NULL, &child_query);
+      if (child_query) {
+	count_delta += child_query->GetCount();
+	if (need_subs) {
+	  vector<Map> subs;
+	  vector<Time> times;
+	  child_query->GetSubstitutions(&subs, need_times?(&times):NULL);
+	  if (need_times) {
+	    for (uint i=0; i<times.size(); i++) 
+	      times[i] = max(times[i], queued_wt_update_->new_time_);
+	  }
+	  for (uint i=0; i<subs.size(); i++) {
+	    SingleQueryUpdate s 
+	      = SingleQueryUpdate::Create(OMap::Make(Union(subs[i], additional_sub)), 
+					  need_times?times[i]:Time());
+	    out_update_with_subs.changes_.push_back(s);
+	    if (need_times) out_update_with_times.changes_.push_back(s);
+	  }
+	}
+      }
+      goto step2;
+    }
+
+    // It's a deletion or a time change.
+    if (children_ % tuple) { // ignore it if it doesn't match
+      Query * child_query = children_[tuple].first;
+      GivenQSub *subscription = children_[tuple].second;
+      if (queued_wt_update_->action_ == UPDATE_DESTROY) { // it's a tuple deletion
+	count_delta -= child_query->GetCount();
+	if (need_subs) {
+	  vector<Map> subs;
+	  vector<Time> times;
+	  child_query->GetSubstitutions(&subs, need_times?(&times):NULL);
+	  if (need_times) {
+	    for (uint i=0; i<times.size(); i++) times[i] 
+	      = max(times[i], queued_wt_update_->old_time_);
+	  }
+	  for (uint i=0; i<subs.size(); i++) {
+	    SingleQueryUpdate s 
+	      = SingleQueryUpdate::Destroy(OMap::Make(Union(subs[i], additional_sub)),
+					   need_times?times[i]:Time());
+	    out_update_with_subs.changes_.push_back(s);
+	    if (need_times) out_update_with_times.changes_.push_back(s);
+	  }
+	}
+	child_query->L1_RemoveParent();
+	subscription->L1_Erase();	
+	CL.RemoveFromMap(&children_, tuple);
+	goto step2;
+      } 
+	
+      // change time on a tuple
+      CHECK(queued_wt_update_->action_ == UPDATE_CHANGE_TIME);
+      if (!need_times) goto step2;
+      vector<Map> subs;
+      vector<Time> times;
+      child_query->GetSubstitutions(&subs, &times);
+      for (uint i=0; i<subs.size(); i++) {
+	Time old_time = max(times[i], queued_wt_update_->old_time_);
+	Time new_time = max(times[i], queued_wt_update_->new_time_);
+	if (old_time != new_time) {
+	  out_update_with_times.changes_.push_back
+	    (SingleQueryUpdate::ChangeTime
+	     (OMap::Make(Union(subs[i], additional_sub)),
+	      old_time, new_time));
+	}
+      }
+    }
+  }
+  
+ step2:
+  // Done with the wt update, delete it
+  SingleWTUpdate * nullptr = NULL;
+  CL.ChangeValue(&queued_wt_update_, nullptr);
+
+  out_update.count_delta_ = 
+    out_update_with_subs.count_delta_ = 
+    out_update_with_times.count_delta_ = count_delta;
+
+  CL.ChangeValue(&count_, count_ + count_delta);
+
+  forall(run_needs, query_->subscriptions_) {
+    // could possibly optimize this by not building a whole new
+    // update for every set of needs.
+    UpdateNeeds needs = run_needs->first;
+    QueryUpdate * out = &out_update;
+    if (needs && UPDATE_WHICH) out = &out_update_with_subs;
+    if (needs && UPDATE_TIME) out = &out_update_with_times;
+    forall(run, run_needs->second) {
+      (*run)->Update(*out);
+    }
+  }
+
+}
+
+
 
 TimedQuery::TimedQuery(Blackboard *blackboard, const OPattern &pattern,
 		       OTime time_limit) {

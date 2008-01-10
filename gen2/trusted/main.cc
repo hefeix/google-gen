@@ -63,6 +63,7 @@ int main() {
   rand();
   Object::Init();
   ChooserSet::Init();
+  Query::Init();
   Object::DoneAddingKeywords();
 
   N.SetAutomaticallyNameAll(true);

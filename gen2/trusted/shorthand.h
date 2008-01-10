@@ -58,6 +58,9 @@ typedef unsigned int uint;
 typedef unsigned char uint8;
 typedef signed char int8;
 
+#define MAXUINT64 0xffffffffffffffffULL
+#define MAXUINT32 0xffffffffUL
+
 /*
 The interface to sets and maps sucks rocks. Let's fix it.
 
