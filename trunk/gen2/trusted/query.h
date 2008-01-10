@@ -46,6 +46,9 @@ class SamplingInfo;
 class Model;
 class Changelist;
 
+// Declare builtin keyword relations
+extern Keyword SUCCESSOR;
+
 /* 
    The Search and the Query are coupled 1 to 1.  
    Search is a virtual class.  The subclasses represent different search
@@ -76,29 +79,16 @@ typedef Subscription<QueryUpdate, Query> QuerySubscription;
 typedef LoggingSubscription<QueryUpdate, Query> LoggingQuerySubscription; 
 
 struct Query {
+
+  // For adding builtin relations as keywords
+  static void Init();
+
   Query(Blackboard *blackboard, const Pattern &pattern, SamplingInfo sampling) 
     :pattern_(pattern), sampling_(sampling), blackboard_(blackboard), needs_(0),
      parent_count_(0), search_(NULL) {
     CL.Creating(this);
     blackboard_->L1_AddNonupdatedQuery(this);
   }
-  // defining data:
-  Pattern pattern_;
-  SamplingInfo sampling_;
-  Blackboard *blackboard_;
-  // What kind of updates does this search need to get?  
-  // Equal to the union of the needs of the subscriptions.
-  UpdateNeeds needs_;  
-
-  // Parents are things that need you to exist, they may be tracked
-  // by you, like subscriptions, or untracked, for example a piece of
-  // code that wants to examine your internals
-  int parent_count_;
-
-  // The external subscriptions to this query
-  // Each subscription is included only once, under its complete needs.
-  map<UpdateNeeds, set<QuerySubscription *> > subscriptions_;
-  Search *search_;
 
   // Try to complete the search, or fail and set search_ to NULL.
   // We do this by rolling back on failure.
@@ -125,6 +115,53 @@ struct Query {
   } 
   void Verify() const;
 
+  bool FindBuiltinCondition
+  (int position,
+   int64 * num_substitutions, 
+   vector<OMap> * substitutions) const; 
+
+  static Keyword AddBuiltinRelation(string s) {
+    Keyword k = Object::AddKeyword(s);
+    builtin_relations_.insert(k);
+    return k;
+  }
+  static bool IsBuiltinRelation(Object relation) {
+    if (relation.GetType() != Object::KEYWORD) return false;
+    return builtin_relations_ % Keyword(relation);
+  }
+  static bool IsBuiltinRelationTuple(const Tuple& t) {
+    if (t.size() == 0) return false;
+    return IsBuiltinRelation(t[0]);
+  }
+
+  // NULL here means the pattern is simplifiable to falseness
+  static pair<OPattern, SamplingInfo> 
+    SimplifyBuiltins(OPattern p, SamplingInfo sampling);
+
+  // Helper function for simplification
+  static bool EvaluateBuiltin(OTuple t);
+
+  // defining data:
+  Pattern pattern_;
+  SamplingInfo sampling_;
+  Blackboard *blackboard_;
+  // What kind of updates does this search need to get?  
+  // Equal to the union of the needs of the subscriptions.
+  UpdateNeeds needs_;  
+
+  // Parents are things that need you to exist, they may be tracked
+  // by you, like subscriptions, or untracked, for example a piece of
+  // code that wants to examine your internals
+  int parent_count_;
+
+  // The external subscriptions to this query
+  // Each subscription is included only once, under its complete needs.
+  map<UpdateNeeds, set<QuerySubscription *> > subscriptions_;
+  Search *search_;
+
+  // This part relates to builtin relations
+  set<Keyword> builtin_relations_;
+
 };
 
 class ConditionSearch;
@@ -132,6 +169,7 @@ class PartitionSearch;
 class OneTupleSearch;
 typedef UpdateSubscriptionWithData<QueryUpdate, Query, ConditionSearch, OTuple> ConditionQSub;
 typedef UpdateSubscriptionWithData<QueryUpdate, Query, PartitionSearch, int> PartitionQSub;
+typedef UpdateSubscriptionWithData<QueryUpdate, Query, GivenSearch, OMap> GivenQSub;
 
 typedef UpdateSubscription<SingleWTUpdate, IndexRow, ConditionSearch> ConditionWTSub;
 typedef UpdateSubscription<SingleWTUpdate, IndexRow, OneTupleSearch> OneTupleWTSub;
@@ -226,6 +264,29 @@ struct ConditionSearch : public Search {
 
   SingleWTUpdate * queued_wt_update_;
   map<OTuple, QueryUpdate> queued_query_updates_;
+};
+
+// A given search is given a set of maps to split on, it doesn't need
+// to subscribe to anything nor question why these things are given
+// It's usually used to split on values of a builtin relation or something
+// known because of a builtin relation
+
+struct GivenSearch : public Search {
+  GivenSearch(Query *query, const vector<Map>& subs);
+  bool L1_Search(int64 * max_work_now);
+
+  void GetSubstitutions(vector<Map> * substitutions, 
+			vector<Time> *times) const;
+
+  void L1_EraseSubclass();
+  void Update(const QueryUpdate &update, const ConditionQSub *subscription,
+	      OTuple t);
+  void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
+  void L1_FlushUpdates();
+
+  map<OMap, pair<Query*, GivenQSub *> > children_;
+  map<OMap, QueryUpdate> queued_query_updates_;
+  vector<OMap> subs_;
 };
 
 struct PartitionSearch : public Search {
