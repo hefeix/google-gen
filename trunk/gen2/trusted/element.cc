@@ -486,8 +486,8 @@ OTime DynamicOn::ComputeChildTime(const Link * link,
 				  const Element * child) const{
   return OTime::Make
     (max(time_.Data(),
-	 BB.FindLastTime(Substitute(child->GetBinding().Data(), 
-				    GetPattern().Data())).Data()
+	 Query::FindQueryTime(BB, Substitute(child->GetBinding().Data(), 
+					     GetPattern().Data())).Data()
 	 + BitSeq::Min() ) );
 }
 /*

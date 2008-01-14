@@ -5,7 +5,7 @@
      post (IS_COL 0)
      post (IS_TIME 0)
   }
-  on pattern((IS_ROW x)) let y sum(x,1)
+  on pattern((IS_ROW x)(successor x y))
      if (equal(y, 5) 0 {
           post (IS_ROW y)
           post (ROW_ADJACENT x y)
@@ -13,7 +13,7 @@
        }
      )       
     
-  on pattern((IS_COL x)) let y sum(x,1)
+  on pattern((IS_COL x) (successor x y) )
      if (equal(y, 5) 0 {
           post (IS_COL y)
           post (COL_ADJACENT x y)
