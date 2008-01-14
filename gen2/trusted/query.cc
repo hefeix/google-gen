@@ -20,6 +20,8 @@
 
 // TODO: Changing counts with CL?
 
+set<Keyword> Query::builtin_relations_;
+
 // Define builtin relation keywords
 Keyword SUCCESSOR;
 
@@ -68,8 +70,8 @@ void Query::Verify() const {
   set<OMap> subs_set;
   for (uint snum=0; snum<search_->count_; snum++) {    
     Time latest;
-    Pattern p_sub = Substitute(subs[snum], pattern_);
-    for (uint tnum=0; tnum<pattern_.size(); tnum++) {
+    Pattern p_sub = Substitute(subs[snum], pattern_.Data());
+    for (uint tnum=0; tnum<pattern_.Data().size(); tnum++) {
       TupleInfo * ti = blackboard_->GetTupleInfo(p_sub[tnum]);
       CHECK(ti);
       latest = max(latest, ti->FirstTime());
@@ -91,9 +93,9 @@ bool Query::FindBuiltinCondition(int position,
   if (substitutions) substitutions->clear();
 
   // Make sure it's a builtin relation
-  Tuple tuple = pattern_[position];
+  Tuple tuple = pattern_.Data()[position].Data();
   Object relation = tuple[0];
-  if (!IsBuiltinRelation(relation)) return false;
+  if (!IsBuiltinRelationKeyword(relation)) return false;
 
   // SUCCESSOR e.g. (successor 3 4)
   if (relation == SUCCESSOR) {
@@ -105,7 +107,7 @@ bool Query::FindBuiltinCondition(int position,
     // Type check
     int num_vars = 0;
     int num_ints = 0;
-    for (int c=1; c<tuple.size(); c++) {
+    for (uint c=1; c<tuple.size(); c++) {
       switch (tuple[c].GetType()) {
       case Object::VARIABLE: num_vars++; break;
       case Object::INTEGER: num_ints++; break;
@@ -136,27 +138,36 @@ bool Query::FindBuiltinCondition(int position,
 // Returning NULL here means it's unsatisfiable
 pair<OPattern, SamplingInfo> 
 Query::SimplifyBuiltins(OPattern p, SamplingInfo sampling) {
+  if (p == NULL) return make_pair(p, sampling);
   const Pattern& pp = p.Data();
   Pattern result;
   int sampling_shift = 0;
-  for (int position = 0; position<pp.size(); position++) {
+  for (uint position = 0; position<pp.size(); position++) {
     const OTuple & tuple = pp[position];
     Object relation = tuple.Data()[0];
-    if (IsConstantTuple(tuple) && IsBuiltinRelation(relation)) {
+    if (IsConstantTuple(tuple.Data()) && IsBuiltinRelationKeyword(relation)) {
       if (EvaluateBuiltin(tuple)) {
 	// You can't sample builtins
-	CHECK(position != sampling.position_);
-	if (position < sampling.position_)
+	CHECK((int)position != sampling.position_);
+	if ((int)position < sampling.position_)
 	  sampling_shift++;
 	continue;
       }
-      return make_pair<OPattern(), sampling>;
+      return make_pair(OPattern(), sampling);
     }
-    result.push_back(*run);
+    result.push_back(tuple);
   }
   SamplingInfo sampling_result = sampling;
   sampling_result.position_ -= sampling_shift;
   return make_pair(OPattern::Make(result), sampling_result);
+}
+
+OTime Query::FindQueryTime(const Blackboard &bb, const Pattern &p) {
+  OTime last = CREATION;
+  for (uint i=0; i<p.size(); i++) 
+    if (!IsBuiltinRelationTuple(p[i].Data())) 
+      last = DataMax(last, bb.FindTupleTime(p[i]));
+  return last;
 }
 
 bool Query::EvaluateBuiltin(OTuple t) {
@@ -211,13 +222,19 @@ void Query::L1_SendCurrentAsUpdates(QuerySubscription *sub){
 bool Query::L1_Search(int64 *max_work_now){
 
   CHECK(search_ == NULL);
-  if (pattern_.size() == 0) {
+
+  if (pattern_ == NULL) {
+    new FalseSearch(this);
+    return search_->L1_Search(max_work_now);
+  }
+
+  if (pattern_.Data().size() == 0) {
     new NoTuplesSearch(this);
     return search_->L1_Search(max_work_now);
   }
 
-  if (pattern_.size() == 1) {
-     const Tuple& t = pattern_[0].Data();
+  if (pattern_.Data().size() == 1) {
+    const Tuple& t = pattern_.Data()[0].Data();
      if (!IsBuiltinRelationTuple(t) && !HasDuplicateVariables(t)) {
        new OneTupleSearch(this);
        return search_->L1_Search(max_work_now);
@@ -226,8 +243,8 @@ bool Query::L1_Search(int64 *max_work_now){
 
   // This is now a condition node or a partition node
   vector<uint64> num_matches;
-  for (uint i=0; i<pattern_.size(); i++)  {
-    const Tuple& t = pattern_[i].Data();
+  for (uint i=0; i<pattern_.Data().size(); i++)  {
+    const Tuple& t = pattern_.Data()[i].Data();
     if (IsBuiltinRelationTuple(t)) {
       int64 num_subs = 0;
       if (FindBuiltinCondition(i, &num_subs, NULL))
@@ -249,7 +266,7 @@ bool Query::L1_Search(int64 *max_work_now){
 
 #define NO_PARTITION
 #ifndef NO_PARTITION
-  int num_components = GetConnectedComponents(pattern_, NULL);
+  int num_components = GetConnectedComponents(pattern_.Data(), NULL);
   if ( (num_components > 1) && (least_matches > 0) ) {
     // Partition node TODO
     new PartitionSearch(this);
@@ -258,15 +275,26 @@ bool Query::L1_Search(int64 *max_work_now){
   }
 #endif
 
-  TODO make either a condition search or a split search
-
-  // Condition node
-  new ConditionSearch(this, best_tuple);
+  if (IsBuiltinRelationTuple(pattern_.Data()[best_tuple].Data())) {
+    int64 num_subs;
+    vector<OMap> subs;
+    MOREWORK(least_matches);
+    CHECK(FindBuiltinCondition(best_tuple, &num_subs, &subs));
+    new BuiltinSearch(this, subs);
+  } else {
+    // Condition node
+    new ConditionSearch(this, best_tuple);
+  }
   return search_->L1_Search(max_work_now);
 }
  
 NoTuplesSearch::NoTuplesSearch(Query *query) 
   : Search(query) {
+  CHECK(query->pattern_.Data().size() == 0);
+}
+FalseSearch::FalseSearch(Query *query) 
+  : Search(query) {
+  CHECK(query->pattern_ == NULL);
 }
 
 OneTupleSearch::OneTupleSearch(Query *query) 
@@ -293,7 +321,7 @@ void OneTupleSearch::GetSubstitutions(vector<Map> * substitutions,
   substitutions->clear(); 
   if (times) times->clear();
   Blackboard & bb = *query_->blackboard_;
-  const Tuple &t = query_->pattern_[0].Data();
+  const Tuple &t = query_->pattern_.Data()[0].Data();
   IndexRow * ir = bb.GetIndexRow(GetWildcardTuple());
   if (ir == NULL) {
     return;
@@ -389,10 +417,10 @@ void PartitionSearch::Verify() const {
 }
 
 bool PartitionSearch::L1_Search(int64 * max_work_now) {
-  int num_parts = GetConnectedComponents(query_->pattern_, &partition_);
+  int num_parts = GetConnectedComponents(query_->pattern_.Data(), &partition_);
   vector<Pattern> parts(num_parts);
-  for(uint i=0; i<query_->pattern_.size(); i++) {
-    parts[partition_[i]].push_back(query_->pattern_[i]);
+  for(uint i=0; i<query_->pattern_.Data().size(); i++) {
+    parts[partition_[i]].push_back(query_->pattern_.Data()[i]);
   }
   count_ = 1;
   for (int i=0; i<num_parts; i++) {
@@ -486,7 +514,8 @@ bool ConditionSearch::L1_MaybeAddChild(OTuple specification,
   SamplingInfo sub_sampling
     = query_->sampling_.RemovePosition(condition_tuple_);
   Pattern sub_pattern 
-    = Substitute(sub, RemoveFromVector(query_->pattern_, condition_tuple_));    
+    = Substitute(sub, RemoveFromVector(query_->pattern_.Data(), 
+				       condition_tuple_));    
   Query * q = query_->blackboard_->
     L1_GetExecuteQuery(OPattern::Make(sub_pattern), 
 		       sub_sampling, 
@@ -539,7 +568,8 @@ void ConditionSearch::GetSubstitutions(vector<Map> * substitutions,
 				       vector<Time> * times) const {
   substitutions->clear();
   if (times) times->clear();
-  const Tuple& condition_tuple = query_->pattern_[condition_tuple_].Data();  
+  const Tuple& condition_tuple 
+    = query_->pattern_.Data()[condition_tuple_].Data();  
   forall(run, children_) {
     OTuple specific_tuple = run->first;
     Time tuple_time;
@@ -762,19 +792,18 @@ void ConditionSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
   wt_subscription_->L1_ChangeNeeds(new_needs);
 }
 
-GivenSearch::GivenSearch(Query * query, const vector<Map>& subs) :
+BuiltinSearch::BuiltinSearch(Query * query, const vector<OMap>& subs) :
   Search(query), subs_(subs) {
 }
 
-bool GivenSearch::L1_Search(int64 * max_work_now) {
+bool BuiltinSearch::L1_Search(int64 * max_work_now) {
 
   MOREWORK(subs_.size());
   
   count_ = 0;
   forall(run_maps, subs_) {
-
     OMap sub = *run_maps;
-    Pattern sub_pattern = Substitute(sub.Data(), query_->pattern_);
+    Pattern sub_pattern = Substitute(sub.Data(), query_->pattern_.Data());
     pair<OPattern, SamplingInfo> simpler = 
       Query::SimplifyBuiltins
       (OPattern::Make(sub_pattern), query_->sampling_);    
@@ -788,9 +817,9 @@ bool GivenSearch::L1_Search(int64 * max_work_now) {
 			 max_work_now);
     if (!q) return false;
     q->L1_AddParent();
-    GivenQSub * new_qsub = NULL;
+    BuiltinQSub * new_qsub = NULL;
     if (query_->needs_) {
-      new_qsub = new GivenQSub(q, query_->needs_, this, sub);
+      new_qsub = new BuiltinQSub(q, query_->needs_, this, sub);
     }
 
     CL.InsertIntoMap(&children_, sub, make_pair(q, new_qsub));
@@ -800,7 +829,7 @@ bool GivenSearch::L1_Search(int64 * max_work_now) {
   return true;
 }
 
-void GivenSearch::GetSubstitutions(vector<Map> * substitutions,
+void BuiltinSearch::GetSubstitutions(vector<Map> * substitutions,
 				   vector<Time> * times) const {
   // Clear the results
   substitutions->clear();
@@ -820,28 +849,28 @@ void GivenSearch::GetSubstitutions(vector<Map> * substitutions,
   }
 }
 
-void GivenSearch::L1_EraseSubclass() {
+void BuiltinSearch::L1_EraseSubclass() {
   forall(run, children_) run->second.first->L1_RemoveParent();
 }
 
-void GivenSearch::Update
+void BuiltinSearch::Update
 (const QueryUpdate &update, 
- const GivenQSub *subscription,
+ const BuiltinQSub *subscription,
  OMap m) {
   CHECK(!(queued_query_updates_ % m));
   CL.InsertIntoMap(&queued_query_updates_, m, update);
   query_->blackboard_->L1_AddSearchToFlush(this);
 }
 
-void GivenSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
+void BuiltinSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
   forall(run, children_) {
-    GivenQSub * & sub_ref = run->second.second;
+    BuiltinQSub * & sub_ref = run->second.second;
     if (sub_ref == NULL) {
       CHECK(query_->needs_ == 0);  
       CL.ChangeMapValue
 	(&children_, run->first, 
 	 make_pair(run->second.first, 
-		   new GivenQSub(run->second.first, 
+		   new BuiltinQSub(run->second.first, 
 				     new_needs, this, run->first)));
       continue;
     }
@@ -849,7 +878,7 @@ void GivenSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
       sub_ref->L1_Erase();
       CL.ChangeMapValue
 	(&children_, run->first, 
-	 make_pair(run->second.first, (GivenQSub*)NULL));
+	 make_pair(run->second.first, (BuiltinQSub*)NULL));
       continue;
     }
 
@@ -858,7 +887,7 @@ void GivenSearch::L1_ChangeUpdateNeeds(UpdateNeeds new_needs){
 }
 
 // Not Done Yet
-void GivenSearch::L1_FlushUpdates() {
+void BuiltinSearch::L1_FlushUpdates() {
 
   // Three different outputs correspond to not needing which or time,
   // needing which only, or needing both
@@ -866,7 +895,7 @@ void GivenSearch::L1_FlushUpdates() {
 
   int64 count_delta = 0;
   bool need_subs = query_->needs_ & UPDATE_WHICH;
-  bool need_times = query_->needs_ & UPDATE_TIME;
+  // bool need_times = query_->needs_ & UPDATE_TIME;
   
   // first run over all query updates.
   forall(run_q, queued_query_updates_) {
@@ -906,7 +935,6 @@ void GivenSearch::L1_FlushUpdates() {
       (*run)->Update(*out);
     }
   }
-
 }
 
 TimedQuery::TimedQuery(Blackboard *blackboard, const OPattern &pattern,

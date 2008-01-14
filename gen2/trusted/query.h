@@ -83,9 +83,12 @@ struct Query {
   // For adding builtin relations as keywords
   static void Init();
 
-  Query(Blackboard *blackboard, const Pattern &pattern, SamplingInfo sampling) 
-    :pattern_(pattern), sampling_(sampling), blackboard_(blackboard), needs_(0),
+  Query(Blackboard *blackboard, OPattern pattern, SamplingInfo sampling) 
+    :blackboard_(blackboard), needs_(0),
      parent_count_(0), search_(NULL) {
+    pair<OPattern, SamplingInfo> simple = SimplifyBuiltins(pattern, sampling);
+    pattern_ = simple.first;
+    sampling_ = simple.second;
     CL.Creating(this);
     blackboard_->L1_AddNonupdatedQuery(this);
   }
@@ -108,7 +111,7 @@ struct Query {
   void L1_RecomputeUpdateNeeds();
   void L1_SendCurrentAsUpdates(QuerySubscription *sub);
   string GetDescription() const { 
-    return "Query" + OPattern::Make(pattern_).ToString();
+    return "Query" + pattern_.ToString();
   }
   string ToString() const {
     return GetDescription();
@@ -125,13 +128,13 @@ struct Query {
     builtin_relations_.insert(k);
     return k;
   }
-  static bool IsBuiltinRelation(Object relation) {
+  static bool IsBuiltinRelationKeyword(Object relation) {
     if (relation.GetType() != Object::KEYWORD) return false;
     return builtin_relations_ % Keyword(relation);
   }
   static bool IsBuiltinRelationTuple(const Tuple& t) {
     if (t.size() == 0) return false;
-    return IsBuiltinRelation(t[0]);
+    return IsBuiltinRelationKeyword(t[0]);
   }
 
   // NULL here means the pattern is simplifiable to falseness
@@ -141,8 +144,10 @@ struct Query {
   // Helper function for simplification
   static bool EvaluateBuiltin(OTuple t);
 
+  static OTime FindQueryTime(const Blackboard &bb, const Pattern &p);
+
   // defining data:
-  Pattern pattern_;
+  OPattern pattern_;
   SamplingInfo sampling_;
   Blackboard *blackboard_;
   // What kind of updates does this search need to get?  
@@ -160,16 +165,17 @@ struct Query {
   Search *search_;
 
   // This part relates to builtin relations
-  set<Keyword> builtin_relations_;
-
+  static set<Keyword> builtin_relations_;
+  
 };
 
 class ConditionSearch;
 class PartitionSearch;
 class OneTupleSearch;
+class BuiltinSearch;
 typedef UpdateSubscriptionWithData<QueryUpdate, Query, ConditionSearch, OTuple> ConditionQSub;
 typedef UpdateSubscriptionWithData<QueryUpdate, Query, PartitionSearch, int> PartitionQSub;
-typedef UpdateSubscriptionWithData<QueryUpdate, Query, GivenSearch, OMap> GivenQSub;
+typedef UpdateSubscriptionWithData<QueryUpdate, Query, BuiltinSearch, OMap> BuiltinQSub;
 
 typedef UpdateSubscription<SingleWTUpdate, IndexRow, ConditionSearch> ConditionWTSub;
 typedef UpdateSubscription<SingleWTUpdate, IndexRow, OneTupleSearch> OneTupleWTSub;
@@ -214,6 +220,19 @@ struct NoTuplesSearch : public Search {
   }
 };
 
+struct FalseSearch : public Search {
+  FalseSearch(Query *query);
+  bool L1_Search(int64 *max_work_now) {
+    CL.ChangeValue(&count_, (uint64)0);
+    return true;
+  }
+  void GetSubstitutions(vector<Map> * substitutions, 
+			vector<Time> *times) const {
+    substitutions->clear();
+    if (times) times->clear();
+  }
+};
+
 struct OneTupleSearch : public Search {
   OneTupleSearch(Query *query);
   bool OneTupleSearch::L1_Search(int64 * max_work_now);
@@ -223,7 +242,7 @@ struct OneTupleSearch : public Search {
     return OTuple::Make(VariablesToWildcards(GetVariableTuple().Data()));
   }
   OTuple GetVariableTuple() const { 
-    return query_->pattern_[0];
+    return query_->pattern_.Data()[0];
   }
   // Receive an update.
   // should be caled L1_Update to keep to convention, but the name is
@@ -246,7 +265,7 @@ struct ConditionSearch : public Search {
     return OTuple::Make(VariablesToWildcards(GetVariableTuple().Data()));
   }
   OTuple GetVariableTuple() const { 
-    return query_->pattern_[condition_tuple_];
+    return query_->pattern_.Data()[condition_tuple_];
   }
   // Receive an update.
   // should be caled L1_Update to keep to convention, but the name is
@@ -271,20 +290,20 @@ struct ConditionSearch : public Search {
 // It's usually used to split on values of a builtin relation or something
 // known because of a builtin relation
 
-struct GivenSearch : public Search {
-  GivenSearch(Query *query, const vector<Map>& subs);
+struct BuiltinSearch : public Search {
+  BuiltinSearch(Query *query, const vector<OMap>& subs);
   bool L1_Search(int64 * max_work_now);
 
   void GetSubstitutions(vector<Map> * substitutions, 
 			vector<Time> *times) const;
 
   void L1_EraseSubclass();
-  void Update(const QueryUpdate &update, const ConditionQSub *subscription,
-	      OTuple t);
+  void Update(const QueryUpdate &update, const BuiltinQSub *subscription,
+	      OMap m);
   void L1_ChangeUpdateNeeds(UpdateNeeds new_needs);
   void L1_FlushUpdates();
 
-  map<OMap, pair<Query*, GivenQSub *> > children_;
+  map<OMap, pair<Query*, BuiltinQSub *> > children_;
   map<OMap, QueryUpdate> queued_query_updates_;
   vector<OMap> subs_;
 };

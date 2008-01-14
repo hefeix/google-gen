@@ -357,12 +357,15 @@ void Blackboard::L1_RemovePosting(Posting * p){
 
 Query * Blackboard::L1_GetExecuteQuery(OPattern p, SamplingInfo sampling, 
 				       int64 *max_work_now){
+  pair<OPattern, SamplingInfo> simple = Query::SimplifyBuiltins(p, sampling);
+  p = simple.first;
+  sampling = simple.second;
   if (!sampling.sampled_) {
     Query ** find = queries_ % p;
     if (find) return *find;
   }
   Checkpoint cp = CL.GetCheckpoint();
-  Query * q = new Query(this, p.Data(), sampling);
+  Query * q = new Query(this, p, sampling);
   if (!q->L1_Search(max_work_now)) {
     CL.Rollback(cp);
     return NULL;
@@ -371,7 +374,7 @@ Query * Blackboard::L1_GetExecuteQuery(OPattern p, SamplingInfo sampling,
   return q;
 }
 void Blackboard::L1_DeletingQuery(Query *q){
-  OPattern p = OPattern::Make(q->pattern_);
+  OPattern p = q->pattern_;
   Query ** stored_query = queries_ % p;
   if (stored_query && *stored_query == q) {
     CL.RemoveFromMap(&queries_, p);
@@ -572,12 +575,6 @@ OTime Blackboard::FindTupleTime(OTuple t) const{
   CHECK(ti);
   return OTime::Make(ti->FirstTime());
 }
-OTime Blackboard::FindLastTime(const Pattern & p) const {
-  OTime last = CREATION;
-  for (uint i=0; i<p.size(); i++) last = DataMax(last, FindTupleTime(p[i]));
-  return last;
-}
-
 
 void Blackboard::RandomTest() {
   CL.MakeChangesPermanent();

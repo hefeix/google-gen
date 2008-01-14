@@ -132,11 +132,11 @@ template<>
 OTime MissingOnMatchViolation::ComputeTime() const {
   return 
     DataMax(GetTypedOwner()->GetDynamicOnParent()->GetTime(), 	    
-	    BB.FindLastTime
-	    (Substitute
-	     (OMap(data_).Data(), 
-	      GetTypedOwner()->GetDynamicOnParent()
-	      ->GetStaticOn()->GetPattern().Data())));
+	    Query::FindQueryTime(BB,
+				 (Substitute
+				  (OMap(data_).Data(), 
+				   GetTypedOwner()->GetDynamicOnParent()
+				   ->GetStaticOn()->GetPattern().Data()))));
 }
 
 template<>
