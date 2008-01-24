@@ -1,11 +1,8 @@
 Now:
 
-Simplify queries on construction?
-Have a pattern that means false (perh. OPattern NULL).
-Make queries take an OPattern
-
 Allow queries in the links to fail. Have a violation for this. 
 
+If match matches one thing, return it even if it's not an integer.
 
 When the binding changes at a dynamic match, the MISSING_MATCH and EXTRA_MATCH violations become all wrong.  Fix this. 
 
