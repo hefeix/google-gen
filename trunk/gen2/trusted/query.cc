@@ -24,10 +24,12 @@ set<Keyword> Query::builtin_relations_;
 
 // Define builtin relation keywords
 Keyword SUCCESSOR;
+Keyword SUM_REL;
 
 // Add in the builtin keywords
 void Query::Init() {
   SUCCESSOR = AddBuiltinRelation("successor");
+  SUM_REL = AddBuiltinRelation("sum_rel");
 }
 
 // Parents is a count of things that need you to exist
@@ -132,6 +134,49 @@ bool Query::FindBuiltinCondition(int position,
     substitutions->push_back(OMap::Make(one_sub));
     return true;
   }
+
+
+  if (relation == SUM_REL) {
+    // Sanity check
+    if (tuple.size() != 4) {
+      *num_substitutions = 0;
+      return true;
+    }
+    // Type check
+    int num_vars = 0;
+    int num_ints = 0;
+    for (uint c=1; c<tuple.size(); c++) {
+      switch (tuple[c].GetType()) {
+      case Object::VARIABLE: num_vars++; break;
+      case Object::INTEGER: num_ints++; break;
+      default: *num_substitutions = 0; return true; break;
+      }
+    }
+    // We could maybe detect ranges or other things here but not now
+    if (num_vars >= 2) return false;
+    if (num_vars == 0) CHECK(false); // this should have been simplified
+
+    // There's one substitution
+    *num_substitutions = 1;
+    if (!substitutions) return true;
+
+    // One substitution
+    Map one_sub;
+    for (int pos = 1; pos<3; pos++) {
+      if (tuple[pos].GetType() == Object::VARIABLE) {
+	one_sub[tuple[pos]] = 
+	  Integer::Make(Integer(tuple[3]).Data() 
+			- Integer(tuple[3-pos]).Data());
+      }
+    }
+    if (tuple[3].GetType() == Object::VARIABLE) {
+	one_sub[tuple[3]] = 
+	  Integer::Make(Integer(tuple[1]).Data() 
+			+ Integer(tuple[2]).Data());
+    }
+    substitutions->push_back(OMap::Make(one_sub));
+    return true;
+  }
   return false;
 }
 
@@ -162,7 +207,7 @@ Query::SimplifyBuiltins(OPattern p, SamplingInfo sampling) {
   return make_pair(OPattern::Make(result), sampling_result);
 }
 
-OTime Query::FindQueryTime(const Blackboard &bb, const Pattern &p) {
+OTime Query::FindConjunctionTime(const Blackboard &bb, const Pattern &p) {
   OTime last = CREATION;
   for (uint i=0; i<p.size(); i++) 
     if (!IsBuiltinRelationTuple(p[i].Data())) 
@@ -177,6 +222,12 @@ bool Query::EvaluateBuiltin(OTuple t) {
     if (t[1].GetType() != Object::INTEGER) return false;
     if (t[2].GetType() != Object::INTEGER) return false;
     return (Integer(t[1]).Data() + 1 == Integer(t[2]).Data());
+  }
+  if (relation == SUM_REL) {
+    if (t.size() != 4) return false;
+    for (int i=1; i<4; i++) if (t[i].GetType() != Object::INTEGER) return false;
+    return (Integer(t[1]).Data() + Integer(t[2]).Data() 
+	    == Integer(t[3]).Data());
   }
   return false;
 }

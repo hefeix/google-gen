@@ -1,59 +1,10 @@
-<game of life>
 {
-  on pattern() {
-     post (IS_ROW 0)
-     post (IS_COL 0)
-     post (IS_TIME 0)
-  }
-  on pattern((IS_ROW x)(successor x y))
-     if (equal(y, 5) 0 {
-          post (IS_ROW y)
-          post (ROW_ADJACENT x y)
-          post (ROW_ADJACENT y x)
-       }
-     )       
-    
-  on pattern((IS_COL x) (successor x y) )
-     if (equal(y, 5) 0 {
-          post (IS_COL y)
-          post (COL_ADJACENT x y)
-          post (COL_ADJACENT y x)
-       }
-     )       
-    
-  on pattern((IS_TIME x)) let y sum(x,1)
-     if (equal(y, 20) 0
-       delay # {
-          post (TS x y)
-	  post (IS_TIME y)
-       }
-    )          
-    
-  on pattern((IS_ROW x)(IS_COL y)) {
-     post (IS_CELL (x y))
-  }
-  on pattern((ROW_ADJACENT a b)(COL_ADJACENT c d)) 
-     post (CELL_ADJACENT (a c) (b d))
-  on pattern((ROW_ADJACENT a b)(IS_COL c)) 
-     post (CELL_ADJACENT (a c) (b c))
-  on pattern((COL_ADJACENT a b)(IS_ROW c)) 
-     post (CELL_ADJACENT (c a) (c b))
-
-  on pattern((IS_COL x)) post (FULL 0 (0 x))
-  on pattern((IS_TIME t)(IS_CELL c)) delay #0
-     post (NUM_NEIGHBORS t c match pattern((CELL_ADJACENT c a)(FULL t a)) 1)
-
-  on pattern((TS t u)(NUM_NEIGHBORS t c 3)) 
-     post (FULL u c)
-  on pattern((TS t u)(NUM_NEIGHBORS t c 2)(FULL t c))
-     post (FULL u c)
-     
- < the print statements >
-  on pattern((FULL t cell))
-     post (PRINT t nth(cell 0) sum(nth(cell 1) 1) "X")
-
-  on pattern((IS_TIME t) (IS_ROW row)) {
-     post (PRINT t row 0 "|")
-     post (PRINT t row 6 "|")
-  }
+  on pattern() post (F 0 0)
+  
+  on pattern((F x y) (successor x xplusone) (sum_rel y x fofxplusone))
+     if (equal(x 1001) 
+        0 
+	post (F xplusone fofxplusone)
+     )
 }
+

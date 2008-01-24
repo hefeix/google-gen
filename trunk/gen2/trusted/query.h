@@ -48,6 +48,7 @@ class Changelist;
 
 // Declare builtin keyword relations
 extern Keyword SUCCESSOR;
+extern Keyword SUM_REL;
 
 /* 
    The Search and the Query are coupled 1 to 1.  
@@ -144,7 +145,12 @@ struct Query {
   // Helper function for simplification
   static bool EvaluateBuiltin(OTuple t);
 
-  static OTime FindQueryTime(const Blackboard &bb, const Pattern &p);
+  // Takes a query which is fully substituted and returns the time
+  // at which the last tuple comes true. (builtin relations are ignored,
+  // since they occur at creation)
+  // Crashes if any of he tuples in the pattern (other than builtin functions)
+  // aren't on the blackboard.
+  static OTime FindConjunctionTime(const Blackboard &bb, const Pattern &p);
 
   // defining data:
   OPattern pattern_;
