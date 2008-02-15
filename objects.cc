@@ -8,23 +8,23 @@ map<D, SpecificDefinition<OT, D> *> SpecificDefinition<OT, D>::unique_;
 //map<string, SpecificDefinition<FLAKE, string> *> SpecificDefinition<FLAKE, string>::unique_;
 
 template<>
-string FlakeDefinition::ToString() const { return data_; }
+string FlakeDefinition::ToStringSpecific(bool verbose) const { return data_; }
 
 template<>
-string KeywordDefinition::ToString() const { return data_; }
+string KeywordDefinition::ToStringSpecific(bool verbose) const { return data_; }
 
 template<>
-string VariableDefinition::ToString() const { 
+string VariableDefinition::ToStringSpecific(bool verbose) const { 
   if (data_ < 26) 
     return string() + (char('a' + data_));
   return "v" + itoa(data_);
 }
 
 template<>
-string TupleDefinition::ToString() const {
+string TupleDefinition::ToStringSpecific(bool verbose) const {
   string ret = "(";
   for (uint i=0; i<data_.size(); i++) {
-    ret += data_[i].ToString();
+    ret += data_[i].ToString(verbose);
     if (i+1<data_.size()) ret += ", ";
   }
   ret += ")";
@@ -32,17 +32,17 @@ string TupleDefinition::ToString() const {
 }
 
 template<>
-string BooleanDefinition::ToString() const {
+string BooleanDefinition::ToStringSpecific(bool verbose) const {
   return data_?"true":"false";
 }
 
 template<>
-string IntegerDefinition::ToString() const {
+string IntegerDefinition::ToStringSpecific(bool verbose) const {
   return itoa(data_);
 }
 
 template<>
-string RealDefinition::ToString() const {
+string RealDefinition::ToStringSpecific(bool verbose) const {
   string ret = dtoa(data_);
   if (ret.find('.')==string::npos && ret.find('e')==string::npos) 
     ret += ".0";
@@ -50,15 +50,10 @@ string RealDefinition::ToString() const {
 }
 
 template<>
-string EscapeDefinition::ToString() const {
+string EscapeDefinition::ToStringSpecific(bool verbose) const {
   return "\'" + data_.ToString();
 }
 
-void EatCommaAndWhitespace(istream & input) {
-  input >> ws;
-  if (input.peek() == ',') input.get();
-  input >> ws;
-}
 bool IsNumericChar(char c){
   return (isdigit(c) || c=='.' || c=='-' || c=='+' || c=='e');
 }
@@ -68,17 +63,56 @@ bool IsBeginningNumericChar(char c){
 bool IsNameChar(char c){
   return (isalnum(c) || c=='_');
 }
+bool IsOpenEnclosure(char c){
+  return (c=='(' || c=='[' || c=='{');
+}
+char MatchingCloseEnclosure(char c){
+  switch(c){
+  case '(': return ')';
+  case '[': return ']';
+  case '{': return '}';
+  default: CHECK(false); return ' ';
+  }
+}
+void EatCommentsAndWhitespace(istream & input) {
+  input >> ws;
+  if (input.peek() == '<') {
+    char c;
+    input >> c;
+    int level = 1;
+    while (level > 0) {
+      CHECK(input >> c);
+      if (c=='<') level++;
+      if (c=='>') level--;
+    }
+    EatCommentsAndWhitespace(input);
+  }
+  if (input.peek()=='/') {
+    input.get();
+    CHECK(input.peek()=='/');
+    char c;
+    while (input.get(c)) if (c=='\n') break;
+    EatCommentsAndWhitespace(input);
+  }
+  input >> ws;
+}
+void EatCommaAndCommentsAndWhitespace(istream & input) {
+  EatCommentsAndWhitespace(input);
+  if (input.peek() == ',') input.get();
+  EatCommentsAndWhitespace(input);
+}
 istream & operator >>(istream & input, Object & o){
+  EatCommentsAndWhitespace(input);
   char firstchar;
   if (!(input >> firstchar)) return input;
-  if (firstchar == '(') { // it's a tuple;
+  if (IsOpenEnclosure(firstchar)) { // it's a tuple;
     input >> ws;
     vector<Object> v;
     Object element;
-    while (input.peek() != ')') { // it's a tuple
+    while (input.peek() != MatchingCloseEnclosure(firstchar)) {
       CHECK(input >> element);
       v.push_back(element);
-      EatCommaAndWhitespace(input);
+      EatCommaAndCommentsAndWhitespace(input);
     }
     input.get();
     o = Tuple::Make(v);
@@ -151,10 +185,11 @@ int main() {
   Object o;
   vector<Object> v;
   while (cin >> o) {
-    cout << o.ToString() << endl;
-    cout << o.ToStringVerbose() << endl << endl;
+    //    cout << o.ToString() << endl;
+    cout << o.ToString(true) << endl << endl;
     v.push_back(o);
     if (o==Keyword::Make("clear")) v = vector<Object>();
+    if (o==Keyword::Make("done")) break;
   }
   /*Variable seven = Variable::Make(7);
   Flake n = Flake::Make("Noam");
