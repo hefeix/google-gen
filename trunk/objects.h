@@ -50,14 +50,16 @@ string ObjectTypeName(ObjectType t) {
 // There will exist no two identical ObjectDefinition objects.
 struct ObjectDefinition {
   virtual ObjectType type() const = 0;
-  virtual string ToString() const {
+  string ToString(bool verbose = false){
+    string ret = ToStringSpecific(verbose);
+    if (verbose) ret = "<" + ObjectTypeName(type()) + " rc=" 
+      + itoa(reference_count_) + "> " + ret;
+    return ret;
+  }
+  virtual string ToStringSpecific(bool verbose) const {
     return "ERROR";
   }
   virtual ~ObjectDefinition(){}
-  string ToStringVerbose() const {
-    return "[" + ObjectTypeName(type()) + " rc=" 
-      + itoa(reference_count_) + "] " + ToString(); 
-  }
   int reference_count_;
   ObjectDefinition() {
     reference_count_ = 0;
@@ -90,10 +92,8 @@ class Object {
   const ObjectDefinition * GetObjectDefinition() const {
     return def_;
   }
-  string ToString() const 
-  { if (def_) return def_->ToString(); return "__NULL__"; }
-  string ToStringVerbose() const 
-  { if (def_) return def_->ToStringVerbose(); return "__NULL__"; }
+  string ToString(bool verbose=false) const 
+  { if (def_) return def_->ToString(verbose); return "__NULL__"; }
 
  private:
   ObjectDefinition * def_;
@@ -132,7 +132,7 @@ class SpecificDefinition : public ObjectDefinition {
   ObjectType type() const { 
     return OT;
   }
-  string ToString() const;
+  string ToStringSpecific(bool verbose) const;
   static map<D, SpecificDefinition<OT, D> *> unique_;
 };
 
