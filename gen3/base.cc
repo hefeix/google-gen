@@ -17,9 +17,7 @@
 // Author: Georges Harik and Noam Shazeer
 
 #include "base.h"
-#include "changelist.h"
 #include "webserver.h"
-#include "violation.h"
 
 
 #undef ITEM
@@ -40,55 +38,38 @@ Base * Namer::Lookup(Base::Type type, Object name) const {
   return NULL;
 }
 
-void Base::L1_SetName(Object new_name) {
+void Base::SetName(Object new_name) {
   CHECK(new_name != NULL);
-  if (new_name == name_) return;
-  if (name_ != NULL) CL.RemoveFromMap(&N.index_[GetBaseType()], name_);
-  CL.ChangeValue(&name_, new_name);
-  CL.InsertIntoMap(&N.index_[GetBaseType()], new_name, this);
+  if (new_name == name_) return;  
+  if (name_ != NULL) N.index_[GetBaseType()].erase(name_);
+  name_ =  new_name;
+  N.index_[GetBaseType()][new_name] = this;
 }
 
-void Base::L1_AutomaticallyName() {
-  CHECK(!NameMatters());
+void Base::AutomaticallyName() {
   // do we care if the increment of next_name_ reverts??
   while (N.Index(GetBaseType()) 
 	 % (Object)Integer::Make(N.next_name_)) N.next_name_++;
-  L1_SetName(Integer::Make(N.next_name_));
+  SetName(Integer::Make(N.next_name_));
 }
 
-void Base::L1_Erase() {
+void Base::Erase() {
   VLOG(2) << "Erasing object " << name_ << endl;
-  Violation::L1_EraseViolations(this);  
-  if (name_ != NULL) CL.RemoveFromMap(&N.index_[GetBaseType()], name_);
-  CL.ChangeValue(&erased_, true);
-  if (N.TrackCurrentCount()) {
-    CL.ChangeValue(&N.current_count_[GetBaseType()],
-		   N.current_count_[GetBaseType()]-1);
-  }
-  CL.Destroying(this);
+  if (name_ != NULL) N.index_[GetBaseType()].erase(name_);
+  if (N.TrackCurrentCount()) N.current_count_[GetBaseType()]--;
+  delete this;
 }
 
-void Base::L1_Init() {
-  CL.Creating(this);
-  erased_ = false;
+void Base::Init() {
   if ( N.AutomaticallyNameAll() ) AutomaticallyName();
-
   N.all_time_count_[GetBaseType()]++;
-  if (N.TrackCurrentCount()) {
-    CL.ChangeValue(&N.current_count_[GetBaseType()],
-		   N.current_count_[GetBaseType()]+1);
-  }
+  if (N.TrackCurrentCount()) N.current_count_[GetBaseType()]++;
 }
 
 Record Base::GetRecordForDisplay() const { 
   Record ret;
   if (name_ != NULL) ret["name"] = name_.ToString();
   ret["type"] = TypeToString(GetBaseType());
-  if (IsErased()) ret["ERASED"] = "ERASED";
-  set<Violation *> violations 
-    = Violation::GetViolations(Violation::Search((Base *)this));
-  forall(run, violations) 
-    ret["violations"] += (*run)->ShortDescription() + "<br>\n";
   return ret;
 }
 string Base::GetURL() const { 

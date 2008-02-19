@@ -16,14 +16,10 @@
 //
 // Author: Georges Harik and Noam Shazeer
 
-#include "changelist.h"
-#include "blackboard.h"
-#include "model.h"
+#include "base.h"
 
-Changelist CL;
-LinearAllocator CL_ALLOC;
-GeneralAllocator GEN_ALLOC;
-Blackboard BB;
+//Changelist CL;
+//Blackboard BB;
 Namer N;
-Model M;
-GlobalChooser GC;
+//Model M;
+//GlobalChooser GC;

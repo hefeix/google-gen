@@ -18,15 +18,17 @@
 
 #include "objects.h"
 #include "blackboard.h"
-#include "model.h"
-#include "spec.h"
-#include "fixers.h"
-#include "chooser.h"
-#include "ai.h"
+#include "webserver.h"
+#include "genrequesthandler.h"
+//#include "model.h"
+//#include "spec.h"
+//#include "fixers.h"
+//#include "chooser.h"
+//#include "ai.h"
 
 #include <fstream>
 
-void Shell() {
+/* void Shell() {
   ifstream inputspec("test_spec");
   LoadSpec(inputspec);
   ifstream input("test_prog");
@@ -58,20 +60,21 @@ void Shell() {
     }
   }
 }
+*/
 
 int main() {
   rand();
   Object::Init();
-  Query::Init();
-  ChooserSet::Init();
-  Object::DoneAddingKeywords();
 
+  //ChooserSet::Init();
+  Object::DoneAddingKeywords();
   N.SetAutomaticallyNameAll(true);
   N.SetTrackCurrentCount(true);
 
   //ObjectsShell();
-  // Blackboard::Shell();
+  (new WebServer(new GenRequestHandler))->StartInThread();
+  Blackboard::Shell();
 
-  Shell();
+  // Shell();
   Object::Destroy();
 }

@@ -28,59 +28,25 @@ class OwnedPosting;
 class Base {
  public:
   #define BaseTypeList {				\
-      ITEM(STATIC_ELEMENT),				\
-	ITEM(DYNAMIC_ELEMENT),				\
-	ITEM(CHOICE),					\
-	ITEM(CHOOSER),						\
-	ITEM(CHOOSER_SET),					\
-	ITEM(REQUIREMENT),					\
-	ITEM(PROHIBITION),					\
-	ITEM(GIVEN),						\
-	ITEM(VIOLATION),					\
-	ITEM(LINK),						\
-	ITEM(MODEL)						\
+      ITEM(BLACKBOARD)					\
 	};
   CLASS_ENUM_DECLARE(Base, Type);
 
-  /*void *operator new(size_t s) {
-    return GEN_ALLOC.allocate(s);
-  }
-  void operator delete(void *ptr) {
-    return GEN_ALLOC.deallocate(ptr);
-    }*/
-
-  bool AutomaticallyName() {
-    if (NameMatters()) return false;
-    L1_AutomaticallyName();
-    return true;
-  }
-  bool SetName(Object new_name) {
-    if (NameMatters()) return false;
-    L1_SetName(new_name);
-    return true;
-  }
-  virtual bool NameMatters() const { return false; }
-
-  //Base();
-  void L1_Init(); // shadow constructor
+  virtual void Init(); // shadow constructor
+  virtual void Erase();
+  virtual ~Base() {};
+ 
   Object GetName() const { return name_;}
-  void L1_SetName(Object new_name);
-  void L1_AutomaticallyName();
+  void SetName(Object new_name);
+  void AutomaticallyName();
+
   virtual Record GetRecordForDisplay() const;
   string GetURL() const; // link to object view
   string GetLink(string anchortext) const;
   string ShortDescription() const;
   virtual string TextIdentifier() const;
-  virtual OwnedPosting * GetOwnedPosting() const { return NULL;}
-  
 
   virtual Type GetBaseType() const = 0;
-  virtual void L1_Erase();
-  virtual OMap GetMap() { CHECK(false); return OMap();} // overriden for dynamic
-  virtual ~Base() {};
-
-  bool IsErased() const { return erased_;}
-  bool erased_;
 
  private:
   Object name_;
@@ -92,15 +58,11 @@ class Namer {
   friend class Base;
   // returns null if not found
   Base * Lookup(Base::Type type, Object name) const; 
-  // a version of the previous function that returns the subtype.
-  /*template <class BaseClass> 
-    BaseClass * Find(Object name) const {
-    return dynamic_cast<BaseClass *>(Lookup(BaseClass::GetBaseType(), name));
-    }*/
+
   // Get a constant index of one base type by name. 
   const map<Object, Base *> & Index(Base::Type type) const 
     { return index_[type];}
-
+  
   int GetCurrentCount(Base::Type t) const { return current_count_[t];}
   int GetAllTimeCount(Base::Type t) const { return all_time_count_[t];}
 
