@@ -237,9 +237,9 @@ void Blackboard::Shell() {
 
   for (;(cin >> command) && command != "q"; cout << endl) {
     if (command == "post") {
-      cin >> tuple;
-      cout << "Posting " << tuple << endl;
-      b.Post(tuple, CREATION);
+      cin >> tuple >> time;
+      cout << "Posting " << tuple << " " << time << endl;
+      b.Post(tuple, time);
       continue;
     }
     if (command == "postfile") {
@@ -255,6 +255,7 @@ void Blackboard::Shell() {
     }
     if (command == "query") {
       cin >> pattern >> time;
+      cout << "QUERY " << pattern << " " << time << endl;
       vector<OMap> substitutions;
       vector<OTime> times;
       uint64 num_satisfactions;
