@@ -80,6 +80,7 @@ class Object {
   struct Definition {
     virtual Object::Type GetType() const = 0;
     string ToString(bool verbose = false) const{
+      if (this == NULL) return "null";
       string ret = ToStringSpecific(verbose);
       if (verbose) ret = "<" + Object::TypeToString(GetType()) + " rc=" 
 	+ itoa(reference_count_) + "> " + ret;
@@ -171,7 +172,15 @@ class Object {
     def_ = def;
     if (def_) {
       // run-time type checking.
-      CHECK(GetReferenceType()==OBJECT || GetReferenceType() == def_->GetType());
+      if (!(GetReferenceType()==OBJECT 
+	    || GetReferenceType() == def_->GetType())){
+	cerr << "Cannot assign " << def_->ToString() << " which is of type "
+	     << TypeToString(GetType())
+	     << " to an object(pointer) of type " 
+	     << TypeToString(GetReferenceType()) << endl;
+	CHECK(false);
+      }
+      
       def_->reference_count_++;
     }
   }
