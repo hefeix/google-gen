@@ -17,8 +17,8 @@
 // Author: Georges Harik and Noam Shazeer
 
 #include "genrequesthandler.h"
-#include "model.h"
-#include "element.h"
+//#include "model.h"
+//#include "element.h"
 #include "record.h"
 
 
@@ -36,8 +36,6 @@ string GenRequestHandler::TopNavHTML() const {
       + "/" + itoa(N.GetAllTimeCount(t)) 
       + ") ";
   }
-  ret += HTMLLink(BB.GetURL(), "Blackboard") + " ";
-  ret += HTMLLink("print", "PRINT");
   ret += "</font><br><p>";
   return ret;
 }
@@ -46,13 +44,6 @@ string GenRequestHandler::TypeListHTML(Base::Type type) const {
   string ret;
   if (type < 0 || type >= Base::NumTypes()) {
     return "unkown type " + itoa(type);
-  }
-  if (type == Base::VIOLATION) {
-    for (int i=0; i<Violation::NumTypes(); i++) {
-      ret += Violation::TypeToString(Violation::Type(i)) 
-	+ " : " +  itoa(Violation::counts_[i])
-	+ "<br>\n";
-    }
   }
   vector<Record> v;
   forall(run, N.Index(type)) {
@@ -94,15 +85,6 @@ string GenRequestHandler::Handle(Record params) {
       ret += "Object not found";
       return ret;
     }
-    // We are overloading the getobject command to also get owned postings.
-    // It would be more elegant to have a separate command, but instead
-    // we are just tacking on a parameter ownedposting= to signify that 
-    // we want the posting owned by the given base object.
-    if (params % string("ownedposting")) {
-      ret += 
-	RecordToHTMLTable(base->GetOwnedPosting()->GetRecordForDisplay());
-      return ret;
-    }
     ret += "<font size=+1>" + base->ShortDescription() + "</font><p>";
     ret += RecordToHTMLTable(base->GetRecordForDisplay());
     return ret;
@@ -111,7 +93,7 @@ string GenRequestHandler::Handle(Record params) {
     ret += TypeListHTML(Base::StringToType(params["type"]));
     return ret;
   }
-  if (command == "tupleinfo") {
+  /*if (command == "tupleinfo") {
     const TupleInfo * ti 
       = BB.GetConstTupleInfo(OTuple(StringToObject(params["tuple"])));
     if (!ti) return ret + "Tuple not found on blackboard";
@@ -173,7 +155,7 @@ string GenRequestHandler::Handle(Record params) {
     if (params["page"] != "") page = atoi(params["page"].c_str());
     ret += "<pre>" + BB.Print(page) + "</pre>";
   }
-
+  */
   return ret;
 }
 

@@ -54,7 +54,6 @@ a-z(otherwise)   It's a keyword, except for the following exceptions:
 #include "numbers.h"
 #include "ranktree.h"
 #include "small_tree.h"
-#include "allocators.h"
 
 class Object {
  public:
