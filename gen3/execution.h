@@ -64,7 +64,7 @@ struct Execution : public Base {
   }
   void CommitPostings() {
     forall(run, post_queue_) {
-      cout << "Commiting " << *run << " at " << current_time_ << endl;
+      // cout << "Committing " << *run << " at " << current_time_ << endl;
       blackboard_->Post(*run, current_time_);
     }
     post_queue_.clear();
@@ -72,6 +72,9 @@ struct Execution : public Base {
   void ExecuteRunnableThreads();
 
   void AddCodeTreeToRun(Element *top_element);
+
+  // The thread points at the immediately executable code
+  static Tuple MatchAndRun(Thread thread, OTuple variable_tuple);
 
   void Enqueue(Thread t) {
     run_queue_[t.time_.Data()].push_back(t);
