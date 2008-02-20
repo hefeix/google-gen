@@ -176,7 +176,7 @@ struct OnElement : public Element {
     return false;
   }
 
-  virtual Object Execute(Thread t);
+  virtual Object Execute(Thread thread);
 };
 
 struct PostElement : public Element {
