@@ -29,6 +29,7 @@ class Base {
  public:
   #define BaseTypeList {				\
       ITEM(BLACKBOARD)					\
+      ITEM(ELEMENT)					\
 	};
   CLASS_ENUM_DECLARE(Base, Type);
 
@@ -40,11 +41,23 @@ class Base {
   void SetName(Object new_name);
   void AutomaticallyName();
 
+  // This is all for output
+
+  // Output as record format for web server usually
   virtual Record GetRecordForDisplay() const;
-  string GetURL() const; // link to object view
+
+  // A URL that links back to a view of this object
+  string GetURL() const;
+
+  // Use GetURL and the anchortext to create a link
   string GetLink(string anchortext) const;
-  string ShortDescription() const;
+
+  // Whatever the subclass wants to add here
   virtual string TextIdentifier() const;
+
+  // makes a link from Type + Name
+  // and adds on the text identifier
+  string ShortDescription() const;
 
   virtual Type GetBaseType() const = 0;
 
