@@ -154,3 +154,11 @@ void Element::StaticInit() {
   for (int i=0; i<NumFunctions(); i++) 
     Object::AddKeyword(Downcase(FunctionToString(Function(i))));
 }
+
+Object IfElement::Execute(Thread thread) {
+  Object condition = GetChild(CONDITION)->Execute(thread);
+  // Everything other than FALSE is true for this purpose
+  if (condition == FALSE)
+    return GetChild(ON_FALSE)->Execute(thread);
+  return GetChild(ON_TRUE)->Execute(thread);
+}

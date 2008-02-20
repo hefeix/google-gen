@@ -74,7 +74,7 @@ Element * ParseElement(const Tuple & t, uint * pos) {
     children = ParseElements(OTuple(o).Data());
   } else {
     CHECK(!ret->HasVariableNumChildren());
-    for (int i=0; i<ret->NumChildren(); i++) {
+    for (int i=0; i<ret->RequiredNumChildren(); i++) {
       children.push_back(ParseElement(t, pos));
     }
   }

@@ -20,7 +20,18 @@
 #include "parser.h"
 #include "element.h"
 
+string Thread::ToString() {
+  string ret;
+  ret += time_.ToString() + " ";
+  ret += binding_.ToString() + " ";
+  ret += element_->ProgramTree() + " ";
+  return ret;
+}
+
 void OnSubscription::Init(Thread t, OTuple variable_tuple) {
+  CHECK(t.element_);
+  thread_ = t;
+  variable_tuple_ = variable_tuple;
   Blackboard::Subscription::Init
     (OTuple::Make(VariablesToWildcards(variable_tuple.Data())),
      t.execution_->blackboard_);
@@ -28,6 +39,8 @@ void OnSubscription::Init(Thread t, OTuple variable_tuple) {
 
 void OnSubscription::Update(OTuple tuple, OTime time) {
   Thread t = thread_;
+  // cout << "Update " << tuple << " " << time << endl;
+  // cout << "Threadinfo " << t.ToString() << endl;
   t.time_ = OTime::Make(max(t.time_.Data(), time.Data()) + BitSeq::Min());
   Map new_binding;
   if (!ComputeSubstitution(variable_tuple_.Data(), 
@@ -50,4 +63,15 @@ void Execution::ExecuteRunnableThreads() {
     t.element_->Execute(t);
   }
   run_queue_.erase(run_queue_.begin());
+}
+
+void Execution::AddCodeTreeToRun(Element *top_element) {
+  CHECK(top_element->VerifyTree());
+  Thread t;
+  t.time_ = OTime::Make(current_time_.Data() + BitSeq::Min());
+  t.binding_ = OMap::Default();
+  t.element_ = top_element;
+  t.execution_ = this;
+  Enqueue(t);
+  top_elements_.insert(top_element);
 }

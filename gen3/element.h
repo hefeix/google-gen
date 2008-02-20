@@ -24,23 +24,24 @@
 
 #define ALL_FUNCTIONS \
   FUNCTION(On, ON)						\
-       FUNCTION(Post, POST)					\
-       FUNCTION(MakeTuple, MAKETUPLE)				\
-       FUNCTION(Substitute, SUBSTITUTE)				\
-       FUNCTION(Constant, CONSTANT)				\
+  FUNCTION(Post, POST)						\
+  FUNCTION(MakeTuple, MAKETUPLE)				\
+  FUNCTION(Substitute, SUBSTITUTE)				\
+  FUNCTION(Constant, CONSTANT)					\
+  FUNCTION(Equal, EQUAL)				     	\
+  FUNCTION(Sum, SUM)					       	\
+  FUNCTION(If, IF)					       	\
 
-/*       FUNCTION(Equal, EQUAL)						\
-       FUNCTION(Sum, SUM)						\
+       /*
        FUNCTION(ToString, TOSTRING)					\
        FUNCTION(Concat, CONCAT)						\
        FUNCTION(Nth, NTH)					\
-       FUNCTION(If, IF)						\
        FUNCTION(Let, LET)			\
        FUNCTION(Match, MATCH)			\
        FUNCTION(Delay, DELAY)			\
     
        FUNCTION(Choose, CHOOSE)		\
-*/
+       */
 
 
 struct Element : public Base {  
@@ -62,6 +63,21 @@ struct Element : public Base {
   virtual Object Execute(Thread thread);
   virtual Object ComputeReturnValue(Thread thread, Tuple results) {
     CHECK(false); return NULL;
+  }
+
+  // Verification code
+  bool VerifyNode() {
+    return ( (RequiredNumChildren() == NumChildren()) ||
+	    HasVariableNumChildren());
+  }
+
+  bool VerifyTree() {
+    if (!VerifyNode()) return false;
+    for (uint c=0; c<children_.size(); c++) {
+      Element * child = children_[c];
+      if (!child->VerifyTree()) return false;
+    }
+    return true;
   }
 
   // Linking things up together
@@ -214,6 +230,55 @@ struct SubstituteElement : public Element {
       return DeepSubstitute(thread.binding_.Data(), results[CHILD]);
   }
 };
+
+struct EqualElement : public Element {
+#define EqualElementChildNameList { ITEM(LHS), ITEM(RHS), };
+  CLASS_ENUM_DECLARE(EqualElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  virtual Function GetFunction() const { return EQUAL; }
+  bool ChildrenGoInTuple() const { return true; }
+  Object ComputeReturnValue(Thread thread, Tuple results) {
+    if (results[0] == results[1]) return TRUE;
+    return FALSE;
+  }
+};
+
+struct SumElement : public Element {
+#define SumElementChildNameList { ITEM(LHS), ITEM(RHS), };
+  CLASS_ENUM_DECLARE(SumElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return SUM; }
+  bool ChildrenGoInTuple() const { return true; }
+  Object ComputeReturnValue(Thread thread, Tuple results) {
+    if (results[0].GetType() != Object::INTEGER) return NULL;
+    if (results[1].GetType() != Object::INTEGER) return NULL;
+    return Integer::Make
+      (Integer(results[0]).Data() + Integer(results[1]).Data());
+  }
+};
+
+struct IfElement : public Element {
+#define IfElementChildNameList {					\
+    ITEM(CONDITION),							\
+      ITEM(ON_TRUE),							\
+      ITEM(ON_FALSE),							\
+      };
+  CLASS_ENUM_DECLARE(IfElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  bool ChildrenGoInTuple() const { return true; }
+  bool ChildNeedsSeparateLine(int which_child) const {
+    if (which_child == CONDITION) return false;
+    for (int c = ON_TRUE; c<NumChildren(); c++) {
+      Element * e = GetChild(c);
+      if (e && e->ElementNeedsSeparateLine()) return true;
+    }
+    return false;
+  }
+  Function GetFunction() const { return IF; }
+  virtual Object Execute(Thread thread);
+};
+
+
 
 /*
 
@@ -450,34 +515,6 @@ struct DynamicPost : public DynamicElement {
 
 // if the condition does not evaluate to Boolean::Make(false), 
 // then the ON_TRUE should be executed.
-struct If : public Element {
-  #define IfChildNameList {					\
-      ITEM(CONDITION),							\
-	ITEM(ON_TRUE),					\
-	ITEM(ON_FALSE),					\
-	};
-  CLASS_ENUM_DECLARE(If, ChildName);
-  #define IfObjectNameList {				\
-	};
-  CLASS_ENUM_DECLARE(If, ObjectName);
-  DECLARE_FUNCTION_ENUMS;
-  bool ChildrenGoInTuple() const { return true;}
-  bool ChildNeedsSeparateLine(int which_child) const {
-    if (which_child == CONDITION) return false;
-    for (int c = ON_TRUE; c<NumChildren(); c++) {
-      Element *e = GetChild(c);
-      if (e && e->ElementNeedsSeparateLine()) return true;
-    }
-    return false;
-  }
-
-  // ---------- L2 functions ----------  
-  // ---------- const functions ----------  
-  Function GetFunction() const { return IF;}
-  // ---------- L1 functions ----------  
-  void L1_Init();
-  // ---------- data ----------  
-};
 struct DynamicIf : public DynamicElement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
@@ -507,36 +544,10 @@ struct DynamicIf : public DynamicElement {
 };
 
 
-struct Equal : public Element {
-   #define EqualChildNameList {	 		\
-    ITEM(LHS),						\
-    ITEM(RHS),						\
-      };
-  CLASS_ENUM_DECLARE(Equal, ChildName);
-  #define EqualObjectNameList {				\
-    };
-  CLASS_ENUM_DECLARE(Equal, ObjectName);
-  DECLARE_FUNCTION_ENUMS;
-  virtual Function GetFunction() const { return EQUAL;}
-  bool ChildrenGoInTuple() const { return true;}
-};
 struct DynamicEqual : public DynamicElement {
   Object ComputeValue() const;
 };
 
-struct Sum : public Element {
-   #define SumChildNameList {	 		\
-    ITEM(LHS),						\
-    ITEM(RHS),						\
-      };
-  CLASS_ENUM_DECLARE(Sum, ChildName);
-  #define SumObjectNameList {				\
-    };
-  CLASS_ENUM_DECLARE(Sum, ObjectName);
-  DECLARE_FUNCTION_ENUMS;
-  Function GetFunction() const { return SUM;}
-  bool ChildrenGoInTuple() const { return true;}
-};
 struct DynamicSum : public DynamicElement {
   Object ComputeValue() const;
 };

@@ -53,7 +53,6 @@ a-z(otherwise)   It's a keyword, except for the following exceptions:
 #include "hash.h"
 #include "numbers.h"
 #include "ranktree.h"
-#include "small_tree.h"
 
 class Object {
  public:
