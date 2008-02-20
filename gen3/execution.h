@@ -33,17 +33,23 @@ struct Thread {
 
 struct OnSubscription : public Blackboard::Subscription {
   // t should point to the child of the On.
-  void Init(Thread t, OTuple variable_tuple) {
-    Blackboard::Subscription::Init
-      (OTuple::Make(VariablesToWildcards(variable_tuple.Data())));
-  }
+  void Init(Thread t, OTuple variable_tuple); 
   void Update(OTuple tuple, OTime time);
   // data
   OTuple variable_tuple_;
   Thread thread_;
 };
 
-struct Execution {
+struct Execution : public Base {
+  void Init() { 
+    Base::Init(); 
+    current_time_ = CREATION;
+    blackboard_ = New<Blackboard>();
+  }
+  Base::Type GetBaseType() const { return Base::EXECUTION;}
+
+  void ParseAndExecute(OTuple program_tuple);
+
   void ExecuteForever() {
     while (run_queue_.size()) ExecuteOneEpoch();
   }
@@ -53,19 +59,10 @@ struct Execution {
   }
   void CommitPostings() {
     forall(run, post_queue_) {
-      blackboard_.Post(*run, current_time_);
+      blackboard_->Post(*run, current_time_);
     }
   }
-  void ExecuteRunnableThreads() {
-    CHECK(run_queue_.size());
-    current_time_ = OTime::Make(run_queue_.begin()->first);
-    const vector<Thread> & v = run_queue_.begin()->second;
-    forall(run, v) {
-      Thread t = *run;
-      t.element_->Execute(t);
-    }
-    run_queue_->erase(run_queue_->begin());
-  }
+  void ExecuteRunnableThreads();
 
   void AddCodeTreeToRun(Element *top_element) {
     Thread t;
@@ -99,10 +96,10 @@ struct Execution {
   vector<OTuple> post_queue_;
 
   // This is the blackboard for the execution
-  Blackboard blackboard_;
+  Blackboard *blackboard_;
 
   // The current time (used during execution)
   OTime current_time_;
-}
+};
 
 #endif

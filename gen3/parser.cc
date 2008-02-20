@@ -26,17 +26,16 @@ inline Object GetNext(const Tuple& t, uint * pos) {
   return t[(*pos)++];
 }
 
-StaticElement * ParseElement(const Tuple & t, uint * pos) {
-
+Element * ParseElement(const Tuple & t, uint * pos) {
   // Get the next object
   Object o = GetNext(t, pos);
 
   // a single variable object is a substitute with a constant below
   if (o.GetType() == Object::VARIABLE) { 
-    StaticElement *constant = New<StaticConstant>();
-    constant->SetObject(StaticConstant::OBJECT, o);
-    StaticElement *ret = New<StaticSubstitute>();
-    constant->LinkToParent(ret, StaticSubstitute::CHILD);
+    ConstantElement *constant = New<ConstantElement>();
+    constant->object_ = o;
+    Element *ret = New<SubstituteElement>();
+    ret->AddChild(constant);
     return ret;
   }
 
@@ -50,22 +49,21 @@ StaticElement * ParseElement(const Tuple & t, uint * pos) {
   // If it's not a function name, it's a constant
   if (o.GetType() != Object::KEYWORD
       || Element::TypeKeywordToFunction(o) == -1) {
-    StaticElement *constant = New<StaticConstant>();
-    constant->SetObject(StaticConstant::OBJECT, o);
+    ConstantElement *constant = New<ConstantElement>();
+    constant->object_ = o;
     return constant;
   }
 
   // Here, o is now a keyword that specifies a function
   // Create the static element
   Keyword function_keyword = o;
-  StaticElement * ret = MakeStaticElementByKeyword(function_keyword);
+  Element * ret = MakeElementByKeyword(function_keyword);
 
-  // Read it's objects
-  for (int i=0; i<ret->NumObjects(); i++) {
-    ret->SetObject(i, GetNext(t, pos)); }
+  if (ret->GetFunction() == Element::CONSTANT) // Read the object
+    dynamic_cast<ConstantElement *>(ret)->object_ = GetNext(t, pos);
 
   // Read its children and hook them up to the parent
-  vector<StaticElement *> children;
+  vector<Element *> children;
   if (ret->ChildrenGoInTuple()) {
     o = GetNext(t, pos);
     if (o.GetType() != Object::OTUPLE) {
@@ -81,28 +79,28 @@ StaticElement * ParseElement(const Tuple & t, uint * pos) {
     }
   }
   for (uint i=0; i<children.size(); i++) {
-    children[i]->LinkToParent(ret, i);
+    ret->AddChild(children[i]);
   }
   return ret;
 }
 
-vector<StaticElement *> ParseElements(const Tuple & t) {
+vector<Element *> ParseElements(const Tuple & t) {
   uint pos = 0;
-  vector<StaticElement *> ret;
+  vector<Element *> ret;
   while (pos < t.size()) {
-    StaticElement *e = ParseElement(t, &pos);
+    Element *e = ParseElement(t, &pos);
     ret.push_back(e);
   }
   return ret;
 }
 
-StaticElement * MakeStaticElementByKeyword(Keyword type) {
+Element * MakeElementByKeyword(Keyword type) {
   Element::Function function = Element::TypeKeywordToFunction(type);
   CHECK(function != -1);
 
   switch (function) {
 #define FUNCTION(Func, FUNC) case Element::FUNC: \
-    return MakeStaticElement<Static##Func>();
+    return MakeElement<Func##Element>();
     ALL_FUNCTIONS;
 #undef FUNCTION
   default: CHECK(false);

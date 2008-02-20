@@ -20,28 +20,27 @@
 #define _ELEMENT_H_
 
 #include "base.h"
-#include "link.h"
-#include "extensions.h"
-#include "chooser.h"
 #include "execution.h"
 
 #define ALL_FUNCTIONS \
-       FUNCTION(On, ON)				\
-       FUNCTION(Match, MATCH)			\
-       FUNCTION(Delay, DELAY)			\
-       FUNCTION(Let, LET)			\
-       FUNCTION(Post, POST)			\
-       FUNCTION(If, IF)						\
+  FUNCTION(On, ON)						\
+       FUNCTION(Post, POST)					\
        FUNCTION(MakeTuple, MAKETUPLE)				\
-       FUNCTION(Nth, NTH)				\
        FUNCTION(Substitute, SUBSTITUTE)				\
        FUNCTION(Constant, CONSTANT)				\
-       FUNCTION(Equal, EQUAL)						\
+
+/*       FUNCTION(Equal, EQUAL)						\
        FUNCTION(Sum, SUM)						\
        FUNCTION(ToString, TOSTRING)					\
-       FUNCTION(Concat, CONCAT)		     		\
-
-//       FUNCTION(Choose, CHOOSE)		\
+       FUNCTION(Concat, CONCAT)						\
+       FUNCTION(Nth, NTH)					\
+       FUNCTION(If, IF)						\
+       FUNCTION(Let, LET)			\
+       FUNCTION(Match, MATCH)			\
+       FUNCTION(Delay, DELAY)			\
+    
+       FUNCTION(Choose, CHOOSE)		\
+*/
 
 
 struct Element : public Base {  
@@ -62,7 +61,7 @@ struct Element : public Base {
   // Run things
   virtual Object Execute(Thread thread);
   virtual Object ComputeReturnValue(Thread thread, Tuple results) {
-    CHECK(false);
+    CHECK(false); return NULL;
   }
 
   // Linking things up together
@@ -84,7 +83,7 @@ struct Element : public Base {
   
   // Simple accessor functions for the static tree
   Element * GetParent() const { return parent_; }
-  Element * GetChild (int which) { return children_[which]; }
+  Element * GetChild (int which) const { return children_[which]; }
   virtual int RequiredNumChildren() const = 0;
   int NumChildren() const { return children_.size(); }
   
@@ -99,12 +98,12 @@ struct Element : public Base {
     if (parent_) return parent_->WhichChildIsThis(this); 
     return -1; 
   }
-  int WhichChildIsThis(Element * child) {
+  int WhichChildIsThis(const Element * child) const {
     for (uint c=0; c<children_.size(); c++)
       if (children_[c] == child) return c;
     return -1;
   }
- 
+  
   virtual bool HasVariableNumChildren() const { return false; }
   
   // Accessing names of children pnemonically
@@ -120,6 +119,8 @@ struct Element : public Base {
 
   // Doesn't need to be overridden
   Base::Type GetBaseType() const { return Base::ELEMENT; }
+
+  static void StaticInit();
 
   // ---------- data ----------  
   Element * parent_;
@@ -138,12 +139,18 @@ struct Element : public Base {
   int RequiredNumChildren() const { return HasVariableNumChildren()?	\
       -1:NumChildNames();}
 
-struct On : public Element {
-  #define OnChildNameList {				\
+template <class T> T * MakeElement() {
+  CHECK(static_cast<Element *>((T *)NULL) == NULL);
+  return New<T>();
+}
+
+
+struct OnElement : public Element {
+  #define OnElementChildNameList {				\
         ITEM(TUPLE),						\
 	ITEM(CHILD),						\
   };
-  CLASS_ENUM_DECLARE(StaticOn, ChildName);
+  CLASS_ENUM_DECLARE(OnElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
 
   virtual Function GetFunction() const { return ON; }
@@ -156,18 +163,18 @@ struct On : public Element {
   virtual Object Execute(Thread t);
 };
 
-struct Post : public Element {
-#define PostChildNameList { ITEM(TUPLE) };
-  CLASS_ENUM_DECLARE(Post, ChildName);
+struct PostElement : public Element {
+#define PostElementChildNameList { ITEM(TUPLE) };
+  CLASS_ENUM_DECLARE(PostElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return POST;}
   bool ElementNeedsSeparateLine() const { return true; }
   virtual Object Execute(Thread thread);
 };
 
-struct Constant : public Element {
-#define ConstantChildNameList {};
-  CLASS_ENUM_DECLARE(Constant, ChildName);
+struct ConstantElement : public Element {
+#define ConstantElementChildNameList {};
+  CLASS_ENUM_DECLARE(ConstantElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return CONSTANT; }
   string ProgramTree(int indent) const;
@@ -176,15 +183,15 @@ struct Constant : public Element {
   Object object_;
 };
 
-struct MakeTuple : public Element {
-#define MakeTupleChildNameList {};
-  CLASS_ENUM_DECLARE(MakeTuple, ChildName);
+struct MakeTupleElement : public Element {
+#define MakeTupleElementChildNameList {};
+  CLASS_ENUM_DECLARE(MakeTupleElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return MAKETUPLE; }
   bool HasVariableNumChildren() const { return true; }
   bool ChildNeedsSeparateLine(int which_child) const {
     for (int c = 0; c<NumChildren(); c++) {
-      Element * e = GetChild(c);
+      const Element * e = GetChild(c);
       if (e && e->ElementNeedsSeparateLine()) return true;
     }
     return false;
@@ -194,12 +201,12 @@ struct MakeTuple : public Element {
   }
 };
 
-struct Substitute : public Element {
-#define SubstituteChildNameList { ITEM(CHILD) };
-  CLASS_ENUM_DECLARE(Substitute, ChildName);
+struct SubstituteElement : public Element {
+#define SubstituteElementChildNameList { ITEM(CHILD) };
+  CLASS_ENUM_DECLARE(SubstituteElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
 
-  string ToString(int indent) const;
+  string ProgramTree(int indent) const;
   virtual Function GetFunction() const { return SUBSTITUTE;}
   string ToString() const;
   bool ChildrenGoInTuple() const { return true;}
@@ -638,10 +645,6 @@ struct DynamicConstant : public DynamicElement {
   // ---------- data ----------  
 };
 
-template <class T> T * MakeElement() {
-  CHECK(static_cast<Element *>((T *)NULL) == NULL);
-  return New<T>();
-}
 
 template <class T> T * MakeDynamicElement(Element *static_parent, 
 					  OMap binding) {
