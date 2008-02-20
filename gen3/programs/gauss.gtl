@@ -1,0 +1,8 @@
+{
+  post (F 0 0);
+  on (F x y)
+    if ( equal (x 100001)
+         0
+	 post (F sum (1 x) sum (x y)) )
+}
+
