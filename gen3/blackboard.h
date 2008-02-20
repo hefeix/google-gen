@@ -79,36 +79,22 @@ class Blackboard : public Base{
     return make_pair(r.begin(), FindTimeInRow(r, time_limit));
   }
   static int Size(RowSegment s) { return s.second - s.first; }
+  
+  struct Subscription {
+    virtual ~Subscription();
+    virtual void Update(OTuple tuple, OTime time) = 0;
+    void Init(OTuple wildcard_tuple) {
+      CHECK(IsWildcardTuple(wildcard_tuple.Data()));
+      subscribee_ = &(index_[wildcard_tuple]);
+      subscribee_->subscriptions_.push_back(this);      
+    }
+    void SendCurrentAsUpdates() {
+      forall(run, subscribee_->row_) Update(run->first, run->second);
+    }
+    RowInfo * subscribee_;
+  };
 
   struct RowInfo {
-    struct GeneralSubscription {
-      virtual ~GeneralSubscription();
-      virtual void Update(OTuple tuple, OTime time) = 0;
-      // Sends the update that would be necessary to go from nothing to the 
-      // current state of the world.  Often useful when we want to do the same 
-      // thing upon creating the subscription as we do when the subscription 
-      // sends an update that something was created.  This lets us not 
-      // duplicate code.
-      void L1_SendCurrentAsUpdates() {
-	forall(run, subscribee_->row_) Update(run->first, run->second);
-      }
-      RowInfo * subscribee_;
-      private:
-    };
-
-    template <class SubscriberType> 
-    struct Subscription : public GeneralSubscription {
-      Subscription(RowInfo *subscribee, SubscriberType *subscriber)
-	:subscriber_(subscriber) {
-	subscribee_ = subscribee;
-	subscribee_->subscriptions_.push_back(this);
-      }
-      void Update(OTuple tuple, OTime time) {
-	subscriber_->Update(tuple, time);
-      }
-      SubscriberType * subscriber_;
-    };
-
     Row row_;
     // maps object to how often it appears as the first term in the tuple within
     // this row. 

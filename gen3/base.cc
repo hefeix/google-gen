@@ -78,6 +78,7 @@ string Base::GetURL() const {
   else ret += "&address=" + URLEscape(ptoa(this));
   return ret;
 }
+
 string Base::GetLink(string anchortext) const {
   return HTMLLink(GetURL(), anchortext);
 }
