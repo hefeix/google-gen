@@ -61,7 +61,7 @@ struct Element : public Base {
 
   // Run things
   virtual Object Execute(Thread thread);
-  virtual Object ComputeReturnValue(Tuple results) {
+  virtual Object ComputeReturnValue(Thread thread, Tuple results) {
     CHECK(false);
   }
 
@@ -172,22 +172,53 @@ struct Constant : public Element {
   Function GetFunction() const { return CONSTANT; }
   string ProgramTree(int indent) const;
   void SetObject(Object o) { object_ = o; }
-  Object Execute(Thread * thread) { return object_; }
+  Object Execute(Thread t) { return object_; }
   Object object_;
+};
+
+struct MakeTuple : public Element {
+#define MakeTupleChildNameList {};
+  CLASS_ENUM_DECLARE(MakeTuple, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return MAKETUPLE; }
+  bool HasVariableNumChildren() const { return true; }
+  bool ChildNeedsSeparateLine(int which_child) const {
+    for (int c = 0; c<NumChildren(); c++) {
+      Element * e = GetChild(c);
+      if (e && e->ElementNeedsSeparateLine()) return true;
+    }
+    return false;
+  }
+  Object ComputeReturnValue(Thread thread, Tuple results) {
+    return OTuple::Make(results);
+  }
+};
+
+struct Substitute : public Element {
+#define SubstituteChildNameList { ITEM(CHILD) };
+  CLASS_ENUM_DECLARE(Substitute, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+
+  string ToString(int indent) const;
+  virtual Function GetFunction() const { return SUBSTITUTE;}
+  string ToString() const;
+  bool ChildrenGoInTuple() const { return true;}
+  Object ComputeReturnValue(Thread thread, Tuple results) {
+      return DeepSubstitute(thread.binding_.Data(), results[CHILD]);
+  }
 };
 
 /*
 
-
-struct StaticMatch : public StaticElement {
-  #define StaticMatchChildNameList {				\
+struct Match : public Element {
+  #define MatchChildNameList {				\
       ITEM(CHILD),						\
 	};
-  CLASS_ENUM_DECLARE(StaticMatch, ChildName);
-  #define StaticMatchObjectNameList {				\
+  CLASS_ENUM_DECLARE(Match, ChildName);
+  #define MatchObjectNameList {				\
       ITEM(PATTERN),					\
 	};
-  CLASS_ENUM_DECLARE(StaticMatch, ObjectName);
+  CLASS_ENUM_DECLARE(Match, ObjectName);
   DECLARE_FUNCTION_ENUMS;
 
   // ---------- L2 functions ----------  
@@ -200,7 +231,7 @@ struct StaticMatch : public StaticElement {
   // ---------- L1 functions ----------  
   // ---------- N1 notifiers ----------  
   void N1_ObjectChanged(int which){
-    StaticElement::N1_ObjectChanged(which);
+    Element::N1_ObjectChanged(which);
     CHECK(NumDynamicChildren() == 0);
   }
 
@@ -211,12 +242,12 @@ struct DynamicMatch : public DynamicElement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   Link::Type LinkType(int which_child) const{ return Link::MATCH;}
-  StaticMatch *GetStaticMatch() const { 
-    return dynamic_cast<StaticMatch*>(GetStatic()); }
+  Match *GetMatch() const { 
+    return dynamic_cast<Match*>(Get()); }
   MatchMultiLink * GetMatchMultilink() const { 
-    return dynamic_cast<MatchMultiLink *>(children_[StaticMatch::CHILD]); }
+    return dynamic_cast<MatchMultiLink *>(children_[Match::CHILD]); }
   OPattern ComputePattern() const {
-    return Substitute(GetBinding().Data(), GetStaticMatch()->GetPattern()); }
+    return Substitute(GetBinding().Data(), GetMatch()->GetPattern()); }
   OPattern GetCurrentPattern() const { 
     CHECK(GetMatchMultilink());
     return GetMatchMultilink()->GetPattern(); }
@@ -227,7 +258,7 @@ struct DynamicMatch : public DynamicElement {
   Record GetRecordForDisplay() const;
   Object ComputeValue() const { return Integer::Make(sum_);}
   // ---------- L1 functions ----------
-  void L1_Init(StaticElement* parent, OMap binding) {
+  void L1_Init(Element* parent, OMap binding) {
     sum_ = 0;
     DynamicElement::L1_Init(parent, binding);
     GetTimedQuery()->L1_SetTimeLimit(GetTime());
@@ -256,15 +287,15 @@ struct DynamicMatch : public DynamicElement {
 };
 
 
-struct StaticDelay : public StaticElement { 
-  #define StaticDelayChildNameList {				\
+struct Delay : public Element { 
+  #define DelayChildNameList {				\
       ITEM(DIMENSION),						\
       ITEM(CHILD),						\
 	};
-  CLASS_ENUM_DECLARE(StaticDelay, ChildName);
-  #define StaticDelayObjectNameList {				\
+  CLASS_ENUM_DECLARE(Delay, ChildName);
+  #define DelayObjectNameList {				\
     };
-  CLASS_ENUM_DECLARE(StaticDelay, ObjectName);
+  CLASS_ENUM_DECLARE(Delay, ObjectName);
   DECLARE_FUNCTION_ENUMS;
 
   // ---------- L2 functions ----------  
@@ -282,10 +313,10 @@ struct DynamicDelay : public DynamicElement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
   OTime ComputeChildTime(const Link * link, const Element *child) const {
-    if (link == children_[StaticDelay::CHILD]) {
+    if (link == children_[Delay::CHILD]) {
       if (time_ == NULL) return OTime();
       DynamicElement *delay_element 
-	= GetSingleChild(StaticDelay::DIMENSION);
+	= GetSingleChild(Delay::DIMENSION);
       if (!delay_element) return OTime();
       Object dimension = delay_element->value_;
       if (dimension.GetType() != Object::OBITSEQ) return OTime();
@@ -305,22 +336,22 @@ struct DynamicDelay : public DynamicElement {
   void N1_ChildValueChanged(int which_child, Object old_val, Object new_val) { 
     DynamicElement::N1_ChildValueChanged(which_child, old_val, new_val);
     // todo: check whether the times are right on the children
-    DynamicElement * child = GetSingleChild(StaticDelay::CHILD);
+    DynamicElement * child = GetSingleChild(Delay::CHILD);
     if (child) child->N1_ComputedTimeChanged();
   }
   // ---------- data ----------  
 };
   
-struct StaticLet : public StaticElement {
-  #define StaticLetChildNameList {				\
+struct Let : public Element {
+  #define LetChildNameList {				\
       ITEM(VALUE),					\
       ITEM(CHILD),					\
 	};
-  CLASS_ENUM_DECLARE(StaticLet, ChildName);
-  #define StaticLetObjectNameList {				\
+  CLASS_ENUM_DECLARE(Let, ChildName);
+  #define LetObjectNameList {				\
       ITEM(VARIABLE),					\
 	};
-  CLASS_ENUM_DECLARE(StaticLet, ObjectName);
+  CLASS_ENUM_DECLARE(Let, ObjectName);
   DECLARE_FUNCTION_ENUMS;
 
   // ---------- L2 functions ----------  
@@ -336,7 +367,7 @@ struct StaticLet : public StaticElement {
   void L1_Init();
   // ---------- N1 notifiers ----------  
   void N1_ObjectChanged(int which){
-    StaticElement::N1_ObjectChanged(which);
+    Element::N1_ObjectChanged(which);
     CHECK(NumDynamicChildren() == 0);
   }
   bool ElementNeedsSeparateLine() const { return true;}
@@ -347,20 +378,20 @@ struct StaticLet : public StaticElement {
 struct DynamicLet : public DynamicElement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
-  StaticLet *GetStaticLet() const { 
-    return dynamic_cast<StaticLet*>(GetStatic());
+  Let *GetLet() const { 
+    return dynamic_cast<Let*>(Get());
   }
   bool NeedsLetViolation() const; // a let violation should exist.
   OMap GetIntroducedBinding(int which_child) const { 
-    if (which_child != StaticLet::CHILD) return OMap::Default();
+    if (which_child != Let::CHILD) return OMap::Default();
     Map ret;
-    ret[GetStaticLet()->GetVariable()] = GetChildValue(StaticLet::VALUE);
+    ret[GetLet()->GetVariable()] = GetChildValue(Let::VALUE);
     return OMap::Make(ret);
   }
-  Object ComputeValue() const { return GetChildValue(StaticLet::CHILD);}
+  Object ComputeValue() const { return GetChildValue(Let::CHILD);}
   // ---------- L1 functions ----------  
   void L1_CheckSetLetViolation(); // (programming with Dr. Seuss)
-  void L1_Init(StaticElement * static_parent, OMap binding) {
+  void L1_Init(Element * static_parent, OMap binding) {
     DynamicElement::L1_Init(static_parent, binding);
     L1_CheckSetLetViolation();
   }
@@ -382,15 +413,15 @@ struct DynamicPost : public DynamicElement {
   // ---------- const functions ----------  
   bool NeedsPostViolation() const;
   Object ComputeTuple() const{
-    DynamicElement * expr = GetSingleChild(StaticPost::TUPLE);
+    DynamicElement * expr = GetSingleChild(Post::TUPLE);
     if (!expr) return Object();
     return expr->GetValue();
   }
   OwnedPosting * GetOwnedPosting() const { return posting_;}
   Record GetRecordForDisplay() const;
-  Object ComputeValue() const { return GetChildValue(StaticPost::TUPLE);}
+  Object ComputeValue() const { return GetChildValue(Post::TUPLE);}
   // ---------- L1 functions ----------  
-  void L1_Init(StaticElement * static_parent, OMap binding) {
+  void L1_Init(Element * static_parent, OMap binding) {
     posting_ = NULL;
     DynamicElement::L1_Init(static_parent, binding);
     L1_CheckSetPostViolation();
@@ -412,22 +443,22 @@ struct DynamicPost : public DynamicElement {
 
 // if the condition does not evaluate to Boolean::Make(false), 
 // then the ON_TRUE should be executed.
-struct StaticIf : public StaticElement {
-  #define StaticIfChildNameList {					\
+struct If : public Element {
+  #define IfChildNameList {					\
       ITEM(CONDITION),							\
 	ITEM(ON_TRUE),					\
 	ITEM(ON_FALSE),					\
 	};
-  CLASS_ENUM_DECLARE(StaticIf, ChildName);
-  #define StaticIfObjectNameList {				\
+  CLASS_ENUM_DECLARE(If, ChildName);
+  #define IfObjectNameList {				\
 	};
-  CLASS_ENUM_DECLARE(StaticIf, ObjectName);
+  CLASS_ENUM_DECLARE(If, ObjectName);
   DECLARE_FUNCTION_ENUMS;
   bool ChildrenGoInTuple() const { return true;}
   bool ChildNeedsSeparateLine(int which_child) const {
     if (which_child == CONDITION) return false;
     for (int c = ON_TRUE; c<NumChildren(); c++) {
-      StaticElement *e = GetChild(c);
+      Element *e = GetChild(c);
       if (e && e->ElementNeedsSeparateLine()) return true;
     }
     return false;
@@ -443,65 +474,41 @@ struct StaticIf : public StaticElement {
 struct DynamicIf : public DynamicElement {
   // ---------- L2 functions ----------  
   // ---------- const functions ----------  
-  StaticIf *GetStaticIf() const { 
-    return dynamic_cast<StaticIf*>(GetStatic());
+  If *GetIf() const { 
+    return dynamic_cast<If*>(Get());
   }
   bool ChildShouldExist(int which_child) const;
   Object ComputeValue() const { 
-    if (ChildShouldExist(StaticIf::ON_TRUE)) 
-      return GetChildValue(StaticIf::ON_TRUE);
-    if (ChildShouldExist(StaticIf::ON_FALSE)) 
-      return GetChildValue(StaticIf::ON_FALSE);
+    if (ChildShouldExist(If::ON_TRUE)) 
+      return GetChildValue(If::ON_TRUE);
+    if (ChildShouldExist(If::ON_FALSE)) 
+      return GetChildValue(If::ON_FALSE);
     return NULL;
   }
 
   // ---------- L1 functions ----------  
-  void L1_Init(StaticElement * static_parent, OMap binding) {
+  void L1_Init(Element * static_parent, OMap binding) {
     DynamicElement::L1_Init(static_parent, binding);
   }
   // ---------- N1 notifiers ----------
   void N1_ChildValueChanged(int which_child, Object old_val, Object new_val) {
     if (old_val == new_val) return;
     DynamicElement::N1_ChildValueChanged(which_child, old_val, new_val);
-    if (which_child == StaticIf::CONDITION) L1_CheckSetChildViolation();
+    if (which_child == If::CONDITION) L1_CheckSetChildViolation();
   }
   // ---------- data ----------  
 };
 
 
-struct StaticSubstitute : public StaticElement {
-   #define StaticSubstituteChildNameList {	 		\
-    ITEM(CHILD),						\
-      };
-  CLASS_ENUM_DECLARE(StaticSubstitute, ChildName);
-  #define StaticSubstituteObjectNameList {				\
-    };
-  CLASS_ENUM_DECLARE(StaticSubstitute, ObjectName);
-  DECLARE_FUNCTION_ENUMS;
-
-  string ToString(int indent) const;
-
-  virtual Function GetFunction() const { return SUBSTITUTE;}
-  string ToString() const;
-  bool ChildrenGoInTuple() const { return true;}
-};
-struct DynamicSubstitute : public DynamicElement {
-  Object ComputeValue() const;
-  void N1_BindingChanged() {
-    DynamicElement::N1_BindingChanged();
-    L1_CheckSetValueViolation();
-  }
-};
-
-struct StaticEqual : public StaticElement {
-   #define StaticEqualChildNameList {	 		\
+struct Equal : public Element {
+   #define EqualChildNameList {	 		\
     ITEM(LHS),						\
     ITEM(RHS),						\
       };
-  CLASS_ENUM_DECLARE(StaticEqual, ChildName);
-  #define StaticEqualObjectNameList {				\
+  CLASS_ENUM_DECLARE(Equal, ChildName);
+  #define EqualObjectNameList {				\
     };
-  CLASS_ENUM_DECLARE(StaticEqual, ObjectName);
+  CLASS_ENUM_DECLARE(Equal, ObjectName);
   DECLARE_FUNCTION_ENUMS;
   virtual Function GetFunction() const { return EQUAL;}
   bool ChildrenGoInTuple() const { return true;}
@@ -510,15 +517,15 @@ struct DynamicEqual : public DynamicElement {
   Object ComputeValue() const;
 };
 
-struct StaticSum : public StaticElement {
-   #define StaticSumChildNameList {	 		\
+struct Sum : public Element {
+   #define SumChildNameList {	 		\
     ITEM(LHS),						\
     ITEM(RHS),						\
       };
-  CLASS_ENUM_DECLARE(StaticSum, ChildName);
-  #define StaticSumObjectNameList {				\
+  CLASS_ENUM_DECLARE(Sum, ChildName);
+  #define SumObjectNameList {				\
     };
-  CLASS_ENUM_DECLARE(StaticSum, ObjectName);
+  CLASS_ENUM_DECLARE(Sum, ObjectName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return SUM;}
   bool ChildrenGoInTuple() const { return true;}
@@ -527,14 +534,14 @@ struct DynamicSum : public DynamicElement {
   Object ComputeValue() const;
 };
 
-struct StaticToString : public StaticElement {
-   #define StaticToStringChildNameList {	 		\
+struct ToString : public Element {
+   #define ToStringChildNameList {	 		\
     ITEM(ARG),						\
       };
-  CLASS_ENUM_DECLARE(StaticToString, ChildName);
-  #define StaticToStringObjectNameList {				\
+  CLASS_ENUM_DECLARE(ToString, ChildName);
+  #define ToStringObjectNameList {				\
     };
-  CLASS_ENUM_DECLARE(StaticToString, ObjectName);
+  CLASS_ENUM_DECLARE(ToString, ObjectName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return TOSTRING;}
   bool ChildrenGoInTuple() const { return true;}
@@ -543,13 +550,13 @@ struct DynamicToString : public DynamicElement {
   Object ComputeValue() const;
 };
 
-struct StaticConcat : public StaticElement {
-   #define StaticConcatChildNameList {	 		\
+struct Concat : public Element {
+   #define ConcatChildNameList {	 		\
       };
-  CLASS_ENUM_DECLARE(StaticConcat, ChildName);
-   #define StaticConcatObjectNameList {		\
+  CLASS_ENUM_DECLARE(Concat, ChildName);
+   #define ConcatObjectNameList {		\
     };
-  CLASS_ENUM_DECLARE(StaticConcat, ObjectName);
+  CLASS_ENUM_DECLARE(Concat, ObjectName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return CONCAT;}
   bool HasVariableNumChildren() const { return true; }
@@ -558,37 +565,19 @@ struct DynamicConcat : public DynamicElement {
   Object ComputeValue() const;
 };
 
-struct StaticMakeTuple : public StaticElement {
-   #define StaticMakeTupleChildNameList {	 		\
-      };
-  CLASS_ENUM_DECLARE(StaticMakeTuple, ChildName);
-   #define StaticMakeTupleObjectNameList {		\
-    };
-  CLASS_ENUM_DECLARE(StaticMakeTuple, ObjectName);
-  DECLARE_FUNCTION_ENUMS;
-  Function GetFunction() const { return MAKETUPLE;}
-  bool HasVariableNumChildren() const { return true; }
-  bool ChildNeedsSeparateLine(int which_child) const {
-    for (int c = 0; c<NumChildren(); c++) {
-      StaticElement *e = GetChild(c);
-      if (e && e->ElementNeedsSeparateLine()) return true;
-    }
-    return false;
-  }
-};
 struct DynamicMakeTuple : public DynamicElement {
   Object ComputeValue() const;
 };
 
-struct StaticNth : public StaticElement {
-   #define StaticNthChildNameList {	 		\
+struct Nth : public Element {
+   #define NthChildNameList {	 		\
     ITEM(TUPLE),						\
     ITEM(N),						\
       };
-  CLASS_ENUM_DECLARE(StaticNth, ChildName);
-  #define StaticNthObjectNameList {				\
+  CLASS_ENUM_DECLARE(Nth, ChildName);
+  #define NthObjectNameList {				\
     };
-  CLASS_ENUM_DECLARE(StaticNth, ObjectName);
+  CLASS_ENUM_DECLARE(Nth, ObjectName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return NTH;}
   bool ChildrenGoInTuple() const { return true;}
@@ -599,14 +588,14 @@ struct DynamicNth : public DynamicElement {
 
 
 
-struct StaticChoose : public StaticElement { 
-   #define StaticChooseChildNameList {	 		\
+struct Choose : public Element { 
+   #define ChooseChildNameList {	 		\
     ITEM(STRATEGY),					\
       };
-  CLASS_ENUM_DECLARE(StaticChoose, ChildName);
-  #define StaticChooseObjectNameList {		\
+  CLASS_ENUM_DECLARE(Choose, ChildName);
+  #define ChooseObjectNameList {		\
     };
-  CLASS_ENUM_DECLARE(StaticChoose, ObjectName);
+  CLASS_ENUM_DECLARE(Choose, ObjectName);
   DECLARE_FUNCTION_ENUMS;
   virtual Function GetFunction() const { return CHOOSE;}
 };
@@ -622,7 +611,7 @@ struct DynamicChoose : public DynamicElement {
   Object ComputeValue() const;
   
   // ---------- L1 functions ----------  
-  void L1_Init(StaticElement * static_parent, OMap binding);
+  void L1_Init(Element * static_parent, OMap binding);
   void L1_Erase();
   bool L1_TryMakeChoice(OTuple strategy, Object value);
   bool L1_TryMakeCorrectChoice();
@@ -649,18 +638,18 @@ struct DynamicConstant : public DynamicElement {
   // ---------- data ----------  
 };
 
-template <class T> T * MakeStaticElement() {
+template <class T> T * MakeElement() {
   CHECK(static_cast<Element *>((T *)NULL) == NULL);
   return New<T>();
 }
 
-template <class T> T * MakeDynamicElement(StaticElement *static_parent, 
+template <class T> T * MakeDynamicElement(Element *static_parent, 
 					  OMap binding) {
   CHECK(static_cast<DynamicElement *>((T *)NULL) == NULL);
   return New<T>(static_parent, binding);
 }
 
-DynamicElement * MakeDynamicElement(StaticElement *static_parent, 
+DynamicElement * MakeDynamicElement(Element *static_parent, 
 				    OMap binding);
 
 */

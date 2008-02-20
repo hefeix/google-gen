@@ -41,7 +41,7 @@ Object Element::Execute(Thread thread) {
     Object return_val = children_[c].Execute(thread);
     results.push_back(return_val);
   }
-  return ComputeReturnValue(results);
+  return ComputeReturnValue(thread, results);
 }
 
 Record Element::GetRecordForDisplay() const {
@@ -136,4 +136,19 @@ string Constant::ProgramTree(int indent) const {
   if (!can_be_concise) return Element::ProgramTree(indent);
   string ret = HTMLEscape(o.ToString());
   return GetLink(ret);
+}
+
+string Substitute::ProgramTree(int indent) const {
+  Element *child = GetChild(CHILD);
+  if (child) {
+    Constant *constant = dynamic_cast<Constant *>(child);
+    if (constant) {
+      Object o = constant->object_;
+      if (o.GetType() == Object::VARIABLE) { 
+	string ret = HTMLEscape(o.ToString());
+	return GetLink(ret);
+      }
+    }
+  }
+  return Element::ProgramTree();
 }
