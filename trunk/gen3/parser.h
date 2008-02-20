@@ -30,9 +30,9 @@
 // ad hoc parser.
 // position points to where to start parsing, and is changed by the function
 // to the end of what was parsed.
-StaticElement * ParseElement(const Tuple & t, uint * pos);
-vector<StaticElement *> ParseElements(const Tuple & t); 
+Element * ParseElement(const Tuple & t, uint * pos);
+vector<Element *> ParseElements(const Tuple & t); 
 
-StaticElement * MakeStaticElementByKeyword(Keyword type);
+Element * MakeElementByKeyword(Keyword type);
 
 #endif

@@ -28,7 +28,7 @@ Object Object::AddKeyword(string k) {
   return Keyword::Make(k);  
 }
 
-void Object::Init(){
+void Object::StaticInit(){
   cout << "Calling Object::Init" << endl;
   AddReservedWord("pattern");
   AddReservedWord("null");

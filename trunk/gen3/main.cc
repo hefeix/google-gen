@@ -20,6 +20,9 @@
 #include "blackboard.h"
 #include "webserver.h"
 #include "genrequesthandler.h"
+#include "element.h"
+#include "parser.h"
+
 //#include "model.h"
 //#include "spec.h"
 //#include "fixers.h"
@@ -28,19 +31,15 @@
 
 #include <fstream>
 
-/* void Shell() {
-  ifstream inputspec("test_spec");
-  LoadSpec(inputspec);
+void Shell() {
   ifstream input("test_prog");
-  input >> M;
-  cout << M;
-  StaticExecutor::Execute();
+  Execution *E = New<Execution>();
+  OTuple program_tuple;
+  input >> program_tuple;
+  E->ParseAndExecute(program_tuple);
   string command;
   while ((cout << "\n?") && (cin >> command)) {
     if (command == "q") break;
-    if (command == "run") {
-      StaticExecutor::Execute();
-    }
     if (command == "v") {
       int level;
       cin >> level;
@@ -52,19 +51,20 @@
       cin >> func_name >> level;
       SetVerbosity(func_name, level);
     }
-    if (command == "ai") {
+    /*if (command == "ai") {
       string comments;
       CandidateRule cr;
       Optimizer::MaybeFindRandomManyExamplesRule(&cr, &comments);
       cout << "rule:" << ToString(cr) << endl;
-    }
+      }*/
   }
 }
-*/
+
 
 int main() {
   rand();
-  Object::Init();
+  Object::StaticInit();
+  Element::StaticInit();
 
   //ChooserSet::Init();
   Object::DoneAddingKeywords();
@@ -73,8 +73,8 @@ int main() {
 
   //ObjectsShell();
   (new WebServer(new GenRequestHandler))->StartInThread();
-  Blackboard::Shell();
+  //Blackboard::Shell();
 
-  // Shell();
+  Shell();
   Object::Destroy();
 }

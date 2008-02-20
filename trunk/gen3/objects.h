@@ -153,7 +153,7 @@ class Object {
   static bool IsReservedWord(string s) { return (reserved_words_ % s); }
   static bool IsKeyword(string s) { return (keywords_ % s); }
   static void DoneAddingKeywords() { done_adding_keywords_ = true;}
-  static void Init();
+  static void StaticInit();
   static void Destroy();
 
   // true/false/pattern are reserved words but not keywords

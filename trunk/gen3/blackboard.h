@@ -23,6 +23,7 @@
 #include "numbers.h"
 #include "record.h"
 #include "base.h"
+#include "tuple.h"
 
 struct SamplingInfo{
   bool   sampled_;
@@ -79,13 +80,23 @@ class Blackboard : public Base{
     return make_pair(r.begin(), FindTimeInRow(r, time_limit));
   }
   static int Size(RowSegment s) { return s.second - s.first; }
-  
+
+  struct Subscription;
+  struct RowInfo {
+    Row row_;
+    // maps object to how often it appears as the first term in the tuple within
+    // this row. 
+    // Absent if the row indexes a schema where the first term is constant. 
+    // Used for sampling random tuples.
+    map<Object, int> first_term_counts_;
+    vector<Subscription *> subscriptions_;
+  };
   struct Subscription {
-    virtual ~Subscription();
+    virtual ~Subscription() {}
     virtual void Update(OTuple tuple, OTime time) = 0;
-    void Init(OTuple wildcard_tuple) {
+    void Init(OTuple wildcard_tuple, Blackboard *blackboard) {
       CHECK(IsWildcardTuple(wildcard_tuple.Data()));
-      subscribee_ = &(index_[wildcard_tuple]);
+      subscribee_ = &(blackboard->index_[wildcard_tuple]);
       subscribee_->subscriptions_.push_back(this);      
     }
     void SendCurrentAsUpdates() {
@@ -94,15 +105,6 @@ class Blackboard : public Base{
     RowInfo * subscribee_;
   };
 
-  struct RowInfo {
-    Row row_;
-    // maps object to how often it appears as the first term in the tuple within
-    // this row. 
-    // Absent if the row indexes a schema where the first term is constant. 
-    // Used for sampling random tuples.
-    map<Object, int> first_term_counts_;
-    vector<GeneralSubscription *> subscriptions_;
-  };
 
   // Modifying the blackboard
   void Post(OTuple tuple, OTime time);  

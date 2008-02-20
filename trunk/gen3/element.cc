@@ -17,10 +17,8 @@
 // Author: Georges Harik and Noam Shazeer
 
 #include "element.h"
-#include "link.h"
-#include "changelist.h"
-#include "model.h"
 #include "execution.h"
+#include "webserver.h"
 
 #undef ITEM
 #define ITEM(x) #x
@@ -29,16 +27,15 @@
 CLASS_ENUM_DEFINE(Element, Function);
 #undef FUNCTION
 
-#define FUNCTION(f, F)				\
-  CLASS_ENUM_DEFINE(Static##f, ChildName);	\
-  CLASS_ENUM_DEFINE(Static##f, ObjectName);
+#define FUNCTION(f, F) CLASS_ENUM_DEFINE(f##Element, ChildName);
 ALL_FUNCTIONS
 #undef FUNCTION
+
 
 Object Element::Execute(Thread thread) {
   Tuple results;
   for (uint c=0; c<children_.size(); c++) {
-    Object return_val = children_[c].Execute(thread);
+    Object return_val = children_[c]->Execute(thread);
     results.push_back(return_val);
   }
   return ComputeReturnValue(thread, results);
@@ -97,12 +94,12 @@ string Element::ProgramTree(int indent) const {
   return ret;
 }
 
-Object On::Execute(Thread t) {
+Object OnElement::Execute(Thread t) {
   // Get the tuple child
   Object tuple_child = GetChild(TUPLE)->Execute(t);
   if ( (tuple_child.GetType() != Object::OTUPLE) ||
        (!IsVariableTuple(OTuple(tuple_child).Data())) ) {
-    cerr << "Tuple child of On not an OTUPLE: " << tuple_child << endl;
+    cerr << "Tuple child of OnElement not an OTUPLE: " << tuple_child << endl;
     return NULL;
   }
 
@@ -112,11 +109,11 @@ Object On::Execute(Thread t) {
   return NULL;
 }
 
-Object Post::Execute(Thread t) {
+Object PostElement::Execute(Thread t) {
   // Get the tuple child
   Object tuple_child = GetChild(TUPLE)->Execute(t);
   if ( (tuple_child.GetType() != Object::OTUPLE) ) {
-    cerr << "Tuple child of Post not an OTUPLE: " << tuple_child << endl;
+    cerr << "Tuple child of PostElement not an OTUPLE: " << tuple_child << endl;
     return NULL;
   }
 
@@ -124,7 +121,7 @@ Object Post::Execute(Thread t) {
   return tuple_child;
 }
 
-string Constant::ProgramTree(int indent) const {
+string ConstantElement::ProgramTree(int indent) const {
   bool can_be_concise = true;
   Object o = object_;
   if (o.GetType() == Object::OTUPLE)  can_be_concise = false;
@@ -138,10 +135,10 @@ string Constant::ProgramTree(int indent) const {
   return GetLink(ret);
 }
 
-string Substitute::ProgramTree(int indent) const {
+string SubstituteElement::ProgramTree(int indent) const {
   Element *child = GetChild(CHILD);
   if (child) {
-    Constant *constant = dynamic_cast<Constant *>(child);
+    ConstantElement *constant = dynamic_cast<ConstantElement *>(child);
     if (constant) {
       Object o = constant->object_;
       if (o.GetType() == Object::VARIABLE) { 
@@ -151,4 +148,9 @@ string Substitute::ProgramTree(int indent) const {
     }
   }
   return Element::ProgramTree();
+}
+
+void Element::StaticInit() {
+  for (int i=0; i<NumFunctions(); i++) 
+    Object::AddKeyword(Downcase(FunctionToString(Function(i))));
 }

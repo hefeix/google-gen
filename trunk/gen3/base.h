@@ -28,8 +28,9 @@ class OwnedPosting;
 class Base {
  public:
   #define BaseTypeList {				\
-      ITEM(BLACKBOARD)					\
-      ITEM(ELEMENT)					\
+      ITEM(EXECUTION),					\
+      ITEM(BLACKBOARD),					\
+	ITEM(ELEMENT),					\
 	};
   CLASS_ENUM_DECLARE(Base, Type);
 
