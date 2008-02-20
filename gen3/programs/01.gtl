@@ -1,0 +1,11 @@
+{
+   post (S 0 1)
+   on (S a b)
+      if (equal(a 10000) 0
+      post (S b sum(1 b)))
+   post (C 0 0)
+   on (S a b) {
+      on (C a 0) post (C b 1)
+      on (C a 1) post (C b 0)
+   }  
+}
