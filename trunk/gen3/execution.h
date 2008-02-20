@@ -25,10 +25,15 @@ struct Element;
 struct Execution;
 
 struct Thread {
+  Thread() {
+    element_ = NULL;
+    execution_ = NULL;
+  }
   OTime time_;
   OMap binding_;
   Element * element_;
   Execution * execution_;
+  string ToString();
 };
 
 struct OnSubscription : public Blackboard::Subscription {
@@ -59,20 +64,14 @@ struct Execution : public Base {
   }
   void CommitPostings() {
     forall(run, post_queue_) {
+      cout << "Commiting " << *run << " at " << current_time_ << endl;
       blackboard_->Post(*run, current_time_);
     }
+    post_queue_.clear();
   }
   void ExecuteRunnableThreads();
 
-  void AddCodeTreeToRun(Element *top_element) {
-    Thread t;
-    t.time_ = OTime::Make(current_time_.Data() + BitSeq::Min());
-    t.binding_ = OMap::Default();
-    t.element_ = top_element;
-    t.execution_ = this;
-    Enqueue(t);
-    top_elements_.insert(top_element);
-  }
+  void AddCodeTreeToRun(Element *top_element);
 
   void Enqueue(Thread t) {
     run_queue_[t.time_.Data()].push_back(t);
