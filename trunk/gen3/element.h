@@ -227,7 +227,7 @@ struct SubstituteElement : public Element {
   string ToString() const;
   bool ChildrenGoInTuple() const { return true;}
   Object ComputeReturnValue(Thread thread, Tuple results) {
-      return DeepSubstitute(thread.binding_.Data(), results[CHILD]);
+    return DeepSubstitute(thread.binding_, results[CHILD]);
   }
 };
 

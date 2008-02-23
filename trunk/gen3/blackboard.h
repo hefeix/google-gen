@@ -54,7 +54,6 @@ class Blackboard : public Base{
  public:
   void Init() { 
     Base::Init(); 
-    last_time_ = CREATION;
   }
   void Erase() { Base::Erase(); }
   Base::Type GetBaseType() const { return Base::BLACKBOARD;}
@@ -68,80 +67,78 @@ class Blackboard : public Base{
 
   uint64 GetNumTuples() const { return all_tuples_.size(); }
 
-  static void Shell();
-
-  // new stuff
-  typedef vector<pair<OTuple, OTime> > Row;
-  typedef pair<Row::const_iterator, Row::const_iterator> RowSegment;
-  static RowSegment EntireRow(const Row & r) { 
-    return make_pair(r.begin(), r.end());}
-  static Row::const_iterator FindTimeInRow(const Row &r, OTime time_limit);
-  static RowSegment TimeLimetedRow(const Row &r, OTime time_limit) {
-    return make_pair(r.begin(), FindTimeInRow(r, time_limit));
-  }
-  static int Size(RowSegment s) { return s.second - s.first; }
-
+  void Shell();
+  
   struct Subscription;
-  struct RowInfo {
-    Row row_;
-    // maps object to how often it appears as the first term in the tuple within
-    // this row. 
-    // Absent if the row indexes a schema where the first term is constant. 
-    // Used for sampling random tuples.
-    map<Object, int> first_term_counts_;
+  struct Row {
+    Tuple wildcard_tuple_;
+    int num_wildcards_;
+    int num_tuples_; // necessary because num_wildcards_ can be 0.
+    // all of the tuples (we only store non-constant positions)
+    vector<Object> data_; 
+    vector<hash_map<Object, Row *> *> children_;
     vector<Subscription *> subscriptions_;
+
+    void Init(const Tuple & wildcard_tuple);
+    void AddTuple(const Tuple &t);
+    void SplitAtPosition(int position);
+    Row * FindCreateChild(int position, Object value);
+
+    int NumTuples() const { return num_tuples_;}
+    void GetTuple(int which, Tuple * result) const {
+      *result = wildcard_tuple_;
+      const Object * read_ptr = &(data_[which * num_wildcards_]);
+      for (uint i=0; i<result->size(); i++) {
+	if ((*result)[i] == WILDCARD) 
+	  (*result)[i] = *(read_ptr++);
+      }
+    }
   };
+
+  Row * GetCreateAllWildcardRow(int size) const;
+  Row * GetCreateRow(const Tuple & wildcard_tuple) const;
+  
+
   struct Subscription {
     virtual ~Subscription() {}
-    virtual void Update(OTuple tuple, OTime time) = 0;
-    void Init(OTuple wildcard_tuple, Blackboard *blackboard) {
-      CHECK(IsWildcardTuple(wildcard_tuple.Data()));
-      subscribee_ = &(blackboard->index_[wildcard_tuple]);
-      subscribee_->subscriptions_.push_back(this);      
+    virtual void Update(const Tuple & tuple) = 0;
+    void Init(const Tuple & wildcard_tuple, Blackboard *blackboard) {
+      VLOG(1) << "New subscription to " << wildcard_tuple << endl;
+      CHECK(IsWildcardTuple(wildcard_tuple));
+      subscribee_ = blackboard->GetCreateRow(wildcard_tuple);
+      subscribee_->subscriptions_.push_back(this);
     }
-    void SendCurrentAsUpdates() {
-      forall(run, subscribee_->row_) Update(run->first, run->second);
-    }
-    RowInfo * subscribee_;
+    Row * subscribee_;
   };
 
 
   // Modifying the blackboard
-  void Post(OTuple tuple, OTime time);  
+  void Post(const Tuple & tuple);
 
   // Reading the blackboard
 
-  // returns a pointer to an empty row on failure.
-  const Row * GetRow(OTuple wildcard_tuple) const { 
-    const RowInfo * ri = index_ % wildcard_tuple;
-    if (!ri) return &empty_row_;
-    return &(ri->row_);
+  int GetNumWildcardMatches(const Tuple & t) {
+    return GetCreateRow(t)->NumTuples();
   }
-  int GetNumWildcardMatches(OTuple t) const{
-    return GetRow(t)->size();
-  }
-  bool Contains(OTuple t) const { return GetNumWildcardMatches(t);}
+  bool Contains(const Tuple & t) const { return all_tuples_ % t; }
 
-  // Pass in a row if you want this to be thread-safe. 
-  RowSegment GetVariableMatches(OTuple variable_tuple, 
-				OTime time_limit = NULL, 
-				Row * temp_row = 0,
-				double sample_fraction = 1.0) const;
-
-  OTime FindTupleTime(OTuple t) const;
+  // Appends bindings to the results vector
+  void GetVariableMatches(const Tuple & variable_tuple, 
+			  Map binding_so_far,
+			  vector<Map> *results,
+			  double sample_fraction = 1.0) const;
   
   // Random tuples
-  bool GetRandomTuple(OTuple * result);
+  /*bool GetRandomTuple(OTuple * result);
   bool GetRandomTupleMatching(OTuple * result, const OTuple& wildcard_t);
   bool GetRandomTupleContaining(OTuple * ret, const set<Object>& terms,
 				bool situation_distribution);
+  */
 
   // Simple way to query and get results back
   bool FindSatisfactions(OPattern pattern,
-			 OTime time_limit, 
 			 const SamplingInfo & sampling,
-			 vector<OMap> * substitutions,
-			 vector<OTime> * times,
+			 vector<Map> * substitutions,
 			 uint64 * num_satisfactions,
 			 int64 * max_work_now);
 			 
@@ -149,15 +146,10 @@ class Blackboard : public Base{
 
 
  private:
-  map<OTuple, RowInfo> index_;
-
-  // non-essential stuff - used for analysis
-  Row all_tuples_;
-  OTime last_time_;
-  set<int> all_lengths_;
-  map<OTuple, map<Object, int> > first_term_counts_;
-  Row empty_row_;
-
+  // points from length to rowinfo for a tuple of all wildcards. 
+  vector<Row *> top_level_rowinfo_;
+  
+  hash_set<Tuple> all_tuples_;
 };
 
 #endif

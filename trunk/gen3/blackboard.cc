@@ -65,88 +65,106 @@ string SamplingInfo::ToString() const {
   return "{pos=" + itoa(position_) + " fraction=1/" + dtoa(1/fraction_) + "}"; 
 }
 
-
-
-struct TimeCompare{
-  bool operator() (const pair<OTuple, OTime> & p1,
-	
-	   const pair<OTuple, OTime> & p2) { 
-    return (p1.second.Data() < p2.second.Data());
+void Blackboard::Row::SplitAtPosition(int position) {
+  if (children_[position] != NULL) return;
+  children_[position] = new hash_map<Object, Row *>;
+  Tuple t;
+  for(int i=0; i<NumTuples(); i++) {
+    GetTuple(i, &t);
+    FindCreateChild(position, t[position])->AddTuple(t);
   }
-};
-  
-Blackboard::Row::const_iterator
-Blackboard::FindTimeInRow(const Row &r, OTime time_limit) {
-  return lower_bound(r.begin(), r.end(), 
-		     make_pair(OTuple(NULL), time_limit),
-		     TimeCompare());
+
+}
+Blackboard::Row * Blackboard::Row::FindCreateChild(int position, Object value) {
+  CHECK(children_[position]);
+  Row * & row_ref = (*children_[position])[value];  
+  if (row_ref == NULL) {
+    Tuple new_wt = wildcard_tuple_;
+    new_wt[position] = value;
+    row_ref = New<Row>(new_wt);
+  }
+  return row_ref;
 }
 
-Blackboard::RowSegment 
-Blackboard::GetVariableMatches(OTuple variable_tuple,
-			       OTime time_limit,
-			       Row * temp_row,
-			       double sampling_fraction) const{
-  static Row static_temp_row;
-  const Row * wildcard_matches = GetRow
-    (OTuple::Make(VariablesToWildcards(variable_tuple.Data())));
-  RowSegment wildcard_segment = EntireRow(*wildcard_matches);  
-  if (Size(wildcard_segment) == 0) return wildcard_segment;
-  if (time_limit != NULL) {
-    wildcard_segment.second = FindTimeInRow(*wildcard_matches, time_limit);
+void Blackboard::Row::Init(const Tuple & wildcard_tuple) {
+  VLOG(1) << "New row " << wildcard_tuple << endl;
+  wildcard_tuple_ = wildcard_tuple;
+  num_wildcards_ = NumWildcards(wildcard_tuple_);
+  num_tuples_ = 0;
+  children_.resize(wildcard_tuple_.size());
+}
+void Blackboard::Row::AddTuple(const Tuple &t) {
+  for (uint i=0; i<t.size(); i++) 
+    if (wildcard_tuple_[i] == WILDCARD) data_.push_back(t[i]);
+  num_tuples_++;
+  forall(run, subscriptions_) {
+    (*run)->Update(t);
   }
-  if (sampling_fraction == 1.0 
-      && !HasDuplicateVariables(variable_tuple.Data())) return wildcard_segment;
-
-  if (!temp_row) temp_row = &static_temp_row;
-  temp_row->clear();
-  for (Row::const_iterator run = wildcard_segment.first; 
-       run < wildcard_segment.second; run++) {
-    if (sampling_fraction != 1.0) {
-      double skip = int(log(RandomFraction())/log(1.0-sampling_fraction));
-      run += skip;
-      if (run >= wildcard_segment.second) break;
-    }
-    OTuple t = run->first;
-    if (ComputeSubstitution(variable_tuple.Data(), t.Data(), NULL)) {
-      temp_row->push_back(*run);
+  for (uint i=0; i<wildcard_tuple_.size(); i++) {
+    if (children_[i]) {
+      FindCreateChild(i, t[i])->AddTuple(t);
     }
   }
-  return EntireRow(*temp_row);
 }
 
-void Blackboard::Post(OTuple tuple, OTime time) {
-  CHECK(!(time.Data() < last_time_.Data()));
-  last_time_ = time;
-  
+
+
+Blackboard::Row * Blackboard::GetCreateAllWildcardRow(int size) const{
+  vector<Row *> * tlr = 
+    (vector<Row *> *)(&top_level_rowinfo_);
+  while (tlr->size() <= (uint)size) tlr->push_back(NULL);
+  if ((*tlr)[size] == NULL) {
+    (*tlr)[size] = New<Row>(AllWildcards(size));
+  }
+  return (*tlr)[size];
+}
+
+Blackboard::Row * Blackboard::GetCreateRow(const Tuple & wildcard_tuple) const{
+  int size = wildcard_tuple.size();
+  // Later, we might search, now let's just put in constants left to right.
+  Row * r = GetCreateAllWildcardRow(size);
+  for (int i=0; i<size; i++) {
+    if (wildcard_tuple[i] != WILDCARD) {
+      r->SplitAtPosition(i);
+      r = r->FindCreateChild(i, wildcard_tuple[i]);
+    }
+  }
+  return r;
+}
+
+void Blackboard::Post(const Tuple & tuple) {
+  VLOG(1) << "Post tuple " << tuple << endl;
   if (Contains(tuple)) return;
+  all_tuples_.insert(tuple);
+  GetCreateAllWildcardRow(tuple.size())->AddTuple(tuple);
+}
 
-  pair<OTuple, OTime> p = make_pair(tuple, time);
-  for (GeneralizationIterator g_iter(tuple.Data()); !g_iter.done(); ++g_iter){
-    const Tuple & generalized = g_iter.Current();
-    RowInfo * ri = &(index_[OTuple::Make(generalized)]);
-    ri->row_.push_back(p);
-    if (generalized.size() > 0 && generalized[0] == WILDCARD) {
-      ri->first_term_counts_[tuple.Data()[0]]++;
+
+void 
+Blackboard::GetVariableMatches(const Tuple & variable_tuple, 
+			       Map binding_so_far,
+			       vector<Map> *results,
+			       double sample_fraction) const {
+  const Row * wildcard_matches = GetCreateRow
+    (VariablesToWildcards(variable_tuple));
+  for (int i=0; i<wildcard_matches->NumTuples(); i++) {
+    if (sample_fraction != 1.0) {
+      double skip = int(log(RandomFraction())/log(1.0-sample_fraction));
+      i += skip;
+      if (i >= wildcard_matches->NumTuples()) break;
     }
-    // we may want to make two passes so that the blackboard is consistent
-    // before it sends updates.
-    forall(run, ri->subscriptions_) {
-      (*run)->Update(tuple, time);
+    Map m = binding_so_far;
+    Tuple t;
+    wildcard_matches->GetTuple(i, &t);
+    if (ExtendSubstitution(variable_tuple, t, &m)) {
+      results->push_back(m);
     }
   }
-  all_tuples_.push_back(p);
-  all_lengths_.insert(tuple.Data().size());
 }
 
-OTime Blackboard::FindTupleTime(OTuple t) const{
-  const Row * r = GetRow(t);
-  if (r->size() == 0) return NULL;
-  CHECK(r->size() == 1);
-  return (*r)[0].second;
-}
 
-bool Blackboard::GetRandomTuple(OTuple * result) {
+/*
+  bool Blackboard::GetRandomTuple(OTuple * result) {
   if (all_tuples_.size() == 0) return false;
   *result = all_tuples_[RandomUInt32() % all_tuples_.size()].first;
   return true;
@@ -225,11 +243,9 @@ bool Blackboard::GetRandomTupleContaining(OTuple * ret,
   if (ret->size()) return true;
   return false;
 }
-
+*/
 
 void Blackboard::Shell() {
-  Blackboard * b_ptr = New<Blackboard>();
-  Blackboard &b = *b_ptr;
   string command;
   OTuple tuple;
   OTime time;
@@ -237,9 +253,9 @@ void Blackboard::Shell() {
 
   for (;(cin >> command) && command != "q"; cout << endl) {
     if (command == "post") {
-      cin >> tuple >> time;
-      cout << "Posting " << tuple << " " << time << endl;
-      b.Post(tuple, time);
+      cin >> tuple;
+      cout << "Posting " << tuple << endl;
+      Post(tuple.Data());
       continue;
     }
     if (command == "postfile") {
@@ -248,26 +264,24 @@ void Blackboard::Shell() {
       ifstream input(fn.c_str());
       int count = 0;
       while (input >> tuple) {
-	b.Post(tuple, CREATION);
+	Post(tuple.Data());
 	count++;
       }
       cout << "Posted " << count << " tuples" << endl;      
     }
     if (command == "query") {
-      cin >> pattern >> time;
-      cout << "QUERY " << pattern << " " << time << endl;
-      vector<OMap> substitutions;
-      vector<OTime> times;
+      cin >> pattern;
+      cout << "QUERY " << pattern << endl;
+      vector<Map> substitutions;
       uint64 num_satisfactions;
-      b.FindSatisfactions(pattern, time, SamplingInfo(), &substitutions, &times,
+      FindSatisfactions(pattern, SamplingInfo(), &substitutions,
 			  &num_satisfactions, NULL);
       cout << "#sats: " << num_satisfactions << endl;
       for (uint64 i=0; i<num_satisfactions; i++) {
-	cout << "   " << substitutions[i] << "   " << times[i] << endl;
+	cout << "   " << OMap::Make(substitutions[i]) << endl;
       }
     }
   }
-  b_ptr->Erase();
 }
 
 string Blackboard::GetURL() const {
@@ -277,12 +291,9 @@ Record Blackboard::GetRecordForDisplay() const {
   Record ret = Base::GetRecordForDisplay();
   ret["type"] = "BLACKBOARD";
   ret["num tuples"] = itoa(GetNumTuples());
-  ret["tuples"] = "<table>"; 
   forall(run, all_tuples_) {
-    ret["tuples"] += "<tr><td>" + run->first.ToString()
-      + "</td><td>" + run->second.ToString() + "</tr>\n";
+    ret["tuples"] += OTuple::Make(*run).ToString() + "<br>\n";
   }
-  ret["tuples"] += "</table>";
   return ret;
 }
 
@@ -290,14 +301,15 @@ string Blackboard::Print(int page) const {
   OTuple t = StringToObject("(PRINT " 
 			    + ((page==-1)?"*":itoa(page)) 
 			    +  " * * *)");
-  const Row * r = GetRow(t);
+  const Row * r = GetCreateRow(t.Data());
   
   // page, lines
   map<int, vector<string> > output;
   if (page != -1) output[page];
   
-  forall (run, *r) {
-    Tuple t = run->first.Data();
+  for (int i=0; i<r->NumTuples(); i++) {
+    Tuple t;
+    r->GetTuple(i, &t);
     Object page_num_obj = t[1];
     if (page_num_obj.GetType() != Object::INTEGER) continue;
     int page_num = Integer(page_num_obj).Data();
@@ -331,35 +343,30 @@ string Blackboard::Print(int page) const {
 
 // Simple way to query and get results back
 bool Blackboard::FindSatisfactions(OPattern pattern,
-				   OTime time_limit,
 				   const SamplingInfo & sampling,
-				   vector<OMap> * substitutions,
-				   vector<OTime> * times,
+				   vector<Map> * substitutions,
 				   uint64 * num_satisfactions,
 				   int64 * max_work_now) {
   if (substitutions) substitutions->clear();
-  if (times) times->clear();
   CHECK(num_satisfactions);
   *num_satisfactions = 0;
 
   const Pattern & p = pattern.Data();
   if (p.size() == 0) { 
     MOREWORK(1);
-    if (substitutions) substitutions->push_back(OMap::Default());
-    if (times) times->push_back(CREATION);
+    if (substitutions) substitutions->push_back(Map());
     *num_satisfactions = 1;
     return true;
   }
 
-  // This is now a condition node or a partition node
   vector<uint64> num_matches;
   for (uint i=0; i<p.size(); i++)  {
     const Tuple& t = p[i].Data();
     num_matches.push_back(uint64(GetNumWildcardMatches
-				 (OTuple::Make(VariablesToWildcards(t)))
+				 (VariablesToWildcards(t))
 				 * sampling.FractionAtPosition(i)) );
   }
-  int condition_tuple 
+  int condition_tuple
     = min_element(num_matches.begin(), num_matches.end())-num_matches.begin();
   
   /* TODO: we might want to run this as a partition search.
@@ -367,44 +374,39 @@ bool Blackboard::FindSatisfactions(OPattern pattern,
      int num_components = GetConnectedComponents(p, NULL);
      if ( (num_components > 1) && (least_matches > 0) ) {
   }
+
+  Also, we might want to save time if the tuple has no repeated variables
+  and we don't need the actual substitutions.
   */
-  Row temp_row;
-  RowSegment s = 
-    GetVariableMatches(p[condition_tuple], time_limit, &temp_row,
-		       sampling.FractionAtPosition(condition_tuple));
-  MOREWORK(Size(s));
+  MOREWORK(num_matches[condition_tuple]);
+
+  vector<Map> variable_matches;
+  GetVariableMatches(p[condition_tuple].Data(), Map(), &variable_matches,
+		     sampling.FractionAtPosition(condition_tuple));
+  
   SamplingInfo sub_sampling = sampling.RemovePosition(condition_tuple);
-  for (Row::const_iterator run_row = s.first; run_row!=s.second; run_row++) {
-    Map sub;
-    CHECK(ComputeSubstitution(p[condition_tuple].Data(), 
-			      run_row->first.Data(), &sub));
+  forall(run, variable_matches) {
+    const Map & sub = *run;
     Pattern sub_pattern 
       = Substitute(sub, RemoveFromVector(p, condition_tuple));
     
-    vector<OMap> sub_substitutions;
-    vector<OTime> sub_times;
+    vector<Map> sub_substitutions;
     uint64 sub_num_satisfactions;
-    
     bool success = FindSatisfactions(OPattern::Make(sub_pattern), 
-				     time_limit, sub_sampling,
+				     sub_sampling,
 				     substitutions?(&sub_substitutions):0, 
-				     times?(&sub_times):0, 
 				     &sub_num_satisfactions,
 				     max_work_now);
     if (!success) return false;
     *num_satisfactions += sub_num_satisfactions;
     if (substitutions) {
       forall(run, sub_substitutions) {
-	substitutions->push_back(OMap::Make(Union(sub, run->Data())));	
+	Map combined = sub;
+	CHECK(Add(&combined, *run));
+	substitutions->push_back(combined);
       }
     }
-    if (times) {
-      forall(run, sub_times) {
-	times->push_back(OTime::Make(max(run_row->second.Data(), run->Data())));
-      }
-    }				     
   }
-  if (times) CHECK(times->size() == *num_satisfactions);
   if (substitutions) CHECK(substitutions->size() == *num_satisfactions);
   return true;
 }

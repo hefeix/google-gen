@@ -107,32 +107,12 @@ Object OnElement::Execute(Thread thread) {
   thread.element_ = GetChild(CHILD);
 
   // Run over all existing things
-  Execution::MatchAndRun(thread, variable_tuple);
+  Execution::MatchAndRun(thread, OTuple(variable_tuple).Data());
 
   // Make a new on subscription
-  New<OnSubscription>(thread, variable_tuple);
+  New<OnSubscription>(thread, OTuple(variable_tuple).Data());
 
   return NULL;
-}
-
-Tuple Execution::MatchAndRun(Thread thread, OTuple variable_tuple) {
-
-  // Immediately execute everything that currently matches
-  Blackboard * bb = thread.execution_->blackboard_;
-  Blackboard::Row temp_row;
-  Blackboard::RowSegment results =
-    bb->GetVariableMatches(variable_tuple, NULL, &temp_row);
-  Tuple output;
-  for (Blackboard::Row::const_iterator run = results.first;
-       run != results.second; run++) {
-    OTuple the_tuple = run->first;
-    Map new_binding;
-    if (!ComputeSubstitution(variable_tuple.Data(), 
-			     the_tuple.Data(), &new_binding)) continue;
-    thread.binding_ = OMap::Make(Union(thread.binding_.Data(), new_binding));
-    output.push_back(thread.element_->Execute(thread));
-  }
-  return output;
 }
 
 Object PostElement::Execute(Thread t) {
@@ -143,7 +123,7 @@ Object PostElement::Execute(Thread t) {
     return NULL;
   }
 
-  t.execution_->AddPost(tuple_child);
+  t.execution_->AddPost(OTuple(tuple_child).Data());
   return tuple_child;
 }
 

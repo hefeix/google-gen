@@ -293,6 +293,7 @@ namespace __gnu_cxx{
 };
 
 istream & operator >>(istream & input, Object & o);
+
 inline Object StringToObject(string s) {
   istringstream istr(s);
   Object o;
@@ -304,6 +305,8 @@ inline ostream & operator <<(ostream & output, const Object & o) {
   output << o.ToString();
   return output;
 }
+
+
 
 namespace __gnu_cxx{
   template <> class hash<Object> {
@@ -317,8 +320,7 @@ namespace __gnu_cxx{
 // map<int, int, less<int>, MyAlloc<std::pair<int const, int > > > test_vector;
 
 typedef vector<Object> Tuple;
-typedef map<Object, Object> Map;
-//typedef map<Object, Object, less<Object>, MyAlloc<pair<Object const, Object> > > Map;
+typedef vector<pair<Object, Object> > Map;
 typedef vector<Tuple> MPattern; // mutable 2 levels down
 
 typedef SpecificObject<Object::FLAKE, string> Flake;
@@ -336,7 +338,14 @@ typedef SpecificObject<Object::OBITSEQ, BitSeq> OBitSeq;
 typedef SpecificObject<Object::STRING, string> String;
 typedef SpecificObject<Object::ESCAPE, Object> Escape;
 
-// typedef set<Variable> VariableSet;
+inline const Object * operator %(const Map & b, Object key) {
+  forall(run, b) if (run->first == key) return &(run->second);
+  return NULL;
+}
+inline Object * operator %(Map & b, Object key) {
+  forall(run, b) if (run->first == key) return &(run->second);
+  return NULL;
+}
 
 inline const Object * operator %(const OMap & m, Object key) {
   return m.Data() % key;
@@ -408,11 +417,11 @@ template <class T> const T & DataMin(const T & t1, const T & t2) {
   return t2;
 }
 
-inline OMap Union(OMap m1, OMap m2) {
+/*inline OMap Union(OMap m1, OMap m2) {
   CHECK(m1 != NULL);
   CHECK(m2 != NULL);
   return OMap::Make(Union(m1.Data(), m2.Data()));
-}
+  }*/
 
 int VariableToInt(Variable v);
 Variable IntToVariable(int i);
@@ -433,6 +442,26 @@ inline bool IsVariable(const Object & o) {
 inline bool IsWildcard(const Object & o) {  
   return (o == WILDCARD); 
 }
+
+inline istream & operator >>(istream &input, Tuple &t) {
+  OTuple ot;
+  input >> ot;
+  if (ot != NULL) t = ot.Data();
+  return input;
+}
+inline istream & operator >>(istream &input, Map &m) {
+  OMap om;
+  input >> om;
+  if (om != NULL) m = om.Data();
+  return input;
+}
+inline ostream & operator <<(ostream & output, const Tuple & t) {
+  return (output << OTuple::Make(t));
+}
+inline ostream & operator <<(ostream & output, const Map & m) {
+  return  (output << OMap::Make(m));
+}
+
 
 void ObjectsShell();
 

@@ -22,31 +22,27 @@
 
 string Thread::ToString() {
   string ret;
-  ret += time_.ToString() + " ";
-  ret += binding_.ToString() + " ";
+  ret += OMap::Make(binding_).ToString() + " ";
   ret += element_->ProgramTree() + " ";
   return ret;
 }
 
-void OnSubscription::Init(Thread t, OTuple variable_tuple) {
+void OnSubscription::Init(Thread t, const Tuple &  variable_tuple) {
   CHECK(t.element_);
   thread_ = t;
   variable_tuple_ = variable_tuple;
   Blackboard::Subscription::Init
-    (OTuple::Make(VariablesToWildcards(variable_tuple.Data())),
+    (VariablesToWildcards(variable_tuple),
      t.execution_->blackboard_);
 }
 
-void OnSubscription::Update(OTuple tuple, OTime time) {
-  Thread t = thread_;
-  // cout << "Update " << tuple << " " << time << endl;
-  // cout << "Threadinfo " << t.ToString() << endl;
-  t.time_ = OTime::Make(max(t.time_.Data(), time.Data()) + BitSeq::Min());
-  Map new_binding;
-  if (!ComputeSubstitution(variable_tuple_.Data(), 
-			   tuple.Data(), &new_binding)) return;
-  t.binding_ = OMap::Make(Union(t.binding_.Data(), new_binding));
-  t.execution_->Enqueue(t);
+void OnSubscription::Update(const Tuple & tuple) {
+  Thread new_thread = thread_;
+  VLOG(1)  << "Update " << tuple
+	   << " Threadinfo " << new_thread.ToString() << endl;
+  if (!ExtendSubstitution(variable_tuple_, 
+			  tuple, &new_thread.binding_)) return;
+  new_thread.execution_->Enqueue(new_thread, BitSeq::Min());
 }
 void Execution::ParseAndExecute(OTuple program_tuple) {
   vector<Element *> v = ParseElements(program_tuple.Data());
@@ -56,7 +52,7 @@ void Execution::ParseAndExecute(OTuple program_tuple) {
 
 void Execution::ExecuteRunnableThreads() {
   CHECK(run_queue_.size());
-  current_time_ = OTime::Make(run_queue_.begin()->first);
+  current_time_ = OTime::Make(current_time_.Data() + run_queue_.begin()->first);
   const vector<Thread> & v = run_queue_.begin()->second;
   forall(run, v) {
     Thread t = *run;
@@ -68,10 +64,30 @@ void Execution::ExecuteRunnableThreads() {
 void Execution::AddCodeTreeToRun(Element *top_element) {
   CHECK(top_element->VerifyTree());
   Thread t;
-  t.time_ = OTime::Make(current_time_.Data() + BitSeq::Min());
-  t.binding_ = OMap::Default();
   t.element_ = top_element;
   t.execution_ = this;
-  Enqueue(t);
-  top_elements_.insert(top_element);
+  Enqueue(t, BitSeq::Min());
+  top_elements_.push_back(top_element);
+}
+
+Tuple Execution::MatchAndRun(Thread thread, const Tuple & variable_tuple) {
+  // Immediately execute everything that currently matches
+  Blackboard * bb = thread.execution_->blackboard_;
+  vector<Map> results;
+  Tuple output;
+  bb->GetVariableMatches(variable_tuple, thread.binding_, &results);
+  VLOG(1) << "MatchAndRun " << thread.ToString() << " " << variable_tuple
+	  << " #results=" << results.size() << endl;
+  forall(run, results){
+    Thread new_thread = thread;
+    new_thread.binding_ = *run;
+    output.push_back(new_thread.element_->Execute(new_thread));    
+  }
+  return output;
+}
+
+Record Execution::GetRecordForDisplay() const { 
+  Record ret = Base::GetRecordForDisplay();
+  forall(run, top_elements_) ret["program"] += (*run)->ProgramTree();
+  return ret;
 }
