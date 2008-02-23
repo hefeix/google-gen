@@ -45,6 +45,12 @@ bool HasDuplicateVariables(const Tuple & t);
 // Returns a tuple of all wildcards.
 Tuple AllWildcards(int num_terms);
 
+inline int NumWildcards(const Tuple & t) {
+  int ret =0;
+  for (uint i=0; i<t.size(); i++) if (t[i] == WILDCARD) ret++;
+  return ret;
+}
+
 // Given a wildcard tuple and a constant tuple, do they match
 bool MatchesWildcardTuple(const Tuple & wildcard_tuple, 
 			  const Tuple & constant_tuple);
@@ -77,9 +83,8 @@ inline static CandidateRule SplitOffLast(const MPattern & p) {
 
 // Either return the value associated with a given key, or return the key if
 // it is not in the map.  
-inline Object Replacement(const Map & m, const Object &o) {
-  const Object * found = m%o;
-  if (found) return *found;
+inline Object Replacement(const Map & b, const Object &o) {
+  forall(run, b) if (run->first == o) return run->second;
   if (o.GetType() == Object::ESCAPE) return Escape(o).Data();
   return o;
 };
@@ -97,12 +102,16 @@ Object DeepSubstitute(const Map & m, Object o);
 // returns true if DeepSubstitute could change this object for some context.
 bool DeepSubstitutePossible(Object o);
 
-set<Variable> GetDomainVariables(OMap m);
 
 // Adds a key-value pair to a Map.
-void Add(Map *m, Object key, Object value);
+// Returns true if the key is not in the map yet or if the key-value pair
+// is in the map.  Returns false (and does not modify the map) if the key 
+// is already associated with a different value.
+bool Add(Map *b, Object key, Object value);
+
 // union=
-void Add(Map *m, const Map & m2);
+// returns true on success (if the addition is comatible) 
+bool Add(Map *b, const Map & m2);
 
 // Provide a restricted substitution to a set of keys.  The keys are objects
 template<class SType>
@@ -138,11 +147,11 @@ bool IsConnectedPattern(const Pattern & p);
 // removes the tuples that have no variables
 MPattern RemoveVariableFreeTuples(const MPattern & v);
 
-// computes the substitution to get from one tuple to another.
-// The substitution may only use Variables as keys.  Returns NULL if
-// no substitution exists.
-bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub, 
-			 Map *result);
+// Extends a substitution so that it takes the tuple pre_sub to the tuple 
+// post_sub.  
+// returns false on any incompatibility.
+// Only variables can be substituted for.
+bool ExtendSubstitution(const Tuple & pre_sub, const Tuple & post_sub,Map *sub);
 
 set<Object> GetAllTerms(const MPattern & v);
 

@@ -128,15 +128,6 @@ int GeneralizationIterator::GeneralizeMask() const{
   return generalize_mask_;
 }
 
-set<Variable> GetDomainVariables(OMap m) {
-  set<Variable> ret;
-  forall(run, m.Data()) {
-    ret.insert(Variable(run->first));
-  }
-  return ret;
-}
-
-
 void Substitute(const Map & m, Tuple *t) {
   for (uint i=0; i<t->size(); i++) (*t)[i] = Replacement(m, (*t)[i]);
 };
@@ -200,23 +191,23 @@ bool DeepSubstitutePossible(Object o) {
   return false;
 }
 
-void Add(Map * m, Object key, Object value) {
-  (*m)[key] = value;
-}
-void Add(Map *m, const Map & m2) {
-  m->insert(m2.begin(), m2.end());
-}
-/*Map Restrict(const Map & m, const set<Object> & keys){
-  Map ret;
-  forall(run, m) {
-    if (keys % run->first) ret[run->first] = run->second;
+bool Add(Map * b, Object key, Object value) {
+  forall(run, *b) {
+    if (run->first == key) return (run->second == value);
   }
-  return ret;
-  }*/
-Map Reverse(const Map & m) {
+  b->push_back(make_pair(key, value));
+  return true;
+}
+bool Add(Map *b, const Map & b2) {
+  forall(run, b2) {
+    if (!Add(b, run->first, run->second)) return false;   
+  }
+  return true;
+}
+Map Reverse(const Map & b) {
   Map ret;
-  forall(run, m) {
-    ret[run->second] = run->first;
+  forall(run, b) {
+    Add(&ret, run->second, run->first);
   }
   return ret;
 }
@@ -279,20 +270,17 @@ MPattern RemoveVariableFreeTuples(const MPattern &v) {
   }
   return ret;
 }
-bool ComputeSubstitution(const Tuple & pre_sub, const Tuple & post_sub, 
-			 Map *result){
-  Map sub;
+bool ExtendSubstitution(const Tuple & pre_sub, const Tuple & post_sub, 
+			 Map *sub){
+  Map tmp;
+  if (!sub) sub = &tmp;
+
   CHECK(pre_sub.size() == post_sub.size());
   for (uint i=0; i<pre_sub.size(); i++) {
-    if (IsVariable(pre_sub[i])){
-      if ( (sub % pre_sub[i]) 
-	   && (sub[pre_sub[i]] != post_sub[i]) ) return false;
-      sub[pre_sub[i]] = post_sub[i];
-    } else {
-      if (pre_sub[i] != post_sub[i]) return false;
+    if (IsVariable(pre_sub[i])) {
+      if (!Add(sub, pre_sub[i], post_sub[i])) return false;
     }
   }
-  if (result) *result = sub;
   return true;
 }
 set<Object> GetAllTerms(const MPattern & v) {
@@ -311,14 +299,8 @@ istream & operator >>(istream & input, MPattern &p){
   p = PatternToMPattern(o.Data());
   return input;
 }
-string ToString(const Map &m) {
-  return OMap::Make(m).ToString();
-}
-istream & operator >>(istream & input, Map &m){
-  OMap o;
-  input >> o;
-  m = o.Data();
-  return input;
+string ToString(const Map &b) {
+  return OMap::Make(b).ToString();
 }
 string ToString(const CandidateRule & r){
   return ToString(r.first) + "->" + ToString(r.second);
@@ -484,7 +466,7 @@ CandidateRule CanonicalizeRule(const CandidateRule & r,
     for (uint j=0; j<c_res[i].size(); j++) {
       Object & w_ref = c_res[i][j];
       if (sub % w_ref) {
-	w_ref = Escape::Make(sub[w_ref]);
+	w_ref = Escape::Make(Replacement(sub, w_ref));
       }
       else if (w_ref.GetType() == Object::ESCAPE) {
 	w_ref = Escape::Make(w_ref);
@@ -512,7 +494,7 @@ CandidateRule CanonicalizeRule(const CandidateRule & r,
     forall (run, *out_sub)
       run->second 
       = IntToVariable(VariableToInt(Variable(run->second))+next_var);
-    out_sub->insert(sub.begin(), sub.end());
+    Add(out_sub, sub);
   }
   return make_pair(c_pre, c_res);
 }

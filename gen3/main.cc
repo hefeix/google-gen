@@ -32,6 +32,7 @@
 #include <fstream>
 
 void Shell() {
+  //SetVerbosity(1);
   ifstream input("test_prog");
   Execution *E = New<Execution>();
   OTuple program_tuple;
@@ -73,7 +74,7 @@ int main() {
 
   //ObjectsShell();
   (new WebServer(new GenRequestHandler))->StartInThread();
-  //Blackboard::Shell();
+  //New<Blackboard>()->Shell();
 
   Shell();
   Object::Destroy();

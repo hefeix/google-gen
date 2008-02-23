@@ -268,7 +268,7 @@ istream & operator >>(istream & input, Object & o){
 	input.get();
 	EatCommentsAndWhitespace(input);
 	CHECK(input >> value);
-	m[key] = value;
+	m.push_back(make_pair(key, value));
       } else {
 	CHECK(!ismap);
 	v.push_back(key);

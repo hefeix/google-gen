@@ -19,13 +19,14 @@
 
 #include "numbers.h"
 #include "objects.h"
+#include "tuple.h"
 
 string Time::ToString() const {
   if (never_) return "never";
   Map t;
   for (uint i=0; i<coordinates_.size(); i++) {
-    t[OBitSeq::Make(coordinates_[i].first)] 
-      = Integer::Make(coordinates_[i].second);
+    Add(&t, OBitSeq::Make(coordinates_[i].first),
+	Integer::Make(coordinates_[i].second));
   }
   string ret = "time";
   OMap ot = OMap::Make(t);
