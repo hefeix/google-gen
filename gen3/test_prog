@@ -1,8 +1,60 @@
+<game of life>
 {
-  post (F 0 0);
-  on (F x y)
-    if ( equal (x 1000001)
-         0
-	 post (F sum (1 x) sum (x y)) )
-}
+  post (IS_ROW 0)
+  post (IS_COL 0)
+  post (IS_TIME 0)
 
+  on (IS_ROW x) let y sum(x 1)
+     if (equal(y, 20) 0 {
+          post (IS_ROW y)
+          post (ROW_ADJACENT x y)
+          post (ROW_ADJACENT y x)
+       }
+     )       
+
+  on (IS_COL x) let y sum(x 1)
+     if (equal(y, 20) 0 {
+          post (IS_COL y)
+          post (COL_ADJACENT x y)
+          post (COL_ADJACENT y x)
+       }
+     )       
+    
+  on (IS_TIME x) let y sum(x,1)
+     if (equal(y, 100) 0
+       delay # {
+          post (TS x y)
+	  post (IS_TIME y)
+       }
+    )
+    
+  on (IS_ROW x) on (IS_COL y) {
+     post (IS_CELL (x y))
+  }
+  on (ROW_ADJACENT a b) on (COL_ADJACENT c d) 
+     post (CELL_ADJACENT (a c) (b d))
+  on (ROW_ADJACENT a b) on (IS_COL c) 
+     post (CELL_ADJACENT (a c) (b c))
+  on (COL_ADJACENT a b) on (IS_ROW c) 
+     post (CELL_ADJACENT (c a) (c b))
+
+  on (IS_COL x) post (FULL 0 (0 x))
+  on (IS_TIME t) on (IS_CELL c) delay #0
+     post (NUM_NEIGHBORS t c 
+       sum match (CELL_ADJACENT c a) sum match(FULL t a) 1)
+
+  on (TS t u) on (NUM_NEIGHBORS t c 3) 
+     post (FULL u c)
+  on (TS t u) on (NUM_NEIGHBORS t c 2) on (FULL t c)
+     post (FULL u c)
+     
+ < the print statements >
+  on (FULL t cell)
+     post (PRINT t nth(0 cell) sum(nth(1 cell) 1) "X")
+ 
+
+  on (IS_TIME t) on (IS_ROW row) {
+     post (PRINT t row 0 "|")
+     post (PRINT t row 21 "|")
+  }
+}

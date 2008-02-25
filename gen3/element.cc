@@ -115,6 +115,46 @@ Object OnElement::Execute(Thread thread) {
   return NULL;
 }
 
+Object MatchElement::Execute(Thread thread) {
+  // Get the tuple child
+  Object variable_tuple = GetChild(TUPLE)->Execute(thread);
+  if ( (variable_tuple.GetType() != Object::OTUPLE) ||
+       (!IsVariableTuple(OTuple(variable_tuple).Data())) ) {
+    cerr << "Tuple child of MatchElement not an OTUPLE: " 
+	 << variable_tuple << endl;
+    return NULL;
+  }
+  
+  // Point the thread to the next executable element
+  thread.element_ = GetChild(CHILD);
+
+  // Run over all existing things
+  return OTuple::Make
+    (Execution::MatchAndRun(thread, OTuple(variable_tuple).Data()));
+}
+
+Object LetElement::Execute(Thread thread) {
+  // Get the tuple child
+  Object variable = GetChild(VARIABLE)->Execute(thread);
+  Object value = GetChild(VALUE)->Execute(thread);
+  if (variable.GetType() == Object::VARIABLE) {
+    AddChangeValue(&thread.binding_, variable, value);
+  }
+  return GetChild(CHILD)->Execute(thread);
+}
+
+Object DelayElement::Execute(Thread thread) {
+  // Get the tuple child
+  Element * delay_child = GetChild(DIMENSION);
+  Object delay = delay_child->Execute(thread);
+  if (delay.GetType() != Object::OBITSEQ) {
+    delay = OBitSeq::Default();
+  }
+  thread.element_ = GetChild(CHILD);  
+  thread.execution_->Enqueue(thread, OBitSeq(delay).Data());
+  return NULL;
+}
+
 Object PostElement::Execute(Thread t) {
   // Get the tuple child
   Object tuple_child = GetChild(TUPLE)->Execute(t);
@@ -164,7 +204,9 @@ void Element::StaticInit() {
 Object IfElement::Execute(Thread thread) {
   Object condition = GetChild(CONDITION)->Execute(thread);
   // Everything other than FALSE is true for this purpose
-  if (condition == FALSE)
-    return GetChild(ON_FALSE)->Execute(thread);
+  if (condition == FALSE) {
+    Element * on_false = GetChild(ON_FALSE);
+    return on_false->Execute(thread);
+  }
   return GetChild(ON_TRUE)->Execute(thread);
 }

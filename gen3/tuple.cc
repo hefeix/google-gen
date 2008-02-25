@@ -191,6 +191,16 @@ bool DeepSubstitutePossible(Object o) {
   return false;
 }
 
+void AddChangeValue(Map *m, Object key, Object value){
+  forall(run, *m) {
+    if (run->first == key) {
+      run->second = value;
+      return;
+    }
+  }
+  m->push_back(make_pair(key, value));
+}
+
 bool Add(Map * b, Object key, Object value) {
   forall(run, *b) {
     if (run->first == key) return (run->second == value);

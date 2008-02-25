@@ -103,6 +103,10 @@ Object DeepSubstitute(const Map & m, Object o);
 bool DeepSubstitutePossible(Object o);
 
 
+// Adds a key value pair to a Map or changes the existing value associated
+// with the key if the key already exists.
+void AddChangeValue(Map *m, Object key, Object value);
+
 // Adds a key-value pair to a Map.
 // Returns true if the key is not in the map yet or if the key-value pair
 // is in the map.  Returns false (and does not modify the map) if the key 

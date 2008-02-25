@@ -47,7 +47,7 @@ struct OnSubscription : public Blackboard::Subscription {
 struct Execution : public Base {
   void Init() { 
     Base::Init(); 
-    current_time_ = CREATION;
+    current_time_ = Time();
     blackboard_ = New<Blackboard>();
   }
   Base::Type GetBaseType() const { return Base::EXECUTION;}
@@ -101,8 +101,11 @@ struct Execution : public Base {
   // This is the blackboard for the execution
   Blackboard *blackboard_;
 
-  // The current time (used during execution)
-  OTime current_time_;
+  // The current time (Tracked during execution for no purpose)
+  Time current_time_;
+
+  // the output of the program
+  string output_; 
 };
 
 #endif

@@ -294,6 +294,7 @@ Record Blackboard::GetRecordForDisplay() const {
   forall(run, all_tuples_) {
     ret["tuples"] += OTuple::Make(*run).ToString() + "<br>\n";
   }
+  ret["print"] = "<pre>" + Print(-1) + "</pre>";
   return ret;
 }
 
