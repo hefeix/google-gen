@@ -52,13 +52,14 @@ void Execution::ParseAndExecute(OTuple program_tuple) {
 
 void Execution::ExecuteRunnableThreads() {
   CHECK(run_queue_.size());
-  current_time_ = OTime::Make(current_time_.Data() + run_queue_.begin()->first);
-  const vector<Thread> & v = run_queue_.begin()->second;
+  current_time_.Increment(run_queue_.begin()->first, 1);
+  // we copy off and delete first to make delay statements work properly.
+  const vector<Thread> v = run_queue_.begin()->second; 
+  run_queue_.erase(run_queue_.begin());
   forall(run, v) {
     Thread t = *run;
     t.element_->Execute(t);
   }
-  run_queue_.erase(run_queue_.begin());
 }
 
 void Execution::AddCodeTreeToRun(Element *top_element) {
@@ -88,6 +89,9 @@ Tuple Execution::MatchAndRun(Thread thread, const Tuple & variable_tuple) {
 
 Record Execution::GetRecordForDisplay() const { 
   Record ret = Base::GetRecordForDisplay();
-  forall(run, top_elements_) ret["program"] += (*run)->ProgramTree();
+  forall(run, top_elements_) 
+    ret["Program"] += (*run)->ProgramTree() + "\n";
+  ret["Program"] = "<pre>" + ret["Program"] + "</pre>";
+  ret["output"] = "<pre>" + output_ + "</pre>";
   return ret;
 }
