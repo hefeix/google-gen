@@ -1,0 +1,9 @@
+
+<tuple builder>
+on (BUILD_TUPLE tuple_name tuple_size element_number element)
+  if (equal(tuple_size match_size(BUILD_TUPLE tuple_name tuple_size * *) )
+    post 
+      repeat x tuple_size
+        match_last (BUILD_TUPLE tuple_name tuple_size x y) 
+	  y
+
