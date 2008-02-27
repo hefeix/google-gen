@@ -5,5 +5,5 @@
 >
 {
 (let y (constant 3) (post null (maketuple 2 (substitute y) (substitute y))))
-(on (null x) (constant 3) (post null (maketuple 2 (constant 7)(substitute x))))
+(on (null x) (constant 3) (post null (maketuple 2 (substitute x)(constant 7) )))
 }
