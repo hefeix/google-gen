@@ -71,6 +71,7 @@ void Execution::AddCodeTreeToRun(Element *top_element) {
   top_elements_.push_back(top_element);
 }
 
+// huh - maybe we should move this to element.cc MatchBaseElement::whatever
 Tuple Execution::MatchAndRun(Thread thread, const Tuple & variable_tuple) {
   // Immediately execute everything that currently matches
   Blackboard * bb = thread.execution_->blackboard_;

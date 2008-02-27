@@ -75,10 +75,12 @@ void Blackboard::Row::SplitAtPosition(int position) {
   }
 
 }
-Blackboard::Row * Blackboard::Row::FindCreateChild(int position, Object value) {
+Blackboard::Row * Blackboard::Row::FindChild(int position, Object value, 
+					     bool create) {
   CHECK(children_[position]);
   Row * & row_ref = (*children_[position])[value];  
   if (row_ref == NULL) {
+    if (!create) return NULL;
     Tuple new_wt = wildcard_tuple_;
     new_wt[position] = value;
     row_ref = New<Row>(new_wt);
@@ -119,14 +121,16 @@ Blackboard::Row * Blackboard::GetCreateAllWildcardRow(int size) const{
   return (*tlr)[size];
 }
 
-Blackboard::Row * Blackboard::GetCreateRow(const Tuple & wildcard_tuple) const{
+Blackboard::Row * Blackboard::GetRow(const Tuple & wildcard_tuple, 
+				     bool create_empty) const{
   int size = wildcard_tuple.size();
   // Later, we might search, now let's just put in constants left to right.
   Row * r = GetCreateAllWildcardRow(size);
-  for (int i=0; i<size; i++) {
-    if (wildcard_tuple[i] != WILDCARD) {
-      r->SplitAtPosition(i);
-      r = r->FindCreateChild(i, wildcard_tuple[i]);
+  for (int position=0; position<size; position++) {
+    if (wildcard_tuple[position] != WILDCARD) {
+      r->SplitAtPosition(position);      
+      r = r->FindChild(position, wildcard_tuple[position], create_empty); 
+      if (r == NULL) return r;
     }
   }
   return r;

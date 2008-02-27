@@ -94,44 +94,89 @@ string Element::ProgramTree(int indent) const {
   return ret;
 }
 
-Object OnElement::Execute(Thread thread) {
+Object MatchBaseElement::Execute(Thread thread) {
   // Get the tuple child
   Object variable_tuple = GetChild(TUPLE)->Execute(thread);
   if ( (variable_tuple.GetType() != Object::OTUPLE) ||
        (!IsVariableTuple(OTuple(variable_tuple).Data())) ) {
-    cerr << "Tuple child of OnElement not an OTUPLE: " << variable_tuple << endl;
-    return NULL;
-  }
-
-  // Point the thread to the next executable element
-  thread.element_ = GetChild(CHILD);
-
-  // Run over all existing things
-  Execution::MatchAndRun(thread, OTuple(variable_tuple).Data());
-
-  // Make a new on subscription
-  New<OnSubscription>(thread, OTuple(variable_tuple).Data());
-
-  return NULL;
-}
-
-Object MatchElement::Execute(Thread thread) {
-  // Get the tuple child
-  Object variable_tuple = GetChild(TUPLE)->Execute(thread);
-  if ( (variable_tuple.GetType() != Object::OTUPLE) ||
-       (!IsVariableTuple(OTuple(variable_tuple).Data())) ) {
-    cerr << "Tuple child of MatchElement not an OTUPLE: " 
+    cerr << "Tuple child  not an OTUPLE: " 
 	 << variable_tuple << endl;
     return NULL;
   }
-  
+
   // Point the thread to the next executable element
   thread.element_ = GetChild(CHILD);
 
+  return SubclassExecute(thread, variable_tuple);
+}
+
+Object OnElement::SubclassExecute(Thread thread, Object variable_tuple) {
+  // Run over all existing things
+  Execution::MatchAndRun(thread, OTuple(variable_tuple).Data());
+  // Make a new on subscription
+  New<OnSubscription>(thread, OTuple(variable_tuple).Data());
+  return NULL;
+}
+
+Object MatchElement::SubclassExecute(Thread thread, Object variable_tuple) {
   // Run over all existing things
   return OTuple::Make
     (Execution::MatchAndRun(thread, OTuple(variable_tuple).Data()));
 }
+
+Object MatchRandomElement::SubclassExecute(Thread thread, 
+					   Object variable_tuple) {
+  // may want to make this work later.
+  if (HasDuplicateVariables(variable_tuple)) return NULL;
+
+  Blackboard::Row * row = thread.execution_->blackboard_->GetRow
+    (VariablesToWildcards(variable_tuple));
+  if (!row) return NULL;
+
+  int num_tuples = row->GetNumTuples();
+  if (num_tuples == 0) return NULL;
+  int pos = RandomUint32() % num_tuples;
+  Tuple constant_tuple;
+  row->GetTuple(pos, &constant_tuple);
+  CHECK(ExtendSubstitution(variable_tuple, constant_tuple, &thread.binding_));
+
+  return GetChild(CHILD)->Execute(thread);
+}
+
+Object MatchLastElement::SubclassExecute(Thread thread, 
+					   Object variable_tuple) {
+  // may want to make this work later.
+  if (HasDuplicateVariables(variable_tuple)) return NULL;
+
+  Blackboard::Row * row = thread.execution_->blackboard_->GetRow
+    (VariablesToWildcards(variable_tuple));
+  if (!row) return NULL;
+
+  int num_tuples = row->GetNumTuples();
+  if (num_tuples == 0) return NULL;
+  int pos = num_tuples-1;
+  Tuple constant_tuple;
+  row->GetTuple(pos, &constant_tuple);
+  CHECK(ExtendSubstitution(variable_tuple, constant_tuple, &thread.binding_));
+
+  return GetChild(CHILD)->Execute(thread);
+}
+
+Object MatchCountElement::Execute(Thread thread) {
+  // Get the tuple child
+  Object variable_tuple = GetChild(TUPLE)->Execute(thread);
+  if ( (variable_tuple.GetType() != Object::OTUPLE) ||
+       (!IsVariableTuple(OTuple(variable_tuple).Data())) ) {
+    cerr << "Tuple child not an OTUPLE: " << variable_tuple << endl;
+    return NULL;
+  }
+
+  Blackboard::Row * row = thread.execution_->blackboard_->GetRow
+    (VariablesToWildcards(variable_tuple));
+  if (!row) return Integer::Make(0);
+  return Integer::Make(row->GetNumTuples());
+}
+
 
 Object LetElement::Execute(Thread thread) {
   // Get the tuple child
