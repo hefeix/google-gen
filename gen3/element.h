@@ -235,7 +235,7 @@ struct MatchBaseElement : public Element {
     return 0;
   }
   Tuple GetIntroducedVariables(int which_child) const { 
-    if (HasExtraChild() && which_child == NumChildren()-1) 
+    if (HasExtraChild() && which_child == ComputeRequiredNumChildren()-1) 
       return introduced_variables_;
     return Tuple();
   }

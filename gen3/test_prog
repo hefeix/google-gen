@@ -1,4 +1,9 @@
-{
+<{
   let y 3 post (y y)
-  on (3 x) post (x 7)
+  on (3 x) post (7 x)
+}
+>
+{
+(let y (constant 3) (post null (maketuple 2 (substitute y) (substitute y))))
+(on (null x) (constant 3) (post null (maketuple 2 (constant 7)(substitute x))))
 }

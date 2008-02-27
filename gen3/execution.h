@@ -53,7 +53,8 @@ struct Execution : public Base {
   }
   Base::Type GetBaseType() const { return Base::EXECUTION;}
 
-  void ParseAndExecute(OTuple program_tuple, bool execute = true);
+  void ParseAndExecute(OTuple program_tuple, bool pretty = true, 
+		       bool execute = true);
 
   void ExecuteForever() {
     while (run_queue_.size()) ExecuteOneEpoch();

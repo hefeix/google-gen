@@ -24,12 +24,12 @@
 Element * SimpleParseElement(Object o, Element *parent){
   CHECK(o.GetType() == Object::OTUPLE);
   const Tuple & t = OTuple(o).Data();
-  CHECK(t.size() == 3);
+  CHECK(t.size() >= 2);
   Element * ret = MakeElementByKeyword(t[0], parent);
   ret->SetObject(t[1]);
-  Tuple children = OTuple(t[2]).Data();
-  SimpleParseElements(children, ret);
-  return ret;  
+  for (uint i=2; i<t.size(); i++) 
+    SimpleParseElement(t[i], ret);
+  return ret;
 }
 vector<Element *> SimpleParseElements(const Tuple & t, Element *parent) {
   vector<Element *> ret;
