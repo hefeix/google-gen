@@ -27,12 +27,16 @@
 
 #include "element.h"
 
+Element * SimpleParseElement(Object o, Element *parent = 0);
+vector<Element *> SimpleParseElements(const Tuple & t, Element *parent = 0); 
+
 // ad hoc parser.
 // position points to where to start parsing, and is changed by the function
 // to the end of what was parsed.
-Element * ParseElement(const Tuple & t, uint * pos);
-vector<Element *> ParseElements(const Tuple & t); 
+Element * PrettyParseElement(const Tuple & t, uint * pos, Element *parent = 0);
+vector<Element *> PrettyParseElements(const Tuple & t, Element *parent =0); 
 
-Element * MakeElementByKeyword(Keyword type);
+
+Element * MakeElementByKeyword(Keyword type, Element *parent);
 
 #endif

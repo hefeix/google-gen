@@ -27,7 +27,7 @@
        FUNCTION(Match, MATCH)					\
        FUNCTION(MatchLast, MATCH_LAST)				\
        FUNCTION(MatchRandom, MATCH_RANDOM)			\
-       FUNCTION(MatchRandom, MATCH_COUNT)			\
+       FUNCTION(MatchCount, MATCH_COUNT)			\
        FUNCTION(Post, POST)					\
        FUNCTION(MakeTuple, MAKETUPLE)				\
        FUNCTION(Substitute, SUBSTITUTE)				\
@@ -39,16 +39,13 @@
        FUNCTION(Nth, NTH)					\
        FUNCTION(Let, LET)					\
        FUNCTION(Delay, DELAY)					\
-       FUNCTION(AddCode, ADD_CODE)				\
-       FUNCTION(NewFlake, NEW_FLAKE)				\
        FUNCTION(RandomBool, RANDOM_BOOL)	       		\
        FUNCTION(RandomUint, RANDOM_UINT)		        \
-
-       /*
     
-
-       FUNCTION(Choose, CHOOSE)		\
-       */
+/*
+  FUNCTION(AddCode, ADD_CODE)					\
+  FUNCTION(NewFlake, NEW_FLAKE)					\
+*/
 
 
 struct Element : public Base {  
@@ -63,19 +60,29 @@ struct Element : public Base {
 
   // Creation / destruction
   Element() : parent_(NULL) {};
-  void Init() { Base::Init(); }
+  void Init(Element *parent) { 
+    Base::Init(); 
+    object_ = NULL; 
+    parent_ = parent;
+    incoming_stack_depth_ = 0;
+    if (parent_) {
+      int which_child = parent_->children_.size();
+      incoming_stack_depth_ = parent_->GetChildStackDepth(which_child);
+      incoming_variables_ = parent->GetOutgoingVariables(which_child);
+      parent_->children_.push_back(this);
+    }
+  }
   void Erase() { Base::Erase(); }
 
   // Run things
-  virtual Object Execute(Thread thread);
-  virtual Object ComputeReturnValue(Thread thread, Tuple results) {
+  virtual Object Execute(Thread & thread);
+  virtual Object ComputeReturnValue(Thread & thread, Tuple results) {
     CHECK(false); return NULL;
   }
 
   // Verification code
   bool VerifyNode() {
-    return ( (RequiredNumChildren() == NumChildren()) ||
-	    HasVariableNumChildren());
+    return (RequiredNumChildren() == NumChildren());
   }
 
   bool VerifyTree() {
@@ -86,13 +93,6 @@ struct Element : public Base {
     }
     return true;
   }
-
-  // Linking things up together
-  void AddChild(Element * child) {
-    CHECK(child->parent_ == NULL);
-    child->parent_ = this;
-    children_.push_back(child);
-  }
   
   // This is for parsing
   static Function TypeKeywordToFunction(Keyword type) {
@@ -101,8 +101,9 @@ struct Element : public Base {
  
   // Printing
   Record GetRecordForDisplay() const;
-  virtual string ProgramTree(int indent = 0) const;
-  string TextIdentifier() const { return ProgramTree(); }
+  OTuple SimpleProgramTree() const;
+  virtual string PrettyProgramTree(int indent = 0) const;
+  string TextIdentifier() const { return PrettyProgramTree(); }
   
   // Simple accessor functions for the static tree
   Element * GetParent() const { return parent_; }
@@ -110,7 +111,9 @@ struct Element : public Base {
     CHECK(which >= 0 && which < NumChildren());
     return children_[which]; 
   }
+  virtual bool HasVariableNumChildren() const { return false; }
   virtual int RequiredNumChildren() const = 0;
+  virtual int ComputeRequiredNumChildren() const { CHECK(false); return 0;}
   int NumChildren() const { return children_.size(); }
   
   // Accessing the function of the element
@@ -130,7 +133,8 @@ struct Element : public Base {
     return -1;
   }
   
-  virtual bool HasVariableNumChildren() const { return false; }
+  virtual bool HasObject() const { return false; }
+  virtual void SetObject(Object o) { object_ = o; }
   
   // Accessing names of children pnemonically
   // These are virtual but don't need to be defined by subclasses other
@@ -139,10 +143,30 @@ struct Element : public Base {
   virtual string ChildToString(int c) const = 0;
 
   // Sometimes overridden
-  virtual bool ChildrenGoInTuple() const { return HasVariableNumChildren(); }
+
+  // for pretty code
+  virtual bool ChildrenGoInTuple() const { return false; }
   virtual bool ElementNeedsSeparateLine() const { return false; }
   virtual bool ChildNeedsSeparateLine(int which_child) const { return false; }
 
+  int GetIncomingStackDepth() const { return incoming_stack_depth_;}
+  const Tuple & GetIncomingVariables() const { return incoming_variables_;}
+  Tuple GetOutgoingVariables(int which_child) const {
+    return Concat(GetIncomingVariables(), GetIntroducedVariables(which_child));
+  }
+  int GetChildStackDepth(int which_child) const { 
+    return incoming_stack_depth_ + GetNumIntroducedVariables(which_child); }
+  virtual int GetNumIntroducedVariables(int which_child) const { return 0; }
+  Tuple GetIntroducedVariables(int which_child) const { return Tuple();}
+  int StackPosition(Variable variable) const { 
+    for (uint i=0; i<incoming_variables_.size(); i++) 
+      if (variable == incoming_variables_[i]) return i;
+    return -1;
+  }
+  bool IsBound(Variable variable) const { 
+    return (StackPosition(variable) != -1);
+  }
+  
   // Doesn't need to be overridden
   Base::Type GetBaseType() const { return Base::ELEMENT; }
 
@@ -151,6 +175,9 @@ struct Element : public Base {
   // ---------- data ----------  
   Element * parent_;
   vector<Element *> children_;
+  int incoming_stack_depth_;
+  Tuple incoming_variables_;
+  Object object_; // used in some types of elements
 };
 
 // We want to call static functions in the right class given a particular
@@ -163,56 +190,120 @@ struct Element : public Base {
     if (HasVariableNumChildren()) return "CHILD(" + itoa(c) + ")";	\
     return ChildNameToString((ChildName)c);}				\
   int RequiredNumChildren() const { return HasVariableNumChildren()?	\
-      -1:NumChildNames();}
+      ComputeRequiredNumChildren():NumChildNames();}
 
-template <class T> T * MakeElement() {
+template <class T> T * MakeElement(Element *parent) {
   CHECK(static_cast<Element *>((T *)NULL) == NULL);
-  return New<T>();
+  return New<T>(parent);
 }
 
 struct MatchBaseElement : public Element {
-#define MatchBaseElementChildNameList { ITEM(TUPLE), ITEM(CHILD) };
-  CLASS_ENUM_DECLARE(MatchBaseElement, ChildName);
-  DECLARE_FUNCTION_ENUMS;
-  
   bool ElementNeedsSeparateLine() const { return true; }
-  bool ChildNeedsSeparateLine(int which_child) const { 
-    if (which_child == CHILD) return true;
-    return false;
+  bool ChildNeedsSeparateLine(int which_child) const { return true; }
+
+  // Figure out the tuple we are searching for (by executing children)
+  // then do something subclass-specific
+  Object Execute(Thread & thread);
+
+  // the subclass-specific thing
+  virtual Object SubclassExecute(Thread & thread, 
+				 const Tuple &wildcard_tuple) = 0;
+
+  // Execute the extra child for one tuple that matches the search.
+  Object RunForMatchingTuple(Thread &thread, Blackboard::Row *row, 
+			     int tuple_num);
+  
+  bool HasObject() const { return true; }
+  bool HasVariableNumChildren() const { return true; }
+  int ComputeRequiredNumChildren() const {
+    // This is a minor hack so that pretty-parsing works.
+    // When we're pretty-parsing one of these things, we don't know the object
+    // or the number of children until after we add all of the children except
+    // the extra child. 
+    if (object_ == NULL) return -1;
+    return wildcard_tuple_.size() - num_wildcards_ + HasExtraChild()?1:0;
   }
-  Object Execute(Thread thread);
-  virtual Object SubclassExecute(Thread thread, Object variable_tuple) = 0;
+  // the extra child is always at the end.
+  virtual bool HasExtraChild() const { return true; }
+  Element * GetExtraChild() const { 
+    CHECK(HasExtraChild()); 
+    return GetChild(NumChildren()-1); 
+  }
+  int GetNumIntroducedVariables(int which_child) const { 
+    if (HasExtraChild() && which_child == ComputeRequiredNumChildren() - 1)
+      return num_wildcards_;
+    return 0;
+  }
+  Tuple GetIntroducedVariables(int which_child) const { 
+    if (HasExtraChild() && which_child == NumChildren()-1) 
+      return introduced_variables_;
+    return Tuple();
+  }
+  
+  Tuple wildcard_tuple_;
+  int num_wildcards_;
+  Tuple introduced_variables_;
+
+  void SetObject(Object object) {
+    Element::SetObject(object);
+    Tuple t = OTuple(object_).Data();
+    forall(run, t) {
+      Object o = *run;
+      if (o.GetType() == Object::VARIABLE) {
+	CHECK(!IsBound(o));
+	introduced_variables_.push_back(o);
+      }
+      else CHECK(o == NULL);
+    }
+    wildcard_tuple_ = VariablesToWildcards(OTuple(object_).Data());
+    num_wildcards_ = NumWildcards(wildcard_tuple_);
+  }
 };
 
 struct OnElement : public MatchBaseElement {
+#define OnElementChildNameList {};
+  CLASS_ENUM_DECLARE(OnElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  
   virtual Function GetFunction() const { return ON; }
-  Object SubclassExecute(Thread thread, Object variable_tuple);
+  Object SubclassExecute(Thread & thread, const Tuple & wildcard_tuple);
 };
 
 struct MatchElement : public MatchBaseElement {
+#define MatchElementChildNameList {};
+  CLASS_ENUM_DECLARE(MatchElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  
   Function GetFunction() const { return MATCH; }
-  Object SubclassExecute(Thread thread, Object variable_tuple);
+  Object SubclassExecute(Thread & thread, const Tuple & wildcard_tuple);
 };
 
 struct MatchRandomElement : public MatchBaseElement {
+#define MatchRandomElementChildNameList {};
+  CLASS_ENUM_DECLARE(MatchRandomElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  
   Function GetFunction() const { return MATCH_RANDOM; }
-  Object SubclassExecute(Thread thread, Object variable_tuple);
+  Object SubclassExecute(Thread & thread, const Tuple & wildcard_tuple);
 };
 
-// may want to combine with MatchRandom into MatchOne 
-// to save 8 lines of code.
 struct MatchLastElement : public MatchBaseElement {
+#define MatchLastElementChildNameList {};
+  CLASS_ENUM_DECLARE(MatchLastElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  
   Function GetFunction() const { return MATCH_LAST; }
-  Object SubclassExecute(Thread thread, Object variable_tuple);
+  Object SubclassExecute(Thread & thread, const Tuple & wildcard_tuple);
 };
 
-struct MatchCountElement : public Element {
-#define MatchCountElementChildNameList { ITEM(TUPLE) };
+struct MatchCountElement : public MatchBaseElement {
+#define MatchCountElementChildNameList {};
   CLASS_ENUM_DECLARE(MatchCountElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
+  
   Function GetFunction() const { return MATCH_COUNT; }
-  bool ElementNeedsSeparateLine() const { return true; }
-  Object Execute(Thread thread);
+  Object SubclassExecute(Thread & thread, const Tuple & wildcard_tuple);
+  bool HasExtraChild() const { return false; }
 };
 
 struct PostElement : public Element {
@@ -221,7 +312,7 @@ struct PostElement : public Element {
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return POST;}
   bool ElementNeedsSeparateLine() const { return true; }
-  Object Execute(Thread thread);
+  Object Execute(Thread & thread);
 };
 
 struct ConstantElement : public Element {
@@ -229,10 +320,9 @@ struct ConstantElement : public Element {
   CLASS_ENUM_DECLARE(ConstantElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return CONSTANT; }
-  string ProgramTree(int indent) const;
-  void SetObject(Object o) { object_ = o; }
+  string PrettyProgramTree(int indent) const;
   Object Execute(Thread t) { return object_; }
-  Object object_;
+  bool HasObject() const { return true; }
 };
 
 struct MakeTupleElement : public Element {
@@ -248,8 +338,14 @@ struct MakeTupleElement : public Element {
     }
     return false;
   }
-  Object ComputeReturnValue(Thread thread, Tuple results) {
+  Object ComputeReturnValue(Thread & thread, Tuple results) {
     return OTuple::Make(results);
+  }
+  bool HasObject() const { return true;}  
+  int ComputeRequiredNumChildren() const { return Integer(object_).Data(); }
+  void SetObject(Object object) { 
+    Element::SetObject(object);
+    CHECK(object_.GetType() == Object::INTEGER);
   }
 };
 
@@ -257,14 +353,20 @@ struct SubstituteElement : public Element {
 #define SubstituteElementChildNameList { ITEM(CHILD) };
   CLASS_ENUM_DECLARE(SubstituteElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
-
-  string ProgramTree(int indent) const;
+  bool HasObject() const { return true;}
+  void SetObject(Object object) { 
+    Element::SetObject(object);
+    CHECK(object_.GetType() == Object::VARIABLE);
+    CHECK(IsBound(object_));
+    stack_position_ = StackPosition(object_);
+  }
+  
+  string PrettyProgramTree(int indent) const;
   virtual Function GetFunction() const { return SUBSTITUTE;}
   string ToString() const;
   bool ChildrenGoInTuple() const { return true;}
-  Object ComputeReturnValue(Thread thread, Tuple results) {
-    return DeepSubstitute(thread.binding_, results[CHILD]);
-  }
+  Object Execute(Thread &thread) { return thread.stack_[stack_position_];}
+  int stack_position_;
 };
 
 struct EqualElement : public Element {
@@ -273,7 +375,7 @@ struct EqualElement : public Element {
   DECLARE_FUNCTION_ENUMS;
   virtual Function GetFunction() const { return EQUAL; }
   bool ChildrenGoInTuple() const { return true; }
-  Object ComputeReturnValue(Thread thread, Tuple results) {
+  Object ComputeReturnValue(Thread & thread, Tuple results) {
     if (results[0] == results[1]) return TRUE;
     return FALSE;
   }
@@ -284,7 +386,7 @@ struct SumElement : public Element {
   CLASS_ENUM_DECLARE(SumElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return SUM; }
-  Object ComputeReturnValue(Thread thread, Tuple results) {
+  Object ComputeReturnValue(Thread & thread, Tuple results) {
     if (results[0].GetType() != Object::OTUPLE) return NULL;
     const Tuple & t = OTuple(results[0]).Data();
     int sum = 0;
@@ -313,7 +415,7 @@ struct IfElement : public Element {
     }
     return false;
   }
-  Object Execute(Thread thread);
+  Object Execute(Thread & thread);
 };
 
 struct CoutElement : public Element {
@@ -321,7 +423,7 @@ struct CoutElement : public Element {
   CLASS_ENUM_DECLARE(CoutElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return COUT; }
-  Object ComputeReturnValue(Thread thread, Tuple results) {
+  Object ComputeReturnValue(Thread & thread, Tuple results) {
     thread.execution_->output_ += results[0].ToString() + '\n';
     return results[0];
   }
@@ -333,7 +435,7 @@ struct NthElement : public Element {
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return NTH; }
   bool ChildrenGoInTuple() const { return true; }
-  Object ComputeReturnValue(Thread thread, Tuple results) {
+  Object ComputeReturnValue(Thread & thread, Tuple results) {
     if (results[N].GetType() != Object::INTEGER) return NULL;
     if (results[TUPLE].GetType() != Object::OTUPLE) return NULL;
     int n = Integer(results[N]).Data();
@@ -344,14 +446,28 @@ struct NthElement : public Element {
 };
 
 struct LetElement : public Element {
-#define LetElementChildNameList { ITEM(VARIABLE), ITEM(VALUE), ITEM(CHILD) };
+#define LetElementChildNameList { ITEM(VALUE), ITEM(CHILD) };
   CLASS_ENUM_DECLARE(LetElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return LET;}
   bool ElementNeedsSeparateLine() const { return true;}
   bool ChildNeedsSeparateLine(int which_child) const { 
     return (which_child==CHILD);}
-  Object Execute(Thread thread);
+  Object Execute(Thread & thread);
+  bool HasObject() const { return true; }
+  int GetNumIntroducedVariables(int which_child) const { 
+    if (which_child == CHILD) return 1; return 0;
+  }
+  Tuple GetIntroducedVariables(int which_child) const { 
+    Tuple ret;
+    if (which_child == CHILD) ret.push_back(object_);
+    return ret;
+  }
+  void SetObject(Object object) { 
+    Element::SetObject(object);
+    CHECK(object_.GetType() == Object::VARIABLE);
+    CHECK(!IsBound(object_));
+  }
 };
 
 struct DelayElement : public Element {
@@ -362,7 +478,7 @@ struct DelayElement : public Element {
   bool ElementNeedsSeparateLine() const { return true;}
   bool ChildNeedsSeparateLine(int which_child) const { 
     return (which_child==CHILD);}
-  Object Execute(Thread thread);
+  Object Execute(Thread & thread);
 };
 
 struct RandomBoolElement : public Element {
@@ -370,8 +486,8 @@ struct RandomBoolElement : public Element {
   CLASS_ENUM_DECLARE(RandomBoolElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return RANDOM_BOOL; }
-  Object ComputeReturnValue(Thread thread, Tuple results) {
-    if (results[PRIOR].GetType() != Object::Real) return NULL;
+  Object ComputeReturnValue(Thread & thread, Tuple results) {
+    if (results[PRIOR].GetType() != Object::REAL) return NULL;
     double prior = Real(results[PRIOR]).Data();
     bool ret = (RandomFraction() < prior);
     return Boolean::Make(ret);
@@ -383,7 +499,7 @@ struct RandomUintElement : public Element {
   CLASS_ENUM_DECLARE(RandomUintElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return RANDOM_UINT; }
-  Object ComputeReturnValue(Thread thread, Tuple results) {
+  Object ComputeReturnValue(Thread & thread, Tuple results) {
     int ret = RandomUintQuadratic();
     return Integer::Make(ret);
   }

@@ -96,6 +96,14 @@ class Blackboard : public Base{
 	  (*result)[i] = *(read_ptr++);
       }
     }
+    // copy the which'th entry onto the stack, starting at position start_pos
+    void CopyBinding(int tuple_num, Tuple *stack, int start_pos) {
+      CHECK(tuple_num >= 0 && tuple_num < NumTuples());
+      if ((int)stack->size() < start_pos + num_wildcards_) 
+	stack->resize(start_pos+num_wildcards_);
+      memcpy(&(stack[start_pos]), &(data_[tuple_num * num_wildcards_]), 
+	     num_wildcards_ * sizeof(Object));     
+    }
   };
 
   Row * GetCreateAllWildcardRow(int size) const;
@@ -110,11 +118,10 @@ class Blackboard : public Base{
 
   struct Subscription {
     virtual ~Subscription() {}
-    virtual void Update(const Tuple & tuple) = 0;
-    void Init(const Tuple & wildcard_tuple, Blackboard *blackboard) {
-      VLOG(1) << "New subscription to " << wildcard_tuple << endl;
-      CHECK(IsWildcardTuple(wildcard_tuple));
-      subscribee_ = blackboard->GetCreateRow(wildcard_tuple);
+    virtual void Update(Row *row, int item_num) = 0;
+    void Init(Row *row) {
+      CHECK(row);
+      subscribee_ = row;
       subscribee_->subscriptions_.push_back(this);
     }
     Row * subscribee_;
@@ -132,10 +139,10 @@ class Blackboard : public Base{
   bool Contains(const Tuple & t) const { return all_tuples_ % t; }
 
   // Appends bindings to the results vector
-  void GetVariableMatches(const Tuple & variable_tuple, 
+  /*void GetVariableMatches(const Tuple & variable_tuple, 
 			  Map binding_so_far,
 			  vector<Map> *results,
-			  double sample_fraction = 1.0) const;
+			  double sample_fraction = 1.0) const;*/
   
   // Random tuples
   /*bool GetRandomTuple(OTuple * result);
@@ -145,11 +152,11 @@ class Blackboard : public Base{
   */
 
   // Simple way to query and get results back
-  bool FindSatisfactions(OPattern pattern,
-			 const SamplingInfo & sampling,
-			 vector<Map> * substitutions,
+  /*  bool FindSatisfactions(OPattern pattern,
+     const SamplingInfo & sampling,
+			 vector<Tuple> * stacks,
 			 uint64 * num_satisfactions,
-			 int64 * max_work_now);
+			 int64 * max_work_now);*/
 			 
   
 

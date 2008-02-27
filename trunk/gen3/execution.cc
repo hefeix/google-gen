@@ -22,30 +22,27 @@
 
 string Thread::ToString() {
   string ret;
-  ret += OMap::Make(binding_).ToString() + " ";
-  ret += element_->ProgramTree() + " ";
+  ret += OTuple::Make(stack_).ToString() + " ";
+  ret += element_->PrettyProgramTree() + " ";
   return ret;
 }
 
-void OnSubscription::Init(Thread t, const Tuple &  variable_tuple) {
+void OnSubscription::Init(const Thread & t, Blackboard::Row *row) {
   CHECK(t.element_);
   thread_ = t;
-  variable_tuple_ = variable_tuple;
-  Blackboard::Subscription::Init
-    (VariablesToWildcards(variable_tuple),
-     t.execution_->blackboard_);
+  Blackboard::Subscription::Init(row);
 }
 
-void OnSubscription::Update(const Tuple & tuple) {
+void OnSubscription::Update(Blackboard::Row *row, int tuple_num) {
   Thread new_thread = thread_;
-  VLOG(1)  << "Update " << tuple
-	   << " Threadinfo " << new_thread.ToString() << endl;
-  if (!ExtendSubstitution(variable_tuple_, 
-			  tuple, &new_thread.binding_)) return;
+  row->CopyBinding(tuple_num, &new_thread.stack_, 
+		   new_thread.element_->parent_->incoming_stack_depth_);
+  // VLOG(1)  << "Update " << tuple
+  //	   << " Threadinfo " << new_thread.ToString() << endl;
   new_thread.execution_->Enqueue(new_thread, BitSeq::Min());
 }
 void Execution::ParseAndExecute(OTuple program_tuple) {
-  vector<Element *> v = ParseElements(program_tuple.Data());
+  vector<Element *> v = PrettyParseElements(program_tuple.Data());
   forall(run, v) AddCodeTreeToRun(*run);
   ExecuteForever();
 }
@@ -71,27 +68,10 @@ void Execution::AddCodeTreeToRun(Element *top_element) {
   top_elements_.push_back(top_element);
 }
 
-// huh - maybe we should move this to element.cc MatchBaseElement::whatever
-Tuple Execution::MatchAndRun(Thread thread, const Tuple & variable_tuple) {
-  // Immediately execute everything that currently matches
-  Blackboard * bb = thread.execution_->blackboard_;
-  vector<Map> results;
-  Tuple output;
-  bb->GetVariableMatches(variable_tuple, thread.binding_, &results);
-  VLOG(1) << "MatchAndRun " << thread.ToString() << " " << variable_tuple
-	  << " #results=" << results.size() << endl;
-  forall(run, results){
-    Thread new_thread = thread;
-    new_thread.binding_ = *run;
-    output.push_back(new_thread.element_->Execute(new_thread));    
-  }
-  return output;
-}
-
 Record Execution::GetRecordForDisplay() const { 
   Record ret = Base::GetRecordForDisplay();
   forall(run, top_elements_) 
-    ret["Program"] += (*run)->ProgramTree() + "\n";
+    ret["Program"] += (*run)->PrettyProgramTree() + "\n";
   ret["Program"] = "<pre>" + ret["Program"] + "</pre>";
   ret["output"] = "<pre>" + output_ + "</pre>";
   return ret;

@@ -24,12 +24,14 @@
 struct Element;
 struct Execution;
 
+	      
+
 struct Thread {
   Thread() {
     element_ = NULL;
     execution_ = NULL;
   }
-  Map binding_;
+  Tuple stack_;
   Element * element_;
   Execution * execution_;
   string ToString();
@@ -37,10 +39,9 @@ struct Thread {
 
 struct OnSubscription : public Blackboard::Subscription {
   // t should point to the child of the On.
-  void Init(Thread t, const Tuple & variable_tuple); 
-  void Update(const Tuple & tuple);
+  void Init(const Thread & t, Blackboard::Row *row);
+  void Update(Blackboard::Row *rw, int tuple_num);
   // data
-  Tuple variable_tuple_;
   Thread thread_;
 };
 
@@ -73,7 +74,7 @@ struct Execution : public Base {
   void AddCodeTreeToRun(Element *top_element);
 
   // The thread points at the immediately executable code
-  static Tuple MatchAndRun(Thread thread, const Tuple & variable_tuple);
+  static Tuple MatchAndRun(Thread & thread, const Tuple & variable_tuple);
 
   void Enqueue(Thread t, BitSeq time_delay) {
     run_queue_[time_delay].push_back(t);
