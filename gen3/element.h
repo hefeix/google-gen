@@ -25,6 +25,9 @@
 #define ALL_FUNCTIONS \
   FUNCTION(On, ON)						\
        FUNCTION(Match, MATCH)					\
+       FUNCTION(MatchLast, MATCH_LAST)				\
+       FUNCTION(MatchRandom, MATCH_RANDOM)			\
+       FUNCTION(MatchRandom, MATCH_COUNT)			\
        FUNCTION(Post, POST)					\
        FUNCTION(MakeTuple, MAKETUPLE)				\
        FUNCTION(Substitute, SUBSTITUTE)				\
@@ -36,9 +39,14 @@
        FUNCTION(Nth, NTH)					\
        FUNCTION(Let, LET)					\
        FUNCTION(Delay, DELAY)					\
+       FUNCTION(AddCode, ADD_CODE)				\
+       FUNCTION(NewFlake, NEW_FLAKE)				\
+       FUNCTION(RandomBool, RANDOM_BOOL)	       		\
+       FUNCTION(RandomUint, RANDOM_UINT)		        \
 
        /*
     
+
        FUNCTION(Choose, CHOOSE)		\
        */
 
@@ -162,33 +170,48 @@ template <class T> T * MakeElement() {
   return New<T>();
 }
 
-
-struct OnElement : public Element {
-#define OnElementChildNameList { ITEM(TUPLE), ITEM(CHILD) };
-  CLASS_ENUM_DECLARE(OnElement, ChildName);
-  DECLARE_FUNCTION_ENUMS;
-
-  virtual Function GetFunction() const { return ON; }
-  bool ElementNeedsSeparateLine() const { return true; }
-  bool ChildNeedsSeparateLine(int which_child) const { 
-    if (which_child == CHILD) return true;
-    return false;
-  }
-
-  Object Execute(Thread thread);
-};
-
-struct MatchElement : public Element {
-#define MatchElementChildNameList { ITEM(TUPLE), ITEM(CHILD) };
-  CLASS_ENUM_DECLARE(MatchElement, ChildName);
+struct MatchBaseElement : public Element {
+#define MatchBaseElementChildNameList { ITEM(TUPLE), ITEM(CHILD) };
+  CLASS_ENUM_DECLARE(MatchBaseElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   
-  virtual Function GetFunction() const { return MATCH; }
   bool ElementNeedsSeparateLine() const { return true; }
   bool ChildNeedsSeparateLine(int which_child) const { 
     if (which_child == CHILD) return true;
     return false;
   }
+  Object Execute(Thread thread);
+  virtual Object SubclassExecute(Thread thread, Object variable_tuple) = 0;
+};
+
+struct OnElement : public MatchBaseElement {
+  virtual Function GetFunction() const { return ON; }
+  Object SubclassExecute(Thread thread, Object variable_tuple);
+};
+
+struct MatchElement : public MatchBaseElement {
+  Function GetFunction() const { return MATCH; }
+  Object SubclassExecute(Thread thread, Object variable_tuple);
+};
+
+struct MatchRandomElement : public MatchBaseElement {
+  Function GetFunction() const { return MATCH_RANDOM; }
+  Object SubclassExecute(Thread thread, Object variable_tuple);
+};
+
+// may want to combine with MatchRandom into MatchOne 
+// to save 8 lines of code.
+struct MatchLastElement : public MatchBaseElement {
+  Function GetFunction() const { return MATCH_LAST; }
+  Object SubclassExecute(Thread thread, Object variable_tuple);
+};
+
+struct MatchCountElement : public Element {
+#define MatchCountElementChildNameList { ITEM(TUPLE) };
+  CLASS_ENUM_DECLARE(MatchCountElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return MATCH_COUNT; }
+  bool ElementNeedsSeparateLine() const { return true; }
   Object Execute(Thread thread);
 };
 
@@ -341,6 +364,31 @@ struct DelayElement : public Element {
     return (which_child==CHILD);}
   Object Execute(Thread thread);
 };
+
+struct RandomBoolElement : public Element {
+#define RandomBoolElementChildNameList { ITEM(PRIOR), };
+  CLASS_ENUM_DECLARE(RandomBoolElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return RANDOM_BOOL; }
+  Object ComputeReturnValue(Thread thread, Tuple results) {
+    if (results[PRIOR].GetType() != Object::Real) return NULL;
+    double prior = Real(results[PRIOR]).Data();
+    bool ret = (RandomFraction() < prior);
+    return Boolean::Make(ret);
+  }
+};
+
+struct RandomUintElement : public Element {
+#define RandomUintElementChildNameList { };
+  CLASS_ENUM_DECLARE(RandomUintElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return RANDOM_UINT; }
+  Object ComputeReturnValue(Thread thread, Tuple results) {
+    int ret = RandomUintQuadratic();
+    return Integer::Make(ret);
+  }
+};
+
 
 
 #endif

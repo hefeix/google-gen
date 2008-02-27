@@ -82,7 +82,10 @@ class Blackboard : public Base{
     void Init(const Tuple & wildcard_tuple);
     void AddTuple(const Tuple &t);
     void SplitAtPosition(int position);
-    Row * FindCreateChild(int position, Object value);
+    Row * FindChild(int position, Object value, bool create = false);
+    Row * FindCreateChild(int position, Object value) {
+      return FindChild(position, value, true);
+    }
 
     int NumTuples() const { return num_tuples_;}
     void GetTuple(int which, Tuple * result) const {
@@ -96,7 +99,13 @@ class Blackboard : public Base{
   };
 
   Row * GetCreateAllWildcardRow(int size) const;
-  Row * GetCreateRow(const Tuple & wildcard_tuple) const;
+  // may split rows internally to arrive at the row, but returns null if
+  // the row does not need to exist in the blackboard, unless 
+  // create_empty is set to true, in which case it forces the row to exist.
+  Row * GetRow (const Tuple & wildcard_tuple, bool create_empty = false) const;
+  Row * GetCreateRow(const Tuple & wildcard_tuple) const {
+    return GetRow(wildcard_tuple, true);
+  }
   
 
   struct Subscription {

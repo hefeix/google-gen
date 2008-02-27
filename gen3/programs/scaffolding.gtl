@@ -1,9 +1,33 @@
 
 <tuple builder>
-on (BUILD_TUPLE tuple_name tuple_size element_number element)
+on (TUPLE_ELEMENT tuple_name tuple_size element_number element)
   if (equal(tuple_size match_size(BUILD_TUPLE tuple_name tuple_size * *) )
-    post 
+    let tuple 
       repeat x tuple_size
-        match_last (BUILD_TUPLE tuple_name tuple_size x y) 
-	  y
+        match_last (TUPLE_ELEMENT tuple_name tuple_size x y) {
+     post tuple
+     post (TUPLE tuple_name tuple)
+     }
+       
+
+post (KEYWORD on 2)
+
+<top level call to build a program and add it to the execution>
+on (BUILD_PROGRAM_ADD_CODE program_name) {
+  post (BUILD_PROGRAM program_name)
+  on (PROGRAM program_name program) add_code program
+}
+
+<program builder - builds a random program tree (top level or otherwise)>
+on (BUILD_PROGRAM program_name)
+  match_random (KEYWORD function_keyword arity) 
+    let tuple_name new_flake {
+      post (TUPLE_ELEMENT tuple_name sum(arity 1) 0 function_keyword)
+      repeat x arity {
+        post (BUILD_PROGRAM (program_name x)) 
+        on (PROGRAM (program_name x) sub_program) 
+          post (TUPLE_ELEMENT tuple_name sum(arity 1) sum(x 1) sub_program)
+      }
+      on (TUPLE tuple_name tuple) post (PROGRAM program_name tuple)
+    }
 
