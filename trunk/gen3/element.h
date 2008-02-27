@@ -221,7 +221,7 @@ struct MatchBaseElement : public Element {
     // or the number of children until after we add all of the children except
     // the extra child. 
     if (object_ == NULL) return -1;
-    return wildcard_tuple_.size() - num_wildcards_ + HasExtraChild()?1:0;
+    return wildcard_tuple_.size() - num_wildcards_ + (HasExtraChild()?1:0);
   }
   // the extra child is always at the end.
   virtual bool HasExtraChild() const { return true; }
@@ -230,13 +230,18 @@ struct MatchBaseElement : public Element {
     return GetChild(NumChildren()-1); 
   }
   int GetNumIntroducedVariables(int which_child) const { 
-    if (HasExtraChild() && which_child == ComputeRequiredNumChildren() - 1)
+    if (HasExtraChild() && 
+	((1+which_child) == ComputeRequiredNumChildren())) {
       return num_wildcards_;
+    }
     return 0;
   }
   Tuple GetIntroducedVariables(int which_child) const { 
-    if (HasExtraChild() && which_child == ComputeRequiredNumChildren()-1) 
+    if (HasExtraChild() && 
+	((1+which_child) == ComputeRequiredNumChildren())) {
+      // cout << "introducing which_child=" << which_child << endl;
       return introduced_variables_;
+    }
     return Tuple();
   }
   
