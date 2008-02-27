@@ -68,11 +68,9 @@ OTuple Element::SimpleProgramTree() const {
   Tuple t;
   t.push_back(FunctionKeyword());
   t.push_back(HasObject()?object_:Object(NULL));
-  Tuple children;
   for (uint i=0; i<children_.size(); i++) {
-    children.push_back(children_[i]->SimpleProgramTree());
+    t.push_back(children_[i]->SimpleProgramTree());
   }
-  t.push_back(OTuple::Make(children));
   return OTuple::Make(t);
 }
 

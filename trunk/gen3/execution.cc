@@ -41,8 +41,12 @@ void OnSubscription::Update(Blackboard::Row *row, int tuple_num) {
   //	   << " Threadinfo " << new_thread.ToString() << endl;
   new_thread.execution_->Enqueue(new_thread, BitSeq::Min());
 }
-void Execution::ParseAndExecute(OTuple program_tuple, bool execute) {
-  vector<Element *> v = PrettyParseElements(program_tuple.Data());  
+void Execution::ParseAndExecute(OTuple program_tuple, 
+				bool pretty, 
+				bool execute) {
+  vector<Element *> v;
+  if (pretty) v = PrettyParseElements(program_tuple.Data());  
+  else v = SimpleParseElements(program_tuple.Data());
   forall(run, v) AddCodeTreeToRun(*run);
   if (!execute) return;
   ExecuteForever();
