@@ -45,6 +45,12 @@ bool HasDuplicateVariables(const Tuple & t);
 // Returns a tuple of all wildcards.
 Tuple AllWildcards(int num_terms);
 
+inline Tuple Concat(const Tuple & t1, const Tuple &t2) {
+  Tuple ret = t1;
+  ret.insert(ret.end(), t2.begin(), t2.end());
+  return ret;
+}
+
 inline int NumWildcards(const Tuple & t) {
   int ret =0;
   for (uint i=0; i<t.size(); i++) if (t[i] == WILDCARD) ret++;

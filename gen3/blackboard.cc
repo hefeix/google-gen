@@ -99,14 +99,12 @@ void Blackboard::Row::AddTuple(const Tuple &t) {
   for (uint i=0; i<t.size(); i++) 
     if (wildcard_tuple_[i] == WILDCARD) data_.push_back(t[i]);
   num_tuples_++;
-  forall(run, subscriptions_) {
-    (*run)->Update(t);
-  }
   for (uint i=0; i<wildcard_tuple_.size(); i++) {
     if (children_[i]) {
       FindCreateChild(i, t[i])->AddTuple(t);
     }
   }
+  forall(run, subscriptions_) (*run)->Update(this, num_tuples_-1);
 }
 
 
@@ -144,7 +142,7 @@ void Blackboard::Post(const Tuple & tuple) {
 }
 
 
-void 
+/*void 
 Blackboard::GetVariableMatches(const Tuple & variable_tuple, 
 			       Map binding_so_far,
 			       vector<Map> *results,
@@ -164,7 +162,7 @@ Blackboard::GetVariableMatches(const Tuple & variable_tuple,
       results->push_back(m);
     }
   }
-}
+  }*/
 
 
 /*
@@ -273,7 +271,7 @@ void Blackboard::Shell() {
       }
       cout << "Posted " << count << " tuples" << endl;      
     }
-    if (command == "query") {
+    /*if (command == "query") {
       cin >> pattern;
       cout << "QUERY " << pattern << endl;
       vector<Map> substitutions;
@@ -284,7 +282,7 @@ void Blackboard::Shell() {
       for (uint64 i=0; i<num_satisfactions; i++) {
 	cout << "   " << OMap::Make(substitutions[i]) << endl;
       }
-    }
+      }*/
   }
 }
 
@@ -347,7 +345,7 @@ string Blackboard::Print(int page) const {
 }
 
 // Simple way to query and get results back
-bool Blackboard::FindSatisfactions(OPattern pattern,
+/*bool Blackboard::FindSatisfactions(OPattern pattern,
 				   const SamplingInfo & sampling,
 				   vector<Map> * substitutions,
 				   uint64 * num_satisfactions,
@@ -374,15 +372,15 @@ bool Blackboard::FindSatisfactions(OPattern pattern,
   int condition_tuple
     = min_element(num_matches.begin(), num_matches.end())-num_matches.begin();
   
-  /* TODO: we might want to run this as a partition search.
-     uint64 least_matches = num_matches[condition_tuple];
-     int num_components = GetConnectedComponents(p, NULL);
-     if ( (num_components > 1) && (least_matches > 0) ) {
-  }
+  // TODO: we might want to run this as a partition search.
+  //   uint64 least_matches = num_matches[condition_tuple];
+  //   int num_components = GetConnectedComponents(p, NULL);
+  //   if ( (num_components > 1) && (least_matches > 0) ) {
+  // }
 
-  Also, we might want to save time if the tuple has no repeated variables
-  and we don't need the actual substitutions.
-  */
+  // Also, we might want to save time if the tuple has no repeated variables
+  // and we don't need the actual substitutions.
+  // 
   MOREWORK(num_matches[condition_tuple]);
 
   vector<Map> variable_matches;
@@ -414,6 +412,6 @@ bool Blackboard::FindSatisfactions(OPattern pattern,
   }
   if (substitutions) CHECK(substitutions->size() == *num_satisfactions);
   return true;
-}
+  }*/
 
 

@@ -32,7 +32,7 @@ ALL_FUNCTIONS
 #undef FUNCTION
 
 
-Object Element::Execute(Thread thread) {
+Object Element::Execute(Thread & thread) {
   Tuple results;
   for (uint c=0; c<children_.size(); c++) {
     Object return_val = children_[c]->Execute(thread);
@@ -47,8 +47,11 @@ Record Element::GetRecordForDisplay() const {
   if (parent) ret["parent"] = parent->ShortDescription();
   ret["function"] = FunctionToString(GetFunction());
   ret["description"] = ShortDescription();
-  ret["program"] = "<pre>" + ProgramTree() + "</pre>";
-
+  ret["program"] = "<pre>" + PrettyProgramTree() + "</pre>";
+  ret["simple_program"] = SimpleProgramTree().ToString();
+  ret["incoming_variables"] = OTuple::Make(incoming_variables_).ToString();
+  ret["object"] = object_.ToString();
+  
   for (uint i=0; i<children_.size(); i++) {
     if (i>0) ret["children"] += "<br>\n";
     ret["children"] += children_[i]->ShortDescription();
@@ -57,7 +60,19 @@ Record Element::GetRecordForDisplay() const {
   return ret;
 }
 
-string Element::ProgramTree(int indent) const {
+OTuple Element::SimpleProgramTree() const { 
+  Tuple t;
+  t.push_back(FunctionKeyword());
+  t.push_back(HasObject()?object_:Object(NULL));
+  Tuple children;
+  for (uint i=0; i<children_.size(); i++) {
+    children.push_back(children_[i]->SimpleProgramTree());
+  }
+  t.push_back(OTuple::Make(children));
+  return OTuple::Make(t);
+}
+
+string Element::PrettyProgramTree(int indent) const {
   string ret = GetLink(FunctionKeyword().ToString());
   if (GetFunction() == Element::MAKETUPLE) {
     ret="";
@@ -83,7 +98,7 @@ string Element::ProgramTree(int indent) const {
     } else {
       if (i>0) ret += " ";
     }    
-    if (child) ret += child->ProgramTree(child_indent);
+    if (child) ret += child->PrettyProgramTree(child_indent);
     else ret += "null";
   }
   if (ChildrenGoInTuple()) {
@@ -94,101 +109,88 @@ string Element::ProgramTree(int indent) const {
   return ret;
 }
 
-Object MatchBaseElement::Execute(Thread thread) {
-  // Get the tuple child
-  Object variable_tuple = GetChild(TUPLE)->Execute(thread);
-  if ( (variable_tuple.GetType() != Object::OTUPLE) ||
-       (!IsVariableTuple(OTuple(variable_tuple).Data())) ) {
-    cerr << "Tuple child  not an OTUPLE: " 
-	 << variable_tuple << endl;
-    return NULL;
+Object MatchBaseElement::Execute(Thread & thread) {
+  // Figure out the tuple we are searching for
+  Tuple match_tuple = wildcard_tuple_;
+  int child_num = 0;
+  for (uint pos=0; pos<wildcard_tuple_.size(); pos++) {
+    if (wildcard_tuple_[pos] == NULL) {
+      match_tuple[pos] = GetChild(child_num++)->Execute(thread);
+      // this is to avoid introducing wildcards during execution. 
+      // we might want to unescape on the other side.
+      if (match_tuple[pos] == WILDCARD)
+	match_tuple[pos] = Escape::Make(match_tuple[pos]);
+    }
   }
-
-  // Point the thread to the next executable element
-  thread.element_ = GetChild(CHILD);
-
-  return SubclassExecute(thread, variable_tuple);
+  // do something subclass-specific
+  return SubclassExecute(thread, match_tuple);
 }
 
-Object OnElement::SubclassExecute(Thread thread, Object variable_tuple) {
-  // Run over all existing things
-  Execution::MatchAndRun(thread, OTuple(variable_tuple).Data());
-  // Make a new on subscription
-  New<OnSubscription>(thread, OTuple(variable_tuple).Data());
+Object MatchBaseElement::RunForMatchingTuple(Thread &thread, 
+					     Blackboard::Row *row,
+					     int tuple_num) {
+  row->CopyBinding(tuple_num, &thread.stack_, incoming_stack_depth_);
+  return GetExtraChild()->Execute(thread);
+}
+Object OnElement::SubclassExecute(Thread & thread, 
+				  const Tuple & wildcard_tuple) {
+  Blackboard::Row *row 
+    = thread.execution_->blackboard_->GetCreateRow(wildcard_tuple);
+  for (int i=0; i<row->NumTuples(); i++) RunForMatchingTuple(thread, row, i);
+  thread.element_ = GetExtraChild();
+  New<OnSubscription>(thread, row);  
   return NULL;
 }
 
-Object MatchElement::SubclassExecute(Thread thread, Object variable_tuple) {
-  // Run over all existing things
-  return OTuple::Make
-    (Execution::MatchAndRun(thread, OTuple(variable_tuple).Data()));
+Object MatchElement::SubclassExecute(Thread & thread, 
+				     const Tuple & wildcard_tuple) {
+  Blackboard::Row *row = thread.execution_->blackboard_->GetRow(wildcard_tuple);
+  if (row == NULL) return OTuple::Default();
+  Tuple ret;
+  for (int i=0; i<row->NumTuples(); i++) 
+    ret.push_back(RunForMatchingTuple(thread, row, i));
+  return OTuple::Make(ret);
 }
 
-Object MatchRandomElement::SubclassExecute(Thread thread, 
-					   Object variable_tuple) {
-  // may want to make this work later.
-  if (HasDuplicateVariables(variable_tuple)) return NULL;
-
-  Blackboard::Row * row = thread.execution_->blackboard_->GetRow
-    (VariablesToWildcards(variable_tuple));
+Object MatchRandomElement::SubclassExecute(Thread & thread, 
+					   const Tuple & wildcard_tuple) {
+  Blackboard::Row *row = thread.execution_->blackboard_->GetRow(wildcard_tuple);
   if (!row) return NULL;
-
-  int num_tuples = row->GetNumTuples();
+  int num_tuples = row->NumTuples();
   if (num_tuples == 0) return NULL;
-  int pos = RandomUint32() % num_tuples;
-  Tuple constant_tuple;
-  row->GetTuple(pos, &constant_tuple);
-  CHECK(ExtendSubstitution(variable_tuple, constant_tuple, &thread.binding_));
-
-  return GetChild(CHILD)->Execute(thread);
+  int pos = RandomUInt32() % num_tuples;
+  return RunForMatchingTuple(thread, row, pos);
 }
 
-Object MatchLastElement::SubclassExecute(Thread thread, 
-					   Object variable_tuple) {
-  // may want to make this work later.
-  if (HasDuplicateVariables(variable_tuple)) return NULL;
-
-  Blackboard::Row * row = thread.execution_->blackboard_->GetRow
-    (VariablesToWildcards(variable_tuple));
+Object MatchLastElement::SubclassExecute(Thread & thread, 
+					 const Tuple & wildcard_tuple) {
+  Blackboard::Row *row = thread.execution_->blackboard_->GetRow(wildcard_tuple);
   if (!row) return NULL;
-
-  int num_tuples = row->GetNumTuples();
+  int num_tuples = row->NumTuples();
   if (num_tuples == 0) return NULL;
   int pos = num_tuples-1;
-  Tuple constant_tuple;
-  row->GetTuple(pos, &constant_tuple);
-  CHECK(ExtendSubstitution(variable_tuple, constant_tuple, &thread.binding_));
-
-  return GetChild(CHILD)->Execute(thread);
+  return RunForMatchingTuple(thread, row, pos);
 }
 
-Object MatchCountElement::Execute(Thread thread) {
-  // Get the tuple child
-  Object variable_tuple = GetChild(TUPLE)->Execute(thread);
-  if ( (variable_tuple.GetType() != Object::OTUPLE) ||
-       (!IsVariableTuple(OTuple(variable_tuple).Data())) ) {
-    cerr << "Tuple child not an OTUPLE: " << variable_tuple << endl;
-    return NULL;
-  }
-
-  Blackboard::Row * row = thread.execution_->blackboard_->GetRow
-    (VariablesToWildcards(variable_tuple));
+Object MatchCountElement::SubclassExecute(Thread & thread,
+					  const Tuple & wildcard_tuple) {
+  Blackboard::Row *row = thread.execution_->blackboard_->GetRow(wildcard_tuple);
   if (!row) return Integer::Make(0);
-  return Integer::Make(row->GetNumTuples());
+  int num_tuples = row->NumTuples();
+  return Integer::Make(num_tuples);
 }
 
 
-Object LetElement::Execute(Thread thread) {
+Object LetElement::Execute(Thread & thread) {
   // Get the tuple child
-  Object variable = GetChild(VARIABLE)->Execute(thread);
   Object value = GetChild(VALUE)->Execute(thread);
-  if (variable.GetType() == Object::VARIABLE) {
-    AddChangeValue(&thread.binding_, variable, value);
-  }
+  if ((int)thread.stack_.size() < incoming_stack_depth_ + 1)
+    thread.stack_.resize(incoming_stack_depth_ + 1);
+  thread.stack_[incoming_stack_depth_] = value;
   return GetChild(CHILD)->Execute(thread);
 }
 
-Object DelayElement::Execute(Thread thread) {
+Object DelayElement::Execute(Thread & thread) {
   // Get the tuple child
   Element * delay_child = GetChild(DIMENSION);
   Object delay = delay_child->Execute(thread);
@@ -200,7 +202,7 @@ Object DelayElement::Execute(Thread thread) {
   return NULL;
 }
 
-Object PostElement::Execute(Thread t) {
+Object PostElement::Execute(Thread & t) {
   // Get the tuple child
   Object tuple_child = GetChild(TUPLE)->Execute(t);
   if ( (tuple_child.GetType() != Object::OTUPLE) ) {
@@ -212,7 +214,7 @@ Object PostElement::Execute(Thread t) {
   return tuple_child;
 }
 
-string ConstantElement::ProgramTree(int indent) const {
+string ConstantElement::PrettyProgramTree(int indent) const {
   bool can_be_concise = true;
   Object o = object_;
   if (o.GetType() == Object::OTUPLE)  can_be_concise = false;
@@ -221,12 +223,12 @@ string ConstantElement::ProgramTree(int indent) const {
     if (Element::TypeKeywordToFunction(Keyword(o)) != -1)
       can_be_concise = false;
   }
-  if (!can_be_concise) return Element::ProgramTree(indent);
+  if (!can_be_concise) return Element::PrettyProgramTree(indent);
   string ret = HTMLEscape(o.ToString());
   return GetLink(ret);
 }
 
-string SubstituteElement::ProgramTree(int indent) const {
+string SubstituteElement::PrettyProgramTree(int indent) const {
   Element *child = GetChild(CHILD);
   if (child) {
     ConstantElement *constant = dynamic_cast<ConstantElement *>(child);
@@ -238,7 +240,7 @@ string SubstituteElement::ProgramTree(int indent) const {
       }
     }
   }
-  return Element::ProgramTree();
+  return Element::PrettyProgramTree();
 }
 
 void Element::StaticInit() {
@@ -246,7 +248,7 @@ void Element::StaticInit() {
     Object::AddKeyword(Downcase(FunctionToString(Function(i))));
 }
 
-Object IfElement::Execute(Thread thread) {
+Object IfElement::Execute(Thread & thread) {
   Object condition = GetChild(CONDITION)->Execute(thread);
   // Everything other than FALSE is true for this purpose
   if (condition == FALSE) {
