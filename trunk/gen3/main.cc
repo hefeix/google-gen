@@ -37,7 +37,7 @@ void Shell() {
   Execution *E = New<Execution>();
   OTuple program_tuple;
   input >> program_tuple;
-  E->ParseAndExecute(program_tuple);
+  E->ParseAndExecute(program_tuple, true);
   string command;
   while ((cout << "\n?") && (cin >> command)) {
     if (command == "q") break;
