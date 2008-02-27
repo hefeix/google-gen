@@ -5,7 +5,7 @@
   post (IS_TIME 0)
 
   on (IS_ROW x) let y sum(x 1)
-     if (equal(y, 5) 0 {
+     if (equal(y, 20) 0 {
           post (IS_ROW y)
           post (ROW_ADJACENT x y)
           post (ROW_ADJACENT y x)
@@ -13,7 +13,7 @@
      )       
 
   on (IS_COL x) let y sum(x 1)
-     if (equal(y, 5) 0 {
+     if (equal(y, 20) 0 {
           post (IS_COL y)
           post (COL_ADJACENT x y)
           post (COL_ADJACENT y x)
@@ -21,7 +21,7 @@
      )       
     
   on (IS_TIME x) let y sum(x,1)
-     if (equal(y, 20) 0
+     if (equal(y, 100) 0
        delay # {
           post (TS x y)
 	  post (IS_TIME y)
@@ -55,6 +55,6 @@
 
   on (IS_TIME t) on (IS_ROW row) {
      post (PRINT t row 0 "|")
-     post (PRINT t row 6 "|")
+     post (PRINT t row 21 "|")
   }
 }

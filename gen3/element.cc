@@ -50,11 +50,15 @@ Record Element::GetRecordForDisplay() const {
   ret["program"] = "<pre>" + PrettyProgramTree() + "</pre>";
   ret["simple_program"] = SimpleProgramTree().ToString();
   ret["incoming_variables"] = OTuple::Make(incoming_variables_).ToString();
-  ret["object"] = object_.ToString();
+  ret["object"] = object_.ToString();  
   
   for (uint i=0; i<children_.size(); i++) {
     if (i>0) ret["children"] += "<br>\n";
     ret["children"] += children_[i]->ShortDescription();
+    ret["children"] += " introduced variables = " 
+      + ToString(GetIntroducedVariables(i))
+      + " outgoing variables = " 
+      + ToString(GetOutgoingVariables(i));
   }
 
   return ret;
@@ -76,6 +80,9 @@ string Element::PrettyProgramTree(int indent) const {
   string ret = GetLink(FunctionKeyword().ToString());
   if (GetFunction() == Element::MAKETUPLE) {
     ret="";
+  }
+  if (GetFunction() == Element::LET) {
+    ret += " " +  HTMLEscape(object_.ToString());
   }
   if (ChildrenGoInTuple()) {
     if (GetFunction() == Element::MAKETUPLE) ret += GetLink("(");
@@ -229,18 +236,9 @@ string ConstantElement::PrettyProgramTree(int indent) const {
 }
 
 string SubstituteElement::PrettyProgramTree(int indent) const {
-  Element *child = GetChild(CHILD);
-  if (child) {
-    ConstantElement *constant = dynamic_cast<ConstantElement *>(child);
-    if (constant) {
-      Object o = constant->object_;
-      if (o.GetType() == Object::VARIABLE) { 
-	string ret = HTMLEscape(o.ToString());
-	return GetLink(ret);
-      }
-    }
-  }
-  return Element::PrettyProgramTree();
+  Object o = object_;
+  string ret = HTMLEscape(o.ToString());
+  return GetLink(ret);
 }
 
 void Element::StaticInit() {

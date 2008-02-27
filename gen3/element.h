@@ -79,7 +79,7 @@ struct Element : public Base {
   virtual Object ComputeReturnValue(Thread & thread, Tuple results) {
     CHECK(false); return NULL;
   }
-
+  
   // Verification code
   bool VerifyNode() {
     return (RequiredNumChildren() == NumChildren());
@@ -157,7 +157,7 @@ struct Element : public Base {
   int GetChildStackDepth(int which_child) const { 
     return incoming_stack_depth_ + GetNumIntroducedVariables(which_child); }
   virtual int GetNumIntroducedVariables(int which_child) const { return 0; }
-  Tuple GetIntroducedVariables(int which_child) const { return Tuple();}
+  virtual Tuple GetIntroducedVariables(int which_child) const { return Tuple();}
   int StackPosition(Variable variable) const { 
     for (uint i=0; i<incoming_variables_.size(); i++) 
       if (variable == incoming_variables_[i]) return i;
@@ -321,7 +321,7 @@ struct ConstantElement : public Element {
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return CONSTANT; }
   string PrettyProgramTree(int indent) const;
-  Object Execute(Thread t) { return object_; }
+  Object Execute(Thread & t) { return object_; }
   bool HasObject() const { return true; }
 };
 
@@ -331,6 +331,7 @@ struct MakeTupleElement : public Element {
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return MAKETUPLE; }
   bool HasVariableNumChildren() const { return true; }
+  bool ChildrenGoInTuple() const { return true; }
   bool ChildNeedsSeparateLine(int which_child) const {
     for (int c = 0; c<NumChildren(); c++) {
       const Element * e = GetChild(c);
@@ -350,7 +351,7 @@ struct MakeTupleElement : public Element {
 };
 
 struct SubstituteElement : public Element {
-#define SubstituteElementChildNameList { ITEM(CHILD) };
+#define SubstituteElementChildNameList { };
   CLASS_ENUM_DECLARE(SubstituteElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   bool HasObject() const { return true;}

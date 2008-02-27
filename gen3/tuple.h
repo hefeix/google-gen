@@ -175,6 +175,8 @@ string ToString(const CandidateRule &r);
 
 string ToString(const Tuple & s, const Map & sub); 
 
+inline string ToString(const Tuple & s) { return OTuple::Make(s).ToString(); }
+
 // Given a vector of tuples, with variables, we rename the variables
 // so that the first variable to occur in the vector of tuples is 
 // Variable(0), the next is Variable(1), etc.
