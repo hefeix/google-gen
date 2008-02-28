@@ -24,12 +24,15 @@
 struct Element;
 struct Execution;
 
-	      
-
 struct Thread {
   Thread() {
     element_ = NULL;
     execution_ = NULL;
+  }
+  Thread(const Thread& t) {
+    stack_ = t.stack_;
+    element_ = t.element_;
+    execution_ = t.execution_;
   }
   Tuple stack_;
   Element * element_;
@@ -77,7 +80,8 @@ struct Execution : public Base {
   // The thread points at the immediately executable code
   static Tuple MatchAndRun(Thread & thread, const Tuple & variable_tuple);
 
-  void Enqueue(Thread t, BitSeq time_delay) {
+  void Enqueue(Thread & t, BitSeq time_delay) {
+    VLOG(0) << "Enqueue Thread " << t.ToString() << endl;
     run_queue_[time_delay].push_back(t);
   }
   
