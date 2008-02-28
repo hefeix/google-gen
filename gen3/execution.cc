@@ -22,8 +22,9 @@
 
 string Thread::ToString() {
   string ret;
+  ret += "depth " + itoa(stack_.size()) + " ";
   ret += OTuple::Make(stack_).ToString() + " ";
-  ret += element_->PrettyProgramTree() + " ";
+  // ret += element_->PrettyProgramTree() + " ";
   return ret;
 }
 
@@ -34,12 +35,17 @@ void OnSubscription::Init(const Thread & t, Blackboard::Row *row) {
 }
 
 void OnSubscription::Update(Blackboard::Row *row, int tuple_num) {
-  Thread new_thread = thread_;
-  row->CopyBinding(tuple_num, &new_thread.stack_, 
-		   new_thread.element_->parent_->incoming_stack_depth_);
-  // VLOG(1)  << "Update " << tuple
-  //	   << " Threadinfo " << new_thread.ToString() << endl;
-  new_thread.execution_->Enqueue(new_thread, BitSeq::Min());
+  VLOG(0) << "updating wildcard_tuple " << row->wildcard_tuple_ 
+	  << " num_wildcards_ " << row->num_wildcards_
+	  << " tuple_num " << tuple_num 
+	  << " parent incoming stack depth " <<
+	  thread_.element_->parent_->incoming_stack_depth_ << endl;  
+  VLOG(0) << "Update Thread before binding " << thread_.ToString() << endl;
+  row->CopyBinding(tuple_num, 
+		   &thread_.stack_,
+		   thread_.element_->parent_->incoming_stack_depth_);
+  VLOG(0) << "Update Thread after binding " << thread_.ToString() << endl;
+  thread_.execution_->Enqueue(thread_, BitSeq::Min());
 }
 void Execution::ParseAndExecute(OTuple program_tuple, 
 				bool pretty, 

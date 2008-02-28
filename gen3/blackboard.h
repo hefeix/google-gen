@@ -99,10 +99,17 @@ class Blackboard : public Base{
     // copy the which'th entry onto the stack, starting at position start_pos
     void CopyBinding(int tuple_num, Tuple *stack, int start_pos) {
       CHECK(tuple_num >= 0 && tuple_num < NumTuples());
-      if ((int)stack->size() < start_pos + num_wildcards_) 
+      VLOG(0) << "Thread before CopyBinding " << ToString(*stack) << endl;
+      if ((int)stack->size() < start_pos + num_wildcards_) {
+	VLOG(0) << "resizing to " << start_pos + num_wildcards_ << endl;
 	stack->resize(start_pos+num_wildcards_);
-      memcpy(&(stack[start_pos]), &(data_[tuple_num * num_wildcards_]), 
-	     num_wildcards_ * sizeof(Object));     
+      }
+      VLOG(0) << "Thread after resizing " << ToString(*stack) << endl;
+      /*memcpy(&(stack[start_pos]), &(data_[tuple_num * num_wildcards_]), 
+	num_wildcards_ * sizeof(Object)); */
+      for (int i=0; i<num_wildcards_; i++)
+	(*stack)[start_pos+i] = data_[tuple_num*num_wildcards_+i];
+      VLOG(0) << "Thread after CopyBinding " << ToString(*stack) << endl;
     }
   };
 

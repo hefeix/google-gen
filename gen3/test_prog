@@ -1,6 +1,6 @@
 <{
   let y 3 post (y y)
-  on (3 x) post (7 x)
+  on (3 x) post (x 7)
 }
 >
 {
