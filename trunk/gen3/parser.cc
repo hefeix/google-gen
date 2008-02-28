@@ -84,7 +84,7 @@ Element * PrettyParseElement(const Tuple & t, uint * pos, Element *parent) {
     Object o = GetNext(t, pos);
     const Tuple & t2 = OTuple(o).Data();
     PrettyParseElements(t2, ret);
-    ret->SetObject(Integer::Make(t2.size()));
+    ret->SetObject(Integer::Make(ret->children_.size()));
     return ret;
   }
 

@@ -81,7 +81,7 @@ struct Element : public Base {
   }
   
   // Verification code
-  bool VerifyNode() {
+  bool VerifyNode() const{
     return (RequiredNumChildren() == NumChildren());
   }
 
@@ -212,6 +212,8 @@ struct MatchBaseElement : public Element {
   // Execute the extra child for one tuple that matches the search.
   Object RunForMatchingTuple(Thread &thread, Blackboard::Row *row, 
 			     int tuple_num);
+
+  string PrettyProgramTree(int indent) const;
   
   bool HasObject() const { return true; }
   bool HasVariableNumChildren() const { return true; }
