@@ -80,8 +80,8 @@ struct Execution : public Base {
   // The thread points at the immediately executable code
   static Tuple MatchAndRun(Thread & thread, const Tuple & variable_tuple);
 
-  void Enqueue(Thread & t, BitSeq time_delay) {
-    VLOG(0) << "Enqueue Thread " << t.ToString() << endl;
+  void Enqueue(const Thread & t, BitSeq time_delay) {
+    // VLOG(2) << "Enqueue Thread " << t.ToString() << endl;
     run_queue_[time_delay].push_back(t);
   }
   

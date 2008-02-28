@@ -35,16 +35,16 @@ void OnSubscription::Init(const Thread & t, Blackboard::Row *row) {
 }
 
 void OnSubscription::Update(Blackboard::Row *row, int tuple_num) {
-  VLOG(0) << "updating wildcard_tuple " << row->wildcard_tuple_ 
+  VLOG(2) << "updating wildcard_tuple " << row->wildcard_tuple_ 
 	  << " num_wildcards_ " << row->num_wildcards_
 	  << " tuple_num " << tuple_num 
 	  << " parent incoming stack depth " <<
 	  thread_.element_->parent_->incoming_stack_depth_ << endl;  
-  VLOG(0) << "Update Thread before binding " << thread_.ToString() << endl;
+  VLOG(2) << "Update Thread before binding " << thread_.ToString() << endl;
   row->CopyBinding(tuple_num, 
 		   &thread_.stack_,
 		   thread_.element_->parent_->incoming_stack_depth_);
-  VLOG(0) << "Update Thread after binding " << thread_.ToString() << endl;
+  VLOG(2) << "Update Thread after binding " << thread_.ToString() << endl;
   thread_.execution_->Enqueue(thread_, BitSeq::Min());
 }
 void Execution::ParseAndExecute(OTuple program_tuple, 

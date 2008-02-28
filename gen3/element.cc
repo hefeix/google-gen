@@ -60,6 +60,7 @@ Record Element::GetRecordForDisplay() const {
       + " outgoing variables = " 
       + ToString(GetOutgoingVariables(i));
   }
+  if (!VerifyNode()) ret["verify"] = "BAD";
 
   return ret;
 }
@@ -110,6 +111,29 @@ string Element::PrettyProgramTree(int indent) const {
     if (separate_line) ret += "\n" + string(indent, ' ');
     if (GetFunction() == Element::MAKETUPLE) ret += GetLink(")");
     else ret += ")";
+  }
+  return ret;
+}
+
+string MatchBaseElement::PrettyProgramTree(int indent) const { 
+  string ret = GetLink(FunctionKeyword().ToString());
+  ret += " ( ";
+  int child_num = 0;
+  for (uint i=0; i<wildcard_tuple_.size(); i++) {
+    if (wildcard_tuple_[i] == NULL) {
+      Element * child = GetChild(child_num++);
+      if (child == NULL) ret += "null";
+      else ret += child->PrettyProgramTree(indent+2);
+    } else {
+      CHECK(wildcard_tuple_[i] == WILDCARD);
+      ret += OTuple(object_).Data()[i].ToString();
+    }
+    ret += " ";
+  }
+  ret += ") ";    
+  if (HasExtraChild()) {
+    ret += "\n" + string(indent+2, ' ') 
+      + GetExtraChild()->PrettyProgramTree(indent+2);
   }
   return ret;
 }
