@@ -243,6 +243,18 @@ Object PostElement::Execute(Thread & t) {
   return tuple_child;
 }
 
+Object UnpostElement::Execute(Thread & t) {
+  // Get the tuple child
+  Object tuple_child = GetChild(TUPLE)->Execute(t);
+  if ( (tuple_child.GetType() != Object::OTUPLE) ) {
+    cerr << "Tuple child of UnpostElement not an OTUPLE: " 
+	 << tuple_child << endl;
+    return NULL;
+  }
+  t.execution_->AddUnpost(OTuple(tuple_child).Data());
+  return tuple_child;
+}
+
 string ConstantElement::PrettyProgramTree(int indent) const {
   bool can_be_concise = true;
   Object o = object_;
