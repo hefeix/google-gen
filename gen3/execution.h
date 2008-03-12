@@ -64,13 +64,18 @@ struct Execution : public Base {
   }
   void ExecuteOneEpoch() {
     ExecuteRunnableThreads();
-    CommitPostings();
-  }
-  void CommitPostings() {
+    CommitChanges();
+   }
+  void CommitChanges() {
+    forall(run, unpost_queue_) {
+      // cout << "Committing " << *run << " at " << current_time_ << endl;
+      blackboard_->Remove(*run);
+    }
     forall(run, post_queue_) {
       // cout << "Committing " << *run << " at " << current_time_ << endl;
       blackboard_->Post(*run);
     }
+    unpost_queue_.clear();
     post_queue_.clear();
   }
   void ExecuteRunnableThreads();
@@ -85,9 +90,8 @@ struct Execution : public Base {
     run_queue_[time_delay].push_back(t);
   }
   
-  void AddPost(const Tuple & post) {
-    post_queue_.push_back(post);
-  }
+  void AddPost(const Tuple & t) { post_queue_.push_back(t);}
+  void AddUnpost(const Tuple & t) { unpost_queue_.push_back(t); }
   
   Record GetRecordForDisplay() const;
 
@@ -103,6 +107,7 @@ struct Execution : public Base {
   // This contains the list of tuples to be posted at the end
   // of this epoch
   vector<Tuple> post_queue_;
+  vector<Tuple> unpost_queue_;
 
   // This is the blackboard for the execution
   Blackboard *blackboard_;

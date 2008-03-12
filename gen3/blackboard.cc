@@ -68,12 +68,9 @@ string SamplingInfo::ToString() const {
 void Blackboard::Row::SplitAtPosition(int position) {
   if (children_[position] != NULL) return;
   children_[position] = new hash_map<Object, Row *>;
-  Tuple t;
-  for(int i=0; i<NumTuples(); i++) {
-    GetTuple(i, &t);
-    FindCreateChild(position, t[position])->AddTuple(t);
+  for(int i=0; i<NumTuples(); i++) {    
+    FindCreateChild(position, GetTuple(i)[position])->AddTuple(data_[i]);
   }
-
 }
 Blackboard::Row * Blackboard::Row::FindChild(int position, Object value, 
 					     bool create) {
@@ -92,22 +89,24 @@ void Blackboard::Row::Init(const Tuple & wildcard_tuple) {
   VLOG(1) << "New row " << wildcard_tuple << endl;
   wildcard_tuple_ = wildcard_tuple;
   num_wildcards_ = NumWildcards(wildcard_tuple_);
-  num_tuples_ = 0;
   children_.resize(wildcard_tuple_.size());
 }
-void Blackboard::Row::AddTuple(const Tuple &t) {
-  for (uint i=0; i<t.size(); i++) 
-    if (wildcard_tuple_[i] == WILDCARD) data_.push_back(t[i]);
-  num_tuples_++;
+void Blackboard::Row::AddTuple(TupleInfo * tuple_info) {
+  tuple_info->positions_.push_back(make_pair(this, data_.size()));
+  data_.push_back(tuple_info);
+  const Tuple & t = tuple_info->tuple_;
   for (uint i=0; i<wildcard_tuple_.size(); i++) {
     if (children_[i]) {
-      FindCreateChild(i, t[i])->AddTuple(t);
+      FindCreateChild(i, t[i])->AddTuple(tuple_info);
     }
   }
-  forall(run, subscriptions_) (*run)->Update(this, num_tuples_-1);
+  forall(run, subscriptions_) (*run)->Update(this, data_.size()-1);
 }
-
-
+void Blackboard::Row::RemoveTuple(int position) {
+  TupleInfo * ti = data_[position] = data_[data_.size()-1];
+  data_.pop_back();
+  forall(run, ti->positions_) if (run->first == this) run->second = position;
+}
 
 Blackboard::Row * Blackboard::GetCreateAllWildcardRow(int size) const{
   vector<Row *> * tlr = 
@@ -137,32 +136,20 @@ Blackboard::Row * Blackboard::GetRow(const Tuple & wildcard_tuple,
 void Blackboard::Post(const Tuple & tuple) {
   VLOG(1) << "Post tuple " << tuple << endl;
   if (Contains(tuple)) return;
-  all_tuples_.insert(tuple);
-  GetCreateAllWildcardRow(tuple.size())->AddTuple(tuple);
+  TupleInfo *info = new TupleInfo(tuple);
+  tuples_[tuple] = info;
+  GetCreateAllWildcardRow(tuple.size())->AddTuple(info);
 }
 
-
-/*void 
-Blackboard::GetVariableMatches(const Tuple & variable_tuple, 
-			       Map binding_so_far,
-			       vector<Map> *results,
-			       double sample_fraction) const {
-  const Row * wildcard_matches = GetCreateRow
-    (VariablesToWildcards(variable_tuple));
-  for (int i=0; i<wildcard_matches->NumTuples(); i++) {
-    if (sample_fraction != 1.0) {
-      double skip = int(log(RandomFraction())/log(1.0-sample_fraction));
-      i += skip;
-      if (i >= wildcard_matches->NumTuples()) break;
-    }
-    Map m = binding_so_far;
-    Tuple t;
-    wildcard_matches->GetTuple(i, &t);
-    if (ExtendSubstitution(variable_tuple, t, &m)) {
-      results->push_back(m);
-    }
+void Blackboard::Remove(const Tuple &tuple) {
+  TupleInfo **info = tuples_ % tuple;
+  if (!info) return;
+  forall(run, (*info)->positions_) {
+    run->first->RemoveTuple(run->second);
   }
-  }*/
+  tuples_.erase(tuple);
+  delete *info;
+}
 
 
 /*
@@ -293,8 +280,8 @@ Record Blackboard::GetRecordForDisplay() const {
   Record ret = Base::GetRecordForDisplay();
   ret["type"] = "BLACKBOARD";
   ret["num tuples"] = itoa(GetNumTuples());
-  forall(run, all_tuples_) {
-    ret["tuples"] += OTuple::Make(*run).ToString() + "<br>\n";
+  forall(run, tuples_) {
+    ret["tuples"] += OTuple::Make(run->first).ToString() + "<br>\n";
   }
   ret["print"] = "<pre>" + Print(-1) + "</pre>";
   return ret;
@@ -311,8 +298,7 @@ string Blackboard::Print(int page) const {
   if (page != -1) output[page];
   
   for (int i=0; i<r->NumTuples(); i++) {
-    Tuple t;
-    r->GetTuple(i, &t);
+    Tuple t = r->GetTuple(i);
     Object page_num_obj = t[1];
     if (page_num_obj.GetType() != Object::INTEGER) continue;
     int page_num = Integer(page_num_obj).Data();

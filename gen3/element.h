@@ -29,6 +29,7 @@
        FUNCTION(MatchRandom, MATCH_RANDOM)			\
        FUNCTION(MatchCount, MATCH_COUNT)			\
        FUNCTION(Post, POST)					\
+       FUNCTION(Unpost, UNPOST)					\
        FUNCTION(MakeTuple, MAKETUPLE)				\
        FUNCTION(Substitute, SUBSTITUTE)				\
        FUNCTION(Constant, CONSTANT)				\
@@ -320,6 +321,16 @@ struct PostElement : public Element {
   Function GetFunction() const { return POST;}
   bool ElementNeedsSeparateLine() const { return true; }
   Object Execute(Thread & thread);
+};
+
+struct UnpostElement : public Element {
+#define UnpostElementChildNameList { ITEM(TUPLE) };
+  CLASS_ENUM_DECLARE(UnpostElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return UNPOST;}
+  bool ElementNeedsSeparateLine() const { return true; }
+  Object Execute
+(Thread & thread);
 };
 
 struct ConstantElement : public Element {

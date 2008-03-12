@@ -65,49 +65,54 @@ class Blackboard : public Base{
   // tuples on the blackboard
   string Print(int page = -1) const;
 
-  uint64 GetNumTuples() const { return all_tuples_.size(); }
+  uint64 GetNumTuples() const { return tuples_.size(); }
 
   void Shell();
   
+  struct Row;
+  struct TupleInfo {
+    TupleInfo(const Tuple & t) : tuple_(t) {}
+    Tuple tuple_;
+    vector<pair<Row *, int> > positions_;
+  };
+
   struct Subscription;
   struct Row {
     Tuple wildcard_tuple_;
     int num_wildcards_;
-    int num_tuples_; // necessary because num_wildcards_ can be 0.
-    // all of the tuples (we only store non-constant positions)
-    vector<Object> data_; 
+    vector<TupleInfo *> data_; 
     vector<hash_map<Object, Row *> *> children_;
     vector<Subscription *> subscriptions_;
 
     void Init(const Tuple & wildcard_tuple);
-    void AddTuple(const Tuple &t);
+    // Add the tuple into this row and all children of this row, 
+    // and modify the tuple_info
+    void AddTuple(TupleInfo *tuple_info);
+    // Not parallel to AddTuple - just remove the tuple from this row.
+    void RemoveTuple(int position);
     void SplitAtPosition(int position);
     Row * FindChild(int position, Object value, bool create = false);
     Row * FindCreateChild(int position, Object value) {
       return FindChild(position, value, true);
     }
 
-    int NumTuples() const { return num_tuples_;}
-    void GetTuple(int which, Tuple * result) const {
-      *result = wildcard_tuple_;
-      const Object * read_ptr = &(data_[which * num_wildcards_]);
-      for (uint i=0; i<result->size(); i++) {
-	if ((*result)[i] == WILDCARD) 
-	  (*result)[i] = *(read_ptr++);
-      }
-    }
+    int NumTuples() const { return data_.size();}
+    const Tuple & GetTuple(int which) const { return data_[which]->tuple_; }
+
     // copy the which'th entry onto the stack, starting at position start_pos
     void CopyBinding(int tuple_num, Tuple *stack, int start_pos) {
       CHECK(tuple_num >= 0 && tuple_num < NumTuples());
-      //VLOG(2) << "Thread before CopyBinding " << ToString(*stack) << endl;
       if ((int)stack->size() < start_pos + num_wildcards_) {
-	//VLOG(2) << "resizing to " << start_pos + num_wildcards_ << endl;
 	stack->resize(start_pos+num_wildcards_);
       }
-      //VLOG(2) << "Thread after resizing " << ToString(*stack) << endl;
-      for (int i=0; i<num_wildcards_; i++)
-	(*stack)[start_pos+i] = data_[tuple_num*num_wildcards_+i];
-      //VLOG(2) << "Thread after CopyBinding " << ToString(*stack) << endl;
+      int pos = start_pos;
+      const Tuple & t = GetTuple(tuple_num);
+      for (uint i=0; i<wildcard_tuple_.size(); i++) {
+	if (wildcard_tuple_[i] == WILDCARD) {
+	  (*stack)[pos] = t[i];
+	  pos++;
+	}
+      }
     }
   };
 
@@ -120,7 +125,6 @@ class Blackboard : public Base{
     return GetRow(wildcard_tuple, true);
   }
   
-
   struct Subscription {
     virtual ~Subscription() {}
     virtual void Update(Row *row, int item_num) = 0;
@@ -135,13 +139,14 @@ class Blackboard : public Base{
 
   // Modifying the blackboard
   void Post(const Tuple & tuple);
+  void Remove(const Tuple &tuple);
 
   // Reading the blackboard
 
   int GetNumWildcardMatches(const Tuple & t) {
     return GetCreateRow(t)->NumTuples();
   }
-  bool Contains(const Tuple & t) const { return all_tuples_ % t; }
+  bool Contains(const Tuple & t) const { return tuples_ % t; }
 
   // Appends bindings to the results vector
   /*void GetVariableMatches(const Tuple & variable_tuple, 
@@ -169,8 +174,7 @@ class Blackboard : public Base{
  private:
   // points from length to rowinfo for a tuple of all wildcards. 
   vector<Row *> top_level_rowinfo_;
-  
-  hash_set<Tuple> all_tuples_;
+  hash_map<Tuple, TupleInfo *> tuples_;
 };
 
 #endif
