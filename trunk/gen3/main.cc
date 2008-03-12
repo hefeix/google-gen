@@ -32,6 +32,10 @@
 #include <fstream>
 
 void Shell() {
+  TestRankSet();
+  TestRankMap();
+  TestWeightedSet();
+
   //SetVerbosity(1);
   ifstream input("test_prog");
   Execution *E = New<Execution>();
