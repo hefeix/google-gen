@@ -52,6 +52,11 @@
 
 using namespace std;
 
+template <class A, class B> ostream & operator << (ostream & output, 
+						   const pair<A,B> & p) {
+  return output << "( " << p.first << ", " << p.second << " )";
+}
+
 template <class NPtr> 
 NPtr NextNode(NPtr current) {
   if (!current) return NULL;
@@ -88,31 +93,94 @@ template<class K, class V>
 };
 
 
-template<class Projection> 
-class RankTree {
+
+template <class DataType>
+struct NullAccumulator {
+  void Accumulate(const NullAccumulator *left, const NullAccumulator *right,
+		  const DataType & data) {}
+  string ToString() { return "[]";}
+};
+
+template <class DataType>
+struct CountAccumulator {
+  void Accumulate(const CountAccumulator *left, const CountAccumulator *right,
+		  const DataType & data) {
+    count_ = (left?left->count_:0) + 1 + (right?right->count_:0);
+  }
+  int GetCount() const { return count_;}
+  string ToString() { return "[]";}
+  int count_;
+};
+
+template <class DataType> 
+struct SecondWeightAccumulator {
+  void Accumulate(const SecondWeightAccumulator *left, 
+		  const SecondWeightAccumulator *right, 
+		  const DataType & data) {
+    weight_ = (left?left->weight_:0.0) + data.second 
+      + (right?right->weight_:0.0);
+  }
+  double GetSubtreeWeight() const {return weight_;}
+  static double GetNodeWeight(const DataType & data) { return data.second; }
+  string ToString() { return "[]";}
+  double weight_;
+};
+
+template <class DataType> 
+struct SecondWeightAndCountAccumulator {
+  void Accumulate(const SecondWeightAndCountAccumulator *left, 
+		  const SecondWeightAndCountAccumulator *right, 
+		  const DataType & data) {
+    weight_ = (left?left->weight_:0.0) + data.second 
+      + (right?right->weight_:0.0);
+    count_ = (left?left->count_:0) + 1 + (right?right->count_:0);
+  }
+  int GetCount() const { return count_;}
+  double GetSubtreeWeight() const {return weight_;}
+  static double GetNodeWeight(const DataType & data) { return data.second; }
+  string ToString() { 
+    ostringstream ostr;
+    ostr << "[ count=" << count_ << " weight=" << weight_ << " ]";
+    return ostr.str();
+  }
+  int count_;
+  double weight_;
+};
+
+
+template<class Projection, 
+  class Accumulator = NullAccumulator<typename Projection::DataType> > 
+class AccumulationTree {
   typedef typename Projection::KeyType Key;
   typedef typename Projection::DataType Data;
   
   bool ProjectLT(const Data & d1, const Data & d2) {
     return (Projection::ToKey(d1) < Projection::ToKey(d2));
   }
-
- public:
-  uint size() const { return root_?root_->subtree_size_:0;}
-
+  
+  public:
+  uint size() const { return size_; }
+  double TotalWeight() const { return SubtreeWeight(root_);}
+  
   void insert(const Data & d) {
     Node *n = GetAddNode(Projection::ToKey(d));
-    if (!Projection::KeyIsData())
+    if (!Projection::KeyIsData()) {
       n->data_ = d;
+      n->AccumulateRecursive();
+    }
   }
   void erase(const Key & k) {
     Node *parent;
     Node ** look = search(k, &parent);
-    if (*look) Delete(*look);
+    if (*look) {
+      Delete(*look);
+      size_--;
+    }
   }
-  RankTree() {root_ = NULL;}
-  RankTree(const RankTree<Projection> & other) {
+  AccumulationTree() {root_ = NULL; size_ = 0;}
+  AccumulationTree(const AccumulationTree<Projection, Accumulator> & other) {
     root_ = NULL;
+    size_ = 0;
     *this = other;
   }
   string ToString(){
@@ -131,7 +199,7 @@ class RankTree {
     Node * left_;
     Node * right_;
     Color color_;
-    uint subtree_size_;
+    Accumulator accumulator_;
     static Node * DeepCopy(Node * n) {
       if (n==NULL) return NULL;
       Node *ret = new Node(*n);
@@ -147,7 +215,7 @@ class RankTree {
     }
     Node(const Node &o) 
       :data_(o.data_), parent_(o.parent_), left_(o.left_), right_(o.right_), 
-       color_(o.color_), subtree_size_(o.subtree_size_) {}
+       color_(o.color_), accumulator_(o.accumulator_){}
     int WhichChild() const{ 
       if (!parent_) return 0;
       if (this == parent_->left_) return -1;
@@ -155,7 +223,6 @@ class RankTree {
     }
     Node * Grandparent() {
       CHECK(parent_->parent_);
-      // if (parent_ == NULL) return NULL;
       return parent_->parent_;
     }
     Node * Uncle() {
@@ -173,33 +240,43 @@ class RankTree {
       parent_ = parent;
       left_ = right_ = NULL;
       color_ = RED;
-      subtree_size_ = 0;
       data_ = data;
-      for (Node *current = this; current; current = current->parent_) {
-	current->subtree_size_++;
-      }
-    }   
+      AccumulateRecursive();
+    }
+    void Accumulate() {
+      accumulator_.Accumulate(left_?(&left_->accumulator_):NULL,
+			      right_?(&right_->accumulator_):NULL, 
+			      data_);
+    }
+    void AccumulateRecursive() {
+      Accumulate();
+      if (parent_) parent_->Accumulate();
+    }
     void Check() {
       if (parent_) CHECK(parent_->left_==this || parent_->right_==this);
       if (left_) CHECK(left_->parent_==this);
       if (right_) CHECK(right_->parent_==this);
-      if (parent_) CHECK(parent_->color_ == BLACK || color_ == BLACK);
-      CHECK(subtree_size_ == 1 + SubtreeSize(left_) + SubtreeSize(right_));
-    }    
+      if (parent_) CHECK(parent_->color_ == BLACK || color_ == BLACK);      
+      // CHECK(subtree_size_ == SubtreeSize(left_) + 1 + SubtreeSize(right_));
+      // CHECK(subtree_weight_ ==
+      // SubtreeWeight(left_) + WeightFunctor::Weight(data_)
+      // + SubtreeWeight(right_));
+    }
   };
   Node * root_;
-
+  int size_;
+  
   string ToString(Node * n, string lineheadtop, string lineheadbottom) {
     if (n==NULL) {
       return lineheadtop + "NULL\n";
     }
-    string ret;
-    ret += ToString(n->left_, lineheadtop+"   ", lineheadtop+" | ");
-    ret += lineheadtop + n->data_ + " (" 
-      + string((n->color_==RED)?"RED":"BLACK")
-      + ")\n";
-    ret += ToString(n->right_, lineheadbottom+" | ", lineheadbottom + "   ");
-    return ret;
+    ostringstream ret;
+    ret << ToString(n->left_, lineheadtop+"   ", lineheadtop+" | ");
+    ret << lineheadtop << n->data_ << " (" 
+      << string((n->color_==RED)?"RED":"BLACK")
+	<< ") " << n->accumulator_.ToString() << "\n";
+    ret << ToString(n->right_, lineheadbottom+" | ", lineheadbottom + "   ");
+    return ret.str();
   } 
   
  public:
@@ -300,6 +377,27 @@ class RankTree {
   iterator nth(uint i){ return _nth(i); }
   const_iterator nth(uint i) const{ return _nth(i); }
 
+  Node * _find_by_weight(double weight) const {
+    CHECK(weight < TotalWeight());
+    Node *n = root_;
+    while(1) {
+      double leftweight = SubtreeWeight(n->left_);
+      double nodeweight = Accumulator::GetNodeWeight(n->data_);
+      if (weight < leftweight) { 
+	n = n->left_;
+	continue;
+      }
+      weight -= leftweight;
+      if (weight < nodeweight) return n;
+      weight -= nodeweight;
+      n = n->right_;
+    }
+    cerr << "Probably a roundoff error here " << endl;
+    return root_;
+  }
+  iterator find_by_weight(double weight) {return _find_by_weight(weight);}
+  const_iterator find_by_weight(double w) const {return _find_by_weight(w);}  
+
   uint _index(const Node * n) const{
     if (!n) return size();
     int ret = SubtreeSize(n->left_);
@@ -334,7 +432,7 @@ class RankTree {
       insert(*run);
     }
   }
-  void operator=(const RankTree & o) {
+  void operator=(const AccumulationTree & o) {
     clear();
     root_ = Node::DeepCopy(o.root_);
      //insert(o.begin(), o.end());
@@ -371,8 +469,8 @@ class RankTree {
     if (swap_in->right_) swap(n->right_->parent_, swap_in->right_->parent_);
     else n->right_->parent_ = swap_in;
     swap(n->right_, swap_in->right_);
-    swap(n->color_, swap_in->color_);
-    swap(n->subtree_size_, swap_in->subtree_size_);
+    swap(n->color_, swap_in->color_);    
+    swap(n->accumulator_, swap_in->accumulator_);
     DeleteOneChild(n);
   }
   void DeleteOneChild(Node *n) { // deletes a node with at most one child
@@ -407,9 +505,8 @@ class RankTree {
     newtop->left_ = n;
     newtop->parent_ = n->parent_;
     n->parent_ = newtop;
-    n->subtree_size_ = 1 + SubtreeSize(n->left_) + SubtreeSize(n->right_);
-    newtop->subtree_size_ = 1 + SubtreeSize(newtop->left_) 
-      + SubtreeSize(newtop->right_);
+    n->Accumulate();
+    newtop->Accumulate();
   }
   void RotateRight(Node *n) {
     Node * newtop = n->left_;
@@ -420,9 +517,8 @@ class RankTree {
     newtop->right_ = n;
     newtop->parent_ = n->parent_;
     n->parent_ = newtop;
-    n->subtree_size_ = 1 + SubtreeSize(n->left_) + SubtreeSize(n->right_);
-    newtop->subtree_size_ = 1 + SubtreeSize(newtop->left_) 
-      + SubtreeSize(newtop->right_);
+    n->Accumulate();
+    newtop->Accumulate();
   }
 
   void InsertCase1(Node *n) {
@@ -549,6 +645,7 @@ class RankTree {
     if (*where) return *where;
     Node * ret = new Node(where, parent, Projection::ToData(k));
     InsertCase1(ret);
+    size_++;
     return ret;
   }
 
@@ -581,63 +678,70 @@ class RankTree {
   }
   static uint SubtreeSize(const Node *n)  {
     if (!n) return 0;
-    return n->subtree_size_;
+    return n->accumulator_.GetCount();
   }
+  static double SubtreeWeight(const Node *n)  {
+    if (!n) return 0;
+    return n->accumulator_.GetSubtreeWeight();
+  }
+  
   // puts displacer where victim was and deletes victim
   void ReplaceAndDestroy(Node *victim, Node *displacer) {
     //CHECK(victim);
-    int count_delta = SubtreeSize(displacer) - SubtreeSize(victim);
     Node * parent = victim->parent_;
     if (displacer) displacer->parent_ = parent;
     *GetPointerTo(victim) = displacer;
     delete victim;
-    for (Node *n = parent; n; n = n->parent_) {
-      n->subtree_size_ += count_delta;
-    }
+    parent->AccumulateRecursive();
   }
 };
 
-template <class T> 
-class rankset : public RankTree<IdentityProjection<T> >{
+template <class T>
+class rankset : public AccumulationTree<IdentityProjection<T>, 
+  CountAccumulator<T> >{
 };
 
-template<class K, class V>
-class rankmap : public RankTree<FirstProjection<K,V> >{
+template<class K, class V> 
+  class rankmap : public AccumulationTree<FirstProjection<K,V>, CountAccumulator<pair<K,V> > >{
  public:
-  typedef typename RankTree<FirstProjection<K,V> >::Node Node;
-  V & operator [](const K & k) {
-    Node *n = GetAddNode(k);
-    return n->data_.second;    
-  }
-};
+    typedef typename AccumulationTree<FirstProjection<K,V>, 
+      CountAccumulator<pair<K,V> > >::Node Node;
+    V & operator [](const K & k) {
+      Node *n = GetAddNode(k);
+      return n->data_.second;    
+    }
+  };
 
-template<class A> bool operator %(const rankset<A> & m, const A & a){
+template<class A> bool operator %(const rankset<A> & m, 
+				  const A & a){
   return m.find(a) != m.end();
 }
 
-template <class A, class B> B * operator %(rankmap<A, B> & m, const A & a){
+template <class A, class B> 
+  B * operator %(rankmap<A, B> & m, const A & a){
   typedef typeof(m.begin()) iter_type;
   iter_type look = m.find(a);
   if (look != m.end()) return &(look->second);
   return 0;
 }
 
-template<class A, class B> const B * operator %(const rankmap<A, B> & m, 
-						const A & a){
+template<class A, class B> 
+  const B * operator %(const rankmap<A, B> & m, 
+		       const A & a){
   typedef typeof(m.begin()) iter_type;
   iter_type look = m.find(a);
   if (look != m.end()) return &(look->second);
   return 0;
 }
 
-template<class Projection> 
-bool operator <(const RankTree<Projection> & x, 
-		const RankTree<Projection> & y) {
+template<class Projection, class Accumulator> 
+  bool operator <(const AccumulationTree<Projection, Accumulator> & x, 
+		  const AccumulationTree<Projection, Accumulator> & y) {
   return lexicographical_compare(x.begin(), x.end(), y.begin(), y.end());
 }
-template<class Projection> 
-bool operator ==(const RankTree<Projection> & x, 
-		 const RankTree<Projection> & y) {
+template<class Projection, class Accumulator> 
+  bool operator ==(const AccumulationTree<Projection, Accumulator> & x, 
+		   const AccumulationTree<Projection, Accumulator> & y) {
   return ((x.size() == y.size()) && 
 	  equal(x.begin(), x.end(), y.begin()) );
 }
@@ -653,16 +757,41 @@ template<class SK, class MK, class V>
   return ret;
 }
 
+template <class K> class weightedset : 
+public AccumulationTree<FirstProjection<K, double>, 
+  SecondWeightAndCountAccumulator<pair<K, double> > > {
+ public:
+  typedef typename AccumulationTree<FirstProjection<K, double>, 
+    SecondWeightAndCountAccumulator<pair<K, double> > >::Node Node;
+  void SetValue(const K & key, double value) {
+    insert(make_pair(key, value) );
+  }
+  void AddToValue(const K & key, double delta) {
+    Node *n = GetAddNode(key);
+    n->data_.second += delta;
+    n->AccumulateRecursive();
+  }
+};
+
+template<class K> 
+  const double * operator %(const weightedset<K> & m, 
+		       const K & k){
+  typedef typeof(m.begin()) iter_type;
+  iter_type look = m.find(k);
+  if (look != m.end()) return &(look->second);
+  return 0;
+}
+
 
 inline void TestRankSet() {
-  set<int> foo;
-  //rankset<int> foo;
+  //set<int> foo;
+  rankset<int> foo;
   int start = time(0);
-  for (int i=0; i<100000000; i++) { 
+  for (int i=0; i<1000000; i++) { 
     if (!(i & (i-1))) { 
       cout << "Testing " << i 
 	   << " size= " << foo.size() << endl;
-      //foo.Check();
+      foo.Check();
     }
     if (rand() % 2) foo.insert(rand() % 1000);
     else foo.erase(rand() % 1000);
@@ -681,15 +810,37 @@ inline void TestRankMap() {
   forall(run, foo) {
     cout << "foo[" << run->first << "] = " << run->second << endl;
   }
-  const rankmap<string, int> & bar = foo;
+  rankmap<string, int> bar = foo;
   forall(run, bar) {
-    cout << "foo[" << run->first << "] = " << run->second << endl;
+    cout << "bar[" << run->first << "] = " << run->second << endl;
   }
   
 }
+inline void TestWeightedSet() {
+  weightedset<char> s;
+  for (int r=0; r<10; r++) {
+    char c = 'A' + (rand() % 6);
+    if (rand() % 5  == 0) {
+      cout << "Erasing " << c << endl;
+      s.erase(c);      
+    } else {
+      int val = rand() % 10;
+      s.SetValue(c, val);
+      cout << "Set value " << c << ":" << val << endl;
+    }
+  }
+  cout << s.ToString();
+  double total_weight = s.TotalWeight();
+  cout << "Total weight = " << total_weight << endl;
+  for (int r=0; r<10; r++) {
+    double d = rand() % int(total_weight);
+    cout << "find by weight " << d << " " << s.find_by_weight(d)->first
+	 << endl;
+  }
+}
 
 //template <class T>
-//typedef RankTree<IdentityProjection<T> > rankset;
+//typedef AccumulationTree<IdentityProjection<T> > rankset;
 
 
 //template <class K, class V> 
