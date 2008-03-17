@@ -25,8 +25,6 @@
 #define ALL_FUNCTIONS \
   FUNCTION(On, ON)						\
        FUNCTION(Match, MATCH)					\
-       FUNCTION(MatchLast, MATCH_LAST)				\
-       FUNCTION(MatchRandom, MATCH_RANDOM)			\
        FUNCTION(MatchCount, MATCH_COUNT)			\
        FUNCTION(Post, POST)					\
        FUNCTION(Unpost, UNPOST)					\
@@ -40,8 +38,7 @@
        FUNCTION(Nth, NTH)					\
        FUNCTION(Let, LET)					\
        FUNCTION(Delay, DELAY)					\
-       FUNCTION(RandomBool, RANDOM_BOOL)	       		\
-       FUNCTION(RandomUint, RANDOM_UINT)		        \
+       FUNCTION(Choose, CHOOSE)					\
     
 /*
   FUNCTION(AddCode, ADD_CODE)					\
@@ -286,24 +283,6 @@ struct MatchElement : public MatchBaseElement {
   Object SubclassExecute(Thread & thread, const Tuple & wildcard_tuple);
 };
 
-struct MatchRandomElement : public MatchBaseElement {
-#define MatchRandomElementChildNameList {};
-  CLASS_ENUM_DECLARE(MatchRandomElement, ChildName);
-  DECLARE_FUNCTION_ENUMS;
-  
-  Function GetFunction() const { return MATCH_RANDOM; }
-  Object SubclassExecute(Thread & thread, const Tuple & wildcard_tuple);
-};
-
-struct MatchLastElement : public MatchBaseElement {
-#define MatchLastElementChildNameList {};
-  CLASS_ENUM_DECLARE(MatchLastElement, ChildName);
-  DECLARE_FUNCTION_ENUMS;
-  
-  Function GetFunction() const { return MATCH_LAST; }
-  Object SubclassExecute(Thread & thread, const Tuple & wildcard_tuple);
-};
-
 struct MatchCountElement : public MatchBaseElement {
 #define MatchCountElementChildNameList {};
   CLASS_ENUM_DECLARE(MatchCountElement, ChildName);
@@ -500,6 +479,39 @@ struct DelayElement : public Element {
   Object Execute(Thread & thread);
 };
 
+struct ChooseElement : public Element { 
+#define ChooseElementChildNameList { ITEM(DISTRIBUTION) };
+  CLASS_ENUM_DECLARE(ChooseElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+#define ChooseElementDistributionTypeList { ITEM(BOOL), \
+      ITEM(QUADRATIC_UINT),				\
+      ITEM(BLACKBOARD) };
+  CLASS_ENUM_DECLARE(ChooseElement, DistributionType);
+
+  static vector<Keyword> distribution_type_keywords_;
+  static void InitDistributionTypeKeywords();
+  static Keyword DistributionTypeToKeyword(DistributionType s) { 
+    return distribution_type_keywords_[s];}
+  static DistributionType KeywordToDistributionType(Keyword k) {
+    for (int i=0; i<NumDistributionTypes(); i++) 
+      if (k == distribution_type_keywords_[i]) return (DistributionType)i;
+    return (DistributionType)(-1);
+  }
+  Function GetFunction() const { return CHOOSE;}
+  
+  // first element of return value is the choice
+  // second element is the likelihood of that choice. 
+  // If suggestion is non-null, forces the choice to be equal to *suggestion
+  // if that has non-zero likelihood
+  static pair<Object, LL> Choose(Thread &thread, 
+				 Tuple distribution, 
+				 const Object *suggestion);
+
+
+  Object ComputeReturnValue(Thread & thread, Tuple results);
+};
+
+/*
 struct RandomBoolElement : public Element {
 #define RandomBoolElementChildNameList { ITEM(PRIOR), };
   CLASS_ENUM_DECLARE(RandomBoolElement, ChildName);
@@ -512,7 +524,6 @@ struct RandomBoolElement : public Element {
     return Boolean::Make(ret);
   }
 };
-
 struct RandomUintElement : public Element {
 #define RandomUintElementChildNameList { };
   CLASS_ENUM_DECLARE(RandomUintElement, ChildName);
@@ -523,7 +534,7 @@ struct RandomUintElement : public Element {
     return Integer::Make(ret);
   }
 };
-
+*/
 
 
 #endif

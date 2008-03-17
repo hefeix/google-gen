@@ -96,6 +96,7 @@ template<class K, class V>
 
 template <class DataType>
 struct NullAccumulator {
+  typedef double WeightType; // this is not used.
   void Accumulate(const NullAccumulator *left, const NullAccumulator *right,
 		  const DataType & data) {}
   string ToString() { return "[]";}
@@ -103,6 +104,7 @@ struct NullAccumulator {
 
 template <class DataType>
 struct CountAccumulator {
+  typedef double WeightType; // this is not used.
   void Accumulate(const CountAccumulator *left, const CountAccumulator *right,
 		  const DataType & data) {
     count_ = (left?left->count_:0) + 1 + (right?right->count_:0);
@@ -112,22 +114,24 @@ struct CountAccumulator {
   int count_;
 };
 
-template <class DataType> 
+template <class DataType, class Weight> 
 struct SecondWeightAccumulator {
+  typedef Weight WeightType;
   void Accumulate(const SecondWeightAccumulator *left, 
 		  const SecondWeightAccumulator *right, 
 		  const DataType & data) {
     weight_ = (left?left->weight_:0.0) + data.second 
       + (right?right->weight_:0.0);
   }
-  double GetSubtreeWeight() const {return weight_;}
-  static double GetNodeWeight(const DataType & data) { return data.second; }
+  Weight GetSubtreeWeight() const {return weight_;}
+  static Weight GetNodeWeight(const DataType & data) { return data.second; }
   string ToString() { return "[]";}
-  double weight_;
+  Weight weight_;
 };
 
-template <class DataType> 
+template <class DataType, class Weight> 
 struct SecondWeightAndCountAccumulator {
+  typedef Weight WeightType;
   void Accumulate(const SecondWeightAndCountAccumulator *left, 
 		  const SecondWeightAndCountAccumulator *right, 
 		  const DataType & data) {
@@ -136,15 +140,15 @@ struct SecondWeightAndCountAccumulator {
     count_ = (left?left->count_:0) + 1 + (right?right->count_:0);
   }
   int GetCount() const { return count_;}
-  double GetSubtreeWeight() const {return weight_;}
-  static double GetNodeWeight(const DataType & data) { return data.second; }
+  Weight GetSubtreeWeight() const {return weight_;}
+  static Weight GetNodeWeight(const DataType & data) { return data.second; }
   string ToString() { 
     ostringstream ostr;
     ostr << "[ count=" << count_ << " weight=" << weight_ << " ]";
     return ostr.str();
   }
   int count_;
-  double weight_;
+  Weight weight_;
 };
 
 
@@ -153,14 +157,15 @@ template<class Projection,
 class AccumulationTree {
   typedef typename Projection::KeyType Key;
   typedef typename Projection::DataType Data;
-  
+  typedef typename Accumulator::WeightType Weight;
+
   bool ProjectLT(const Data & d1, const Data & d2) {
     return (Projection::ToKey(d1) < Projection::ToKey(d2));
   }
   
   public:
   uint size() const { return size_; }
-  double TotalWeight() const { return SubtreeWeight(root_);}
+  Weight TotalWeight() const { return SubtreeWeight(root_);}
   
   void insert(const Data & d) {
     Node *n = GetAddNode(Projection::ToKey(d));
@@ -377,12 +382,12 @@ class AccumulationTree {
   iterator nth(uint i){ return _nth(i); }
   const_iterator nth(uint i) const{ return _nth(i); }
 
-  Node * _find_by_weight(double weight) const {
+  Node * _find_by_weight(Weight weight) const {
     CHECK(weight < TotalWeight());
     Node *n = root_;
     while(1) {
-      double leftweight = SubtreeWeight(n->left_);
-      double nodeweight = Accumulator::GetNodeWeight(n->data_);
+      Weight leftweight = SubtreeWeight(n->left_);
+      Weight nodeweight = Accumulator::GetNodeWeight(n->data_);
       if (weight < leftweight) { 
 	n = n->left_;
 	continue;
@@ -395,8 +400,10 @@ class AccumulationTree {
     cerr << "Probably a roundoff error here " << endl;
     return root_;
   }
-  iterator find_by_weight(double weight) {return _find_by_weight(weight);}
-  const_iterator find_by_weight(double w) const {return _find_by_weight(w);}  
+  iterator find_by_weight(Weight weight) 
+  {return _find_by_weight(weight);}
+  const_iterator find_by_weight(Weight w) const 
+  {return _find_by_weight(w);}  
 
   uint _index(const Node * n) const{
     if (!n) return size();
@@ -757,25 +764,25 @@ template<class SK, class MK, class V>
   return ret;
 }
 
-template <class K> class weightedset : 
-public AccumulationTree<FirstProjection<K, double>, 
-  SecondWeightAndCountAccumulator<pair<K, double> > > {
+template <class K, class Weight> class weightedset : 
+public AccumulationTree<FirstProjection<K, Weight>, 
+  SecondWeightAndCountAccumulator<pair<K, Weight>, Weight> > {
  public:
-  typedef typename AccumulationTree<FirstProjection<K, double>, 
-    SecondWeightAndCountAccumulator<pair<K, double> > >::Node Node;
-  void SetValue(const K & key, double value) {
+  typedef typename AccumulationTree<FirstProjection<K, Weight>, 
+    SecondWeightAndCountAccumulator<pair<K, Weight>, Weight> >::Node Node;
+  void SetValue(const K & key, Weight value) {
     insert(make_pair(key, value) );
   }
-  void AddToValue(const K & key, double delta) {
+  void AddToValue(const K & key, Weight delta) {
     Node *n = GetAddNode(key);
     n->data_.second += delta;
     n->AccumulateRecursive();
   }
 };
 
-template<class K> 
-  const double * operator %(const weightedset<K> & m, 
-		       const K & k){
+template<class K, class Weight> 
+  const Weight * operator %(const weightedset<K, Weight> & m, 
+			    const K & k){
   typedef typeof(m.begin()) iter_type;
   iter_type look = m.find(k);
   if (look != m.end()) return &(look->second);
@@ -817,7 +824,7 @@ inline void TestRankMap() {
   
 }
 inline void TestWeightedSet() {
-  weightedset<char> s;
+  weightedset<char, double> s;
   for (int r=0; r<10; r++) {
     char c = 'A' + (rand() % 6);
     if (rand() % 5  == 0) {

@@ -31,6 +31,8 @@ CLASS_ENUM_DEFINE(Element, Function);
 ALL_FUNCTIONS
 #undef FUNCTION
 
+CLASS_ENUM_DEFINE(ChooseElement, DistributionType);
+
 
 Object Element::Execute(Thread & thread) {
   Tuple results;
@@ -181,26 +183,6 @@ Object MatchElement::SubclassExecute(Thread & thread,
   return OTuple::Make(ret);
 }
 
-Object MatchRandomElement::SubclassExecute(Thread & thread, 
-					   const Tuple & wildcard_tuple) {
-  Blackboard::Row *row = thread.execution_->blackboard_->GetRow(wildcard_tuple);
-  if (!row) return NULL;
-  int num_tuples = row->NumTuples();
-  if (num_tuples == 0) return NULL;
-  int pos = RandomUInt32() % num_tuples;
-  return RunForMatchingTuple(thread, row, pos);
-}
-
-Object MatchLastElement::SubclassExecute(Thread & thread, 
-					 const Tuple & wildcard_tuple) {
-  Blackboard::Row *row = thread.execution_->blackboard_->GetRow(wildcard_tuple);
-  if (!row) return NULL;
-  int num_tuples = row->NumTuples();
-  if (num_tuples == 0) return NULL;
-  int pos = num_tuples-1;
-  return RunForMatchingTuple(thread, row, pos);
-}
-
 Object MatchCountElement::SubclassExecute(Thread & thread,
 					  const Tuple & wildcard_tuple) {
   Blackboard::Row *row = thread.execution_->blackboard_->GetRow(wildcard_tuple);
@@ -278,6 +260,7 @@ string SubstituteElement::PrettyProgramTree(int indent) const {
 void Element::StaticInit() {
   for (int i=0; i<NumFunctions(); i++) 
     Object::AddKeyword(Downcase(FunctionToString(Function(i))));
+  ChooseElement::InitDistributionTypeKeywords();
 }
 
 Object IfElement::Execute(Thread & thread) {
@@ -288,4 +271,71 @@ Object IfElement::Execute(Thread & thread) {
     return on_false->Execute(thread);
   }
   return GetChild(ON_TRUE)->Execute(thread);
+}
+
+void ChooseElement::InitDistributionTypeKeywords() {
+  CHECK(distribution_type_keywords_.size() == 0);
+  for (int i=0; i<NumDistributionTypes(); i++) 
+    distribution_type_keywords_.push_back
+      (Object::AddKeyword
+       (Downcase(DistributionTypeToString(DistributionType(i)))));  
+}
+
+pair<Object, LL> 
+ChooseElement::Choose(Thread &thread, Tuple distribution, 
+		      const Object *suggestion) {
+  if ( (distribution.size() <= 0) ||
+       (distribution[0].GetType() != Object::KEYWORD) )
+    return make_pair(Object(NULL), LL(0));
+  DistributionType distribution_type 
+    = KeywordToDistributionType(distribution[0]);
+  switch(distribution_type) {
+  case BOOL: {
+    if (distribution.size() <= 1) break;
+    if (distribution[1].GetType() != Object::REAL) break;
+    double prior = Real(distribution[1]).Data();
+    bool ret = (RandomFraction() < prior);
+    if (suggestion && suggestion->GetType() == Object::BOOLEAN) {
+      ret = Boolean(*suggestion).Data();
+    }
+    return make_pair(Boolean::Make(ret), Log(ret?prior:(1.0-prior)));
+  }
+  case QUADRATIC_UINT: {
+    int ret = RandomUintQuadratic();
+    if (suggestion && suggestion->GetType() == Object::INTEGER) {
+      int n = Integer(*suggestion).Data();
+      if (n>=0) ret = n;
+    }
+    return make_pair(Integer::Make(ret), uintQuadraticLnProb(ret));
+  }
+  case BLACKBOARD: {
+    if (distribution.size() <= 1) break;
+    Object identifier = distribution[1];
+    const Distribution & d = 
+      *(thread.execution_->blackboard_->GetCreateDistribution(identifier));
+    int64 total_weight = d.TotalWeight();
+    if (total_weight == 0) break;
+    if (suggestion) {
+      Distribution::const_iterator look = d.find(*suggestion);
+      if (look != d.end()) {
+	if (look->second == 0) break;
+	return make_pair(look->first, Log(look->second) - Log(total_weight));
+      }
+    }
+    int64 r = RandomUInt64() % (uint64)total_weight;
+    Distribution::const_iterator look = d.find_by_weight(r);
+    return make_pair(look->first, Log(look->second) - Log(total_weight));
+  }
+  default: break;
+  };
+  return make_pair(Object(NULL), LL(0));
+}
+
+vector<Keyword> ChooseElement::distribution_type_keywords_;
+
+Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
+  if (results[DISTRIBUTION].GetType() != Object::OTUPLE) return NULL;
+  Tuple distribution = OTuple(results[DISTRIBUTION]).Data();
+  pair<Object, LL> choice = Choose(thread, distribution, NULL);
+  return choice.first;
 }

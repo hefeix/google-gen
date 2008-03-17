@@ -21,6 +21,20 @@
 #include "webserver.h"
 #include <fstream>
 
+int64 DistributionDiscretize(Object o) {
+  double d = 1;
+  if (o.GetType() == Object::INTEGER) {
+    d = Integer(o).Data();
+  }
+  if (o.GetType() == Object::REAL) {
+    d = Real(o).Data();
+  }
+  if (!finite(d)) d = 0;
+  if (d<0) d = 0;
+  if (d > (1<<20)) d = (1<<20);
+  return uint64(d * (1<<20));
+}
+
 SamplingInfo::SamplingInfo() {
   sampled_ = false;
   position_ = -1;
@@ -139,11 +153,19 @@ void Blackboard::Post(const Tuple & tuple) {
   TupleInfo *info = new TupleInfo(tuple);
   tuples_[tuple] = info;
   GetCreateAllWildcardRow(tuple.size())->AddTuple(info);
+  if (tuple.size() == 4) {
+    Distribution * d = GetDistribution(tuple[0]);
+    if (d) d->AddToValue(tuple[1], DistributionDiscretize(tuple[2]) );
+  }
 }
 
 void Blackboard::Remove(const Tuple &tuple) {
   TupleInfo **info = tuples_ % tuple;
   if (!info) return;
+  if (tuple.size() == 4) {
+    Distribution * d = GetDistribution(tuple[0]);
+    if (d) d->AddToValue(tuple[1], -DistributionDiscretize(tuple[2]) );
+  }
   forall(run, (*info)->positions_) {
     run->first->RemoveTuple(run->second);
   }
@@ -326,6 +348,20 @@ string Blackboard::Print(int page) const {
     forall(run_lines, run->second) {
       ret += (*run_lines) + "\n";
     }
+  }
+  return ret;
+}
+
+Distribution * Blackboard::GetCreateDistribution(Object identifier) {
+  Distribution * ret = GetDistribution(identifier);
+  if (ret) return ret;
+  ret = &(distributions_[identifier]);
+  Tuple wildcard_tuple = AllWildcards(4);
+  wildcard_tuple[0] = identifier;
+  Row *row = GetCreateRow(wildcard_tuple);
+  for (int i=0; i<row->NumTuples(); i++) {
+    const Tuple & t = row->GetTuple(i);
+    ret->AddToValue(t[1], DistributionDiscretize(t[2]) );
   }
   return ret;
 }

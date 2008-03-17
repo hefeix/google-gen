@@ -23,18 +23,12 @@
 #include "element.h"
 #include "parser.h"
 
-//#include "model.h"
-//#include "spec.h"
-//#include "fixers.h"
-//#include "chooser.h"
-//#include "ai.h"
-
 #include <fstream>
 
 void Shell() {
-  TestRankSet();
+  /*TestRankSet();
   TestRankMap();
-  TestWeightedSet();
+  TestWeightedSet();*/
 
   //SetVerbosity(1);
   ifstream input("test_prog");

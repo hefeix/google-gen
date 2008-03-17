@@ -1,16 +1,17 @@
 {
+  post (CollegeBySize Stanford 6000 0)
+  post (CollegeBySize Berkeley 30000 0)
+  post (CollegeBySize Phoenix 200000.0 0)
+
   post (A 0)
-  on (A a) if (equal (a 100000) 
+  on (A a) if (equal (a 100) 
      0 
-     {
-	post (A sum (a 1))
-	    	unpost (A a) 
-     }
+     post (A sum (a 1))
   )
-   post (B 0)
-   on (A a) match (B b) {
-     post (B sum (b a))
-     unpost (B b)
+  on (A a) {
+     post (BOOL a choose (bool 0.8))
+     post (QUADRATIC_UINT a choose (quadratic_uint))
+     post (BLACKBOARD a choose (blackboard CollegeBySize))
   }
 }
 
