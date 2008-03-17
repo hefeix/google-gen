@@ -24,6 +24,10 @@
 #include "record.h"
 #include "base.h"
 #include "tuple.h"
+#include "ranktree.h"
+
+typedef weightedset<Object, int64> Distribution;
+int64 DistributionDiscretize(Object o);
 
 struct SamplingInfo{
   bool   sampled_;
@@ -148,6 +152,11 @@ class Blackboard : public Base{
   }
   bool Contains(const Tuple & t) const { return tuples_ % t; }
 
+  // dealing with distributions
+  Distribution * GetDistribution(Object identifier) 
+    { return distributions_ % identifier; }
+  Distribution * GetCreateDistribution(Object identifier);
+
   // Appends bindings to the results vector
   /*void GetVariableMatches(const Tuple & variable_tuple, 
 			  Map binding_so_far,
@@ -175,6 +184,8 @@ class Blackboard : public Base{
   // points from length to rowinfo for a tuple of all wildcards. 
   vector<Row *> top_level_rowinfo_;
   hash_map<Tuple, TupleInfo *> tuples_;
+
+  hash_map<Object, Distribution> distributions_;
 };
 
 #endif
