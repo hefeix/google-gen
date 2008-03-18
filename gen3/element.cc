@@ -284,12 +284,18 @@ void ChooseElement::InitDistributionTypeKeywords() {
 pair<Object, LL> 
 ChooseElement::Choose(Thread &thread, Tuple distribution, 
 		      const Object *suggestion) {
+  // todo: cerr on error.
   if ( (distribution.size() <= 0) ||
        (distribution[0].GetType() != Object::KEYWORD) )
     return make_pair(Object(NULL), LL(0));
   DistributionType distribution_type 
     = KeywordToDistributionType(distribution[0]);
+  // breaks out of this switch are error cases and return (NULL, 0).
   switch(distribution_type) {
+  case ONE_ELEMENT: {
+    if (distribution.size() <= 1) break;
+    return make_pair(distribution[1], LL(0));
+  }
   case BOOL: {
     if (distribution.size() <= 1) break;
     if (distribution[1].GetType() != Object::REAL) break;
@@ -337,5 +343,6 @@ Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
   if (results[DISTRIBUTION].GetType() != Object::OTUPLE) return NULL;
   Tuple distribution = OTuple(results[DISTRIBUTION]).Data();
   pair<Object, LL> choice = Choose(thread, distribution, NULL);
+  // TODO: track the likelihood here.
   return choice.first;
 }
