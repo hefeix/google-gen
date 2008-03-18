@@ -773,6 +773,7 @@ public AccumulationTree<FirstProjection<K, Weight>,
   void SetValue(const K & key, Weight value) {
     insert(make_pair(key, value) );
   }
+  // doesn't delete if the new value is zero.
   void AddToValue(const K & key, Weight delta) {
     Node *n = GetAddNode(key);
     n->data_.second += delta;

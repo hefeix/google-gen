@@ -483,7 +483,7 @@ struct ChooseElement : public Element {
 #define ChooseElementChildNameList { ITEM(DISTRIBUTION) };
   CLASS_ENUM_DECLARE(ChooseElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
-#define ChooseElementDistributionTypeList { ITEM(BOOL), \
+#define ChooseElementDistributionTypeList { ITEM(ONE_ELEMENT), ITEM(BOOL), \
       ITEM(QUADRATIC_UINT),				\
       ITEM(BLACKBOARD) };
   CLASS_ENUM_DECLARE(ChooseElement, DistributionType);
