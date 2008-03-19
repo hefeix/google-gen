@@ -288,8 +288,10 @@ ChooseElement::Choose(Thread &thread, Tuple distribution,
   if ( (distribution.size() <= 0) ||
        (distribution[0].GetType() != Object::KEYWORD) )
     return make_pair(Object(NULL), LL(0));
+
   DistributionType distribution_type 
     = KeywordToDistributionType(distribution[0]);
+
   // breaks out of this switch are error cases and return (NULL, 0).
   switch(distribution_type) {
   case ONE_ELEMENT: {
@@ -342,6 +344,7 @@ vector<Keyword> ChooseElement::distribution_type_keywords_;
 Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
   if (results[DISTRIBUTION].GetType() != Object::OTUPLE) return NULL;
   Tuple distribution = OTuple(results[DISTRIBUTION]).Data();
+  Object name = results[NAME];
   pair<Object, LL> choice = Choose(thread, distribution, NULL);
   // TODO: track the likelihood here.
   return choice.first;
