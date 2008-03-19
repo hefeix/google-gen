@@ -53,8 +53,15 @@ struct Execution : public Base {
     Base::Init(); 
     current_time_ = Time();
     blackboard_ = New<Blackboard>();
+    guide_ = NULL;
   }
-  Base::Type GetBaseType() const { return Base::EXECUTION;}
+
+  void AddGuide() {
+    CHECK(guide_ == NULL);
+    guide_ = New<Execution>();
+  }
+
+  Base::Type GetBaseType() const { return Base::EXECUTION; }
 
   void ParseAndExecute(OTuple program_tuple, bool pretty = true, 
 		       bool execute = true);
@@ -62,22 +69,31 @@ struct Execution : public Base {
   void ExecuteForever() {
     while (run_queue_.size()) ExecuteOneEpoch();
   }
+
   void ExecuteOneEpoch() {
+    if (guide_)
+      guide_->ExecuteForever();
     ExecuteRunnableThreads();
     CommitChanges();
-   }
+  }
+
   void CommitChanges() {
     forall(run, unpost_queue_) {
       // cout << "Committing " << *run << " at " << current_time_ << endl;
       blackboard_->Remove(*run);
+      if (guide_)
+	guide_->blackboard_->Remove(*run);
     }
     forall(run, post_queue_) {
       // cout << "Committing " << *run << " at " << current_time_ << endl;
       blackboard_->Post(*run);
+      if (guide_)
+	guide_->blackboard_->Post(*run);
     }
     unpost_queue_.clear();
     post_queue_.clear();
   }
+
   void ExecuteRunnableThreads();
 
   void AddCodeTreeToRun(Element *top_element);
@@ -108,6 +124,9 @@ struct Execution : public Base {
   // of this epoch
   vector<Tuple> post_queue_;
   vector<Tuple> unpost_queue_;
+
+  // Guide execution if it exists
+  Execution * guide_;
 
   // This is the blackboard for the execution
   Blackboard *blackboard_;

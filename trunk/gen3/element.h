@@ -480,7 +480,7 @@ struct DelayElement : public Element {
 };
 
 struct ChooseElement : public Element { 
-#define ChooseElementChildNameList { ITEM(DISTRIBUTION) };
+#define ChooseElementChildNameList { ITEM(NAME), ITEM(DISTRIBUTION) };
   CLASS_ENUM_DECLARE(ChooseElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
 #define ChooseElementDistributionTypeList { ITEM(ONE_ELEMENT), ITEM(BOOL), \
