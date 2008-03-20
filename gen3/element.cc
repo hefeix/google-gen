@@ -259,7 +259,7 @@ string SubstituteElement::PrettyProgramTree(int indent) const {
 
 void Element::StaticInit() {
   for (int i=0; i<NumFunctions(); i++) 
-    Object::AddKeyword(Downcase(FunctionToString(Function(i))));
+    AddKeyword(Downcase(FunctionToString(Function(i))));
   ChooseElement::InitDistributionTypeKeywords();
 }
 
@@ -277,7 +277,7 @@ void ChooseElement::InitDistributionTypeKeywords() {
   CHECK(distribution_type_keywords_.size() == 0);
   for (int i=0; i<NumDistributionTypes(); i++) 
     distribution_type_keywords_.push_back
-      (Object::AddKeyword
+      (AddKeyword
        (Downcase(DistributionTypeToString(DistributionType(i)))));  
 }
 
