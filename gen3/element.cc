@@ -201,6 +201,21 @@ Object LetElement::Execute(Thread & thread) {
   return GetChild(CHILD)->Execute(thread);
 }
 
+Object RepeatElement::Execute(Thread & thread) {
+  Object n_obj = GetChild(N)->Execute(thread);
+  if (n_obj.GetType() != Object::INTEGER) return NULL;
+  int n = Integer(n_obj).Data();
+  if (n<0) return NULL; 
+  Tuple ret;
+  if ((int)thread.stack_.size() < incoming_stack_depth_ + 1)
+    thread.stack_.resize(incoming_stack_depth_ + 1);
+  for (int value=0; value<n; value++) {
+    thread.stack_[incoming_stack_depth_] = Integer::Make(value);
+    ret.push_back(GetChild(CHILD)->Execute(thread));
+  }
+  return OTuple::Make(ret);
+}
+
 Object DelayElement::Execute(Thread & thread) {
   // Get the tuple child
   Element * delay_child = GetChild(DIMENSION);
