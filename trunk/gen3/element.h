@@ -39,6 +39,7 @@
        FUNCTION(Let, LET)					\
        FUNCTION(Delay, DELAY)					\
        FUNCTION(Choose, CHOOSE)					\
+       FUNCTION(Repeat, REPEAT)					\
     
 /*
   FUNCTION(AddCode, ADD_CODE)					\
@@ -448,6 +449,31 @@ struct LetElement : public Element {
   CLASS_ENUM_DECLARE(LetElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return LET;}
+  bool ElementNeedsSeparateLine() const { return true;}
+  bool ChildNeedsSeparateLine(int which_child) const { 
+    return (which_child==CHILD);}
+  Object Execute(Thread & thread);
+  bool HasObject() const { return true; }
+  int GetNumIntroducedVariables(int which_child) const { 
+    if (which_child == CHILD) return 1; return 0;
+  }
+  Tuple GetIntroducedVariables(int which_child) const { 
+    Tuple ret;
+    if (which_child == CHILD) ret.push_back(object_);
+    return ret;
+  }
+  void SetObject(Object object) { 
+    Element::SetObject(object);
+    CHECK(object_.GetType() == Object::VARIABLE);
+    CHECK(!IsBound(object_));
+  }
+};
+
+struct RepeatElement : public Element {
+#define RepeatElementChildNameList { ITEM(N), ITEM(CHILD) };
+  CLASS_ENUM_DECLARE(RepeatElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return REPEAT;}
   bool ElementNeedsSeparateLine() const { return true;}
   bool ChildNeedsSeparateLine(int which_child) const { 
     return (which_child==CHILD);}
