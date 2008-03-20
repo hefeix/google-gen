@@ -67,8 +67,6 @@ int main() {
   Object::StaticInit();
   Element::StaticInit();
 
-  //ChooserSet::Init();
-  Object::DoneAddingKeywords();
   N.SetAutomaticallyNameAll(true);
   N.SetTrackCurrentCount(true);
 

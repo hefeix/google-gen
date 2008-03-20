@@ -31,9 +31,8 @@ based on the first character:
 *     It's a wildcard
 #     It's an OBitSeq, example #00011100
 0-9.- It's an Integer or a Real.  It's a real if it has a period.
+_     It's a variable
 A-Z   It's a Flake. example: Noam
-a-z(single character)   It's a variable.
-v(followed by an integer) It's a variable. example: v26
 a-z(otherwise)   It's a keyword, except for the following exceptions:
    true   the Boolean true
    false  the Boolean false
@@ -42,8 +41,9 @@ a-z(otherwise)   It's a keyword, except for the following exceptions:
    time (followed by an OMap)   a time.  Dimensions mapped to coordinates.
       Example: time (#00:3 #0:2 #:7 #1:12)
    pattern (followd by an OTuple of OTuples)   an OPattern
+// TODO: If there are keywords on these names, give them a way to print and
+// parse.  
 "     A string object where quotes and \ need to be escaped with \ 
-
 */
 
 #ifndef _OBJECTS_H_
@@ -141,25 +141,10 @@ class Object {
     if (def_ == NULL) return 0xDEADBEEF;
     return def_->DeepHash32(level);
   }
-
-  // Any string starting with a lower-case letter that is not a reserved
-  // word is interpreted as a variable.
-  // TODO: populate this with static functions
-  static void AddReservedWord(string w) {
-    reserved_words_.insert(w);
-  }
-  static Object AddKeyword(string k);
-  static bool IsReservedWord(string s) { return (reserved_words_ % s); }
-  static bool IsKeyword(string s) { return (keywords_ % s); }
-  static void DoneAddingKeywords() { done_adding_keywords_ = true;}
+  
   static void StaticInit();
   static void Destroy();
 
-  // true/false/pattern are reserved words but not keywords
-  // keywords are the only allowed string values for the Keyword type
-  static set<string> reserved_words_;
-  static set<string> keywords_; // subset of reserved_words_
-  static bool done_adding_keywords_;
  protected:
 
   Definition * def_;
@@ -325,7 +310,7 @@ typedef vector<Tuple> MPattern; // mutable 2 levels down
 
 typedef SpecificObject<Object::FLAKE, string> Flake;
 typedef SpecificObject<Object::KEYWORD, string> Keyword;
-typedef SpecificObject<Object::VARIABLE, string> Variable;
+typedef SpecificObject<Object::VARIABLE, Object> Variable;
 typedef SpecificObject<Object::OTUPLE, Tuple > OTuple;
 typedef SpecificObject<Object::OMAP, Map> OMap;
 typedef SpecificObject<Object::BOOLEAN, bool> Boolean;
@@ -372,6 +357,10 @@ inline uint32 OMap::Definition::DeepHash32(uint32 level) const {
 }
 template <> 
 inline uint32 Escape::Definition::DeepHash32(uint32 level) const {
+  return ::Hash32(::Hash32(data_, level), ESCAPE);
+}
+template <> 
+inline uint32 Variable::Definition::DeepHash32(uint32 level) const {
   return ::Hash32(::Hash32(data_, level), ESCAPE);
 }
 
@@ -426,11 +415,8 @@ template <class T> const T & DataMin(const T & t1, const T & t2) {
 int VariableToInt(Variable v);
 Variable IntToVariable(int i);
 
-//void InitConstants();
-//void DestroyConstants();
 // keywords that need to be created in InitKeywords
 extern Keyword WILDCARD;
-extern Keyword SEMICOLON;
 extern OTime CREATION;
 extern OTime NEVER;
 extern Boolean TRUE;
@@ -461,6 +447,16 @@ inline ostream & operator <<(ostream & output, const Tuple & t) {
 inline ostream & operator <<(ostream & output, const Map & m) {
   return  (output << OMap::Make(m));
 }
+
+inline void AddReservedWord(const string & s) {
+  // we may want to do something here to prevent these from being keywords.
+}
+
+inline Object AddKeyword(string k) {
+  // we may want to post keywords to the blackboard here. 
+  return Keyword::Make(k);
+}
+
 
 
 void ObjectsShell();
