@@ -130,6 +130,14 @@ Element * PrettyParseElement(const Tuple & t, uint * pos, Element *parent) {
   } else {
     CHECK(!ret->HasVariableNumChildren());
     for (int i=0; i<ret->RequiredNumChildren(); i++) {
+      if (ret->GetFunction() == Element::IF && i == IfElement::ON_FALSE) {
+	if (*pos < t.size() && t[*pos] == ELSE) {
+	  (*pos)++;
+	} else {
+	  New<PassElement>(ret);
+	  continue;
+	}
+      }
       PrettyParseElement(t, pos, ret);
     }
   }

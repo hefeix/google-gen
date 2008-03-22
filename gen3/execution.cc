@@ -19,6 +19,7 @@
 #include "execution.h"
 #include "parser.h"
 #include "element.h"
+#include <fstream>
 
 string Thread::ToString() {
   string ret;
@@ -47,19 +48,19 @@ void OnSubscription::Update(Blackboard::Row *row, int tuple_num) {
   VLOG(2) << "Update Thread after binding " << thread_.ToString() << endl;
   thread_.execution_->Enqueue(thread_, BitSeq::Min());
 }
-void Execution::ParseAndExecute(OTuple program_tuple, 
+void Execution::ParseAndExecute(const Tuple & program_tuple, 
 				bool pretty, 
 				bool execute) {
   vector<Element *> v;
-  if (pretty) v = PrettyParseElements(program_tuple.Data());  
-  else v = SimpleParseElements(program_tuple.Data());
+  if (pretty) v = PrettyParseElements(program_tuple);  
+  else v = SimpleParseElements(program_tuple);
   forall(run, v) AddCodeTreeToRun(*run);
   if (!execute) return;
   ExecuteForever();
 }
 
 void Execution::ExecuteRunnableThreads() {
-  CHECK(run_queue_.size());
+  if (run_queue_.size() == 0) return;
   current_time_.Increment(run_queue_.begin()->first, 1);
   // we copy off and delete first to make delay statements work properly.
   const vector<Thread> v = run_queue_.begin()->second; 
@@ -89,4 +90,20 @@ Record Execution::GetRecordForDisplay() const {
   if (guide_) ret["guide"] = guide_->GetLink("guide");
   ret["blackboard"] = blackboard_->GetLink("blackboard");
   return ret;
+}
+
+Execution * Execute(const Tuple & main_program, const Tuple & guide_program,
+		    bool pretty_parsing) {
+  Execution *main = New<Execution>();
+  main->AddGuide();
+  main->ParseAndExecute(main_program, pretty_parsing, false);
+  main->guide_->ParseAndExecute(guide_program, pretty_parsing, false);
+  main->ExecuteForever();
+  return main;  
+}
+
+void ReadCodeFile(string filename, Tuple *result) {
+  ifstream input(filename.c_str());
+  Object o;
+  while (input >> o) result->push_back(o);
 }

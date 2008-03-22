@@ -91,6 +91,14 @@ string Element::PrettyProgramTree(int indent) const {
   for (int i=0; i<NumChildren(); i++) {
     int child_indent = indent;
     Element *child = GetChild(i);
+    bool add_else = false;
+    if (GetFunction() == Element::IF && i == IfElement::ON_FALSE) {
+      if (child && child->GetFunction() == Element::PASS) {
+	continue;
+      } else {
+	add_else = true;
+      }
+    }
     separate_line = (ChildNeedsSeparateLine(i) 
 		     || (child && child->ElementNeedsSeparateLine()));
     if (separate_line) {      
@@ -101,7 +109,8 @@ string Element::PrettyProgramTree(int indent) const {
       }
     } else {
       if (i>0) ret += " ";
-    }    
+    }
+    if (add_else) ret += "else ";
     if (child) ret += child->PrettyProgramTree(child_indent);
     else ret += "null";
   }
@@ -277,11 +286,9 @@ void Element::StaticInit() {
 Object IfElement::Execute(Thread & thread) {
   Object condition = GetChild(CONDITION)->Execute(thread);
   // Everything other than FALSE is true for this purpose
-  if (condition == FALSE) {
-    Element * on_false = GetChild(ON_FALSE);
-    return on_false->Execute(thread);
-  }
-  return GetChild(ON_TRUE)->Execute(thread);
+  if (ToBoolean(condition)) 
+    return GetChild(ON_TRUE)->Execute(thread);
+  return GetChild(ON_FALSE)->Execute(thread);
 }
 
 void ChooseElement::InitDistributionTypeKeywords() {
@@ -412,17 +419,21 @@ Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
     Blackboard::Row *row = guide->blackboard_->GetCreateRow(t);
     if (row->NumTuples() == 1) {
       guide_distribution = row->GetTuple(0)[3];
-    }
-    pair<Object, double> guide_choice =
-      Choose(guide->blackboard_, guide_distribution, NULL);
-    pair<Object, double> main_choice = 
-      Choose(thread.execution_->blackboard_, distribution, &guide_choice.first);
-    // If the guide choice is impossible, we just fall through and 
-    // select unguided.
-    if (main_choice.second != 0) {
-      thread.execution_->total_bias_ 
-	+= log(main_choice.second) - log(guide_choice.second);
-      return main_choice.first;
+
+      pair<Object, double> guide_choice =
+	Choose(guide->blackboard_, guide_distribution, NULL);
+
+      pair<Object, double> main_choice = 
+	Choose(thread.execution_->blackboard_, 
+	       distribution, &guide_choice.first);
+
+      // If the guide choice is impossible, we just fall through and 
+      // select unguided.
+      if (main_choice.second != 0) {
+	thread.execution_->total_bias_ 
+	  += log(main_choice.second) - log(guide_choice.second);
+	return main_choice.first;
+      }
     }
   }
   pair<Object, LL> choice 

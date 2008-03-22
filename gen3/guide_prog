@@ -1,0 +1,2 @@
+on (choice_variable 2 _choice _var 7)
+  post (choice 2 _choice 999)

@@ -23,7 +23,8 @@
 #include "execution.h"
 
 #define ALL_FUNCTIONS \
-  FUNCTION(On, ON)						\
+  FUNCTION(Pass, PASS)						\
+       FUNCTION(On, ON)						\
        FUNCTION(Match, MATCH)					\
        FUNCTION(MatchCount, MATCH_COUNT)			\
        FUNCTION(Post, POST)					\
@@ -32,6 +33,7 @@
        FUNCTION(Substitute, SUBSTITUTE)				\
        FUNCTION(Constant, CONSTANT)				\
        FUNCTION(Equal, EQUAL)				     	\
+       FUNCTION(Not, NOT)					\
        FUNCTION(Sum, SUM)					\
        FUNCTION(If, IF)					       	\
        FUNCTION(Cout, COUT)					\
@@ -294,6 +296,14 @@ struct MatchCountElement : public MatchBaseElement {
   bool HasExtraChild() const { return false; }
 };
 
+struct PassElement : public Element {
+#define PassElementChildNameList {};
+  CLASS_ENUM_DECLARE(PassElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return PASS;}
+  Object Execute(Thread & thread) { return NULL;}
+};
+
 struct PostElement : public Element {
 #define PostElementChildNameList { ITEM(TUPLE) };
   CLASS_ENUM_DECLARE(PostElement, ChildName);
@@ -309,8 +319,7 @@ struct UnpostElement : public Element {
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return UNPOST;}
   bool ElementNeedsSeparateLine() const { return true; }
-  Object Execute
-(Thread & thread);
+  Object Execute(Thread & thread);
 };
 
 struct ConstantElement : public Element {
@@ -380,6 +389,17 @@ struct EqualElement : public Element {
   }
 };
 
+struct NotElement : public Element {
+#define NotElementChildNameList { ITEM(CHILD) };
+  CLASS_ENUM_DECLARE(NotElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  virtual Function GetFunction() const { return NOT; }
+  Object ComputeReturnValue(Thread & thread, Tuple results) {
+    if (ToBoolean(results[CHILD])) return FALSE;
+    return TRUE;
+  }
+};
+
 struct SumElement : public Element {
 #define SumElementChildNameList { ITEM(TUPLE), };
   CLASS_ENUM_DECLARE(SumElement, ChildName);
@@ -405,7 +425,6 @@ struct IfElement : public Element {
   CLASS_ENUM_DECLARE(IfElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return IF; }
-  bool ChildrenGoInTuple() const { return true; }
   bool ChildNeedsSeparateLine(int which_child) const {
     if (which_child == CONDITION) return false;
     for (int c = ON_TRUE; c<NumChildren(); c++) {
