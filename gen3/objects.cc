@@ -12,6 +12,11 @@ OTime NEVER;
 Boolean TRUE;
 Boolean FALSE;
 
+Keyword NEED_CHOICE;
+Keyword CHOICE_VARIABLE;
+Keyword CHOICE;
+
+
 void Object::StaticInit(){
   cout << "Calling Object::Init" << endl;
   AddReservedWord("pattern");
@@ -22,6 +27,9 @@ void Object::StaticInit(){
   AddReservedWord("false");
   
   WILDCARD = AddKeyword("*");
+  NEED_CHOICE = AddKeyword("need_choice");
+  CHOICE_VARIABLE = AddKeyword("choice_variable");
+  CHOICE = AddKeyword("choice");
   NEVER = OTime::Make(Time::Never());
   CREATION = OTime::Make(Time());
   TRUE = Boolean::Make(true);

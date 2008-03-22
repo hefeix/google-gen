@@ -21,6 +21,9 @@
 
 #include "blackboard.h"
 
+#define MACHINE_FAIL CHECK(false)
+
+
 struct Element;
 struct Execution;
 
@@ -54,6 +57,7 @@ struct Execution : public Base {
     current_time_ = Time();
     blackboard_ = New<Blackboard>();
     guide_ = NULL;
+    total_bias_ = 0;
   }
 
   void AddGuide() {
@@ -67,7 +71,8 @@ struct Execution : public Base {
 		       bool execute = true);
 
   void ExecuteForever() {
-    while (run_queue_.size()) ExecuteOneEpoch();
+    while (run_queue_.size() || post_queue_.size() || unpost_queue_.size()) 
+      ExecuteOneEpoch();
   }
 
   void ExecuteOneEpoch() {
@@ -136,6 +141,9 @@ struct Execution : public Base {
 
   // the output of the program
   string output_; 
+
+  // the log likelihood of the execution
+  double total_bias_;
 };
 
 #endif

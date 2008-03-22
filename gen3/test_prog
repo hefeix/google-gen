@@ -9,7 +9,6 @@
 	      nth(0 match (TupleElement _tuple_name _x _v) _v) 
 	    post (COUNT match_count (TupleElement _tuple_name _a _b) )
       	    )
-
 post (MakeTuple Foo 4)
 post (TupleElement Foo 0 Noam)
 post (TupleElement Foo 1 Is)
@@ -17,7 +16,7 @@ post (TupleElement Foo 2 A)
 delay # post (TupleElement Foo 3 Flake)
 
 
-<  post (CollegeBySize Stanford 6000 0)
+  post (CollegeBySize Stanford 6000 0)
   post (CollegeBySize Berkeley 30000 0)
   post (CollegeBySize Phoenix 200000.0 0)
 
@@ -30,6 +29,6 @@ delay # post (TupleElement Foo 3 Flake)
      post (BOOL _a choose 1 (bool 0.8))
      post (QUADRATIC_UINT _a choose 2(quadratic_uint))
      post (BLACKBOARD _a choose 3 (blackboard CollegeBySize))
-  } >
+  } 
 }
 

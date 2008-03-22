@@ -60,6 +60,7 @@ LL LnCombinations(uint n, uint k);
 // a particular probability distribution over unsigned ints.
 // Pr(n) = 1/((n+1)(n+2))
 LL uintQuadraticLnProb(uint n);
+inline double uintQuadraticProb(uint n) { return 1.0/( (n+1.0) * (n+2.0));}
 
 // Draws from the above distribution.
 uint32 RandomUintQuadratic(int max_return_value = -1);

@@ -85,5 +85,8 @@ Record Execution::GetRecordForDisplay() const {
     ret["Program"] += (*run)->PrettyProgramTree() + "\n";
   ret["Program"] = "<pre>" + ret["Program"] + "</pre>";
   ret["output"] = "<pre>" + output_ + "</pre>";
+  ret["total_bias"] = dtoa(total_bias_);
+  if (guide_) ret["guide"] = guide_->GetLink("guide");
+  ret["blackboard"] = blackboard_->GetLink("blackboard");
   return ret;
 }
