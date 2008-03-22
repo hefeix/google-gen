@@ -59,7 +59,7 @@ struct Element : public Base {
 
   // Creation / destruction
   Element() : parent_(NULL) {};
-  void Init(Element *parent) { 
+  virtual void Init(Element *parent) { 
     Base::Init(); 
     object_ = NULL; 
     parent_ = parent;
@@ -506,14 +506,20 @@ struct DelayElement : public Element {
 };
 
 struct ChooseElement : public Element { 
-#define ChooseElementChildNameList { ITEM(NAME), ITEM(DISTRIBUTION) };
+#define ChooseElementChildNameList { ITEM(DISTRIBUTION) };
   CLASS_ENUM_DECLARE(ChooseElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
 #define ChooseElementDistributionTypeList { ITEM(ONE_ELEMENT), ITEM(BOOL), \
       ITEM(QUADRATIC_UINT),				\
       ITEM(BLACKBOARD) };
   CLASS_ENUM_DECLARE(ChooseElement, DistributionType);
+  
+  void Init(Element *parent) {
+    Element::Init(parent);
+    choice_counter_ = 0;
+  }
 
+  bool HasObject() const { return true; }
   static vector<Keyword> distribution_type_keywords_;
   static void InitDistributionTypeKeywords();
   static Keyword DistributionTypeToKeyword(DistributionType s) { 
@@ -529,12 +535,13 @@ struct ChooseElement : public Element {
   // second element is the likelihood of that choice. 
   // If suggestion is non-null, forces the choice to be equal to *suggestion
   // if that has non-zero likelihood
-  static pair<Object, LL> Choose(Thread &thread, 
-				 Tuple distribution, 
-				 const Object *suggestion);
+  static pair<Object, double> Choose(Blackboard *blackboard,
+				     Object distribution, 
+				     const Object *suggestion);
 
 
   Object ComputeReturnValue(Thread & thread, Tuple results);
+  int choice_counter_;
 };
 
 /*

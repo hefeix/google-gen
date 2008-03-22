@@ -79,12 +79,8 @@ OTuple Element::SimpleProgramTree() const {
 
 string Element::PrettyProgramTree(int indent) const {
   string ret = GetLink(FunctionKeyword().ToString());
-  if (GetFunction() == Element::MAKETUPLE) {
-    ret="";
-  }
-  if (GetFunction() == Element::LET) {
-    ret += " " +  HTMLEscape(object_.ToString());
-  }
+  if (HasObject()) ret += " " +  HTMLEscape(object_.ToString());
+  if (GetFunction() == Element::MAKETUPLE) ret="";
   if (ChildrenGoInTuple()) {
     if (GetFunction() == Element::MAKETUPLE) ret += GetLink("(");
     else ret += " (";
@@ -296,71 +292,140 @@ void ChooseElement::InitDistributionTypeKeywords() {
        (Downcase(DistributionTypeToString(DistributionType(i)))));  
 }
 
-pair<Object, LL> 
-ChooseElement::Choose(Thread &thread, Tuple distribution, 
-		      const Object *suggestion) {
-  // todo: cerr on error.
-  if ( (distribution.size() <= 0) ||
-       (distribution[0].GetType() != Object::KEYWORD) )
-    return make_pair(Object(NULL), LL(0));
+// Makes a choice given a distribution.
+// returns choice and likelihood therof. 
+// If suggestion is non-null, forces the choice to be suggestion.
+// if the suggestion is impossible, the returned likelihood will be 0.0
 
-  DistributionType distribution_type 
-    = KeywordToDistributionType(distribution[0]);
-
-  // breaks out of this switch are error cases and return (NULL, 0).
-  switch(distribution_type) {
-  case ONE_ELEMENT: {
-    if (distribution.size() <= 1) break;
-    return make_pair(distribution[1], LL(0));
-  }
-  case BOOL: {
-    if (distribution.size() <= 1) break;
-    if (distribution[1].GetType() != Object::REAL) break;
-    double prior = Real(distribution[1]).Data();
-    bool ret = (RandomFraction() < prior);
-    if (suggestion && suggestion->GetType() == Object::BOOLEAN) {
-      ret = Boolean(*suggestion).Data();
+pair<Object, double> ChooseElement::Choose(Blackboard *blackboard, 
+					   Object distribution, 
+					   const Object *suggestion) {
+  Object ret;
+  if (suggestion) ret = *suggestion;
+  
+  if (distribution.GetType() != Object::OTUPLE) goto one_element;
+  {
+    const Tuple & d = OTuple(distribution).Data();
+    // todo: cerr on error.
+    if ( (d.size() <= 0) ||
+	 (d[0].GetType() != Object::KEYWORD) ) goto one_element;
+    
+    DistributionType distribution_type 
+      = KeywordToDistributionType(d[0]);
+    
+    switch(distribution_type) {
+    case ONE_ELEMENT: {
+      if (d.size() <= 1) goto one_element;
+      distribution = d[1];
+      goto one_element;
     }
-    return make_pair(Boolean::Make(ret), Log(ret?prior:(1.0-prior)));
-  }
-  case QUADRATIC_UINT: {
-    int ret = RandomUintQuadratic();
-    if (suggestion && suggestion->GetType() == Object::INTEGER) {
-      int n = Integer(*suggestion).Data();
-      if (n>=0) ret = n;
-    }
-    return make_pair(Integer::Make(ret), uintQuadraticLnProb(ret));
-  }
-  case BLACKBOARD: {
-    if (distribution.size() <= 1) break;
-    Object identifier = distribution[1];
-    const Distribution & d = 
-      *(thread.execution_->blackboard_->GetCreateDistribution(identifier));
-    int64 total_weight = d.TotalWeight();
-    if (total_weight == 0) break;
-    if (suggestion) {
-      Distribution::const_iterator look = d.find(*suggestion);
-      if (look != d.end()) {
-	if (look->second == 0) break;
-	return make_pair(look->first, Log(look->second) - Log(total_weight));
+    case BOOL: {
+      if (d.size() <= 1) goto one_element;
+      if (d[1].GetType() != Object::REAL) goto one_element;
+      double prior = Real(d[1]).Data();
+      if (!(prior >= 0 && prior <= 1)) goto one_element;
+      
+      bool ret = (RandomFraction() < prior);
+      if (suggestion) {
+	if (suggestion->GetType() == Object::BOOLEAN) {
+	  ret = Boolean(*suggestion).Data();
+	} else {
+	  return make_pair(*suggestion, 0);
+	}
       }
+      return make_pair(Boolean::Make(ret), ret?prior:(1.0-prior));
     }
-    int64 r = RandomUInt64() % (uint64)total_weight;
-    Distribution::const_iterator look = d.find_by_weight(r);
-    return make_pair(look->first, Log(look->second) - Log(total_weight));
+    case QUADRATIC_UINT: {
+      int ret = RandomUintQuadratic();
+      if (suggestion) {
+	if (suggestion->GetType() != Object::INTEGER)
+	  return make_pair(*suggestion, 0);
+	int n = Integer(*suggestion).Data();
+	if (n<0) return make_pair(*suggestion, 0);
+	ret = n;
+      }
+      return make_pair(Integer::Make(ret), uintQuadraticProb(ret));
+    }
+    case BLACKBOARD: {
+      if (d.size() <= 1) goto one_element;
+      Object identifier = d[1];
+      const Distribution & dist = 
+	*(blackboard->GetCreateDistribution(identifier));
+      int64 total_weight = dist.TotalWeight();
+      if (total_weight == 0) goto one_element;
+      if (suggestion) {
+	Distribution::const_iterator look = dist.find(*suggestion);
+	if (look == dist.end()) return make_pair(*suggestion, 0);      
+	return make_pair(*suggestion, double(look->second) / total_weight);
+      }
+      int64 r = RandomUInt64() % (uint64)total_weight;
+      Distribution::const_iterator look = dist.find_by_weight(r);
+      return make_pair(look->first, double(look->second) / total_weight);
+    }
+    default: break;
+    }
   }
-  default: break;
-  };
-  return make_pair(Object(NULL), LL(0));
+  one_element:
+    if (suggestion) {
+    if (*suggestion != distribution) return make_pair(*suggestion, 0);
+  }
+  return make_pair(distribution, 1.0);
 }
 
 vector<Keyword> ChooseElement::distribution_type_keywords_;
 
 Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
-  if (results[DISTRIBUTION].GetType() != Object::OTUPLE) return NULL;
-  Tuple distribution = OTuple(results[DISTRIBUTION]).Data();
-  Object name = results[NAME];
-  pair<Object, LL> choice = Choose(thread, distribution, NULL);
-  // TODO: track the likelihood here.
+  Object distribution = results[DISTRIBUTION];
+  Object name = object_;
+
+  pair<Object, double> guide_choice = make_pair(Object(NULL), 1.0);
+
+  Execution *guide = thread.execution_->guide_;
+  Object guide_distribution = NULL;
+  if (guide) {
+    // post the choice on the guide blackboard
+    Integer instance = Integer::Make(choice_counter_++);
+    Tuple t;
+    // post [ NEED_CHOICE <name> <instance> ]
+    t.push_back(NEED_CHOICE);
+    t.push_back(name);
+    t.push_back(instance);
+    guide->AddPost(t);
+    
+    // for each variable, 
+    // post [ CHOICE_VARIABLE <name> <instance> <variable> <value> ]
+    t[0] = CHOICE_VARIABLE;
+    t.push_back(NULL);
+    t.push_back(NULL);
+    for (int i=0; i<incoming_stack_depth_; i++) {
+      t[3] = GetIncomingVariables()[i];
+      t[4] = thread.stack_[i];
+      guide->AddPost(t);
+    }
+    guide->ExecuteForever();
+
+    // search the guide blackboard for 
+    // [ CHOICE <name> <instance> <distribution> ]
+    t.resize(4);
+    t[0] = CHOICE;
+    t[3] = WILDCARD;
+    Blackboard::Row *row = guide->blackboard_->GetCreateRow(t);
+    if (row->NumTuples() == 1) {
+      guide_distribution = row->GetTuple(0)[3];
+    }
+    pair<Object, double> guide_choice =
+      Choose(guide->blackboard_, guide_distribution, NULL);
+    pair<Object, double> main_choice = 
+      Choose(thread.execution_->blackboard_, distribution, &guide_choice.first);
+    // If the guide choice is impossible, we just fall through and 
+    // select unguided.
+    if (main_choice.second != 0) {
+      thread.execution_->total_bias_ 
+	+= log(main_choice.second) - log(guide_choice.second);
+      return main_choice.first;
+    }
+  }
+  pair<Object, LL> choice 
+    = Choose(thread.execution_->blackboard_, distribution, NULL);
   return choice.first;
 }

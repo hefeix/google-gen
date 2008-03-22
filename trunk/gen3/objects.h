@@ -422,6 +422,10 @@ extern OTime NEVER;
 extern Boolean TRUE;
 extern Boolean FALSE;
 
+extern Keyword NEED_CHOICE;
+extern Keyword CHOICE_VARIABLE;
+extern Keyword CHOICE;
+
 inline bool IsVariable(const Object & o) { 
   return (o.GetType()==Object::VARIABLE); 
 }
