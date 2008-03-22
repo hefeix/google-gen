@@ -1,16 +1,11 @@
-{
 <Tuple maker>
 
-   on (MakeTuple _tuple_name _length)
-      on (TupleElement _tuple_name _element_number _value)
-         if (equal (match_count (TupleElement _tuple_name _a _b) _length)
-	    post repeat _x _length 
-	      nth(0 match (TupleElement _tuple_name _x _v) _v) 
-	    0
-      	    )
-   
-
-
+on (MakeTuple _tuple_name _length)
+  on (TupleElement _tuple_name _element_number _value)
+    if equal (match_count (TupleElement _tuple_name _a _b) _length)
+      post repeat _x _length
+	nth(0 match (TupleElement _tuple_name _x _v) _v)
+    else post (COUNT match_count (TupleElement _tuple_name _a _b) )
 
 
 < Code generator
@@ -44,4 +39,3 @@
            post (StatementChildrenComplete p) 0)
     on (StatementComplete x) on (TopLevelStatement x) add_code x
 >
-}

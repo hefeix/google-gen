@@ -66,8 +66,9 @@ struct Execution : public Base {
   }
 
   Base::Type GetBaseType() const { return Base::EXECUTION; }
-
-  void ParseAndExecute(OTuple program_tuple, bool pretty = true, 
+  
+  void ParseAndExecute(const Tuple & program_tuple, 
+		       bool pretty = true, 
 		       bool execute = true);
 
   void ExecuteForever() {
@@ -146,4 +147,10 @@ struct Execution : public Base {
   double total_bias_;
 };
 
+Execution * Execute(const Tuple & main_program, const Tuple & guide_program,
+		    bool pretty_parsing = true);
+// appends to result tuple
+void ReadCodeFile(string filename, Tuple *result);
+
+  
 #endif

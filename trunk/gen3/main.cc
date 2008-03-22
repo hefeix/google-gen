@@ -31,12 +31,16 @@ void Shell() {
   TestWeightedSet();*/
 
   //SetVerbosity(1);
-  ifstream input("test_prog");
-  Execution *E = New<Execution>();
-  OTuple program_tuple;
-  input >> program_tuple;
-  cout << "program_tuple = " << program_tuple << endl;
-  E->ParseAndExecute(program_tuple, true, true);
+  Tuple main_program;
+  Tuple guide_program;
+  ReadCodeFile("main.scaffolding", &main_program);
+  ReadCodeFile("main_prog", &main_program);
+
+  ReadCodeFile("guide.scaffolding", &guide_program);
+  ReadCodeFile("guide_prog", &guide_program);
+
+  Execution *E = Execute(main_program, guide_program, true);
+  CHECK(E);
   
   string command;
   while ((cout << "\n?") && (cin >> command)) {

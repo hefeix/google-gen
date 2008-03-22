@@ -425,6 +425,7 @@ extern Boolean FALSE;
 extern Keyword NEED_CHOICE;
 extern Keyword CHOICE_VARIABLE;
 extern Keyword CHOICE;
+extern Keyword ELSE;
 
 inline bool IsVariable(const Object & o) { 
   return (o.GetType()==Object::VARIABLE); 
@@ -461,6 +462,13 @@ inline Object AddKeyword(string k) {
   return Keyword::Make(k);
 }
 
+inline bool ToBoolean(Object o) {
+  if (o == FALSE) return false;
+  if (o.GetType() == Object::INTEGER && Integer(o).Data() == 0) return false;
+  if (o.GetType() == Object::REAL && Real(o).Data() == 0) return false;
+  if (o == NULL) return false;
+  return true;
+}
 
 
 void ObjectsShell();

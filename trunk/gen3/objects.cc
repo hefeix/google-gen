@@ -15,6 +15,7 @@ Boolean FALSE;
 Keyword NEED_CHOICE;
 Keyword CHOICE_VARIABLE;
 Keyword CHOICE;
+Keyword ELSE;
 
 
 void Object::StaticInit(){
@@ -30,6 +31,7 @@ void Object::StaticInit(){
   NEED_CHOICE = AddKeyword("need_choice");
   CHOICE_VARIABLE = AddKeyword("choice_variable");
   CHOICE = AddKeyword("choice");
+  ELSE = AddKeyword("else");
   NEVER = OTime::Make(Time::Never());
   CREATION = OTime::Make(Time());
   TRUE = Boolean::Make(true);
@@ -43,6 +45,10 @@ void Object::Destroy() {
   CREATION = NULL;
   TRUE = NULL;
   FALSE = NULL;
+  NEED_CHOICE = NULL;
+  CHOICE_VARIABLE = NULL;
+  CHOICE = NULL;
+  ELSE = NULL;
 }
 
 static vector<Variable> g_int_to_variable_cache;

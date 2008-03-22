@@ -1,0 +1,26 @@
+if false
+  post (A)
+  else post (B)
+
+
+post (MakeTuple Foo 4)
+post (TupleElement Foo 0 Noam)
+post (TupleElement Foo 1 Is)
+post (TupleElement Foo 2 A)
+delay # post (TupleElement Foo 3 Flake)
+
+
+post (CollegeBySize Stanford 6000 0)
+post (CollegeBySize Berkeley 30000 0)
+post (CollegeBySize Phoenix 200000.0 0)
+
+post (A 0)
+on (A _a) if not equal (_a 100) 
+   post (A sum (_a 1))
+  
+on (A _a) {
+  post (BOOL _a choose 1 (bool 0.8))
+  post (QUADRATIC_UINT _a choose 2(quadratic_uint))
+  post (BLACKBOARD _a choose 3 (blackboard CollegeBySize))
+} 
+
