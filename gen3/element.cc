@@ -303,7 +303,7 @@ int g_new_flake_counter = 0;
 
 // Makes a choice given a distribution.
 // returns choice and likelihood therof. 
-// If suggestion is non-null, forces the choice to be suggestion.
+// If suggestion is non-null, forces the choice to be *suggestion.
 // if the suggestion is impossible, the returned likelihood will be 0.0
 
 pair<Object, double> ChooseElement::Choose(Execution *execution, 
@@ -341,9 +341,34 @@ pair<Object, double> ChooseElement::Choose(Execution *execution,
 	} while (execution->existing_flakes_ % ret);
       }
       execution->existing_flakes_.insert(ret);
-      execution->AddPost
-	(MakeTuple(EXISTING_FLAKE, ret, Real::Make(1.0), NULL));
+      // TODO: may want to post something to the guide (or main) blackboard. 
+      /*execution->AddPost
+	(MakeTuple(EXISTING_FLAKE, ret, Real::Make(1.0), NULL));*/
       return make_pair(ret, 1.0);
+    }
+    case ANY_FLAKE : {
+      Flake ret;
+      if (suggestion) {
+	if (execution->existing_flakes_ % Flake(*suggestion) ) {
+	  return make_pair(*suggestion, 
+			   0.5 / execution->existing_flakes_.size());
+	} else {
+	  return make_pair(*suggestion, 0.5);
+	}
+      }
+      if (execution->existing_flakes_.size() == 0 || RandomFraction() < 0.5) {
+	// make a new flake
+	do {
+	  ret = Flake::Make("FLAKE_"+itoa(g_new_flake_counter++));
+	} while (execution->existing_flakes_ % ret);
+	execution->existing_flakes_.insert(ret);
+	return make_pair(ret, 0.5);
+      } else {
+	// make an existing flake
+	ret = *execution->existing_flakes_.nth
+	  (RandomUInt64() % execution->existing_flakes_.size());
+	return make_pair(ret, 0.5 / execution->existing_flakes_.size());
+      }
     }
     case BOOL: {
       if (d.size() <= 1) goto one_element;
@@ -391,6 +416,9 @@ pair<Object, double> ChooseElement::Choose(Execution *execution,
     default: break;
     }
   }
+  // If we get here then it's a one-element distribution, which means
+  // the distribution that returns the object which is the value of 
+  // the variable "distribution" with probability 1.0
   one_element:
     if (suggestion) {
     if (*suggestion != distribution) return make_pair(*suggestion, 0);
@@ -412,11 +440,9 @@ Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
   if (guide) {
     // post the choice on the guide blackboard
     Integer instance = Integer::Make(choice_counter_++);
-    Tuple t;
+
     // post [ NEED_CHOICE <name> <instance> ]
-    t.push_back(NEED_CHOICE);
-    t.push_back(name);
-    t.push_back(instance);
+    Tuple t = MakeTuple(NEED_CHOICE, name, instance);
     guide->AddPost(t);
     
     // for each variable, 
