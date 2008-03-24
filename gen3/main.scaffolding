@@ -1,11 +1,53 @@
+< 
+Function calls in gtl should have the following form:
+To call the function post: (FunctionName <instance_name> parameters.. )
+The function posts the result: (FunctionNameResult <instance_name> result)
+>
+
 <Tuple maker>
 
 on (MakeTuple _tuple_name _length)
   on (TupleElement _tuple_name _element_number _value)
     if equal (match_count (TupleElement _tuple_name _a _b) _length)
-      post repeat _x _length
-	nth(0 match (TupleElement _tuple_name _x _v) _v)
-    else post (COUNT match_count (TupleElement _tuple_name _a _b) )
+      post (MakeTupleResult _tuple_name repeat _x _length
+	nth(0 match (TupleElement _tuple_name _x _v) _v) )
+
+on (MakePostTuple _tuple_name _length) {
+  post (MakeTuple _tuple_name _length)
+  on (MakeTupleResult _tuple_name _tuple) post _tuple
+}
+
+
+<Code capable of creating arbitrary objects>
+on (GetRandomObject _name)
+  post (GetRandomObjectResult _name choose GetRandomObjectInt (quadratic_uint))
+
+
+<Generate and post _n random tuples>
+on (PostRandomTuples _n _instance_name)
+  repeat _instance_num _n 
+    let _random_tuple_name (PostRandomTuples _instance_name _instance_num) {
+    post (GetRandomTuple _random_tuple_name)
+    on (GetRandomTupleResult _random_tuple_name _tuple)
+      post _tuple
+  }
+
+<Generate a random tuple>
+
+on (GetRandomTuple _name)
+  let _tuple_size choose GetRandomTupleSize (quadratic_uint) {
+    post (MakeTuple _name _tuple_size)
+    repeat _pos _tuple_size {
+      post (GetRandomObject (_name _pos) )
+      on (GetRandomObjectResult (_name _pos) _o)
+        post (TupleElement _name _pos _o)
+    }	
+    on (MakeTupleResult _name _tuple)
+      post (GetRandomTupleResult _name _tuple)     
+  }
+
+
+
 
 
 < Code generator

@@ -299,12 +299,14 @@ void ChooseElement::InitDistributionTypeKeywords() {
        (Downcase(DistributionTypeToString(DistributionType(i)))));  
 }
 
+int g_new_flake_counter = 0;
+
 // Makes a choice given a distribution.
 // returns choice and likelihood therof. 
 // If suggestion is non-null, forces the choice to be suggestion.
 // if the suggestion is impossible, the returned likelihood will be 0.0
 
-pair<Object, double> ChooseElement::Choose(Blackboard *blackboard, 
+pair<Object, double> ChooseElement::Choose(Execution *execution, 
 					   Object distribution, 
 					   const Object *suggestion) {
   Object ret;
@@ -325,6 +327,23 @@ pair<Object, double> ChooseElement::Choose(Blackboard *blackboard,
       if (d.size() <= 1) goto one_element;
       distribution = d[1];
       goto one_element;
+    }
+    case NEW_FLAKE: {
+      Flake ret;
+      if (suggestion) {
+	if (suggestion->GetType() != Object::FLAKE || 
+	    (execution->existing_flakes_ % Flake(*suggestion)) )
+	  return make_pair(*suggestion, 0);
+	ret = *suggestion;
+      } else {
+	do {
+	  ret = Flake::Make("FLAKE_"+itoa(g_new_flake_counter++));
+	} while (execution->existing_flakes_ % ret);
+      }
+      execution->existing_flakes_.insert(ret);
+      execution->AddPost
+	(MakeTuple(EXISTING_FLAKE, ret, Real::Make(1.0), NULL));
+      return make_pair(ret, 1.0);
     }
     case BOOL: {
       if (d.size() <= 1) goto one_element;
@@ -357,7 +376,7 @@ pair<Object, double> ChooseElement::Choose(Blackboard *blackboard,
       if (d.size() <= 1) goto one_element;
       Object identifier = d[1];
       const Distribution & dist = 
-	*(blackboard->GetCreateDistribution(identifier));
+	*(execution->blackboard_->GetCreateDistribution(identifier));
       int64 total_weight = dist.TotalWeight();
       if (total_weight == 0) goto one_element;
       if (suggestion) {
@@ -378,6 +397,7 @@ pair<Object, double> ChooseElement::Choose(Blackboard *blackboard,
   }
   return make_pair(distribution, 1.0);
 }
+
 
 vector<Keyword> ChooseElement::distribution_type_keywords_;
 
@@ -421,10 +441,10 @@ Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
       guide_distribution = row->GetTuple(0)[3];
 
       pair<Object, double> guide_choice =
-	Choose(guide->blackboard_, guide_distribution, NULL);
+	Choose(guide, guide_distribution, NULL);
 
       pair<Object, double> main_choice = 
-	Choose(thread.execution_->blackboard_, 
+	Choose(thread.execution_, 
 	       distribution, &guide_choice.first);
 
       // If the guide choice is impossible, we just fall through and 
@@ -437,6 +457,6 @@ Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
     }
   }
   pair<Object, LL> choice 
-    = Choose(thread.execution_->blackboard_, distribution, NULL);
+    = Choose(thread.execution_, distribution, NULL);
   return choice.first;
 }
