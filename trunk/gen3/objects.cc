@@ -6,17 +6,14 @@
 #define ITEM(x) #x
 CLASS_ENUM_DEFINE(Object, Type);
 
-Keyword WILDCARD;
 OTime CREATION;
 OTime NEVER;
 Boolean TRUE;
 Boolean FALSE;
 
-Keyword NEED_CHOICE;
-Keyword CHOICE_VARIABLE;
-Keyword CHOICE;
-Keyword ELSE;
-
+#define KEYWORD(k, K) Keyword K;
+ALL_KEYWORDS;
+#undef KEYWORD
 
 void Object::StaticInit(){
   cout << "Calling Object::Init" << endl;
@@ -26,29 +23,27 @@ void Object::StaticInit(){
   AddReservedWord("time");
   AddReservedWord("true");
   AddReservedWord("false");
-  
-  WILDCARD = AddKeyword("*");
-  NEED_CHOICE = AddKeyword("need_choice");
-  CHOICE_VARIABLE = AddKeyword("choice_variable");
-  CHOICE = AddKeyword("choice");
-  ELSE = AddKeyword("else");
+
   NEVER = OTime::Make(Time::Never());
   CREATION = OTime::Make(Time());
   TRUE = Boolean::Make(true);
   FALSE = Boolean::Make(false);
+
+#define KEYWORD(k, K) K = AddKeyword( #k );
+  ALL_KEYWORDS;
+#undef KEYWORD
 };
 
 void Object::Destroy() {
   cout << "Calling DestroyConstants" << endl;
+#define KEYWORD(k, K) K = NULL;
+  ALL_KEYWORDS;
+#undef KEYWORD
   WILDCARD = NULL;
   NEVER = NULL;
   CREATION = NULL;
   TRUE = NULL;
   FALSE = NULL;
-  NEED_CHOICE = NULL;
-  CHOICE_VARIABLE = NULL;
-  CHOICE = NULL;
-  ELSE = NULL;
 }
 
 static vector<Variable> g_int_to_variable_cache;

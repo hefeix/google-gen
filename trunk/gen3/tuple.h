@@ -41,7 +41,6 @@ bool IsWildcardTuple(const Tuple & t); // There are no variables
 // are there any variables that occur twice.
 bool HasDuplicateVariables(const Tuple & t);
 
-
 // Returns a tuple of all wildcards.
 Tuple AllWildcards(int num_terms);
 
@@ -190,5 +189,51 @@ MPattern Canonicalize(const MPattern & v, Map *sub);
 
 // Put a rule (an ordered pair of tuple vectors) in canonical form.
 CandidateRule CanonicalizeRule(const CandidateRule & r, Map * out_sub);
+
+inline Tuple MakeTuple(const Object & o1){
+  Tuple t;
+  t.push_back(o1);
+  return t;
+}
+inline Tuple MakeTuple(const Object & o1,
+		       const Object & o2){
+  Tuple t;
+  t.push_back(o1);
+  t.push_back(o2);
+  return t;
+}
+inline Tuple MakeTuple(const Object & o1,
+		       const Object & o2,
+		       const Object & o3){
+  Tuple t;
+  t.push_back(o1);
+  t.push_back(o2);
+  t.push_back(o3);
+  return t;
+}
+inline Tuple MakeTuple(const Object & o1,
+		       const Object & o2,
+		       const Object & o3,
+		       const Object & o4){
+  Tuple t;
+  t.push_back(o1);
+  t.push_back(o2);
+  t.push_back(o3);
+  t.push_back(o4);
+  return t;
+}
+inline Tuple MakeTuple(const Object & o1,
+		       const Object & o2,
+		       const Object & o3,
+		       const Object & o4,
+		       const Object & o5){
+  Tuple t;
+  t.push_back(o1);
+  t.push_back(o2);
+  t.push_back(o3);
+  t.push_back(o4);
+  t.push_back(o5);
+  return t;
+}
 
 #endif

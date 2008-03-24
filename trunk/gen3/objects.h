@@ -416,16 +416,22 @@ int VariableToInt(Variable v);
 Variable IntToVariable(int i);
 
 // keywords that need to be created in InitKeywords
-extern Keyword WILDCARD;
 extern OTime CREATION;
 extern OTime NEVER;
 extern Boolean TRUE;
 extern Boolean FALSE;
 
-extern Keyword NEED_CHOICE;
-extern Keyword CHOICE_VARIABLE;
-extern Keyword CHOICE;
-extern Keyword ELSE;
+#define ALL_KEYWORDS \
+  KEYWORD(wildcard, WILDCARD)						\
+       KEYWORD(need_choice, NEED_CHOICE)				\
+       KEYWORD(choice_variable, CHOICE_VARIABLE)			\
+       KEYWORD(choice, CHOICE)						\
+       KEYWORD(else, ELSE)						\
+    KEYWORD(existing_flake, EXISTING_FLAKE)				\
+    
+#define KEYWORD(k, K) extern Keyword K;
+ALL_KEYWORDS;
+#undef KEYWORD
 
 inline bool IsVariable(const Object & o) { 
   return (o.GetType()==Object::VARIABLE); 

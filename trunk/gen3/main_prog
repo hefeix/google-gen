@@ -1,4 +1,6 @@
-if false
+post (PostRandomTuples 100 Foo)
+
+<if false
   post (A)
   else post (B)
 
@@ -24,3 +26,4 @@ on (A _a) {
   post (BLACKBOARD _a choose 3 (blackboard CollegeBySize))
 } 
 
+>

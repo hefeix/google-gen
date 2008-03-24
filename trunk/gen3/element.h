@@ -528,9 +528,12 @@ struct ChooseElement : public Element {
 #define ChooseElementChildNameList { ITEM(DISTRIBUTION) };
   CLASS_ENUM_DECLARE(ChooseElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
-#define ChooseElementDistributionTypeList { ITEM(ONE_ELEMENT), ITEM(BOOL), \
-      ITEM(QUADRATIC_UINT),				\
-      ITEM(BLACKBOARD) };
+#define ChooseElementDistributionTypeList { \
+  ITEM(ONE_ELEMENT),						\
+    ITEM(BOOL),							\
+    ITEM(QUADRATIC_UINT),	 				\
+    ITEM(BLACKBOARD),						\
+    ITEM(NEW_FLAKE) };
   CLASS_ENUM_DECLARE(ChooseElement, DistributionType);
   
   void Init(Element *parent) {
@@ -554,7 +557,7 @@ struct ChooseElement : public Element {
   // second element is the likelihood of that choice. 
   // If suggestion is non-null, forces the choice to be equal to *suggestion
   // if that has non-zero likelihood
-  static pair<Object, double> Choose(Blackboard *blackboard,
+  static pair<Object, double> Choose(Execution *execution,
 				     Object distribution, 
 				     const Object *suggestion);
 

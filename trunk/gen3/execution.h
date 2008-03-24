@@ -145,6 +145,10 @@ struct Execution : public Base {
 
   // the log likelihood of the execution
   double total_bias_;
+
+  // Flakes that the new flake chooser has already chosen and cannot
+  // choose again.
+  set<Flake> existing_flakes_;
 };
 
 Execution * Execute(const Tuple & main_program, const Tuple & guide_program,
