@@ -6,11 +6,15 @@ The function posts the result: (FunctionNameResult <instance_name> result)
 
 <Tuple maker>
 
-on (MakeTuple _tuple_name _length)
-  on (TupleElement _tuple_name _element_number _value)
-    if equal (match_count (TupleElement _tuple_name _a _b) _length)
-      post (MakeTupleResult _tuple_name repeat _x _length
-	nth(0 match (TupleElement _tuple_name _x _v) _v) )
+on (MakeTuple _tuple_name _length) {
+  if equal (_length 0)
+    post (MakeTupleResult _tuple_name ()) 
+  else 
+    on (TupleElement _tuple_name _element_number _value)
+      if equal (match_count (TupleElement _tuple_name _a _b) _length)
+        post (MakeTupleResult _tuple_name repeat _x _length
+	  nth(0 match (TupleElement _tuple_name _x _v) _v) )
+}
 
 on (MakePostTuple _tuple_name _length) {
   post (MakeTuple _tuple_name _length)
@@ -19,6 +23,7 @@ on (MakePostTuple _tuple_name _length) {
 
 
 <Code capable of creating arbitrary objects>
+// TODO: so far this only creates a random flake
 on (GetRandomObject _name)
   post (GetRandomObjectResult _name choose GetRandomObjectInt (quadratic_uint))
 

@@ -533,7 +533,8 @@ struct ChooseElement : public Element {
     ITEM(BOOL),							\
     ITEM(QUADRATIC_UINT),	 				\
     ITEM(BLACKBOARD),						\
-    ITEM(NEW_FLAKE) };
+    ITEM(NEW_FLAKE),						\
+    ITEM(ANY_FLAKE)};
   CLASS_ENUM_DECLARE(ChooseElement, DistributionType);
   
   void Init(Element *parent) {

@@ -148,7 +148,7 @@ struct Execution : public Base {
 
   // Flakes that the new flake chooser has already chosen and cannot
   // choose again.
-  set<Flake> existing_flakes_;
+  rankset<Flake> existing_flakes_;
 };
 
 Execution * Execute(const Tuple & main_program, const Tuple & guide_program,
