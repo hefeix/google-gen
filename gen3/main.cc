@@ -26,9 +26,9 @@
 #include <fstream>
 
 void Shell() {
-  /*TestRankSet();
-  TestRankMap();
-  TestWeightedSet();*/
+  //TestRankSet();
+  //TestRankMap();
+  //TestWeightedSet();
 
   //SetVerbosity(1);
   Tuple main_program;
