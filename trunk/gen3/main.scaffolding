@@ -25,7 +25,7 @@ on (MakePostTuple _tuple_name _length) {
 <Code capable of creating arbitrary objects>
 // TODO: so far this only creates a random flake
 on (GetRandomObject _name)
-  post (GetRandomObjectResult _name choose GetRandomObjectInt (quadratic_uint))
+  post (GetRandomObjectResult _name choose GetRandomObjectInt (any_flake))
 
 
 <Generate and post _n random tuples>

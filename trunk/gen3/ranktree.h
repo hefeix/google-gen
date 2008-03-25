@@ -99,7 +99,7 @@ struct NullAccumulator {
   typedef double WeightType; // this is not used.
   void Accumulate(const NullAccumulator *left, const NullAccumulator *right,
 		  const DataType & data) {}
-  string ToString() { return "[]";}
+  string ToString() const { return "[]";}
 };
 
 template <class DataType>
@@ -110,7 +110,7 @@ struct CountAccumulator {
     count_ = (left?left->count_:0) + 1 + (right?right->count_:0);
   }
   int GetCount() const { return count_;}
-  string ToString() { return "[]";}
+  string ToString() const { return "[ count=" + itoa(count_) + " ]";}
   int count_;
 };
 
@@ -125,7 +125,7 @@ struct SecondWeightAccumulator {
   }
   Weight GetSubtreeWeight() const {return weight_;}
   static Weight GetNodeWeight(const DataType & data) { return data.second; }
-  string ToString() { return "[]";}
+  string ToString() const { return "[]";}
   Weight weight_;
 };
 
@@ -142,7 +142,7 @@ struct SecondWeightAndCountAccumulator {
   int GetCount() const { return count_;}
   Weight GetSubtreeWeight() const {return weight_;}
   static Weight GetNodeWeight(const DataType & data) { return data.second; }
-  string ToString() { 
+  string ToString() const { 
     ostringstream ostr;
     ostr << "[ count=" << count_ << " weight=" << weight_ << " ]";
     return ostr.str();
@@ -168,6 +168,7 @@ class AccumulationTree {
   Weight TotalWeight() const { return SubtreeWeight(root_);}
   
   void insert(const Data & d) {
+    //VLOG(0) << "Inserting " << d << endl;
     Node *n = GetAddNode(Projection::ToKey(d));
     if (!Projection::KeyIsData()) {
       n->data_ = d;
@@ -175,6 +176,7 @@ class AccumulationTree {
     }
   }
   void erase(const Key & k) {
+    //VLOG(0) << "Erasing " << k << endl;
     Node *parent;
     Node ** look = search(k, &parent);
     if (*look) {
@@ -188,7 +190,7 @@ class AccumulationTree {
     size_ = 0;
     *this = other;
   }
-  string ToString(){
+  string ToString () const{
     return "tree\n" + ToString(root_, "", "");
   }
 
@@ -254,15 +256,22 @@ class AccumulationTree {
 			      data_);
     }
     void AccumulateRecursive() {
+      //VLOG(0) << "AccumulateRecursive called on node " << data_ << endl;
       Accumulate();
-      if (parent_) parent_->Accumulate();
+      if (parent_) parent_->AccumulateRecursive();
     }
-    void Check() {
-      if (parent_) CHECK(parent_->left_==this || parent_->right_==this);
-      if (left_) CHECK(left_->parent_==this);
-      if (right_) CHECK(right_->parent_==this);
-      if (parent_) CHECK(parent_->color_ == BLACK || color_ == BLACK);      
-      // CHECK(subtree_size_ == SubtreeSize(left_) + 1 + SubtreeSize(right_));
+    bool Check() {
+      if (parent_) 
+	if (!(parent_->left_==this || parent_->right_==this)) return false;
+      if (left_ && left_->parent_!=this) return false;
+      if (right_ && right_->parent_!=this) return false;
+      if (parent_ &&  !(parent_->color_ == BLACK || color_ == BLACK)) 
+	return false;      
+      if (SubtreeSize(this) != SubtreeSize(left_) + 1 + SubtreeSize(right_))
+	return false;
+      if (left_ && !left_->Check()) return false;
+      if (right_ && !right_->Check()) return false;
+      return true;
       // CHECK(subtree_weight_ ==
       // SubtreeWeight(left_) + WeightFunctor::Weight(data_)
       // + SubtreeWeight(right_));
@@ -271,7 +280,8 @@ class AccumulationTree {
   Node * root_;
   int size_;
   
-  string ToString(Node * n, string lineheadtop, string lineheadbottom) {
+  string ToString (const Node * n, string lineheadtop, string lineheadbottom) 
+  const {
     if (n==NULL) {
       return lineheadtop + "NULL\n";
     }
@@ -287,7 +297,7 @@ class AccumulationTree {
  public:
   
   // returns the number of black nodes in every path down from a given node.
-  int CheckNode(Node *n) {
+  /*int CheckNode(Node *n) {
     if (n) {
       n->Check();
       int count1 = CheckNode(n->left_);
@@ -296,10 +306,10 @@ class AccumulationTree {
       return count1 + (n->color_==BLACK)?1:0;
     }
     return 1;    
-  }
-  void Check() {
-    CheckNode(root_);
-    
+    }*/
+  bool Check() {
+    if (root_) return root_->Check();
+    return true;    
   }
 
 
@@ -370,6 +380,10 @@ class AccumulationTree {
     CHECK(i<size());
     Node *n = root_;
     while(1) {
+      if (n == NULL) {
+	cerr << ToString() << endl;
+	CHECK(false);
+      }
       uint leftsize = SubtreeSize(n->left_);
       if (i<leftsize) n = n->left_;
       else if (i==leftsize) return n;
@@ -504,6 +518,7 @@ class AccumulationTree {
   }
   
   void RotateLeft(Node *n) {
+    //VLOG(0) << "Rotate left at " << n->data_ << endl;
     Node * newtop = n->right_;
     //CHECK(newtop);
     *(GetPointerTo(n)) = newtop;
@@ -516,6 +531,7 @@ class AccumulationTree {
     newtop->Accumulate();
   }
   void RotateRight(Node *n) {
+    //VLOG(0) << "Rotate right at " << n->data_ << endl;
     Node * newtop = n->left_;
     //CHECK(newtop);
     *(GetPointerTo(n)) = newtop;
@@ -529,6 +545,7 @@ class AccumulationTree {
   }
 
   void InsertCase1(Node *n) {
+    //VLOG(0) << "Insert case 1" << endl;
     if (n->parent_ == NULL) n->color_ = BLACK;
     else InsertCase2(n);
   }
@@ -796,13 +813,16 @@ inline void TestRankSet() {
   rankset<int> foo;
   int start = time(0);
   for (int i=0; i<1000000; i++) { 
-    if (!(i & (i-1))) { 
+    if (!(i & (i-1))) {       
       cout << "Testing " << i 
 	   << " size= " << foo.size() << endl;
-      foo.Check();
     }
     if (rand() % 2) foo.insert(rand() % 1000);
     else foo.erase(rand() % 1000);
+    if (!foo.Check()) {
+      cerr << foo.ToString();
+      CHECK(false);
+    }
   }
   cout << "time=" << time(0)-start << endl;
 }
@@ -813,7 +833,7 @@ inline void TestRankMap() {
   foo["georges"] = -3;
   foo["ralph"];
   foo.erase("noam");
-  foo.Check();
+  CHECK(foo.Check());
   
   forall(run, foo) {
     cout << "foo[" << run->first << "] = " << run->second << endl;
