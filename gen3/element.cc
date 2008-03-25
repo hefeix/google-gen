@@ -427,6 +427,7 @@ pair<Object, double> ChooseElement::Choose(Execution *execution,
 }
 
 
+
 vector<Keyword> ChooseElement::distribution_type_keywords_;
 
 Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
@@ -439,46 +440,38 @@ Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
   Object guide_distribution = NULL;
   if (guide) {
     // post the choice on the guide blackboard
-    Integer instance = Integer::Make(choice_counter_++);
-
-    // post [ NEED_CHOICE <name> <instance> ]
-    Tuple t = MakeTuple(NEED_CHOICE, name, instance);
-    guide->AddPost(t);
+    Integer instance = Integer::Make(thread.execution_->choice_counter_++);
     
-    // for each variable, 
-    // post [ CHOICE_VARIABLE <name> <instance> <variable> <value> ]
-    t[0] = CHOICE_VARIABLE;
-    t.push_back(NULL);
-    t.push_back(NULL);
-    for (int i=0; i<incoming_stack_depth_; i++) {
-      t[3] = GetIncomingVariables()[i];
-      t[4] = thread.stack_[i];
-      guide->AddPost(t);
-    }
-    guide->ExecuteForever();
+    if (distribution.GetType() == Object::OTUPLE) {
+      const Tuple & distribution_tuple = OTuple(distribution).Data();
+      // post [ NEED_CHOICE {unrolled distribution tuple} <instance> ]
+      Tuple request;
+      request.push_back(NEED_CHOICE);
+      request.insert(request.end(), distribution_tuple.begin(), 
+		     distribution_tuple.end());
+      request.push_back(instance);
+      guide->AddPost(request);
+      guide->ExecuteForever();
 
-    // search the guide blackboard for 
-    // [ CHOICE <name> <instance> <distribution> ]
-    t.resize(4);
-    t[0] = CHOICE;
-    t[3] = WILDCARD;
-    Blackboard::Row *row = guide->blackboard_->GetCreateRow(t);
-    if (row->NumTuples() == 1) {
-      guide_distribution = row->GetTuple(0)[3];
+      Tuple response = MakeTuple(CHOICE, instance, WILDCARD);
+      Blackboard::Row *row = guide->blackboard_->GetCreateRow(response);
+      if (row->NumTuples() == 1) {
+	guide_distribution = row->GetTuple(0)[3];
 
-      pair<Object, double> guide_choice =
-	Choose(guide, guide_distribution, NULL);
-
-      pair<Object, double> main_choice = 
-	Choose(thread.execution_, 
-	       distribution, &guide_choice.first);
-
-      // If the guide choice is impossible, we just fall through and 
-      // select unguided.
-      if (main_choice.second != 0) {
-	thread.execution_->total_bias_ 
-	  += log(main_choice.second) - log(guide_choice.second);
-	return main_choice.first;
+	pair<Object, double> guide_choice =
+	  Choose(guide, guide_distribution, NULL);
+	
+	pair<Object, double> main_choice = 
+	  Choose(thread.execution_, 
+		 distribution, &guide_choice.first);
+	
+	// If the guide choice is impossible, we just fall through and 
+	// select unguided.
+	if (main_choice.second != 0) {
+	  thread.execution_->total_bias_ 
+	    += log(main_choice.second) - log(guide_choice.second);
+	  return main_choice.first;
+	}
       }
     }
   }

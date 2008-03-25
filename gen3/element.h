@@ -542,7 +542,6 @@ struct ChooseElement : public Element {
     choice_counter_ = 0;
   }
 
-  bool HasObject() const { return true; }
   static vector<Keyword> distribution_type_keywords_;
   static void InitDistributionTypeKeywords();
   static Keyword DistributionTypeToKeyword(DistributionType s) { 

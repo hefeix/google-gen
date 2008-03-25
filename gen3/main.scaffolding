@@ -22,12 +22,6 @@ on (MakePostTuple _tuple_name _length) {
 }
 
 
-<Code capable of creating arbitrary objects>
-// TODO: so far this only creates a random flake
-on (GetRandomObject _name)
-  post (GetRandomObjectResult _name choose GetRandomObjectInt (any_flake))
-
-
 <Generate and post _n random tuples>
 on (PostRandomTuples _n _instance_name)
   repeat _instance_num _n 
@@ -40,7 +34,7 @@ on (PostRandomTuples _n _instance_name)
 <Generate a random tuple>
 
 on (GetRandomTuple _name)
-  let _tuple_size choose GetRandomTupleSize (quadratic_uint) {
+  let _tuple_size choose (quadratic_uint GetRandomTupleSize _name) {
     post (MakeTuple _name _tuple_size)
     repeat _pos _tuple_size {
       post (GetRandomObject (_name _pos) )
@@ -51,8 +45,47 @@ on (GetRandomTuple _name)
       post (GetRandomTupleResult _name _tuple)     
   }
 
+<Code capable of creating arbitrary objects>
 
 
+
+
+post (ObjectType Flake)
+post (ObjectType Integer)
+post (ObjectType Boolean)
+//post (ObjectType OTuple)
+// post (ObjectType Keyword)
+// post (ObjectType Variable) we can't make variables yet
+// post (ObjectType Real) don't know how to make those yet either
+
+on (ObjectType _t) 
+  post (ObjectTypeDistribution _t 1.0 null)
+
+on (GetRandomObject _name) {
+  post (GetRandomObjectOfType _name 
+        choose (blackboard ObjectTypeDistribution GetRandomObjectType _name) )
+  on (GetRandomObjectOfTypeResult _name _o)
+    post (GetRandomObjectResult _name _o)
+}
+
+on (GetRandomObjectOfType _name Flake)
+  post (GetRandomObjectOfTypeResult _name 
+    choose (any_flake GetRandomObjectOfType _name))
+
+on (GetRandomObjectOfType _name Boolean)
+  post (GetRandomObjectOfTypeResult _name 
+    choose (bool 0.5 GetRandomObjectOfType _name))
+
+on (GetRandomObjectOfType _name Integer)
+  post (GetRandomObjectOfTypeResult _name 
+    choose (quadratic_uint GetRandomObjectOfType _name))
+
+on (GetRandomObjectOfType _name OTuple) {
+  post (GetRandomTuple _name)
+  on (GetRandomTupleResult _name _t)
+    post (GetRandomObjectOfTypeResult _name _t)
+}
+  
 
 
 < Code generator
