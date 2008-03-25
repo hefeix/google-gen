@@ -58,6 +58,7 @@ struct Execution : public Base {
     blackboard_ = New<Blackboard>();
     guide_ = NULL;
     total_bias_ = 0;
+    choice_counter_ = 0;
   }
 
   void AddGuide() {
@@ -149,6 +150,7 @@ struct Execution : public Base {
   // Flakes that the new flake chooser has already chosen and cannot
   // choose again.
   rankset<Flake> existing_flakes_;
+  int64 choice_counter_;
 };
 
 Execution * Execute(const Tuple & main_program, const Tuple & guide_program,
