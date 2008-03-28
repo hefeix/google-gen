@@ -1,2 +1,3 @@
-on (choice_variable 2 _choice constant _a 7)
-  post (choice 2 _choice 999)
+on (need_choice bool _prob _n _id) {
+   post (choice _id (bool 0.1))
+}
