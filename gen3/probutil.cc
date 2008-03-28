@@ -21,87 +21,6 @@
 
 const double LN2 = log(2.0);
 
-LL operator +(const LL & a, const LL & b) { return Micronats(a.mcn_+b.mcn_); }
-LL operator -(const LL & a, const LL & b) { return Micronats(a.mcn_-b.mcn_); }
-LL operator *(const LL & a, int b) { return Micronats(a.mcn_*b); }
-LL operator *(int b, const LL & a) { return a*b;}
-LL operator -(const LL & a){ return Micronats(-a.mcn_);} 
-ostream & operator << (ostream & output, LL ll){
-  return (output << ll.ToString());
-}
-bool OPERATORLESS(const LL & a, const LL & b){ return (a.mcn_<b.mcn_);}
-bool OPERATORLE(const LL & a, const LL & b){ return (a.mcn_<=b.mcn_);}
-bool OPERATOREQ(const LL & a, const LL & b){ return (a.mcn_==b.mcn_);}
-bool OPERATORGT(const LL & a, const LL & b){ return (a.mcn_>b.mcn_);}
-bool OPERATORGE(const LL & a, const LL & b){ return (a.mcn_>=b.mcn_);}
-bool operator !=(const LL & a, const LL & b){ return (a.mcn_!=b.mcn_);}
-
-
-
-LL LnCombinations(uint n, uint k){
-  CHECK(k<=n);
-  return LnFactorial(n) - LnFactorial(k) - LnFactorial(n-k);
-}
-
-// exact product of Log() if n<max_factorial_cache_size.  Otherwise an estimate.
-
-const uint max_factorial_cache_size = 10000;
-LL LnFactorial(uint n){
-  static vector<LL> cache;
-  while (cache.size()<=(min(n, max_factorial_cache_size)) ) {
-    if (cache.size()==0) cache.push_back(Micronats(0));
-    cache.push_back(cache[cache.size()-1] + Log(cache.size()));
-  }
-  if (n < max_factorial_cache_size)
-    return cache[n];
-  double lower = max_factorial_cache_size-0.5;
-  double upper = n+0.5;
-  return LL( cache[max_factorial_cache_size-1].ToDouble() 
-	     + (upper * log(upper) - upper )
-	     - (lower * log(lower) - lower )
-	     );
-}
-
-LL uintQuadraticLnProb(uint n){
-  return -Log((n+1)*(n+2));
-}
-
-LL BitSeqLnLikelihood(const BitSeq & n){
-  int nb = n.NumBits();
-  return uintQuadraticLnProb(nb) - nb * Log(2);
-}
-
-LL BinaryChoiceLnLikelihood(uint num_total, uint num_positive){
-  return -Log(num_total+1) - LnCombinations(num_total, num_positive);
-}
-
-LL StringLnLikelihood(string s) {
-  return -(s.size() * Log(256));
-}
-
-LL DoubleLnLikelihood(double d) {
-  DoubleBits db(d);
-  int num_mantissa_bits = db.NumMantissaBits();
-  int exponent = db.Exponent();
-
-  LL ret = 0;
-  ret += -Log(2) * 2; // the sign bits
-  ret += -Log(2) * num_mantissa_bits;
-  ret += uintQuadraticLnProb(num_mantissa_bits);
-  ret += uintQuadraticLnProb((exponent >= 0)?exponent:(-1-exponent));
-  return ret;
-}
-double RandomDouble() {
-  int sign = rand() % 2;
-  int exponent = RandomUintQuadratic(1022);
-  if (rand() % 2) exponent = -1 - exponent;
-  int num_mantissa_bits = RandomUintQuadratic(52);
-  uint64 mantissa_bits = (RandomUInt64() << (52-num_mantissa_bits)) 
-    & 0x000FFFFFFFFFFFFFull ;  
-  DoubleBits db(mantissa_bits, exponent, sign);
-  return db.ToDouble();
-}
-
 uint32 RandomUintQuadratic(int max_return_value) {
   while (1) {
     uint ret_val = uint (1.0 / RandomFraction()) - 1;
@@ -110,3 +29,28 @@ uint32 RandomUintQuadratic(int max_return_value) {
     return ret_val;
   }
 }
+
+uint32 RandomUInt32(){
+  CHECK(RAND_MAX == 0x7FFFFFFF);
+  return (rand() << 1) + rand()%2;
+}
+
+uint64 RandomUInt64() {
+  return (uint64(RandomUInt32()) << 32) + RandomUInt32(); 
+}
+
+double TwoToTheThirtyTwo = pow(2, 32);
+double TwoToTheMinusThirtyTwo = pow(0.5, 32);
+double OneOverRandMax = (1.0 / RAND_MAX);
+double RandomFraction(){
+  return (rand() + 0.5) * OneOverRandMax;
+}
+int RandomRoundoff(double d) {
+  int f = floor(d);
+  if (d==f) return f;
+  return f + ((RandomFraction() < (d-f))?1:0);
+}
+
+
+
+

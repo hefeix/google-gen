@@ -21,62 +21,30 @@
 #define _PROBUTIL_H_
 
 #include "util.h"
-#include "numbers.h"
 #include <math.h>
 
-struct LL{
-  int64 mcn_;
-  LL() { mcn_ = 0; }
-  explicit LL(double d){ mcn_ = int64(d*1e6);}
-  LL(int n){ mcn_ = n * 1000000ll;}
-  double ToDouble() const { return mcn_/1e6;}
-  int64 ToMicronats() const { return mcn_;}
-  void operator+=(const LL & o){mcn_ += o.mcn_;}
-  void operator-=(const LL & o){mcn_ -= o.mcn_;}
-  string ToString() const { return dtoa(ToDouble());}
-};
-inline LL Micronats(int64 mcn){ LL ret; ret.mcn_=mcn; return ret;}
-LL operator +(const LL & a, const LL & b);
-LL operator -(const LL & a, const LL & b);
-LL operator *(const LL & a, int b);
-LL operator *(int b, const LL & a);
-LL operator -(const LL & a);
-bool OPERATORLESS(const LL & a, const LL & b);
-bool OPERATORLE(const LL & a, const LL & b);
-bool OPERATOREQ(const LL & a, const LL & b);
-bool OPERATORGT(const LL & a, const LL & b);
-bool OPERATORGE(const LL & a, const LL & b);
-bool operator !=(const LL & a, const LL & b);
+// random 32-bit integer
+uint32 RandomUInt32();
 
-ostream & operator << (ostream & output, LL ll);
-inline LL Log(double d) {
-  CHECK(d>0);
-  return Micronats((int)(log(d)*1000000));
-}
+// random 64-bit integer
+uint64 RandomUInt64();
 
-LL LnFactorial(uint n);
-LL LnCombinations(uint n, uint k);
+// between 0 and 1, non-inclusive
+double RandomFraction();
+
+// Randomly round off a double
+int RandomRoundoff(double d);
 
 // a particular probability distribution over unsigned ints.
 // Pr(n) = 1/((n+1)(n+2))
-LL uintQuadraticLnProb(uint n);
 inline double uintQuadraticProb(uint n) { return 1.0/( (n+1.0) * (n+2.0));}
 
 // Draws from the above distribution.
 uint32 RandomUintQuadratic(int max_return_value = -1);
 
-// Cost of encoding a number in our funky binary representation.  
-// Returns uintQuadraticLnProb(length)-length*log(2)
-LL BitSeqLnLikelihood(const BitSeq & n);
-
-// ln( 1 / ((num_total CHOOSE num_positive) (num_total+1)))
-LL BinaryChoiceLnLikelihood(uint num_total, uint num_positive);
-inline LL BinaryChoiceLnLikelihood(pair<int, int> p){
-  return BinaryChoiceLnLikelihood(p.first, p.second);
-}
-
-LL DoubleLnLikelihood(double d);
-LL StringLnLikelihood(string s);
-double RandomDouble();
+// Are we really using this?
+// Declares A and sets it to a random element of B.
+// defines an interator A pointing to a ranodm element of B.  Linear time.
+#define RandomElement(A, B) typeof(B.begin()) A = B.begin(); int howfar = RandomUInt32() % B.size(); for (int count=0; count<howfar; count++) ++A;
 
 #endif

@@ -275,54 +275,6 @@ string IntVectorToString(const vector<int> v);
 // inverse of above, and ignores extra whitespace
 vector<int> StringToIntVector(const string & s);
 
-// random 32-bit integer
-uint32 RandomUInt32();
-// random 64-bit integer
-uint64 RandomUInt64();
-// between 0 and 1, non-inclusive
-double RandomFraction();
-
-// Declares A and sets it to a random element of B.
-// defines an interator A pointing to a ranodm element of B.  Linear time.
-#define RandomElement(A, B) typeof(B.begin()) A = B.begin(); int howfar = RandomUInt32() % B.size(); for (int count=0; count<howfar; count++) ++A;
-
-int RandomRoundoff(double d);
-
-// Extract a sample from a rankset or rankmap.
-template <class S>
-void GetSample(const S & full, S * result, uint sample_size) {
-  CHECK(sample_size <= full.size());
-  result->clear();
-  if (sample_size * 3 >= full.size()) {
-    int to_pick = sample_size;
-    int out_of = full.size();
-    forall(run, full) {
-      if (RandomFraction() * out_of < to_pick) {
-	result->insert(*run);
-	to_pick--;
-      }
-      out_of--;
-    }
-    return;
-  }
-  set<int> picked;
-  for (uint i=0; i<sample_size; i++) {
-    int n;
-    do { 
-      n = RandomUInt32() % full.size();
-    } while (picked % n);
-    picked.insert(n);
-    result->insert(*(full.nth(n)));
-  }  
-}
-
-template <class S, class R>
-void GetSampleElement(const S& full, R * result) {
-  CHECK(full.size());
-  int n = RandomUInt32() % full.size();
-  *result = *(full.nth(n));  
-}
-
 #define EMPTY_SLOT (-1)
 // runs through distinct assignments of a number of distinct items to a 
 // greater or equal number of slots (which can fit at most one item each). 
@@ -360,16 +312,6 @@ class ProductIterator {
   bool done_;
 };
 
-
-
-// the result of a computation that may not have finished
-enum ComputationResult {
-  RESULT_FALSE, // the anser is no
-  RESULT_TRUE,  // the answer is yes
-  RESULT_MAYBE, // I don't know, and more time won't help.
-  RESULT_GAVE_UP,  // I gave up for lack of time.
-};
-
 // Given a set of num_objects objects numbered from 0..num_objects-1 and a 
 // symmetric adjacency matrix (self-adjacency allowed and ignored), we 
 // find the connected components and number them from 
@@ -404,12 +346,6 @@ template<class T, class P1, class P2, class P3> T * New(const P1 & p1,
   t->Init(p1, p2, p3);
   return t;
 }
-
-/*template<class T> set<T> SingletonSet(const T & t) {
-  set<T> ret;
-  ret.insert(t);
-  return ret;
-  }*/
 
 // In general SK and MK are identical, but we should at least be able to
 // cast an MK to an SK
@@ -461,19 +397,5 @@ template <class A, class B, class C>
   if (t1.third < t2.third) return true;
   return false;
 }
-/*template <class IteratorType> set<typename typeof(IteratorType->second)> >
-GetSeconds(const pair<IteratorType, IteratorType> & p) {
-  set<typeof(IteratorType->second)> ret;
-  for (IteratorType c= p.first; c!=p.second; c++) {
-    ret.insert(c->second);
-  }
-  return ret;
-  }*/
-
-
-/*template<class T> set<T> SingletonSet(const T & t) {
-  set<T> ret; ret.insert(t);
-  return ret;
-  }*/
 
 #endif

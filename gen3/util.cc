@@ -117,24 +117,6 @@ string Join(const vector<string> v, char delim){
   }
   return ret;
 }
-uint32 RandomUInt32(){
-  CHECK(RAND_MAX == 0x7FFFFFFF);
-  return (rand() << 1) + rand()%2;
-}
-uint64 RandomUInt64() {
-  return (uint64(RandomUInt32()) << 32) + RandomUInt32(); 
-}
-double TwoToTheThirtyTwo = pow(2, 32);
-double TwoToTheMinusThirtyTwo = pow(0.5, 32);
-double OneOverRandMax = (1.0 / RAND_MAX);
-double RandomFraction(){
-  return (rand() + 0.5) * OneOverRandMax;
-}
-int RandomRoundoff(double d) {
-  int f = floor(d);
-  if (d==f) return f;
-  return f + ((RandomFraction() < (d-f))?1:0);
-}
 
 string IntVectorToString(const vector<int> v){
   ostringstream ostr;
