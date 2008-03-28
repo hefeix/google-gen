@@ -17,7 +17,7 @@ post (CollegeBySize Berkeley 30000 0)
 post (CollegeBySize Phoenix 200000.0 0)
 
 post (A 0)
-on (A _a) if not equal (_a 100) 
+on (A _a) if not equal _a 100
    post (A sum (_a 1))
   
 on (A _a) {

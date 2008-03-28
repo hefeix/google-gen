@@ -24,21 +24,21 @@
 
 #define ALL_FUNCTIONS \
   FUNCTION(Pass, PASS)						\
+       FUNCTION(Constant, CONSTANT)				\
+       FUNCTION(Substitute, SUBSTITUTE)				\
+       FUNCTION(Let, LET)					\
+       FUNCTION(Post, POST)					\
+       FUNCTION(Unpost, UNPOST)					\
        FUNCTION(On, ON)						\
        FUNCTION(Match, MATCH)					\
        FUNCTION(MatchCount, MATCH_COUNT)			\
-       FUNCTION(Post, POST)					\
-       FUNCTION(Unpost, UNPOST)					\
        FUNCTION(MakeTuple, MAKETUPLE)				\
-       FUNCTION(Substitute, SUBSTITUTE)				\
-       FUNCTION(Constant, CONSTANT)				\
        FUNCTION(Equal, EQUAL)				     	\
        FUNCTION(Not, NOT)					\
        FUNCTION(Sum, SUM)					\
        FUNCTION(If, IF)					       	\
        FUNCTION(Cout, COUT)					\
        FUNCTION(Nth, NTH)					\
-       FUNCTION(Let, LET)					\
        FUNCTION(Delay, DELAY)					\
        FUNCTION(Choose, CHOOSE)					\
        FUNCTION(Repeat, REPEAT)					\
@@ -372,7 +372,6 @@ struct SubstituteElement : public Element {
   string PrettyProgramTree(int indent) const;
   virtual Function GetFunction() const { return SUBSTITUTE;}
   string ToString() const;
-  bool ChildrenGoInTuple() const { return true;}
   Object Execute(Thread &thread) { return thread.stack_[stack_position_];}
   int stack_position_;
 };
@@ -382,7 +381,6 @@ struct EqualElement : public Element {
   CLASS_ENUM_DECLARE(EqualElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   virtual Function GetFunction() const { return EQUAL; }
-  bool ChildrenGoInTuple() const { return true; }
   Object ComputeReturnValue(Thread & thread, Tuple results) {
     if (results[0] == results[1]) return TRUE;
     return FALSE;
@@ -452,7 +450,6 @@ struct NthElement : public Element {
   CLASS_ENUM_DECLARE(NthElement, ChildName);
   DECLARE_FUNCTION_ENUMS;
   Function GetFunction() const { return NTH; }
-  bool ChildrenGoInTuple() const { return true; }
   Object ComputeReturnValue(Thread & thread, Tuple results) {
     if (results[N].GetType() != Object::INTEGER) return NULL;
     if (results[TUPLE].GetType() != Object::OTUPLE) return NULL;
