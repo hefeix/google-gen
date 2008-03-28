@@ -475,7 +475,7 @@ Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
       }
     }
   }
-  pair<Object, LL> choice 
+  pair<Object, double> choice 
     = Choose(thread.execution_, distribution, NULL);
   return choice.first;
 }
