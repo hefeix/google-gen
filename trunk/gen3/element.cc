@@ -456,7 +456,7 @@ Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
       Tuple response = MakeTuple(CHOICE, instance, WILDCARD);
       Blackboard::Row *row = guide->blackboard_->GetCreateRow(response);
       if (row->NumTuples() == 1) {
-	guide_distribution = row->GetTuple(0)[3];
+	guide_distribution = row->GetTuple(0)[2];
 
 	pair<Object, double> guide_choice =
 	  Choose(guide, guide_distribution, NULL);
