@@ -13,7 +13,7 @@ on (MakeTuple _tuple_name _length) {
     on (TupleElement _tuple_name _element_number _value)
       if equal match_count (TupleElement _tuple_name _a _b) _length
         post (MakeTupleResult _tuple_name repeat _x _length
-	  nth(0 match (TupleElement _tuple_name _x _v) _v) )
+	  nth 0 match (TupleElement _tuple_name _x _v) _v)
 }
 
 on (MakePostTuple _tuple_name _length) {
@@ -88,34 +88,3 @@ on (GetRandomObjectOfType _name OTuple) {
   
 
 
-< Code generator
-   post (FunctionNumChildren post 1) <....>
-
-   on (FunctionNumChildren f n) 
-      post (FunctionByPopularity f 1.0 (choose new_flake))
-
-
-    <create the program tree>
-    repeat x (choose quadratic_uint)
-      post (TopLevelStatement (choose new_flake))
-    on (TopLevelStatement x) post (Statement x)
-    on (Statement x) 
-       post (HasFunction x (choose (blackboard FunctionByPopularity))) 
-    on (HasFunction x f) post (FunctionByPopularity f 1.0 (choose new_flake))
-    on (HasFunction x f) on (FunctionNumChildren f n) 
-       post (StatementNumChildren x 
-             if (equal n -1 
-	     	choose (quadratic_uint) 
-		n) )
-    on (StatementNumChildren x n) 
-       repeat n (StatementChild x (choose new_flake))
-    on (StatementChild x y) post (Statement y)
-    on (StatementNumChildren x 0) post (StatementChildrenComplete x)
-    on (StatementChildrenComplete x) post (StatementComplete x)
-    on (StatementComplete c) on (StatementChild p c) 
-      post (StatementChildComplete p c)
-    on (StatementChildComplete p c) on (StatementNumChildren p n)
-       if (equal match_count(StatementChildComplete p *) n
-           post (StatementChildrenComplete p) 0)
-    on (StatementComplete x) on (TopLevelStatement x) add_code x
->
