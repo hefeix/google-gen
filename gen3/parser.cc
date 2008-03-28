@@ -37,9 +37,11 @@ vector<Element *> SimpleParseElements(const Tuple & t, Element *parent) {
   return ret;
 }
 
-
 inline Object GetNext(const Tuple& t, uint * pos) {
-  CHECK (*pos < t.size());
+  if (*pos >= t.size()) {
+    cerr << "Parsing tuple:" << t << " pos:" << *pos << endl;
+    CHECK(false);
+  }
   return t[(*pos)++];
 }
 
