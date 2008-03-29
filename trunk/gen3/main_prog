@@ -7,7 +7,7 @@ post (CollegeBySize Phoenix 200000.0 0)
 >
 
 repeat _a 100 {
-  post (BOOL _a choose (bool 0.8 _a))
-  // post (QUADRATIC_UINT _a choose (quadratic_uint))
+  // post (BOOL _a choose (bool 0.8 _a))
+  post (NORMAL _a choose (normal 100.0 10.0 _a))
   // post (BLACKBOARD _a choose (blackboard CollegeBySize))
 }

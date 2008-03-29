@@ -36,6 +36,7 @@
        FUNCTION(Equal, EQUAL)				     	\
        FUNCTION(Not, NOT)					\
        FUNCTION(Sum, SUM)					\
+       FUNCTION(Product, PRODUCT)		       		\
        FUNCTION(If, IF)					       	\
        FUNCTION(Cout, COUT)					\
        FUNCTION(Nth, NTH)					\
@@ -406,13 +407,50 @@ struct SumElement : public Element {
   Object ComputeReturnValue(Thread & thread, Tuple results) {
     if (results[0].GetType() != Object::OTUPLE) return NULL;
     const Tuple & t = OTuple(results[0]).Data();
-    int sum = 0;
+    int64 sum = 0;
+    double dsum = 0.0;
+    bool any_reals = false;
     forall(run, t) {
-      if (run->GetType() == Object::INTEGER) sum += Integer(*run).Data();
+      if (run->GetType() == Object::INTEGER) 
+	sum += Integer(*run).Data();
+      if (run->GetType() == Object::REAL) {
+	any_reals = true;
+	dsum += Real(*run).Data();
+      }
     }
-    return Integer::Make(sum);
+    if (any_reals)
+      return Real::Make(dsum + sum);
+    else
+      return Integer::Make(sum);
   }
 };
+
+struct ProductElement : public Element {
+#define ProductElementChildNameList { ITEM(TUPLE), };
+  CLASS_ENUM_DECLARE(ProductElement, ChildName);
+  DECLARE_FUNCTION_ENUMS;
+  Function GetFunction() const { return PRODUCT; }
+  Object ComputeReturnValue(Thread & thread, Tuple results) {
+    if (results[0].GetType() != Object::OTUPLE) return NULL;
+    const Tuple & t = OTuple(results[0]).Data();
+    int64 product = 1;
+    double dproduct = 1.0;
+    bool any_reals = false;
+    forall(run, t) {
+      if (run->GetType() == Object::INTEGER) 
+	product *= Integer(*run).Data();
+      if (run->GetType() == Object::REAL) {
+	any_reals = true;
+	dproduct *= Real(*run).Data();
+      }
+    }
+    if (any_reals)
+      return Real::Make(dproduct * product);
+    else
+      return Integer::Make(product);
+  }
+};
+
 
 struct IfElement : public Element {
 #define IfElementChildNameList {					\
@@ -529,6 +567,7 @@ struct ChooseElement : public Element {
   ITEM(ONE_ELEMENT),						\
     ITEM(BOOL),							\
     ITEM(QUADRATIC_UINT),	 				\
+    ITEM(NORMAL),						\
     ITEM(BLACKBOARD),						\
     ITEM(NEW_FLAKE),						\
     ITEM(ANY_FLAKE)};
@@ -550,15 +589,6 @@ struct ChooseElement : public Element {
   }
   Function GetFunction() const { return CHOOSE;}
   
-  // first element of return value is the choice
-  // second element is the likelihood of that choice. 
-  // If suggestion is non-null, forces the choice to be equal to *suggestion
-  // if that has non-zero likelihood
-  static pair<Object, double> Choose(Execution *execution,
-				     Object distribution, 
-				     const Object *suggestion);
-
-
   Object ComputeReturnValue(Thread & thread, Tuple results);
   int choice_counter_;
 };

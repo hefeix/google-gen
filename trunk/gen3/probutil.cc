@@ -16,7 +16,6 @@
 //
 // Author: Noam Shazeer
 
-
 #include "probutil.h"
 
 const double LN2 = log(2.0);
@@ -42,7 +41,7 @@ uint64 RandomUInt64() {
 double TwoToTheThirtyTwo = pow(2, 32);
 double TwoToTheMinusThirtyTwo = pow(0.5, 32);
 double OneOverRandMax = (1.0 / RAND_MAX);
-double RandomFraction(){
+double RandomFraction() {
   return (rand() + 0.5) * OneOverRandMax;
 }
 int RandomRoundoff(double d) {
@@ -51,6 +50,31 @@ int RandomRoundoff(double d) {
   return f + ((RandomFraction() < (d-f))?1:0);
 }
 
+// Box muller transform, polar method
+double RandomNormal() {
+  double s = 0.0;
+  double u, v;
+  do {
+    u = RandomFraction() * 2.0 - 1.0;
+    v = RandomFraction() * 2.0 - 1.0;
+    s = u*u + v*v;
+  } while ( (s>=1) || (s == 0.0) );
+  double z0 = u * sqrt(-2 * log(s) / s);
+  return z0;
+}
+double ONEOVERROOT2PI = 1 / sqrt(2 * M_PI);
+double LOGONEOVERROOT2PI = log(ONEOVERROOT2PI);
+double NormalDensity(double x) {
+  // 1 / sqrt(2PI) e^-(x^2/2)
+  return ONEOVERROOT2PI * exp(-0.5*x*x);
+}
+double NormalDensity(double x, double mean, double std) {
+  return NormalDensity((x-mean)/std) / std;
+}
+
+double LogOfNormalDensity(double x) {
+  return LOGONEOVERROOT2PI - (0.5 * x * x);
+}
 
 
 

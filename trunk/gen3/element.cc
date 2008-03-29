@@ -306,9 +306,20 @@ int g_new_flake_counter = 0;
 // If suggestion is non-null, forces the choice to be *suggestion.
 // if the suggestion is impossible, the returned likelihood will be 0.0
 
-pair<Object, double> ChooseElement::Choose(Execution *execution, 
-					   Object distribution, 
-					   const Object *suggestion) {
+struct Choice {
+  // What is chosen
+  Object value_;
+  // What was its probability or density of value_ being chosen
+  double prob_;
+  // number of dimensions of the density function
+  int dimension_;
+  Choice(Object v, double p, int d) :
+    value_(v), prob_(p), dimension_(d) {}
+};
+
+Choice ChooseHelper(Execution *execution, 
+		    Object distribution, 
+		    const Object *suggestion) {
   Object ret;
   if (suggestion) ret = *suggestion;
   
@@ -319,21 +330,21 @@ pair<Object, double> ChooseElement::Choose(Execution *execution,
     if ( (d.size() <= 0) ||
 	 (d[0].GetType() != Object::KEYWORD) ) goto one_element;
     
-    DistributionType distribution_type 
-      = KeywordToDistributionType(d[0]);
+    ChooseElement::DistributionType distribution_type 
+      = ChooseElement::KeywordToDistributionType(d[0]);
     
     switch(distribution_type) {
-    case ONE_ELEMENT: {
+    case ChooseElement::ONE_ELEMENT: {
       if (d.size() <= 1) goto one_element;
       distribution = d[1];
       goto one_element;
     }
-    case NEW_FLAKE: {
+    case ChooseElement::NEW_FLAKE: {
       Flake ret;
       if (suggestion) {
 	if (suggestion->GetType() != Object::FLAKE || 
 	    (execution->existing_flakes_ % Flake(*suggestion)) )
-	  return make_pair(*suggestion, 0);
+	  return Choice(*suggestion, 0, 0);
 	ret = *suggestion;
       } else {
 	do {
@@ -344,16 +355,16 @@ pair<Object, double> ChooseElement::Choose(Execution *execution,
       // TODO: may want to post something to the guide (or main) blackboard. 
       /*execution->AddPost
 	(MakeTuple(EXISTING_FLAKE, ret, Real::Make(1.0), NULL));*/
-      return make_pair(ret, 1.0);
+      return Choice(ret, 1.0, 0);
     }
-    case ANY_FLAKE : {
+    case ChooseElement::ANY_FLAKE : {
       Flake ret;
       if (suggestion) {
 	if (execution->existing_flakes_ % Flake(*suggestion) ) {
-	  return make_pair(*suggestion, 
-			   0.5 / execution->existing_flakes_.size());
+	  return Choice(*suggestion,
+			0.5 / execution->existing_flakes_.size(), 0);
 	} else {
-	  return make_pair(*suggestion, 0.5);
+	  return Choice(*suggestion, 0.5, 0);
 	}
       }
       if (execution->existing_flakes_.size() == 0 || RandomFraction() < 0.5) {
@@ -362,15 +373,15 @@ pair<Object, double> ChooseElement::Choose(Execution *execution,
 	  ret = Flake::Make("FLAKE_"+itoa(g_new_flake_counter++));
 	} while (execution->existing_flakes_ % ret);
 	execution->existing_flakes_.insert(ret);
-	return make_pair(ret, 0.5);
+	return Choice(ret, 0.5, 0);
       } else {
 	// make an existing flake
 	ret = *execution->existing_flakes_.nth
 	  (RandomUInt64() % execution->existing_flakes_.size());
-	return make_pair(ret, 0.5 / execution->existing_flakes_.size());
+	return Choice(ret, 0.5 / execution->existing_flakes_.size(), 0);
       }
     }
-    case BOOL: {
+    case ChooseElement::BOOL: {
       if (d.size() <= 1) goto one_element;
       if (d[1].GetType() != Object::REAL) goto one_element;
       double prior = Real(d[1]).Data();
@@ -381,23 +392,37 @@ pair<Object, double> ChooseElement::Choose(Execution *execution,
 	if (suggestion->GetType() == Object::BOOLEAN) {
 	  ret = Boolean(*suggestion).Data();
 	} else {
-	  return make_pair(*suggestion, 0);
+	  return Choice(*suggestion, 0, 0);
 	}
       }
-      return make_pair(Boolean::Make(ret), ret?prior:(1.0-prior));
+      return Choice(Boolean::Make(ret), ret?prior:(1.0-prior), 0);
     }
-    case QUADRATIC_UINT: {
+    case ChooseElement::QUADRATIC_UINT: {
       int ret = RandomUintQuadratic();
       if (suggestion) {
 	if (suggestion->GetType() != Object::INTEGER)
-	  return make_pair(*suggestion, 0);
+	  return Choice(*suggestion, 0, 0);
 	int n = Integer(*suggestion).Data();
-	if (n<0) return make_pair(*suggestion, 0);
+	if (n<0) return Choice(*suggestion, 0, 0);
 	ret = n;
       }
-      return make_pair(Integer::Make(ret), uintQuadraticProb(ret));
+      return Choice(Integer::Make(ret), uintQuadraticProb(ret), 0);
     }
-    case BLACKBOARD: {
+    case ChooseElement::NORMAL: {
+      if (d[1].GetType() != Object::REAL) goto one_element;
+      if (d[2].GetType() != Object::REAL) goto one_element;
+      double mean = Real(d[1]).Data();
+      double std = Real(d[2]).Data();
+      if (!finite(std) || !finite(mean) || (std <= 0)) goto one_element;
+      double ret = RandomNormal() * std + mean;
+      if (suggestion) {
+	if (suggestion->GetType() != Object::REAL)
+	  return Choice(*suggestion, 0.0, 1);
+	ret = Real(*suggestion).Data();
+      }
+      return Choice(Real::Make(ret), NormalDensity(ret, mean, std), 1);
+    }
+    case ChooseElement::BLACKBOARD: {
       if (d.size() <= 1) goto one_element;
       Object identifier = d[1];
       const Distribution & dist = 
@@ -406,12 +431,12 @@ pair<Object, double> ChooseElement::Choose(Execution *execution,
       if (total_weight == 0) goto one_element;
       if (suggestion) {
 	Distribution::const_iterator look = dist.find(*suggestion);
-	if (look == dist.end()) return make_pair(*suggestion, 0);      
-	return make_pair(*suggestion, double(look->second) / total_weight);
+	if (look == dist.end()) return Choice(*suggestion, 0, 0);      
+	return Choice(*suggestion, double(look->second) / total_weight, 0);
       }
       int64 r = RandomUInt64() % (uint64)total_weight;
       Distribution::const_iterator look = dist.find_by_weight(r);
-      return make_pair(look->first, double(look->second) / total_weight);
+      return Choice(look->first, double(look->second) / total_weight, 0);
     }
     default: break;
     }
@@ -419,22 +444,18 @@ pair<Object, double> ChooseElement::Choose(Execution *execution,
   // If we get here then it's a one-element distribution, which means
   // the distribution that returns the object which is the value of 
   // the variable "distribution" with probability 1.0
-  one_element:
-    if (suggestion) {
-    if (*suggestion != distribution) return make_pair(*suggestion, 0);
+ one_element:
+  if (suggestion) {
+    if (*suggestion != distribution) return Choice(*suggestion, 0, 0);
   }
-  return make_pair(distribution, 1.0);
+  return Choice(distribution, 1.0, 0);
 }
-
-
 
 vector<Keyword> ChooseElement::distribution_type_keywords_;
 
 Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
   Object distribution = results[DISTRIBUTION];
   Object name = object_;
-
-  pair<Object, double> guide_choice = make_pair(Object(NULL), 1.0);
 
   Execution *guide = thread.execution_->guide_;
   Object guide_distribution = NULL;
@@ -458,24 +479,22 @@ Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
       if (row->NumTuples() == 1) {
 	guide_distribution = row->GetTuple(0)[2];
 
-	pair<Object, double> guide_choice =
-	  Choose(guide, guide_distribution, NULL);
-	
-	pair<Object, double> main_choice = 
-	  Choose(thread.execution_, 
-		 distribution, &guide_choice.first);
+	Choice guide_choice = ChooseHelper(guide, guide_distribution, NULL);
+	Choice main_choice = 
+	  ChooseHelper(thread.execution_, 
+		 distribution, &guide_choice.value_);
 	
 	// If the guide choice is impossible, we just fall through and 
 	// select unguided.
-	if (main_choice.second != 0) {
+	if ( (main_choice.prob_ != 0.0) && 
+	     (main_choice.dimension_ == guide_choice.dimension_) ) {
 	  thread.execution_->total_bias_ 
-	    += log(main_choice.second) - log(guide_choice.second);
-	  return main_choice.first;
+	    += log(main_choice.prob_) - log(guide_choice.prob_);
+	  return main_choice.value_;
 	}
       }
     }
   }
-  pair<Object, double> choice 
-    = Choose(thread.execution_, distribution, NULL);
-  return choice.first;
+  Choice choice = ChooseHelper(thread.execution_, distribution, NULL);
+  return choice.value_;
 }
