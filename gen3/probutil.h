@@ -42,6 +42,12 @@ inline double uintQuadraticProb(uint n) { return 1.0/( (n+1.0) * (n+2.0));}
 // Draws from the above distribution.
 uint32 RandomUintQuadratic(int max_return_value = -1);
 
+// Normally distributed random variable N(0,1)
+double RandomNormal();
+double NormalDensity(double x);
+double NormalDensity(double x, double mean, double std);
+double LogOfNormalDensity(double x);
+
 // Are we really using this?
 // Declares A and sets it to a random element of B.
 // defines an interator A pointing to a ranodm element of B.  Linear time.
