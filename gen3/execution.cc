@@ -46,8 +46,9 @@ void OnSubscription::Update(Blackboard::Row *row, int tuple_num) {
 		   &thread_.stack_,
 		   thread_.element_->parent_->incoming_stack_depth_);
   VLOG(2) << "Update Thread after binding " << thread_.ToString() << endl;
-  thread_.execution_->Enqueue(thread_, BitSeq::Min());
+  thread_.execution_->Enqueue(thread_, MININT64);
 }
+
 void Execution::ParseAndExecute(const Tuple & program_tuple, 
 				bool pretty, 
 				bool execute) {
@@ -76,7 +77,7 @@ void Execution::AddCodeTreeToRun(Element *top_element) {
   Thread t;
   t.element_ = top_element;
   t.execution_ = this;
-  Enqueue(t, BitSeq::Min());
+  Enqueue(t, MININT64);
   top_elements_.push_back(top_element);
 }
 

@@ -26,13 +26,12 @@ on (MakePostTuple _tuple_name _length) {
 on (PostRandomTuples _n _instance_name)
   repeat _instance_num _n 
     let _random_tuple_name (PostRandomTuples _instance_name _instance_num) {
-    post (GetRandomTuple _random_tuple_name)
-    on (GetRandomTupleResult _random_tuple_name _tuple)
-      post _tuple
-  }
+      post (GetRandomTuple _random_tuple_name)
+      on (GetRandomTupleResult _random_tuple_name _tuple)
+        post _tuple
+    }	
 
 <Generate a random tuple>
-
 on (GetRandomTuple _name)
   let _tuple_size choose (geometric 3.0 GetRandomTupleSize _name) {
     post (MakeTuple _name _tuple_size)

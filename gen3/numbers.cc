@@ -16,7 +16,6 @@
 //
 // Author: Noam Shazeer
 
-
 #include "numbers.h"
 #include "objects.h"
 #include "tuple.h"
@@ -25,7 +24,8 @@ string Time::ToString() const {
   if (never_) return "never";
   Map t;
   for (uint i=0; i<coordinates_.size(); i++) {
-    Add(&t, OBitSeq::Make(coordinates_[i].first),
+    Add(&t, 
+	Integer::Make(coordinates_[i].first),
 	Integer::Make(coordinates_[i].second));
   }
   string ret = "time";
@@ -34,32 +34,35 @@ string Time::ToString() const {
   return ret;
 }
 
-void Time::Increment(const BitSeq & coordinate, int  count){
+void Time::Increment(int64 coordinate, int count) {
   if (never_) return;
   if (count==0) return;
-  vector<pair<BitSeq, int> >::iterator look = coordinates_.begin();
+  vector<pair<int64, int> >::iterator look = coordinates_.begin();
   while (look != coordinates_.end() && coordinate < look->first) look++;
-  bool coordinate_exists = look != coordinates_.end()
-    && look->first == coordinate;
+  bool coordinate_exists = 
+    (look != coordinates_.end()) && (look->first == coordinate);
   if (coordinate_exists) {
     look->second += count;
     look++;
   }
   coordinates_.erase(look, coordinates_.end());
-  if (!coordinate_exists) coordinates_.push_back(make_pair(coordinate, count));
+  if (!coordinate_exists) 
+    coordinates_.push_back(make_pair(coordinate, count));
 }
 
-bool OPERATORLESS(const Time & a, const Time & b){
+bool OPERATORLESS(const Time & a, const Time & b) {
   if (a.never_) return false;
   if (b.never_) return true;
   uint minsize = a.coordinates_.size() <? b.coordinates_.size();
   for (uint i=0; i<minsize; i++) {
     if (a.coordinates_[i].first != b.coordinates_[i].first) {
-      if (a.coordinates_[i].first < b.coordinates_[i].first) return true;
+      if (a.coordinates_[i].first < b.coordinates_[i].first) 
+	return true;
       else return false;
     }
     if (a.coordinates_[i].second != b.coordinates_[i].second) {
-      if (a.coordinates_[i].second < b.coordinates_[i].second) return true;
+      if (a.coordinates_[i].second < b.coordinates_[i].second) 
+	return true;
       else return false;
     }
   }
