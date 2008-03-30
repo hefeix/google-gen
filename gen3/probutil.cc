@@ -20,15 +20,6 @@
 
 const double LN2 = log(2.0);
 
-uint32 RandomUintQuadratic(int max_return_value) {
-  while (1) {
-    uint ret_val = uint (1.0 / RandomFraction()) - 1;
-    if ((max_return_value != -1)
-	&& (ret_val > (uint) max_return_value)) continue;
-    return ret_val;
-  }
-}
-
 uint32 RandomUInt32(){
   CHECK(RAND_MAX == 0x7FFFFFFF);
   return (rand() << 1) + rand()%2;
@@ -64,17 +55,64 @@ double RandomNormal() {
 }
 double ONEOVERROOT2PI = 1 / sqrt(2 * M_PI);
 double LOGONEOVERROOT2PI = log(ONEOVERROOT2PI);
-double NormalDensity(double x) {
-  // 1 / sqrt(2PI) e^-(x^2/2)
-  return ONEOVERROOT2PI * exp(-0.5*x*x);
-}
-double NormalDensity(double x, double mean, double std) {
-  return NormalDensity((x-mean)/std) / std;
-}
 
-double LogOfNormalDensity(double x) {
+double StdNormalLnDensity(double x) {
   return LOGONEOVERROOT2PI - (0.5 * x * x);
 }
+
+double NormalLnDensity(double mean, double std, double x) {
+  CHECK(std > 0);
+  return StdNormalLnDensity((x-mean) / std) - log(std);
+}
+
+double RandomExponential(double lambda) {
+  CHECK(lambda > 0.0);
+  double u = RandomFraction();
+  return -(log(u)) / lambda;
+}
+
+double ExponentialLnDensity(double lambda, double x) {
+  // lambda e^-lambda*x
+  CHECK(lambda > 0.0);
+  if (x < 0) return -INF;
+  return log(lambda) - lambda * x;
+}
+
+int64 RandomGeometric(double p) {
+  return int64(RandomExponential(p));
+}
+
+double GeometricLnProb(double p, int64 n) {
+  // (1-p)^n * p
+  if (n < 0) return -INF;
+  return log(p) + n * log(1-p);
+}
+
+double RandomUniform(double minimum, double maximum) {
+  CHECK(maximum > minimum);
+  return minimum + (RandomFraction() * (maximum - minimum));
+}
+
+double UniformLnDensity(double minimum, double maximum, double x) {
+  CHECK (maximum > minimum);
+  if ((x >= minimum) && (x < maximum)) {
+    return - log(maximum-minimum);
+  }
+  return -INF;
+}
+
+int64 RandomUniformDiscrete(int64 minimum, int64 maximum) {
+  CHECK(maximum > minimum);
+  return RandomUInt64() % uint64(maximum - minimum) + minimum;
+}
+
+double UniformDiscreteLnProb(int64 minimum, int64 maximum, int64 x) {
+  if ( (x >= minimum) && (x < maximum) )
+    return -log(uint64(maximum - minimum));
+  return -INF;
+}
+
+
 
 
 

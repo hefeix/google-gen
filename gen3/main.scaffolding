@@ -34,7 +34,7 @@ on (PostRandomTuples _n _instance_name)
 <Generate a random tuple>
 
 on (GetRandomTuple _name)
-  let _tuple_size choose (quadratic_uint GetRandomTupleSize _name) {
+  let _tuple_size choose (geometric 3.0 GetRandomTupleSize _name) {
     post (MakeTuple _name _tuple_size)
     repeat _pos _tuple_size {
       post (GetRandomObject (_name _pos) )
@@ -53,7 +53,7 @@ on (GetRandomTuple _name)
 post (ObjectType Flake)
 post (ObjectType Integer)
 post (ObjectType Boolean)
-//post (ObjectType OTuple)
+post (ObjectType OTuple)
 // post (ObjectType Keyword)
 // post (ObjectType Variable) we can't make variables yet
 // post (ObjectType Real) don't know how to make those yet either
@@ -78,7 +78,7 @@ on (GetRandomObjectOfType _name Boolean)
 
 on (GetRandomObjectOfType _name Integer)
   post (GetRandomObjectOfTypeResult _name 
-    choose (quadratic_uint GetRandomObjectOfType _name))
+    choose (geometric 10.0 GetRandomObjectOfType _name))
 
 on (GetRandomObjectOfType _name OTuple) {
   post (GetRandomTuple _name)

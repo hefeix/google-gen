@@ -559,6 +559,8 @@ struct DelayElement : public Element {
   Object Execute(Thread & thread);
 };
 
+struct Choice;
+
 struct ChooseElement : public Element { 
 #define ChooseElementChildNameList { ITEM(DISTRIBUTION) };
   CLASS_ENUM_DECLARE(ChooseElement, ChildName);
@@ -566,8 +568,11 @@ struct ChooseElement : public Element {
 #define ChooseElementDistributionTypeList { \
   ITEM(ONE_ELEMENT),						\
     ITEM(BOOL),							\
-    ITEM(QUADRATIC_UINT),	 				\
     ITEM(NORMAL),						\
+    ITEM(EXPONENTIAL),						\
+    ITEM(GEOMETRIC),						\
+    ITEM(UNIFORM),						\
+    ITEM(UNIFORM_DISCRETE),					\
     ITEM(BLACKBOARD),						\
     ITEM(NEW_FLAKE),						\
     ITEM(ANY_FLAKE)};
@@ -588,7 +593,12 @@ struct ChooseElement : public Element {
     return (DistributionType)(-1);
   }
   Function GetFunction() const { return CHOOSE;}
-  
+
+  static void ChooseElement::ChooseHelper(Choice *choice,
+					  Execution *execution, 
+					  Object distribution, 
+					  const Object *suggestion);
+
   Object ComputeReturnValue(Thread & thread, Tuple results);
   int choice_counter_;
 };
