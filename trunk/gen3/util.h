@@ -398,4 +398,6 @@ template <class A, class B, class C>
   return false;
 }
 
+#define INF (numeric_limits<double>::infinity())
+
 #endif

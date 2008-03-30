@@ -310,145 +310,228 @@ struct Choice {
   // What is chosen
   Object value_;
   // What was its probability or density of value_ being chosen
-  double prob_;
+  double ln_prob_;
   // number of dimensions of the density function
   int dimension_;
-  Choice(Object v, double p, int d) :
-    value_(v), prob_(p), dimension_(d) {}
+  // the distribution keyword was recognized, but distribution is malformed
+  bool bad_distribution_;
+  // the suggestion is impossible according to the distribution.
+  bool impossible_suggestion_;
+
+  void clear() {
+  value_ = NULL;
+  ln_prob_ = 0.0;
+  dimension_ = 0;
+  bad_distribution_ = false;
+  impossible_suggestion_ = false;  }
+
+  string ToString() {
+    ostringstream ostr;
+    ostr <<  "choice [value_=" <<  value_ 
+	 <<" ln_prob=" << ln_prob_
+	 << " dimension_=" << dimension_
+	 << " bad_distribution_=" << (bad_distribution_?'T':'F')
+	 << " impossible_suggestion_=" << (impossible_suggestion_?'T':'F')
+	 << endl;
+    return ostr.str();
+  }
 };
 
-Choice ChooseHelper(Execution *execution, 
-		    Object distribution, 
-		    const Object *suggestion) {
-  Object ret;
-  if (suggestion) ret = *suggestion;
+void ChooseElement::ChooseHelper(Choice *choice,
+				 Execution *execution, 
+				 Object distribution, 
+				 const Object *suggestion) {
+  choice->clear();
+  if (suggestion) choice->value_ = *suggestion;
   
-  if (distribution.GetType() != Object::OTUPLE) goto one_element;
-  {
-    const Tuple & d = OTuple(distribution).Data();
-    // todo: cerr on error.
-    if ( (d.size() <= 0) ||
-	 (d[0].GetType() != Object::KEYWORD) ) goto one_element;
-    
-    ChooseElement::DistributionType distribution_type 
-      = ChooseElement::KeywordToDistributionType(d[0]);
-    
-    switch(distribution_type) {
-    case ChooseElement::ONE_ELEMENT: {
-      if (d.size() <= 1) goto one_element;
-      distribution = d[1];
-      goto one_element;
-    }
-    case ChooseElement::NEW_FLAKE: {
-      Flake ret;
-      if (suggestion) {
-	if (suggestion->GetType() != Object::FLAKE || 
-	    (execution->existing_flakes_ % Flake(*suggestion)) )
-	  return Choice(*suggestion, 0, 0);
-	ret = *suggestion;
-      } else {
-	do {
-	  ret = Flake::Make("FLAKE_"+itoa(g_new_flake_counter++));
-	} while (execution->existing_flakes_ % ret);
-      }
-      execution->existing_flakes_.insert(ret);
-      // TODO: may want to post something to the guide (or main) blackboard. 
-      /*execution->AddPost
-	(MakeTuple(EXISTING_FLAKE, ret, Real::Make(1.0), NULL));*/
-      return Choice(ret, 1.0, 0);
-    }
-    case ChooseElement::ANY_FLAKE : {
-      Flake ret;
-      if (suggestion) {
-	if (execution->existing_flakes_ % Flake(*suggestion) ) {
-	  return Choice(*suggestion,
-			0.5 / execution->existing_flakes_.size(), 0);
-	} else {
-	  return Choice(*suggestion, 0.5, 0);
-	}
-      }
-      if (execution->existing_flakes_.size() == 0 || RandomFraction() < 0.5) {
-	// make a new flake
-	do {
-	  ret = Flake::Make("FLAKE_"+itoa(g_new_flake_counter++));
-	} while (execution->existing_flakes_ % ret);
-	execution->existing_flakes_.insert(ret);
-	return Choice(ret, 0.5, 0);
-      } else {
-	// make an existing flake
-	ret = *execution->existing_flakes_.nth
-	  (RandomUInt64() % execution->existing_flakes_.size());
-	return Choice(ret, 0.5 / execution->existing_flakes_.size(), 0);
-      }
-    }
-    case ChooseElement::BOOL: {
-      if (d.size() <= 1) goto one_element;
-      if (d[1].GetType() != Object::REAL) goto one_element;
-      double prior = Real(d[1]).Data();
-      if (!(prior >= 0 && prior <= 1)) goto one_element;
-      
-      bool ret = (RandomFraction() < prior);
-      if (suggestion) {
-	if (suggestion->GetType() == Object::BOOLEAN) {
-	  ret = Boolean(*suggestion).Data();
-	} else {
-	  return Choice(*suggestion, 0, 0);
-	}
-      }
-      return Choice(Boolean::Make(ret), ret?prior:(1.0-prior), 0);
-    }
-    case ChooseElement::QUADRATIC_UINT: {
-      int ret = RandomUintQuadratic();
-      if (suggestion) {
-	if (suggestion->GetType() != Object::INTEGER)
-	  return Choice(*suggestion, 0, 0);
-	int n = Integer(*suggestion).Data();
-	if (n<0) return Choice(*suggestion, 0, 0);
-	ret = n;
-      }
-      return Choice(Integer::Make(ret), uintQuadraticProb(ret), 0);
-    }
-    case ChooseElement::NORMAL: {
-      if (d[1].GetType() != Object::REAL) goto one_element;
-      if (d[2].GetType() != Object::REAL) goto one_element;
-      double mean = Real(d[1]).Data();
-      double std = Real(d[2]).Data();
-      if (!finite(std) || !finite(mean) || (std <= 0)) goto one_element;
-      double ret = RandomNormal() * std + mean;
-      if (suggestion) {
-	if (suggestion->GetType() != Object::REAL)
-	  return Choice(*suggestion, 0.0, 1);
-	ret = Real(*suggestion).Data();
-      }
-      return Choice(Real::Make(ret), NormalDensity(ret, mean, std), 1);
-    }
-    case ChooseElement::BLACKBOARD: {
-      if (d.size() <= 1) goto one_element;
-      Object identifier = d[1];
-      const Distribution & dist = 
-	*(execution->blackboard_->GetCreateDistribution(identifier));
-      int64 total_weight = dist.TotalWeight();
-      if (total_weight == 0) goto one_element;
-      if (suggestion) {
-	Distribution::const_iterator look = dist.find(*suggestion);
-	if (look == dist.end()) return Choice(*suggestion, 0, 0);      
-	return Choice(*suggestion, double(look->second) / total_weight, 0);
-      }
-      int64 r = RandomUInt64() % (uint64)total_weight;
-      Distribution::const_iterator look = dist.find_by_weight(r);
-      return Choice(look->first, double(look->second) / total_weight, 0);
-    }
-    default: break;
-    }
+#define BAD_DISTRIBUTION {choice->bad_distribution_ = true; cerr << "bad distribution " << d << " " << __LINE__ << endl; return;}
+#define IMPOSSIBLE_SUGGESTION {choice->impossible_suggestion_ = true; /*cerr << "impossible_suggestion_ " << __LINE__ << endl; */return;}
+
+
+  if (distribution.GetType() != Object::OTUPLE)
+    distribution = OTuple::Make
+      (MakeTuple(DistributionTypeToKeyword(ONE_ELEMENT), distribution));
+  
+  Tuple d = OTuple(distribution).Data();
+  
+  if ( (d.size() <= 0) || (d[0].GetType() != Object::KEYWORD) ) 
+    d = MakeTuple(DistributionTypeToKeyword(ONE_ELEMENT), distribution);
+  
+  DistributionType distribution_type = KeywordToDistributionType(d[0]);
+  if (distribution_type == -1) {
+    d = (MakeTuple(DistributionTypeToKeyword(ONE_ELEMENT), distribution));
+    distribution_type = ONE_ELEMENT;
   }
-  // If we get here then it's a one-element distribution, which means
-  // the distribution that returns the object which is the value of 
-  // the variable "distribution" with probability 1.0
- one_element:
-  if (suggestion) {
-    if (*suggestion != distribution) return Choice(*suggestion, 0, 0);
+
+  
+  switch(distribution_type) {
+  case ONE_ELEMENT: 
+    if (d.size() <= 1) BAD_DISTRIBUTION;
+    choice->value_ = d[1];
+    if (suggestion && (*suggestion != choice->value_)) IMPOSSIBLE_SUGGESTION;
+    return;
+  case NEW_FLAKE:{
+    if (suggestion) {
+      if (suggestion->GetType() != Object::FLAKE || 
+	  (execution->existing_flakes_ % Flake(*suggestion)) )
+	IMPOSSIBLE_SUGGESTION;
+      return;
+    }
+    Flake ret;
+    do {
+      ret = Flake::Make("FLAKE_"+itoa(g_new_flake_counter++));
+    } while (execution->existing_flakes_ % ret);
+    execution->existing_flakes_.insert(ret);
+    choice->value_ = ret;
+    // TODO: may want to post something to the guide (or main) blackboard. 
+    /*execution->AddPost
+      (MakeTuple(EXISTING_FLAKE, ret, Real::Make(1.0), NULL));*/
+    return;
   }
-  return Choice(distribution, 1.0, 0);
+  case ANY_FLAKE : {
+    if (suggestion) {
+      if (suggestion->GetType() != Object::FLAKE) IMPOSSIBLE_SUGGESTION;
+      if (execution->existing_flakes_ % Flake(*suggestion) ) {
+	choice->ln_prob_ = log(0.5 / execution->existing_flakes_.size());
+	return;
+      }
+      choice->ln_prob_ = log(0.5);
+      return;
+    }
+    if (execution->existing_flakes_.size() == 0 || RandomFraction() < 0.5) {
+      // make a new flake
+      Flake ret;
+      do {
+	ret = Flake::Make("FLAKE_"+itoa(g_new_flake_counter++));
+      } while (execution->existing_flakes_ % ret);
+      execution->existing_flakes_.insert(choice->value_);
+      choice->value_ = ret;
+      choice->ln_prob_ = log(0.5);
+      return;
+    }
+    // make an existing flake
+    choice->value_ = *execution->existing_flakes_.nth
+      (RandomUInt64() % execution->existing_flakes_.size());
+    choice->ln_prob_ = log(0.5 / execution->existing_flakes_.size());
+    return;
+  }
+  case BOOL:
+    if (d.size() <= 1) BAD_DISTRIBUTION;
+    if (d[1].GetType() != Object::REAL) BAD_DISTRIBUTION;
+    double prior = Real(d[1]).Data();
+    if (!(prior >= 0 && prior <= 1)) BAD_DISTRIBUTION;      
+    bool bool_val = (RandomFraction() < prior);
+    if (suggestion) {
+      if (suggestion->GetType() == Object::BOOLEAN)
+	bool_val = Boolean(*suggestion).Data();
+      else IMPOSSIBLE_SUGGESTION;
+    }
+    choice->value_ = Boolean::Make(bool_val);
+    choice->ln_prob_ = log(bool_val?prior:(1.0-prior));
+    return;
+  case NORMAL: {
+    if (d[1].GetType() != Object::REAL) BAD_DISTRIBUTION;
+    if (d[2].GetType() != Object::REAL) BAD_DISTRIBUTION;
+    double mean = Real(d[1]).Data();
+    double std = Real(d[2]).Data();
+    if (!finite(std) || !finite(mean) || (std <= 0)) BAD_DISTRIBUTION;
+    double ret = RandomNormal() * std + mean;
+    if (suggestion) {
+      if (suggestion->GetType() != Object::REAL) IMPOSSIBLE_SUGGESTION;
+      ret = Real(*suggestion).Data();
+      if (!finite(ret)) IMPOSSIBLE_SUGGESTION;
+    }
+    choice->value_ = Real::Make(ret);
+    choice->ln_prob_ = NormalLnDensity(mean, std, ret);
+    choice->dimension_ = 1;
+    return;
+  }
+  case UNIFORM: {
+    if (d[1].GetType() != Object::REAL) BAD_DISTRIBUTION;
+    if (d[2].GetType() != Object::REAL) BAD_DISTRIBUTION;
+    double minimum = Real(d[1]).Data();
+    double maximum = Real(d[2]).Data();
+    if (!(finite(minimum) && finite(maximum) && (minimum < maximum)))
+      BAD_DISTRIBUTION;
+    double ret = RandomUniform(minimum, maximum);
+    if (suggestion) {
+      if (suggestion->GetType() != Object::REAL) IMPOSSIBLE_SUGGESTION;
+      ret = Real(*suggestion).Data();
+      if (!(minimum <= ret && ret < maximum) ) IMPOSSIBLE_SUGGESTION;
+    }
+    choice->value_ = Real::Make(ret);
+    choice->ln_prob_ = UniformLnDensity(minimum, maximum, ret);
+    choice->dimension_ = 1;
+    return;
+  }
+  case UNIFORM_DISCRETE: {
+    if (d[1].GetType() != Object::INTEGER) BAD_DISTRIBUTION;
+    if (d[2].GetType() != Object::INTEGER) BAD_DISTRIBUTION;
+    int64 minimum = Integer(d[1]).Data();
+    int64 maximum = Integer(d[2]).Data();
+    if (!(minimum < maximum)) BAD_DISTRIBUTION;
+    int64 ret = RandomUniformDiscrete(minimum, maximum);
+    if (suggestion) {
+      if (suggestion->GetType() != Object::INTEGER) IMPOSSIBLE_SUGGESTION;
+      ret = Integer(*suggestion).Data();
+      if (!(minimum <= ret && ret < maximum) ) IMPOSSIBLE_SUGGESTION;
+    }
+    choice->value_ = Integer::Make(ret);
+    choice->ln_prob_ = UniformDiscreteLnProb(minimum, maximum, ret);
+    return;
+  }
+  case EXPONENTIAL: {
+    if (d[1].GetType() != Object::REAL) BAD_DISTRIBUTION;
+    double lambda = 1.0/Real(d[1]).Data();
+    if (!(lambda > 0)) BAD_DISTRIBUTION;
+    double ret = RandomExponential(lambda);
+    if (suggestion) {
+      if (suggestion->GetType() != Object::REAL) IMPOSSIBLE_SUGGESTION;
+      ret = Real(*suggestion).Data();
+      if (!(ret >= 0)) IMPOSSIBLE_SUGGESTION;
+    }
+    choice->value_ = Real::Make(ret);
+    choice->ln_prob_ = ExponentialLnDensity(lambda, ret);
+    choice->dimension_ = 1;
+    return;
+  }
+  case GEOMETRIC: {
+    if (d[1].GetType() != Object::REAL) BAD_DISTRIBUTION;
+    double lambda = 1.0/Real(d[1]).Data();
+    if (!(lambda > 0)) BAD_DISTRIBUTION;
+    int64 ret = RandomGeometric(lambda);
+    if (suggestion) {
+      if (suggestion->GetType() != Object::INTEGER) IMPOSSIBLE_SUGGESTION;
+      ret = Integer(*suggestion).Data();
+      if (!(ret >= 0)) IMPOSSIBLE_SUGGESTION;
+    }
+    choice->value_ = Integer::Make(ret);
+    choice->ln_prob_ = GeometricLnProb(lambda, ret);
+    return;
+  }
+    
+  case BLACKBOARD: {
+    if (d.size() <= 1) BAD_DISTRIBUTION;
+    Object identifier = d[1];
+    const Distribution & dist = 
+      *(execution->blackboard_->GetCreateDistribution(identifier));
+    int64 total_weight = dist.TotalWeight();
+    if (total_weight == 0) BAD_DISTRIBUTION;
+    if (suggestion) {
+      Distribution::const_iterator look = dist.find(*suggestion);
+      if (look == dist.end()) IMPOSSIBLE_SUGGESTION;
+      choice->ln_prob_ = log(double(look->second) / total_weight);
+      return;
+    }
+    int64 r = RandomUInt64() % (uint64)total_weight;
+    Distribution::const_iterator look = dist.find_by_weight(r);
+    choice->value_ = look->first;
+    choice->ln_prob_ = log(double(look->second) / total_weight);
+    return;
+  }
+  default: CHECK(false);
+  }
+  CHECK(false);
 }
 
 vector<Keyword> ChooseElement::distribution_type_keywords_;
@@ -459,42 +542,49 @@ Object ChooseElement::ComputeReturnValue(Thread & thread, Tuple results) {
 
   Execution *guide = thread.execution_->guide_;
   Object guide_distribution = NULL;
-  if (guide) {
+
+  // We break out if the guide fails.
+  for (int retarded = 0; retarded<1; retarded++) {
+    if (!guide) break;
     // post the choice on the guide blackboard
     Integer instance = Integer::Make(thread.execution_->choice_counter_++);
+    if (distribution.GetType() != Object::OTUPLE) break;
+    const Tuple & distribution_tuple = OTuple(distribution).Data();
+    // post [ NEED_CHOICE {unrolled distribution tuple} <instance> ]
+    Tuple request;
+    request.push_back(NEED_CHOICE);
+    request.insert(request.end(), distribution_tuple.begin(), 
+		   distribution_tuple.end());
+    request.push_back(instance);
+    guide->AddPost(request);
+    guide->ExecuteForever();
     
-    if (distribution.GetType() == Object::OTUPLE) {
-      const Tuple & distribution_tuple = OTuple(distribution).Data();
-      // post [ NEED_CHOICE {unrolled distribution tuple} <instance> ]
-      Tuple request;
-      request.push_back(NEED_CHOICE);
-      request.insert(request.end(), distribution_tuple.begin(), 
-		     distribution_tuple.end());
-      request.push_back(instance);
-      guide->AddPost(request);
-      guide->ExecuteForever();
-
-      Tuple response = MakeTuple(CHOICE, instance, WILDCARD);
-      Blackboard::Row *row = guide->blackboard_->GetCreateRow(response);
-      if (row->NumTuples() == 1) {
-	guide_distribution = row->GetTuple(0)[2];
-
-	Choice guide_choice = ChooseHelper(guide, guide_distribution, NULL);
-	Choice main_choice = 
-	  ChooseHelper(thread.execution_, 
+    Tuple response = MakeTuple(CHOICE, instance, WILDCARD);
+    Blackboard::Row *row = guide->blackboard_->GetCreateRow(response);
+    if (row->NumTuples() != 1) break;
+    guide_distribution = row->GetTuple(0)[2];
+    
+    Choice guide_choice;
+    ChooseHelper(&guide_choice, guide, guide_distribution, NULL);
+    if (guide_choice.bad_distribution_) break;
+    Choice main_choice;
+    ChooseHelper(&main_choice, thread.execution_, 
 		 distribution, &guide_choice.value_);
-	
-	// If the guide choice is impossible, we just fall through and 
-	// select unguided.
-	if ( (main_choice.prob_ != 0.0) && 
-	     (main_choice.dimension_ == guide_choice.dimension_) ) {
-	  thread.execution_->total_bias_ 
-	    += log(main_choice.prob_) - log(guide_choice.prob_);
-	  return main_choice.value_;
-	}
-      }
-    }
+    
+    // If the guide choice is impossible, we just fall through and 
+    // select unguided.
+    if (main_choice.impossible_suggestion_ || 
+	!finite(main_choice.ln_prob_) || 
+      (main_choice.dimension_ != guide_choice.dimension_)) break;
+    thread.execution_->total_bias_ 
+    += main_choice.ln_prob_ - guide_choice.ln_prob_;
+    return main_choice.value_;
   }
-  Choice choice = ChooseHelper(thread.execution_, distribution, NULL);
+  Choice choice;
+  ChooseHelper(&choice, thread.execution_, distribution, NULL);
+  if (choice.bad_distribution_) return distribution;
+  //cerr << "Chose with no guide distribution=" << distribution 
+  //     << " choice=" << choice.ToString()
+  //    << endl;
   return choice.value_;
 }
