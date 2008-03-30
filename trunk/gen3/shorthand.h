@@ -60,6 +60,8 @@ typedef signed char int8;
 
 #define MAXUINT64 0xffffffffffffffffULL
 #define MAXUINT32 0xffffffffUL
+#define MININT64  0x8000000000000000LL
+#define MAXINT64  0x7fffffffffffffffLL
 
 /*
 The interface to sets and maps sucks rocks. Let's fix it.

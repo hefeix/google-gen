@@ -362,11 +362,11 @@ istream & operator >>(istream & input, Object & o){
   if (s=="time") {
     OMap t;
     input >> t;
-    vector<pair<BitSeq, int> > coordinates;
+    vector<pair<int64, int> > coordinates;
     forall(run, t.Data()) {
-      OBitSeq seq = run->first;
+	Integer dim = run->first;
 	Integer n = run->second;
-	coordinates.push_back(make_pair(seq.Data(), n.Data()));	
+	coordinates.push_back(make_pair(dim.Data(), n.Data()));	
 	sort(coordinates.begin(), coordinates.end());
     }
     o = OTime::Make(Time(coordinates));

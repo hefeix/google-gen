@@ -225,11 +225,11 @@ Object DelayElement::Execute(Thread & thread) {
   // Get the tuple child
   Element * delay_child = GetChild(DIMENSION);
   Object delay = delay_child->Execute(thread);
-  if (delay.GetType() != Object::OBITSEQ) {
-    delay = OBitSeq::Default();
+  if (delay.GetType() != Object::INTEGER) {
+    delay = Integer::Make(MININT64);
   }
   thread.element_ = GetChild(CHILD);  
-  thread.execution_->Enqueue(thread, OBitSeq(delay).Data());
+  thread.execution_->Enqueue(thread, Integer(delay).Data());
   return NULL;
 }
 

@@ -108,9 +108,9 @@ struct Execution : public Base {
   // The thread points at the immediately executable code
   static Tuple MatchAndRun(Thread & thread, const Tuple & variable_tuple);
 
-  void Enqueue(const Thread & t, BitSeq time_delay) {
+  void Enqueue(const Thread & t, int64 time_delay_dimension) {
     // VLOG(2) << "Enqueue Thread " << t.ToString() << endl;
-    run_queue_[time_delay].push_back(t);
+    run_queue_[time_delay_dimension].push_back(t);
   }
   
   void AddPost(const Tuple & t) { post_queue_.push_back(t);}
@@ -125,7 +125,7 @@ struct Execution : public Base {
   set<OnSubscription *> subscriptions_;
 
   // This contains threads ordered by when they can be run
-  map<BitSeq, vector<Thread> > run_queue_;
+  map<int64, vector<Thread> > run_queue_;
 
   // This contains the list of tuples to be posted at the end
   // of this epoch
