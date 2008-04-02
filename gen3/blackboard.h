@@ -121,6 +121,7 @@ class Blackboard : public Base{
   };
 
   Row * GetCreateAllWildcardRow(int size) const;
+
   // may split rows internally to arrive at the row, but returns null if
   // the row does not need to exist in the blackboard, unless 
   // create_empty is set to true, in which case it forces the row to exist.
@@ -158,33 +159,34 @@ class Blackboard : public Base{
   Distribution * GetCreateDistribution(Object identifier);
 
   // Appends bindings to the results vector
-  /*void GetVariableMatches(const Tuple & variable_tuple, 
-			  Map binding_so_far,
+  void GetVariableMatches(const Tuple & variable_tuple, 
 			  vector<Map> *results,
-			  double sample_fraction = 1.0) const;*/
+			  double sample_fraction = 1.0) const;
+  
+  // Simple way to query and get results back
+  bool FindSatisfactions(const Pattern& p,
+			 const SamplingInfo & sampling,
+			 vector<Map> * substitutions,
+			 uint64 * num_satisfactions,
+			 int64 * max_work_now);
   
   // Random tuples
-  /*bool GetRandomTuple(OTuple * result);
-  bool GetRandomTupleMatching(OTuple * result, const OTuple& wildcard_t);
+  // bool GetRandomTuple(OTuple * result);
+  bool GetRandomTupleMatching(Tuple * result, const Tuple& wildcard_t);
+
+  /*
   bool GetRandomTupleContaining(OTuple * ret, const set<Object>& terms,
 				bool situation_distribution);
-  */
-
-  // Simple way to query and get results back
-  /*  bool FindSatisfactions(OPattern pattern,
-     const SamplingInfo & sampling,
-			 vector<Tuple> * stacks,
-			 uint64 * num_satisfactions,
-			 int64 * max_work_now);*/
-			 
-  
-
+  */  
 
  private:
-  // points from length to rowinfo for a tuple of all wildcards. 
-  vector<Row *> top_level_rowinfo_;
-  hash_map<Tuple, TupleInfo *> tuples_;
 
+  // points from length to rowinfo for a tuple of all wildcards. 
+  // Careful, allwildcards of size N is at position N not position N-1
+  // 0th position is NULL
+  vector<Row *> top_level_rowinfo_;
+
+  hash_map<Tuple, TupleInfo *> tuples_;
   hash_map<Object, Distribution> distributions_;
 };
 

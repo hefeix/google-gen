@@ -122,6 +122,8 @@ void Blackboard::Row::RemoveTuple(int position) {
   forall(run, ti->positions_) if (run->first == this) run->second = position;
 }
 
+// Careful, allwildcards of size N is at position N not position N-1
+// 0th position is NULL
 Blackboard::Row * Blackboard::GetCreateAllWildcardRow(int size) const{
   vector<Row *> * tlr = 
     (vector<Row *> *)(&top_level_rowinfo_);
@@ -173,22 +175,28 @@ void Blackboard::Remove(const Tuple &tuple) {
   delete *info;
 }
 
-
+// Pick a random size then pick a random tuple
+// Could do it uniformly but ...
 /*
-  bool Blackboard::GetRandomTuple(OTuple * result) {
+bool Blackboard::GetRandomTuple(OTuple * result) {
+  uint32 n = top_level_rowinfo_->size();
+  AllWildcards(n);
+
   if (all_tuples_.size() == 0) return false;
   *result = all_tuples_[RandomUInt32() % all_tuples_.size()].first;
   return true;
 }
+*/
 
-bool Blackboard::GetRandomTupleMatching(OTuple * result, 
-					const OTuple& wildcard_t) {
-  const Row * r = GetRow(wildcard_t);
-  if (r->size() == 0) return false;
-  *result = (*r)[RandomUInt32() % r->size()].first;
+bool Blackboard::GetRandomTupleMatching(Tuple * result, 
+					const Tuple& wildcard_t) {
+  const Row * r = GetCreateRow(wildcard_t);
+  if (r->NumTuples() == 0) return false;
+  *result = r->GetTuple(RandomUInt32() % r->NumTuples());
   return true;
 }
 
+/*
 // We select a random tuple which contains all of the terms.
 // If situation_distribution is false, this selection is uniform. 
 // If situation_distribution is true, we first select a situation uniformly.  
@@ -262,6 +270,7 @@ void Blackboard::Shell() {
   OTime time;
   OPattern pattern;
 
+  cout << "entering blackboard shell" << endl;
   for (;(cin >> command) && command != "q"; cout << endl) {
     if (command == "post") {
       cin >> tuple;
@@ -293,6 +302,7 @@ void Blackboard::Shell() {
       }
       }*/
   }
+  cout << "quitting blackboard shell" << endl;
 }
 
 string Blackboard::GetURL() const {
@@ -366,17 +376,56 @@ Distribution * Blackboard::GetCreateDistribution(Object identifier) {
   return ret;
 }
 
+void Blackboard::
+GetVariableMatches(const Tuple & variable_tuple, 
+		   vector<Map> * results,
+		   double sample_fraction) const {
+
+  // Prepare the results
+  CHECK(results);
+  results->clear();
+
+  // First get the wildcard row
+  Tuple wildcard_tuple = VariablesToWildcards(variable_tuple);
+  Row * row = GetCreateRow(wildcard_tuple);
+  if (row->NumTuples() == 0) return;
+
+  // Track the variable positions
+  vector<int> var_positions;
+  for (uint i=0; i<variable_tuple.size(); i++) {
+    if (IsVariable(variable_tuple[i]))
+      var_positions.push_back(i);
+  }
+
+  // Run through the row
+  for (uint i=0; i<(uint)row->NumTuples(); i++) {
+    Map m;
+    const Tuple & t = row->GetTuple(i);
+    bool good_tuple = true;
+    for (uint c=0; c<var_positions.size(); c++) {
+      good_tuple = Add(&m, variable_tuple[var_positions[c]], t[var_positions[c]]);
+      if (!good_tuple) break;
+    }
+    if (good_tuple) {
+      if (sample_fraction == 1.0)
+	results->push_back(m);
+      else if (RandomFraction() < sample_fraction)
+	results->push_back(m);
+    }
+  }
+}
+
 // Simple way to query and get results back
-/*bool Blackboard::FindSatisfactions(OPattern pattern,
+bool Blackboard::FindSatisfactions(const Pattern& p,
 				   const SamplingInfo & sampling,
 				   vector<Map> * substitutions,
 				   uint64 * num_satisfactions,
 				   int64 * max_work_now) {
+
   if (substitutions) substitutions->clear();
   CHECK(num_satisfactions);
   *num_satisfactions = 0;
 
-  const Pattern & p = pattern.Data();
   if (p.size() == 0) { 
     MOREWORK(1);
     if (substitutions) substitutions->push_back(Map());
@@ -406,7 +455,7 @@ Distribution * Blackboard::GetCreateDistribution(Object identifier) {
   MOREWORK(num_matches[condition_tuple]);
 
   vector<Map> variable_matches;
-  GetVariableMatches(p[condition_tuple].Data(), Map(), &variable_matches,
+  GetVariableMatches(p[condition_tuple].Data(), &variable_matches,
 		     sampling.FractionAtPosition(condition_tuple));
   
   SamplingInfo sub_sampling = sampling.RemovePosition(condition_tuple);
@@ -417,7 +466,7 @@ Distribution * Blackboard::GetCreateDistribution(Object identifier) {
     
     vector<Map> sub_substitutions;
     uint64 sub_num_satisfactions;
-    bool success = FindSatisfactions(OPattern::Make(sub_pattern), 
+    bool success = FindSatisfactions(sub_pattern, 
 				     sub_sampling,
 				     substitutions?(&sub_substitutions):0, 
 				     &sub_num_satisfactions,
@@ -434,6 +483,4 @@ Distribution * Blackboard::GetCreateDistribution(Object identifier) {
   }
   if (substitutions) CHECK(substitutions->size() == *num_satisfactions);
   return true;
-  }*/
-
-
+  }
