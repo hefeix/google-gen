@@ -160,7 +160,7 @@ MPattern RemoveVariableFreeTuples(const MPattern & v);
 // post_sub.  
 // returns false on any incompatibility.
 // Only variables can be substituted for.
-bool ExtendSubstitution(const Tuple & pre_sub, const Tuple & post_sub,Map *sub);
+bool ExtendSubstitution(const Tuple & pre_sub, const Tuple & post_sub, Map *sub);
 
 set<Object> GetAllTerms(const MPattern & v);
 

@@ -40,6 +40,7 @@ void Shell() {
   ReadCodeFile("guide_prog", &guide_program);
 
   Execution *E = Execute(main_program, guide_program, true);
+  Blackboard *B = E->blackboard_;
   CHECK(E);
   
   string command;
@@ -56,6 +57,28 @@ void Shell() {
       cin >> func_name >> level;
       SetVerbosity(func_name, level);
     }
+    if (command == "s") {
+      OPattern p;
+      cin >> p;
+      vector<Map> results;
+      uint64 num_sats = 0;
+      B->FindSatisfactions(p.Data(), SamplingInfo(), &results, &num_sats, NULL);
+      cout << "num results " << results.size() << endl;
+      for (uint c=0; c<results.size() && (c<10); c++) {
+	cout << results[c] << endl;
+      }
+    }
+    if (command == "rt_match") {
+      OTuple rt;
+      cin >> rt;
+      Tuple t;
+      if (B->GetRandomTupleMatching(&t, rt.Data())) {
+	cout << t << endl;
+      } else {
+	cout << "no tuple found" << endl;
+      }
+    }
+
     /*if (command == "ai") {
       string comments;
       CandidateRule cr;

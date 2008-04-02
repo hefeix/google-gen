@@ -1,13 +1,24 @@
 // post (PostRandomTuples 100 Foo)
 
+<
 post (CollegeBySize Stanford 6000 0)
 post (CollegeBySize Berkeley 30000 0)
 post (CollegeBySize Phoenix 200000.0 0)
 
 delay 1
 repeat _a 100 {
-  post (BOOL _a choose (bool 0.8 _a))
+  post (BOOL _a choose (bool 0.5 _a))
   post (NORMAL _a choose (normal 100.0 10.0 _a))
   post (EXPONENTIAL _a choose (exponential 0.1 _a))
   post (BLACKBOARD _a choose (blackboard CollegeBySize))
 }
+>
+
+repeat _a 100 {
+  post (S _a sum (_a 1))
+  post (AC _a sum(_a choose(geometric 3.0)))
+}
+
+post (C 0 true)
+on (C _x _y) on (S _x _z)
+   post (C _z not _y)
