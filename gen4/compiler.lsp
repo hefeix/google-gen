@@ -16,10 +16,15 @@
 ; base class for dynamic forms
 (defclass dform ()
   (
+   (return-value :initform nil)
+
    (s-parent :initform nil)
-   (enter-time :initform nil)
-   (children :initform nil)
+   (children :initform (gen-vector))
    (d-parent :initform nil)
+
+   ; time at which your static form was logged
+   (entry-time :initform nil)
+   ; time at which your return value was logged
    (exit-time :initform nil)
    )
   )
@@ -30,8 +35,8 @@
 	       #'(lambda (sf) (rewrite sf logv))
 	       (slot-value f 'children))))
     `(progn
-       (gen-log ,f ,logv)
-       (gen-log (,(car (slot-value f 'code)) ,@rewritten-children) ,logv)
+       (gen-push ,f ,logv)
+       (gen-push (,(car (slot-value f 'code)) ,@rewritten-children) ,logv)
        )
     )
   )
@@ -39,6 +44,18 @@
 (defmethod gen-print ((f sform) indent)
   (format t (nspaces indent))
   (format t "~S~%" (slot-value f 'code))
+  (map 'list #'(lambda (cf) (gen-print cf (+ 2 indent))) (slot-value f 'children))
+  nil
+  )
+
+(defmethod gen-print ((f dform) indent)
+  (format t (nspaces indent))
+  (format t "return-value:~S [~S..~S] ~S~%" 
+	  (slot-value f 'return-value)
+	  (slot-value f 'entry-time)
+	  (slot-value f 'exit-time)
+	  (slot-value (slot-value f 's-parent) 'code)
+	  )
   (map 'list #'(lambda (cf) (gen-print cf (+ 2 indent))) (slot-value f 'children))
   nil
   )
@@ -90,8 +107,8 @@
 
 (defmethod rewrite ((f constant-sform) logv)
   `(progn
-     (gen-log ,f ,logv)
-     (gen-log ,(slot-value f 'value) ,logv)
+     (gen-push ,f ,logv)
+     (gen-push ,(slot-value f 'value) ,logv)
      )
   )
 
@@ -119,14 +136,49 @@
     )
 )
 
-(defun toplevel-make-dform (readfrom)
-  
-  )
+; pass in a read iterator
+(defun toplevel-enform (ri)
+  (let ((sf (read-advance ri)))
+    (enform sf ri)
+    )
+)
+ 
+(defmethod enform ((f sform) ri)
+  (let (
+	(df (create-dform f))
+	(next (read-advance ri))
+	)
+    (setf (slot-value df 's-parent) f)
+    (setf (slot-value df 'entry-time) (- (cdr ri) 2))
+	  
+    ; getting dforms for children
+    (loop while (typep next 'sform) do
+	 (let ((child (enform next ri)))
+	   (gen-push child (slot-value df 'children))
+	   (setf (slot-value child 'd-parent) df)
+	   )
+	 (setf next (read-advance ri))
+	 )
+    ; this is now our return value
+    (setf (slot-value df 'return-value) next)
+    (setf (slot-value df 'exit-time) (- (cdr ri) 1))
+    df
+    )
+)
+   
+; creating dforms
+(defmethod create-dform ((f call-sform))
+  (make-instance 'call-dform)
+)
+(defmethod create-dform ((f constant-sform))
+  (make-instance 'constant-dform)
+)
 
 (setf *runlog* (gen-vector))
-(let ((tl (toplevel-gen-compile '(+ 1 1) nil)))
+(let ((tl (toplevel-gen-compile '(+ 1 (+ 31 2)) nil)))
   (format t "~%")
   (gen-print tl 0)
   (print (rewrite tl '*runlog*))
   (print (eval (rewrite tl '*runlog*)))
+  (gen-print (toplevel-enform (reader *runlog*)) 0)
 )
