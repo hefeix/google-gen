@@ -5,7 +5,8 @@
   (make-array 0 :fill-pointer 0)
 )
 
-(defun gen-log (v vec)
+; like vector-push-extend but returns the pushed item
+(defun gen-push (v vec)
   (vector-push-extend v vec)
   v
   )
@@ -15,14 +16,17 @@
   (cons vec 0)
   )
 
-(defun reader-value (r)
-  (svref (car r) (cdr r))
+(defun read-value (r)
+  (aref (car r) (cdr r))
   )
 
-(defun reader-advance (r)
-  (incf (cdr r))
+(defun read-advance (r)
+  (prog1
+      (aref (car r) (cdr r))
+    (incf (cdr r))
+    )
 )
 
-(defun reader-done (r)
+(defun read-done (r)
   (= (cdr r) (fill-pointer (car r)))
 )
