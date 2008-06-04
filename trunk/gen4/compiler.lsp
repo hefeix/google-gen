@@ -140,6 +140,27 @@
   f
 )
 
+; rewrite code to log form entry, and form exit return value
+(defmethod rewrite ((f let-sform) logv)
+  (let* ((rewritten-children 
+	  (map 'list 
+	       #'(lambda (sf) (rewrite sf logv))
+	       (slot-value f 'children))))
+    `(progn
+       (gen-push ,f ,logv)
+       (gen-push 
+	(let
+	    ,(map 'list #'list 
+	       (slot-value f 'variables) rewritten-children)
+	  ,@(nthcdr (list-length (slot-value f 'variables)) rewritten-children))
+	,logv)
+       )
+    )
+  )
+
+(defmethod create-dform ((f let-sform))
+  (make-instance 'let-dform)
+)
 
 ; e.g 8
 (defclass constant-sform (sform)
@@ -173,27 +194,66 @@
   (make-instance 'constant-dform)
 )
 
+; e.g 8
+(defclass variable-sform (sform)
+  (
+   variable-symbol
+   )
+)
+
+(defclass variable-dform (dform)
+  (
+   )
+  )
+
+; constant-forms are rewritten slightly differently
+(defmethod rewrite ((f variable-sform) logv)
+  `(progn
+     (gen-push ,f ,logv)
+     (gen-push ,(slot-value f 'variable-symbol) ,logv)
+     )
+)
+
+; compiling a specific constant sform
+(defmethod gen-compile ((f variable-sform) code)
+  (call-next-method)
+  (print "variable-sform-compile")
+  (setf (slot-value f 'variable-symbol) code)
+  f
+)
+
+(defmethod create-dform ((f variable-sform))
+  (make-instance 'variable-dform)
+)
+
 
 ; assume code is a list for now
 ; this is the top level function called to compile code, returns an sform
 (defun toplevel-gen-compile (code parent)
   (let ((f nil))
-    (if (typep code 'atom)
-	(setf f (make-instance 'constant-sform))
-	(let ((first (car code)))
-	  (cond 
-	    ((eq first 'let) (setf f (make-instance 'let-sform)))
-	    (t (setf f (make-instance 'call-sform)))
-	    )
-	  )
-	)
+    (cond 
+      ; nils are constant
+      ((null code) (setf f (make-instance 'constant-sform)))
+      ; symbols are variables
+      ((symbolp code) (setf f (make-instance 'variable-sform)))
+      ; this leaves numbers
+      ((typep code 'atom) (setf f (make-instance 'constant-sform)))
+      (t
+       (let ((first (car code)))
+	 (cond 
+	   ((eq first 'let) (setf f (make-instance 'let-sform)))
+	   (t (setf f (make-instance 'call-sform)))
+	   )
+	 )
+       )
+      )
     (gen-compile f code)
     (setf (slot-value f 'code) code)
     (setf (slot-value f 'parent) parent)
     f
     )
 )
-
+      
 ; pass in a read iterator for a vector that is a run log
 ; makes the dform tree for that run and returns the top level dform
 (defun toplevel-enform (ri)
@@ -230,11 +290,11 @@
    
 (setf *runlog* (gen-vector))
 (let ((tl (toplevel-gen-compile 
-	   '(let ((x 1)) (+ 1 (+ 31 2)))
+	   '(let ((x 8)) (+ 1 x))
 	   nil)))
   (format t "~%")
   (gen-print tl 0)
-  ;(print (rewrite tl '*runlog*))
-  ;(print (eval (rewrite tl '*runlog*)))
-  ;(gen-print (toplevel-enform (reader *runlog*)) 0)
+  (print (rewrite tl '*runlog*))
+  (print (eval (rewrite tl '*runlog*)))
+  (gen-print (toplevel-enform (reader *runlog*)) 0)
 )
