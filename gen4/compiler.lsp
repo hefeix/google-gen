@@ -226,6 +226,41 @@
   (make-instance 'variable-dform)
 )
 
+; setf sform
+; e.g 8
+(defclass setf-sform (sform)
+  (
+   variable-symbol
+   )
+)
+
+(defclass setf-dform (dform)
+  (
+   )
+  )
+
+(defmethod gen-compile ((f setf-sform) code)
+  (call-next-method)
+  (print "setf-sform-compile")
+  (setf (slot-value f 'variable-symbol) (second code))
+  (gen-compile-children f (cddr code))
+  f
+)
+
+(defmethod rewrite ((f setf-sform) logv)
+  (let ((rewritten-child (rewrite (car (slot-value f 'children)) logv)))
+    `(progn
+       (gen-push ,f ,logv)
+       (gen-push 
+	(setf ,(slot-value f 'variable-symbol) ,rewritten-child) ,logv
+	)
+       )
+    )
+  )
+
+(defmethod create-dform ((f setf-sform))
+  (make-instance 'setf-dform)
+)
 
 ; assume code is a list for now
 ; this is the top level function called to compile code, returns an sform
@@ -242,6 +277,7 @@
        (let ((first (car code)))
 	 (cond 
 	   ((eq first 'let) (setf f (make-instance 'let-sform)))
+	   ((eq first 'setf) (setf f (make-instance 'setf-sform)))
 	   (t (setf f (make-instance 'call-sform)))
 	   )
 	 )
@@ -290,7 +326,7 @@
    
 (setf *runlog* (gen-vector))
 (let ((tl (toplevel-gen-compile 
-	   '(let ((x 8)) (+ 1 x))
+	   '(let ((x 8)) (setf x 10) (+ 1 x))
 	   nil)))
   (format t "~%")
   (gen-print tl 0)
