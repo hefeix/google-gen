@@ -1,3 +1,26 @@
+(defun gen-lambda (paramlist definition)
+  (eval (list 'lambda paramlist definition)))
+
+(defun gen-defun (name paramlist definition)
+  (setf (symbol-function name) (gen-lambda paramlist definition)))
+
+(gen-defun 'p5 '(x) '(+ x (+ 2 3)))
+
+(p5 2)
+
+(let ((f nil))
+  (setf (symbol-function 'f) (lambda (x) (+ x 2)))
+  (f 8))
+(f 8)
+
+(+ 1 2) -> (funcall '+ 1 2)
+(funcall (lambda (x y) (+ x y)) 1 2)
+(funcall + 1 2)
+(let ((f (lambda (x y) (+ x y)))) 
+
+((lambda (x y) (+ x y)) 3 4)
+
+
 (defun f (x) (+ 1 x))
 (defun g (y) (+ 2 y))
 
