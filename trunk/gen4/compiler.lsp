@@ -77,25 +77,23 @@
      (gen-push ,(slot-value f 'id) ,logv)
      (gen-push-encode ,(rewrite-core f logv) ,logv)))
 
-; print sforms
-(defmethod gen-print ((f sform) indent)
-  (format t (nspaces indent))
-  (format t "~S id=~S~%" (slot-value f 'code) (slot-value f 'id))
-  (map 'list #'(lambda (cf) (gen-print cf (+ 3 indent))) 
-       (slot-value f 'children))
-  nil)
+(defmethod to-string ((f sform))
+  (format nil "~S id=~S~%" (slot-value f 'code) (slot-value f 'id)))
 
-; print dforms
-(defmethod gen-print ((f dform) indent)
-  (format t (nspaces indent))
-  (format t "return-value:~S [~S..~S] ~S~%" 
+; print sforms
+(defmethod gen-print ((f sform))
+  (tree-print t f 'to-string (lambda (x) (slot-value x 'children))))
+
+(defmethod to-string ((f dform))
+  (format nil "return-value:~S [~S..~S] ~S~%" 
 	  (slot-value f 'return-value)
 	  (slot-value f 'entry-time)
 	  (slot-value f 'exit-time)
-	  (slot-value (slot-value f 's-parent) 'code))
-  (map 'list #'(lambda (cf) (gen-print cf (+ 3 indent))) 
-       (slot-value f 'children))
-  nil)
+	  (slot-value (slot-value f 's-parent) 'code)))
+
+; print sforms
+(defmethod gen-print ((f dform))
+  (tree-print t f 'to-string (lambda (x) (slot-value x 'children))))
 
 ; compiling code into sforms
 ; this call is called from all more specific calls
@@ -173,6 +171,12 @@
 
 (defclass function-entry-dform (dform) ())
 
+(defmethod to-string ((f function-entry-sform))
+  (concatenate 
+   'string 
+   (call-next-method)
+   (format nil "defining-dform=~S~%" (slot-value f 'defining-dform))))
+
 ; pass in code = (lambda (args) body) or (function-name (args) body)
 (defmethod gen-compile ((f function-entry-sform) code)
   (call-next-method)
@@ -207,12 +211,15 @@
   (setf (slot-value f 'variables) (third code))
   f)
 
-(defmethod rewrite-core ((f defun-sform) logv)
+(defmethod rewrite ((f defun-sform) logv)
   `(let ((fe (make-instance 'function-entry-sform)))
-     (gen-compile fe ',(cdr (slot-value f 'code)))
-     (list (eval (list 'defun ',(slot-value f 'function-name) 
-		       ',(slot-value f 'variables)
-		       (rewrite fe ',logv))) fe)))
+     (progn
+       (gen-push ,(slot-value f 'id) ,logv)
+       (gen-compile fe ',(cdr (slot-value f 'code)))       
+       (gen-push-encode-multiple-values 
+	(list (eval (list 'defun ',(slot-value f 'function-name) 
+			  ',(slot-value f 'variables)
+			  (rewrite fe ',logv))) (slot-value fe 'id)) ,logv))))
 
 (defmethod create-dform ((f defun-sform)) (make-instance 'defun-dform))
 
@@ -335,9 +342,17 @@
 	 (setf next (read-advance ri)))
     ; this is now our return value
     (setf (slot-value df 'return-value) (get-log-value next 0) )
+    (when (typep df 'defun-dform)
+      (setf (slot-value (aref *id-to-sform* (get-log-value next 1))
+			'defining-dform) df))
     (setf (slot-value df 'exit-time) (- (cdr ri) 1))
     df))
    
+(defun print-sform-trees () 
+  (loop for f across *id-to-sform* do
+       (when (null (slot-value f 'parent))
+	 (gen-print f))))
+
 (setf *runlog* (gen-vector))
 (let ((tl (toplevel-gen-compile 
 ;	   '(+ 2 3)
@@ -345,10 +360,11 @@
 	   '(progn (defun g(x y) (+ x y)) (g 3 4))
 	   nil)))
   (format t "~%")
-  (gen-print tl 0)
+  (gen-print tl)
   (format t "~S" (rewrite tl '*runlog*))
   (print (eval (rewrite tl '*runlog*)))
-  (gen-print (toplevel-enform (reader *runlog*)) 0)
+  (gen-print (toplevel-enform (reader *runlog*)))
+  (print-sform-trees)
 )
 
 
