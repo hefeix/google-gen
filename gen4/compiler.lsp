@@ -82,30 +82,31 @@
 
 ; print sforms
 (defmethod gen-print ((f sform))
+  (format t "~%")
   (tree-print t f 'to-string (lambda (x) (slot-value x 'children))))
 
 (defmethod to-string ((f dform))
-  (format nil "return-value:~S [~S..~S] ~S~%" 
+  (format nil "~S time:[~S..~S] ~S~%" 
 	  (slot-value f 'return-value)
 	  (slot-value f 'entry-time)
 	  (slot-value f 'exit-time)
 	  (slot-value (slot-value f 's-parent) 'code)))
 
+
 ; print sforms
 (defmethod gen-print ((f dform))
+  (format t "~%")
   (tree-print t f 'to-string (lambda (x) (slot-value x 'children))))
 
 ; compiling code into sforms
 ; this call is called from all more specific calls
 (defmethod gen-compile ((f sform) code)
-  (print "sform-compile")
   (assign-id f)
   (setf (slot-value f 'code) code))
 
 ; compile your children and set them
 (defmethod gen-compile-children ((f sform) codelist)
-  (print "sform-compile-children")
-  (print codelist)
+  ; (print codelist)
   (setf (slot-value f 'children) 
 	(map 'list #'(lambda (code) (toplevel-gen-compile code f)) codelist)))
 
@@ -125,7 +126,6 @@
 ; compiling a specific call-sform
 (defmethod gen-compile ((f call-sform) code)
   (call-next-method)
-  (print "call-sform-compile")
   (setf (slot-value f 'function-symbol) (car code))
   (gen-compile-children f (cdr code))
   f)
@@ -142,7 +142,6 @@
 ; compiling a specific constant sform
 (defmethod gen-compile ((f let-sform) code)
   (call-next-method)
-  (print "let-sform-compile")
   (let ((let-variable-assignments (car (cdr code))))
     (setf (slot-value f 'variables)
 	  (map 'list #'car let-variable-assignments))
@@ -166,21 +165,13 @@
 ; the top level of a function
 (defclass function-entry-sform (sform)
   (function-name
-   variables
-   defining-dform ))
+   variables))
 
 (defclass function-entry-dform (dform) ())
-
-(defmethod to-string ((f function-entry-sform))
-  (concatenate 
-   'string 
-   (call-next-method)
-   (format nil "defining-dform=~S~%" (slot-value f 'defining-dform))))
 
 ; pass in code = (lambda (args) body) or (function-name (args) body)
 (defmethod gen-compile ((f function-entry-sform) code)
   (call-next-method)
-  (print "function-entry-sform-compile")
   (setf (slot-value f 'function-name) (first code))
   (setf (slot-value f 'variables) (second code))
   (gen-compile-children f (cddr code))
@@ -201,12 +192,10 @@
   (function-name 
    variables))
 
-(defclass defun-dform (dform)
-  (function-entry-sform-child))
+(defclass defun-dform (dform) (sform-child))
 
 (defmethod gen-compile ((f defun-sform) code)
   (call-next-method)
-  (print "defun-sform-compile")
   (setf (slot-value f 'function-name) (second code))
   (setf (slot-value f 'variables) (third code))
   f)
@@ -222,6 +211,44 @@
 			  (rewrite fe ',logv))) (slot-value fe 'id)) ,logv))))
 
 (defmethod create-dform ((f defun-sform)) (make-instance 'defun-dform))
+
+(defmethod to-string ((f defun-dform))
+  (concatenate 'string (call-next-method)
+	       (format nil "sform-child=~S" 
+		       (slot-value (slot-value f 'sform-child) 'id))))
+
+
+
+;;; EVAL ;;;
+
+; (eval original-exp)
+
+(defclass eval-sform (sform) ())
+
+(defclass eval-dform (dform) (sform-child))
+
+; compiling a specific call-sform
+(defmethod gen-compile ((f eval-sform) code)
+  (call-next-method)
+  (gen-compile-children f (cdr code))
+  f)
+
+(defmethod rewrite ((f eval-sform) logv)
+  `(progn
+     (gen-push ,(slot-value f 'id) ,logv)
+     (let* ((code ,@(rewrite-children f logv))
+	    (sf-id (length *id-to-sform*)))
+       ;(format t "code=~S~%sf-id=~S~%" code sf-id)
+       (gen-push-encode-multiple-values 
+	(list (gen-eval code ,logv) sf-id) ,logv))))
+
+
+(defmethod create-dform ((f eval-sform)) (make-instance 'eval-dform))
+
+(defmethod to-string ((f eval-dform))
+  (concatenate 'string (call-next-method)
+	       (format nil "sform-child=~S" 
+		       (slot-value (slot-value f 'sform-child) 'id))))
 
 
 
@@ -239,11 +266,29 @@
 ; compiling a specific constant sform
 (defmethod gen-compile ((f constant-sform) code)
   (call-next-method)
-  (print "constant-sform-compile")
   (setf (slot-value f 'value) code)
   f)
 
 (defmethod create-dform ((f constant-sform)) (make-instance 'constant-dform))
+
+;;; QUOTE ;;;
+
+; e.g 8
+(defclass quote-sform (sform) (value))
+
+(defclass quote-dform (dform) ())
+
+; quote-forms are rewritten slightly differently
+(defmethod rewrite-core ((f quote-sform) logv) 
+  (list 'quote (slot-value f 'value)))
+
+; compiling a specific quote sform
+(defmethod gen-compile ((f quote-sform) code)
+  (call-next-method)
+  (setf (slot-value f 'value) (second code))
+  f)
+
+(defmethod create-dform ((f quote-sform)) (make-instance 'quote-dform))
 
 ;;; VARIABLE
 ; e.g a
@@ -257,7 +302,6 @@
 ; compiling a specific constant sform
 (defmethod gen-compile ((f variable-sform) code)
   (call-next-method)
-  (print "variable-sform-compile")
   (setf (slot-value f 'variable-symbol) code)
   f
 )
@@ -274,7 +318,6 @@
 
 (defmethod gen-compile ((f setf-sform) code)
   (call-next-method)
-  (print "setf-sform-compile")
   (setf (slot-value f 'variable-symbol) (second code))
   (gen-compile-children f (cddr code))
   f )
@@ -308,6 +351,8 @@
 	   ((eq first 'let) (setf f (make-instance 'let-sform)))
 	   ((eq first 'setf) (setf f (make-instance 'setf-sform)))
 	   ((eq first 'defun) (setf f (make-instance 'defun-sform)))
+	   ((eq first 'eval) (setf f (make-instance 'eval-sform)))
+	   ((eq first 'quote) (setf f (make-instance 'quote-sform)))
 	   (t (setf f (make-instance 'call-sform)))
 	   )
 	 )
@@ -318,6 +363,9 @@
     f
     )
 )
+
+(defun gen-eval (code logv)
+  (eval (rewrite (toplevel-gen-compile code nil) logv)))
       
 ; pass in a read iterator for a vector that is a run log
 ; makes the dform tree for that run and returns the top level dform
@@ -342,29 +390,47 @@
 	 (setf next (read-advance ri)))
     ; this is now our return value
     (setf (slot-value df 'return-value) (get-log-value next 0) )
-    (when (typep df 'defun-dform)
-      (setf (slot-value (aref *id-to-sform* (get-log-value next 1))
-			'defining-dform) df))
+    (when (or (typep df 'defun-dform) (typep df 'eval-dform))
+      (let ((sf (aref *id-to-sform* (get-log-value next 1))))
+	(setf (slot-value sf 'parent) df)
+	(setf (slot-value df 'sform-child) sf)))
     (setf (slot-value df 'exit-time) (- (cdr ri) 1))
     df))
    
 (defun print-sform-trees () 
   (loop for f across *id-to-sform* do
-       (when (null (slot-value f 'parent))
+       (when (not (typep (slot-value f 'parent) 'sform))
 	 (gen-print f))))
 
-(setf *runlog* (gen-vector))
-(let ((tl (toplevel-gen-compile 
+(defun gen-run (code &optional (should-print nil) ) 
+  (setf *runlog* (gen-vector))
+  (setf *id-to-sform* (gen-vector))
+  (let ((result (gen-eval code '*runlog*)))
+    ;(when should-print 
+      (gen-print (toplevel-enform (reader *runlog*)))
+      (print-sform-trees)
+      ;)
+    result))
+
+;(gen-run '(progn (defun f (x y) (+ x y)) (f 3 4)))
+(setf *fiboprog* '(progn (defun fibo (x) (if (< x 2) 1 (+ (fibo (- x 1)) (fibo (- x 2))))) (fibo 10)))
+(setf *gaussprog* '(progn (defun gauss (x) (if (= x 0) 0 (+ x (gauss (- x 1))))) (gauss 100000)))
+(gen-run *fiboprog* t)
+;(time (eval *gaussprog*)) 
+;(time (gen-run *gaussprog*))
+
+;(let ((tl (toplevel-gen-compile 
 ;	   '(+ 2 3)
 ;	   '(let ((x 8)) (setf x 10) (+ 1 x))
-	   '(progn (defun g(x y) (+ x y)) (g 3 4))
-	   nil)))
-  (format t "~%")
-  (gen-print tl)
-  (format t "~S" (rewrite tl '*runlog*))
-  (print (eval (rewrite tl '*runlog*)))
-  (gen-print (toplevel-enform (reader *runlog*)))
-  (print-sform-trees)
-)
+;	   '(progn (defun g(x y) (+ x y)) (g 3 4))
+;	   '(eval '(+ 2 3))
+;	   nil)))
+;  (format t "~%")
+;  (gen-print tl)
+;  (format t "~S" (rewrite tl '*runlog*))
+;  (print (eval (rewrite tl '*runlog*)))
+;  (gen-print (toplevel-enform (reader *runlog*)))
+;  (print-sform-trees)
+;)
 
 
