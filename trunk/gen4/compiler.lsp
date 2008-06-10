@@ -55,7 +55,12 @@
 
 ; non-recursive - meant to be called by tree-print
 (defmethod to-string ((f sform))
-  (format nil "~S id=~S~%" (slot-value f 'code) (slot-value f 'id)))
+  (concatenate 'string 
+	       (format nil "~S id=~S~%" (slot-value f 'code) (slot-value f 'id))
+	       (if (typep (slot-value f 'parent) 'sform) ""
+		   (format nil "parent=~S~%" (slot-value f 'parent)))
+	       )
+  )
 
 ; print sforms
 (defmethod gen-print ((f sform))
@@ -203,7 +208,7 @@
 (defmethod to-string ((f defun-dform))
   (let ((sfc (slot-value f 'sform-child)))
     (concatenate 'string (call-next-method)
-		 (format nil "sform-child=~S" 
+		 (format nil "sform-child=~S"
 			 (if sfc (slot-value sfc 'id) "none")))))
 
 
@@ -235,7 +240,7 @@
 (defmethod to-string ((f eval-dform))
   (let ((sfc (slot-value f 'sform-child)))
     (concatenate 'string (call-next-method)
-		 (format nil "sform-child=~S" 
+		 (format nil "sform-child=~S"
 			 (if sfc (slot-value sfc 'id) "none")))))
 
 
@@ -435,17 +440,20 @@
   (new-program)
   (let ((result (gen-eval code)))
     (when should-print 
-      (gen-print (toplevel-enform))
-      (link-sforms-to-dynamic-parents)
-      (print-sform-trees)
+      (let ((dform-root (toplevel-enform)))
+	(link-sforms-to-dynamic-parents)
+	(gen-print dform-root)
+	(print-sform-trees)
+	)
       )
     result))
 
-(gen-run '(progn (defun f (x y) (+ x y)) (f 3 4)) t)
+;(gen-run '(progn (defun f (x y) (+ x y)) (f 3 4)) t)
+(gen-run '(eval '(+ 2 3)) t)
+
 ;(setf *fiboprog* '(progn (defun fibo (x) (if (< x 2) 1 (+ (fibo (- x 1)) (fibo (- x 2))))) (fibo 5)))
 ;(setf *gaussprog* '(progn (defun gauss (x) (if (= x 0) 0 (+ x (gauss (- x 1))))) (gauss 100000)))
 ;(gen-run *fiboprog* t)
-(gen-run '(eval '(+ 2 3)) t)
 ;(time (eval *gaussprog*)) 
 ;(time (gen-run *gaussprog*))
 
