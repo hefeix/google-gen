@@ -317,7 +317,7 @@
   f )
 
 (defmethod rewrite-core ((f setf-sform))
-  (let ((rewritten-child (rewrite (car (slot-value f 'children)) logv)))
+  (let ((rewritten-child (rewrite (car (slot-value f 'children)))))
     `(setf ,(slot-value f 'variable-symbol) ,rewritten-child))) 
 	
 
@@ -449,13 +449,17 @@
     result))
 
 ;(gen-run '(progn (defun f (x y) (+ x y)) (f 3 4)) t)
-(gen-run '(eval '(+ 2 3)) t)
+;(gen-run '(eval '(+ 2 3)) t)
 
 ;(setf *fiboprog* '(progn (defun fibo (x) (if (< x 2) 1 (+ (fibo (- x 1)) (fibo (- x 2))))) (fibo 5)))
-;(setf *gaussprog* '(progn (defun gauss (x) (if (= x 0) 0 (+ x (gauss (- x 1))))) (gauss 100000)))
 ;(gen-run *fiboprog* t)
+
+;(setf *gaussprog* '(progn (defun gauss (x) (if (= x 0) 0 (+ x (gauss (- x 1))))) (gauss 5)))
+;(gen-run *gaussprog* t)
 ;(time (eval *gaussprog*)) 
 ;(time (gen-run *gaussprog*))
+
+;(gen-run '(let ((x 8)) (setf x 10) (+ 1 x)) t)
 
 ;(let ((tl (toplevel-gen-compile 
 ;	   '(+ 2 3)
@@ -470,5 +474,6 @@
 ;  (gen-print (toplevel-enform (reader *runlog*)))
 ;  (print-sform-trees)
 ;)
-
+;(gen-run '(let ((sum 0)) (dotimes (x 10) (setf sum (+ sum x))) sum) t)
+;(dotimes (x 10) (print x))
 
