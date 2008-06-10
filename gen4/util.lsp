@@ -74,7 +74,7 @@
 
 (defun object-to-string (object) (format nil "~S" object))
 
-;(tree-print t '(a (b c) d e) 'object-to-string #'(lambda (x) (if (listp x) x nil)))
+(tree-print t '(a (b c) d e) 'object-to-string #'(lambda (x) (if (listp x) x nil)))
 
   
   

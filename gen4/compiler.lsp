@@ -3,8 +3,6 @@
 
 ;;; SFORM AND DFORM BASE CLASSES ;;;
 
-(defparameter *id-to-sform* (gen-vector))
-
 ; class for static forms
 (defclass sform ()
   (
@@ -12,6 +10,7 @@
    (children :initform nil)
    (code :initform nil)
    (id :initform nil)
+   (creation-time :initform 0)
    )
   )
 
@@ -36,47 +35,49 @@
    )
   )
 
-;;; LOGGING
-; our brilliant logging scheme:
-; We log function entry and exit in a vector.
-; On function entry we log the sform
-; On function exit, we log the return value, and possibly other values.
-; If there are multiple values, or if the value is an sform or a list, 
-; the values are placed in a list. 
-(defparameter *runlog* (gen-vector))
+(defclass program () 
+  (
+   (id-to-sform :initform (gen-vector))
+   (log-message-type :initform (gen-vector))
+   (log-message :initform (gen-vector))
+   (time-to-dform :initform (gen-vector))
+   )
+  )
 
-(defun encode-value-for-log (v) 
-  (if (or (listp v) (integerp  v)) (list v) v))
+(defun new-program () (setf *program* (make-instance 'program)))
+(new-program)
 
-(defun num-log-values (v) (if (listp v) (length v) 1))
+(defun program-time () (fill-pointer (slot-value *program* 'log-message-type)))
 
-(defun get-log-value (v which) (if (listp v) (nth which v) v))
+(defun log-entry (sform-id) 
+  (vector-push-extend 'entry (slot-value *program* 'log-message-type))
+  (vector-push-extend sform-id (slot-value *program* 'log-message)))
 
-(defun gen-push-encode (v vec)
-  (vector-push-extend (encode-value-for-log v) vec) v)
-
-(defun gen-push-encode-multiple-values (v vec)
-  (vector-push-extend v vec) (first v))
-
-;;; END LOGGING
-
+(defun log-return (value)
+  (vector-push-extend 'return (slot-value *program* 'log-message-type))
+  (vector-push-extend value (slot-value *program* 'log-message))
+  value)
 
 (defmethod assign-id ((f sform))
-  (setf (slot-value f 'id) (fill-pointer *id-to-sform*))
-  (vector-push-extend f *id-to-sform*))
+  (setf (slot-value f 'id) (fill-pointer (slot-value *program* 'id-to-sform)))
+  (vector-push-extend f (slot-value *program* 'id-to-sform)))
 
-(defmethod rewrite-children ((f sform) logv)
-  (map 'list #'(lambda (sf) (rewrite sf logv)) (slot-value f 'children)))
 
-(defmethod rewrite-core ((f sform) logv)
-  `(,(car (slot-value f 'code)) ,@(rewrite-children f logv)))
+; always called from rewrite-core
+(defmethod rewrite-children ((f sform))
+  (map 'list #'(lambda (sf) (rewrite sf)) (slot-value f 'children)))
+
+; always called from rewrite
+(defmethod rewrite-core ((f sform))
+  `(,(car (slot-value f 'code)) ,@(rewrite-children f)))
   
 ; rewrite code to log form entry, and form exit return value
-(defmethod rewrite ((f sform) logv)
+(defmethod rewrite ((f sform))
   `(progn
-     (gen-push ,(slot-value f 'id) ,logv)
-     (gen-push-encode ,(rewrite-core f logv) ,logv)))
+     (log-entry ,(slot-value f 'id))
+     (log-return ,(rewrite-core f))))
 
+; non-recursive - meant to be called by tree-print
 (defmethod to-string ((f sform))
   (format nil "~S id=~S~%" (slot-value f 'code) (slot-value f 'id)))
 
@@ -85,13 +86,13 @@
   (format t "~%")
   (tree-print t f 'to-string (lambda (x) (slot-value x 'children))))
 
+; non-recursive - meant to be called by tree-print
 (defmethod to-string ((f dform))
   (format nil "~S time:[~S..~S] ~S~%" 
 	  (slot-value f 'return-value)
 	  (slot-value f 'entry-time)
 	  (slot-value f 'exit-time)
 	  (slot-value (slot-value f 's-parent) 'code)))
-
 
 ; print sforms
 (defmethod gen-print ((f dform))
@@ -102,6 +103,7 @@
 ; this call is called from all more specific calls
 (defmethod gen-compile ((f sform) code)
   (assign-id f)
+  (setf (slot-value f 'creation-time) (program-time))
   (setf (slot-value f 'code) code))
 
 ; compile your children and set them
@@ -150,8 +152,8 @@
 		    (cddr code)))) f )
 
 ; rewrite code to log form entry, and form exit return value
-(defmethod rewrite-core ((f let-sform) logv)
-  (let* ((rewritten-children (rewrite-children f logv)))
+(defmethod rewrite-core ((f let-sform))
+  (let* ((rewritten-children (rewrite-children f)))
     `(let ,(map 'list #'list (slot-value f 'variables) rewritten-children)
        ,@(nthcdr (list-length (slot-value f 'variables)) 
 		 rewritten-children))))
@@ -162,9 +164,12 @@
 
 ;;; FUNCTION-ENTRY ;;;
 
-; the top level of a function
+; the top level of a function that we define
+; either by lambda or by defun
+; Note: a function-entry-sform is not created from toplevel compilation.
+;  It is created from the dynamic execution of a rewritten defun or lambda.
 (defclass function-entry-sform (sform)
-  (function-name
+  (function-name ; either the name, or 'lambda
    variables))
 
 (defclass function-entry-dform (dform) ())
@@ -177,8 +182,8 @@
   (gen-compile-children f (cddr code))
   f)
 
-(defmethod rewrite-core ((f function-entry-sform) logv)
-  `(progn ,@(rewrite-children f logv)))
+(defmethod rewrite-core ((f function-entry-sform))
+  `(progn ,@(rewrite-children f)))
 
 (defmethod create-dform ((f function-entry-sform))
   (make-instance 'function-entry-dform))
@@ -189,8 +194,9 @@
 ; (defun function-name (args) body)
 
 (defclass defun-sform (sform)
-  (function-name 
-   variables))
+  (function-name
+   variables
+   function-code))
 
 (defclass defun-dform (dform) (sform-child))
 
@@ -198,17 +204,19 @@
   (call-next-method)
   (setf (slot-value f 'function-name) (second code))
   (setf (slot-value f 'variables) (third code))
+  (setf (slot-value f 'function-code (nthcdr 3 code))) ; not yet used
   f)
 
-(defmethod rewrite ((f defun-sform) logv)
-  `(let ((fe (make-instance 'function-entry-sform)))
-     (progn
-       (gen-push ,(slot-value f 'id) ,logv)
-       (gen-compile fe ',(cdr (slot-value f 'code)))       
-       (gen-push-encode-multiple-values 
-	(list (eval (list 'defun ',(slot-value f 'function-name) 
-			  ',(slot-value f 'variables)
-			  (rewrite fe ',logv))) (slot-value fe 'id)) ,logv))))
+(defmethod rewrite-core ((f defun-sform))
+  ; may want to make g-function-entry a gen-sym in case any other 
+  ;   code uses the symbol 'fe
+  `(let ((g-function-entry (make-instance 'function-entry-sform)))
+     (gen-compile g-function-entry ',(cdr (slot-value f 'code)))       
+     (eval (list 'defun 
+		 ',(slot-value f 'function-name) 
+		 ',(slot-value f 'variables)
+		 (rewrite g-function-entry)))))
+
 
 (defmethod create-dform ((f defun-sform)) (make-instance 'defun-dform))
 
@@ -233,14 +241,8 @@
   (gen-compile-children f (cdr code))
   f)
 
-(defmethod rewrite ((f eval-sform) logv)
-  `(progn
-     (gen-push ,(slot-value f 'id) ,logv)
-     (let* ((code ,@(rewrite-children f logv))
-	    (sf-id (length *id-to-sform*)))
-       ;(format t "code=~S~%sf-id=~S~%" code sf-id)
-       (gen-push-encode-multiple-values 
-	(list (gen-eval code ,logv) sf-id) ,logv))))
+(defmethod rewrite-core ((f eval-sform))
+  `(gen-eval ,@(rewrite-children f)))
 
 
 (defmethod create-dform ((f eval-sform)) (make-instance 'eval-dform))
@@ -260,7 +262,7 @@
 (defclass constant-dform (dform) ())
 
 ; constant-forms are rewritten slightly differently
-(defmethod rewrite-core ((f constant-sform) logv)
+(defmethod rewrite-core ((f constant-sform))
   (slot-value f 'value))
 
 ; compiling a specific constant sform
@@ -279,7 +281,7 @@
 (defclass quote-dform (dform) ())
 
 ; quote-forms are rewritten slightly differently
-(defmethod rewrite-core ((f quote-sform) logv) 
+(defmethod rewrite-core ((f quote-sform)) 
   (list 'quote (slot-value f 'value)))
 
 ; compiling a specific quote sform
@@ -296,7 +298,7 @@
 
 (defclass variable-dform (dform) ())
 
-(defmethod rewrite-core ((f variable-sform) logv)
+(defmethod rewrite-core ((f variable-sform))
   (slot-value f 'variable-symbol))
 
 ; compiling a specific constant sform
@@ -364,8 +366,8 @@
     )
 )
 
-(defun gen-eval (code logv)
-  (eval (rewrite (toplevel-gen-compile code nil) logv)))
+; evals the rewrite of compiling the code
+(defun gen-eval (code) (eval (rewrite (toplevel-gen-compile code nil))))
       
 ; pass in a read iterator for a vector that is a run log
 ; makes the dform tree for that run and returns the top level dform
