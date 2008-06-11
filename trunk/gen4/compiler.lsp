@@ -141,6 +141,32 @@
 (defmethod create-dform ((f let-sform)) (make-instance 'let-dform))
 
 
+;;; DOTIMES ;;;
+
+; (dotimes (var limit) code code code)
+
+(defclass dotimes-sform (sform) (variable))
+
+(defclass dotimes-dform (dform)())
+
+; compiling a specific constant sform
+(defmethod gen-compile ((f dotimes-sform) code)
+  (call-next-method)
+  (let ((variable (caadr code))
+	(body (cddr code))
+	(limit-body (second (second code))))
+    (setf (slot-value f 'variable) variable)
+    (gen-compile-children
+     f (cons limit-body body)))
+  f)
+
+; rewrite code to log form entry, and form exit return value
+(defmethod rewrite-core ((f dotimes-sform))
+  (let ((rewritten-children (rewrite-children f)))
+    `(dotimes (,(slot-value f 'variable) ,(first rewritten-children))
+       ,@(cdr rewritten-children))))
+       
+(defmethod create-dform ((f dotimes-sform)) (make-instance 'dotimes-dform))
 
 ;;; FUNCTION-ENTRY ;;;
 
@@ -302,8 +328,6 @@
 
 (defmethod create-dform ((f variable-sform)) (make-instance 'variable-dform))
 
-
-
 ;;; SETF ;;; 
 
 (defclass setf-sform (sform) ( variable-symbol))
@@ -320,13 +344,9 @@
   (let ((rewritten-child (rewrite (car (slot-value f 'children)))))
     `(setf ,(slot-value f 'variable-symbol) ,rewritten-child))) 
 	
-
 (defmethod create-dform ((f setf-sform)) (make-instance 'setf-dform))
 
-
 ;;; END FORM TYPES ;;;
-
-
 
 ; assume code is a list for now
 ; this is the top level function called to compile code, returns an sform
@@ -347,6 +367,7 @@
 	   ((eq first 'defun) (setf f (make-instance 'defun-sform)))
 	   ((eq first 'eval) (setf f (make-instance 'eval-sform)))
 	   ((eq first 'quote) (setf f (make-instance 'quote-sform)))
+	   ((eq first 'dotimes) (setf f (make-instance 'dotimes-sform)))
 	   (t (setf f (make-instance 'call-sform)))
 	   )
 	 )
@@ -386,7 +407,20 @@
 ; evals the rewrite of compiling the code
 (defun gen-eval (code &optional (parent nil))
   (eval (rewrite (toplevel-gen-compile code parent))))
-      
+
+(defun gen-debug (code)
+  (new-program)
+  (let ((sf (toplevel-gen-compile code nil)))
+    (gen-print sf)
+    (let ((rewritten-code (rewrite sf)))
+      (print rewritten-code)
+      (let ((final-value (eval rewritten-code)))
+	(print-sform-trees)
+	(let ((dform-root (toplevel-enform)))
+	  (link-sforms-to-dynamic-parents)
+	  (gen-print dform-root))
+	final-value))))
+
 ; pass in a read iterator for a vector that is a run log
 ; makes the dform tree for that run and returns the top level dform
 (defun toplevel-enform ()
@@ -454,10 +488,10 @@
 ;(setf *fiboprog* '(progn (defun fibo (x) (if (< x 2) 1 (+ (fibo (- x 1)) (fibo (- x 2))))) (fibo 5)))
 ;(gen-run *fiboprog* t)
 
-;(setf *gaussprog* '(progn (defun gauss (x) (if (= x 0) 0 (+ x (gauss (- x 1))))) (gauss 5)))
+(setf *gaussprog* '(progn (defun gauss (x) (if (= x 0) 0 (+ x (gauss (- x 1))))) (gauss 10000)))
 ;(gen-run *gaussprog* t)
 ;(time (eval *gaussprog*)) 
-;(time (gen-run *gaussprog*))
+(time (gen-run *gaussprog*))
 
 ;(gen-run '(let ((x 8)) (setf x 10) (+ 1 x)) t)
 
@@ -474,6 +508,10 @@
 ;  (gen-print (toplevel-enform (reader *runlog*)))
 ;  (print-sform-trees)
 ;)
-;(gen-run '(let ((sum 0)) (dotimes (x 10) (setf sum (+ sum x))) sum) t)
-;(dotimes (x 10) (print x))
+
+(time (gen-run '(let ((sum 0)) (dotimes (x 30000) (setf sum (+ sum x))) sum) nil))
+
+'(gen-debug '(dotimes (x 3) (print x)))
+
+(dotimes (x 10) (print x))
 
