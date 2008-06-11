@@ -38,7 +38,6 @@
   (setf (slot-value f 'id) (fill-pointer (slot-value *program* 'id-to-sform)))
   (vector-push-extend f (slot-value *program* 'id-to-sform)))
 
-
 ; always called from rewrite-core
 (defmethod rewrite-children ((f sform))
   (map 'list #'(lambda (sf) (rewrite sf)) (slot-value f 'children)))
@@ -509,9 +508,28 @@
 ;  (print-sform-trees)
 ;)
 
-(time (gen-run '(let ((sum 0)) (dotimes (x 30000) (setf sum (+ sum x))) sum) nil))
+; (time (gen-run '(let ((sum 0)) (dotimes (x 30000) (setf sum (+ sum x))) sum) nil))
 
-'(gen-debug '(dotimes (x 3) (print x)))
+;(gen-debug '(dotimes (x 3) (print x)))
 
-(dotimes (x 10) (print x))
+;(dotimes (x 10) (print x))
 
+(defun overlord ()
+  (handler-case (gauss 10 0)
+    (condition () -2))
+) 
+
+(defun gauss (x sum)
+  (if (= x 3)
+      (error (make-condition 'condition))
+      nil
+      )
+  (if (= x 0)
+      sum
+      (prog2
+	  (format t "started ~S~%" x)
+	  (gauss (- x 1) (+ x sum))
+	(format t "finished ~S~%" x)
+	) 
+      )
+  )
