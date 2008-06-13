@@ -76,6 +76,6 @@
 
 (tree-print t '(a (b c) d e) 'object-to-string #'(lambda (x) (if (listp x) x nil)))
 
-  
+(defun vector-last (v) (aref v (- (fill-pointer v) 1)))
   
 
