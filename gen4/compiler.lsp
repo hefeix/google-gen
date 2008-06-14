@@ -361,6 +361,54 @@
 
 
 
+; pass in a read iterator for a vector that is a run log
+; makes the dform tree for that run and returns the top level dform
+(defun toplevel-enform ()
+  (let ((type-reader (cons (slot-value *program* 'log-message-type) 
+			   (slot-value *program* 'enform-pointer)))
+	(message-reader (cons (slot-value *program* 'log-message)
+			      (slot-value *program* 'enform-pointer))))
+    (loop while (not (read-done type-reader)) do
+	 (read-advance type-reader)
+	 (let* ((sf (aref (slot-value *program* 'id-to-sform) 
+			 (read-advance message-reader)))
+		(df (enform sf type-reader message-reader)))
+	   (gen-push df (slot-value *program* 'toplevel-dforms)) ))
+    (link-sforms-to-dynamic-parents) ; TODO start from the right point
+    (setf (slot-value *program* 'enform-pointer) 
+	  (fill-pointer (slot-value *program* 'log-message-type)))
+    ) nil)
+	 
+; the basics are simple. everything logged is either an sform
+; in which case it's an entry, or a return value. A simple
+; recursive algorithm matches everything up 
+(defmethod enform ((f sform) type-reader message-reader)
+  (let ((df (create-dform f))
+	(next-type (read-advance type-reader))
+	(next-message (read-advance message-reader)))
+    (vector-push-extend df (slot-value *program* 'log-position-to-dform))
+    (setf (slot-value df 's-parent) f)
+    (setf (slot-value df 'entry-log-position) (- (cdr type-reader) 2))
+    ;getting dforms for children
+    (loop while (eq next-type 'entry) do
+	 (let ((child (enform (aref (slot-value *program* 'id-to-sform) 
+				    next-message) 
+			      type-reader message-reader)))
+	   (gen-push child (slot-value df 'children))
+	   (setf (slot-value child 'd-parent) df))
+	 (setf next-type (read-advance type-reader))
+	 (setf next-message (read-advance message-reader)))
+    ; this is now our return value
+    (setf (slot-value df 'return-value) next-message)
+    (setf (slot-value df 'exit-log-position) (- (cdr type-reader) 1))
+    (vector-push-extend df (slot-value *program* 'log-position-to-dform))
+    df))
+
+
+
+
+
+
 
 ; assume code is a list for now
 ; this is the top level function called to compile code, returns an sform
