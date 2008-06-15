@@ -1,6 +1,3 @@
-; load utilities
-(load "util.lsp")
-
 ;;; SFORM AND DFORM BASE CLASSES ;;;
 
 ; class for static forms
@@ -45,27 +42,33 @@
 ; always called from rewrite
 (defmethod rewrite-core ((f sform))
   `(,(car (slot-value f 'code)) ,@(rewrite-children f)))
+
+
+(define-condition too-long-condition (error) ())
+(define-condition step-limit-exceeded-condition (too-long-condition) ())
+(define-condition time-limit-exceeded-condition (too-long-condition) ())
+
   
 (defun check-limits () 
   (when *step-limit*
     (when (>= *step-counter* *step-limit*)
-      (error (make-condition 'condition))))
-  (when *time-limit*					
+      (error (make-condition 'step-limit-exceeded-condition))))
+  (when *time-limit*
     (when (>= (sb-sys:get-system-info) *time-limit*)
-      (error (make-condition 'condition))))
+      (error (make-condition 'time-limit-exceeded-condition))))
   )
 
 ; rewrite code to log form entry, and form exit return value
 (defmethod rewrite ((f sform))
-  (let ((logging? (slot-value *program* 'logging?)))
-    `(progn
-       (incf *step-counter*)
-       (when (= (mod *step-counter* 1000) 0) (check-limits))
-       ,@(if logging?
-	     `((log-entry *program* ,(slot-value f 'id))
-	       (log-return *program* ,(rewrite-core f)))
-	     (rewrite-core f)))
-    ))
+  (concatenate 
+   'list
+   '(progn 
+     (incf *step-counter*)
+     (when (= (mod *step-counter* 1000) 0) (check-limits)))
+   (if (slot-value *program* 'logging?)
+       `((log-entry *program* ,(slot-value f 'id))
+	 (log-return *program* ,(rewrite-core f)))
+       (list (rewrite-core f)))))
     
 ; non-recursive - meant to be called by tree-print
 (defmethod to-string ((f sform))
@@ -235,7 +238,7 @@
   ;   code uses the symbol 'fe
   `(let ((g-function-entry (make-instance 'function-entry-sform)))
      (gen-compile g-function-entry ',(cdr (slot-value f 'code)))
-     (setf (slot-value g-function-entry 'parent) (- (program-log-position) 1))
+     (setf (slot-value g-function-entry 'parent) (- (log-position *program*) 1))
      (eval (list 'defun 
 		 ',(slot-value f 'function-name) 
 		 ',(slot-value f 'variables)
