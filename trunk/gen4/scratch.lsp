@@ -7,9 +7,9 @@
 (gen-eval '(f 6 7))
 ;(gen-run '(eval '(+ 2 3)) t)
 
-(gen-eval '(defun fibo (x) (if (< x 2) 1 (+ (fibo (- x 1)) (fibo (- x 2)))))) :logging? nil)
+(gen-eval '(defun fibo (x) (if (< x 2) 1 (+ (fibo (- x 1)) (fibo (- x 2))))) :logging? nil)
 
-(time (gen-eval '(fibo 26) :logging? t :enform? nil :time-limit 1.0))
+(time (gen-eval '(fibo 31) :logging? t :enform? nil :time-limit 1.0))
 (time (gen-eval '(fibo 35) :step-limit 900000000 :logging? nil :time-limit 5.0))
 (sb-sys:get-system-info)
 ;(gen-run *fiboprog* t)
