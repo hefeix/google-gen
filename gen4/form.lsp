@@ -54,7 +54,7 @@
     (when (>= *step-counter* *step-limit*)
       (error (make-condition 'step-limit-exceeded-condition))))
   (when *time-limit*
-    (when (>= (sb-sys:get-system-info) *time-limit*)
+    (when (>= (get-time) *time-limit*)
       (error (make-condition 'time-limit-exceeded-condition))))
   )
 
