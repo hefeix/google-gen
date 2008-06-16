@@ -1,3 +1,5 @@
+(defun get-time () (sb-sys:get-system-info))
+
 (defun nspaces (n) (make-string n :initial-element #\Space))
 
 (defun gen-vector ()
