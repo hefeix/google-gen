@@ -65,7 +65,7 @@
    '(progn 
      (incf *step-counter*)
      (when (= (mod *step-counter* 1000) 0) (check-limits)))
-   (if (slot-value *program* 'logging?)
+   (if *logging?*
        `((log-entry *program* ,(slot-value f 'id))
 	 (log-return *program* ,(rewrite-core f)))
        (list (rewrite-core f)))))
